@@ -804,6 +804,7 @@
     for (const q of metaMedia) apply(listen, q, ["change", onChange]);
   };
   const metaColor = (onMediaChange) => {
+    if (location.hostname === "mail.google.com") return null;
     const queries = [];
     let color = null;
     for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
@@ -825,20 +826,12 @@
   };
   const blend = (c, under) =>
     c.a >= 1 ? c : { r: c.r * c.a + under.r * (1 - c.a), g: c.g * c.a + under.g * (1 - c.a), b: c.b * c.a + under.b * (1 - c.a), a: 1 };
-  let surfaceObserver;
-  const watchSurface = (el) => {
-    for (; el; el = el.parentElement)
-      surfaceObserver.observe(el, { childList: true, attributes: true, attributeOldValue: true, attributeFilter: ["class", "style", "data-theme"] });
-  };
   const headerColor = (page) => {
     const scrolled = window.scrollY > 4;
-    watchSurface(document.body);
     for (const x of [innerWidth / 2, innerWidth * 0.2, innerWidth * 0.8]) {
       let pinned = false;
       let color = null;
-      const hit = document.elementFromPoint(x, 1);
-      watchSurface(hit);
-      for (let el = hit; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+      for (let el = document.elementFromPoint(x, 1); el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
         const cs = getComputedStyle(el);
         if (cs.position === "fixed" || cs.position === "sticky") pinned = true;
         if (!color) {
@@ -856,7 +849,6 @@
   const cachedMetaColor = () => (metaCache === undefined ? (metaCache = metaColor(scheduleTheme)) : metaCache);
   const reportTheme = guard(() => {
     if (!document.documentElement) return;
-    surfaceObserver.disconnect();
     let color = cachedMetaColor();
     let source = color ? "meta" : null;
     if (!color && document.body) {
@@ -893,11 +885,6 @@
     });
   };
   const startTheme = () => {
-    surfaceObserver = new NativeMutationObserver((records) => {
-      if (records.some((r) => r.type === "attributes"
-        ? r.oldValue !== r.target.getAttribute(r.attributeName)
-        : [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1))) scheduleTheme();
-    });
     reportTheme();
     const observer = new NativeMutationObserver((records) => themeTouched(records) && scheduleTheme());
     observer.observe(document.head || document.documentElement, {

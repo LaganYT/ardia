@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
 const { isPeekTab, peekSourceOf, peekTabId } = await import("./peek.ts");
-const { DEFAULT_SETTINGS, peekModifierOf } = await import("./settings.ts");
+const { DEFAULT_SETTINGS, peekModifierOf, splitModifierOf } = await import("./settings.ts");
 const { stripPlan } = await import("./liveTabs.ts");
 const { viewTabIds } = await import("./model.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
@@ -183,6 +183,18 @@ test("the Peek modifier setting: ⇧-click by default, ⌥-click or Off, synced,
   assert.ok(SYNCED_SETTINGS.includes("peekModifier"));
   S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"], settings: { peekModifier: "alt" } });
   assert.equal(peekModifierOf(S().settings), "alt");
+});
+
+test("the split modifier setting: ⌥-click by default, Off keeps Chrome's, Peek's ⌥-click wins, synced", () => {
+  S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"] });
+  assert.equal(DEFAULT_SETTINGS.splitModifier, "alt");
+  assert.equal(splitModifierOf(S().settings), "alt");
+  S().updateSettings({ splitModifier: "off" });
+  assert.equal(splitModifierOf(S().settings), "off");
+  assert.ok(S().settings.chosen.includes("splitModifier"));
+  assert.equal(splitModifierOf({ splitModifier: "control", peekModifier: "shift" }), "alt");
+  assert.equal(splitModifierOf({ splitModifier: "alt", peekModifier: "alt" }), "off");
+  assert.ok(SYNCED_SETTINGS.includes("splitModifier"));
 });
 
 test("another window taking a shared pin's page closes the peek opened from it", () => {

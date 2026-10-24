@@ -1,10 +1,10 @@
-import { setPeekModifier } from "@ardia/ardiacore";
+import { setPeekModifier, setSplitModifier } from "@ardia/ardiacore";
 import { hapticTick } from "@ardia/shell";
 import { webviews } from "../../lib/webviews";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { isPeekTab } from "../../store/peek";
-import { peekModifierOf, type PeekModifier } from "../../store/settings";
+import { peekModifierOf, splitModifierOf, type PeekModifier, type SplitModifier } from "../../store/settings";
 import { MAX_SPLIT_PANES, splitOf } from "../../store/splits";
 import { openSplitPane, showToast } from "../layout/splitActions";
 
@@ -96,9 +96,13 @@ export function startPeeks() {
   if (started) return;
   started = true;
   let sent: PeekModifier | null = null;
+  let sentSplit: SplitModifier | null = null;
   const sync = () => {
-    const modifier = peekModifierOf(store().settings);
+    const { settings } = store();
+    const modifier = peekModifierOf(settings);
     if (modifier !== sent) void setPeekModifier((sent = modifier));
+    const split = splitModifierOf(settings);
+    if (split !== sentSplit) void setSplitModifier((sentSplit = split));
   };
   sync();
   useBrowser.subscribe(sync);

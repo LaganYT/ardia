@@ -332,7 +332,7 @@ string doesn't matter. Afterwards: `kill %1` for the server, quit the app, `rm -
 |---|---|---|---|
 | Split view up to 3 panes, horizontal/vertical, add bottom split | ✓ | ✅ | each pane is a Chrome tab at its own size; Chrome's dialogs follow the focused pane (ledger "Split view") |
 | Open Split Pane ⌃⇧=, focus next/prev ⌃⇧] / ⌃⇧[ | ✓ | ✅ | |
-| Drag tab to edge to split; ⌥‑click ➕ opens split NTP; ⇧⌥‑click link opens right pane | ✓ | ✅ | Dia's split targets from the sidebar and the top strip alike ("Add left split" / "Add right split" at each pane's sides: slide in, grow, the one under the dragged card takes the accent and leans to the pointer; the tab shows as a small window under the pointer; `dia-spec.md` › Dragging tabs and split targets). The page showing the dragged tab alone splits with the tab used before it |
+| Drag tab to edge to split; ⌥‑click ➕ opens split NTP; ⌥‑click / ⇧⌥‑click link opens right pane | ✓ | ✅ | ⌥-click a link (http/https, no `download` attribute, not in a text field) opens it in a split beside the page (the pane to the right of it, or navigates the next pane when the page is already in a split, as ⇧⌥-click does), instead of Chrome's save-link download (issue #70). Settings › Tabs › Links › "Open a link in a split with": ⌥-click (default) or Off, which keeps Chrome's download; synced; unavailable while "Peek a link with" is ⌥-click, which then keeps ⌥-click. Same path as Peek: the page script takes the trusted ⌥-click alone and posts `peek` with `action: split`, native checks that a ⌥ mouse-up really happened and emits `openWindow` with disposition `split`; ⌘, ⇧, ⌃ combos and middle-click are untouched. Dia's split targets from the sidebar and the top strip alike ("Add left split" / "Add right split" at each pane's sides: slide in, grow, the one under the dragged card takes the accent and leans to the pointer; the tab shows as a small window under the pointer; `dia-spec.md` › Dragging tabs and split targets). The page showing the dragged tab alone splits with the tab used before it |
 | Per‑pane nav bar / tint / close | ✓ | ✅ | unfocused panes dim |
 | Flip / convert orientation / separate all | ✓ | ✅ | + Move Pane Left/Right, Remove from Split View |
 
@@ -719,7 +719,7 @@ between links, and in text fields ⌥← / ⌥→, ⌥⌫, ⌘← / ⌘→ and �
 
 **Mouse** (checked with CDP clicks on a link): ⌘-click → background tab, ⇧⌘-click → foreground tab, ⇧-click →
 Peek for http(s) links without a `download` attribute (Settings › Tabs › "Peek a link with"; with ⌥-click chosen there, or Off, ⇧-click opens a new window, a private one from a
-private window), middle-click → background tab, ⌥-click → download (Peek when chosen), ⌥⌘-click (Chrome's) and ⌥⇧-click → split. ⌘-click Back / Forward → a new tab (§ Navigation).
+private window), middle-click → background tab, ⌥-click → split beside the page (Settings › Tabs › "Open a link in a split with"; Off keeps Chrome's save-link download; Peek when ⌥-click is chosen there), ⌥⌘-click (Chrome's) and ⌥⇧-click → split. ⌘-click Back / Forward → a new tab (§ Navigation).
 
 ## Menus
 Checked against `packages/shell/ios/Menus.swift`; every item has a handler (lib/commands.ts, sidebar/commands.ts,

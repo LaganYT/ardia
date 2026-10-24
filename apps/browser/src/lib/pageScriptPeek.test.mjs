@@ -271,6 +271,32 @@ test("only the chosen key alone peeks; Off and untrusted events never do", () =>
   assert.equal(peeks(env).length, 1);
 });
 
+test("⌥-click splits when the split key is on and Peek isn't using ⌥; ⇧, ⌘, ⌃, downloads and Off leave the click alone", () => {
+  const env = environment();
+  const a = env.link("/page");
+  env.handlers.peekConfig({ modifier: "shift", split: "alt" });
+  const click = env.gesture([a], ALT);
+  assert.equal(peeks(env).length, 1);
+  assert.equal(peeks(env)[0].action, "split");
+  assert.equal(peeks(env)[0].key, "alt");
+  assert.equal(click.defaultPrevented, true);
+  env.gesture([a], SHIFT);
+  assert.equal(peeks(env).length, 2);
+  assert.equal(peeks(env)[1].action, "peek");
+  for (const keys of [{ alt: true, shift: true }, { alt: true, meta: true }, { alt: true, ctrl: true }, {}]) env.gesture([a], keys);
+  env.gesture([a], { ...ALT, trusted: false });
+  env.gesture([a], { ...ALT, button: 1 });
+  env.gesture([env.link("/file.zip", { download: "" })], ALT);
+  assert.equal(peeks(env).length, 2);
+  env.handlers.peekConfig({ modifier: "shift", split: "off" });
+  const kept = env.gesture([a], ALT);
+  assert.equal(peeks(env).length, 2);
+  assert.equal(kept.defaultPrevented, false);
+  env.handlers.peekConfig({ modifier: "alt", split: "alt" });
+  env.gesture([a], ALT);
+  assert.equal(peeks(env).at(-1).action, "peek");
+});
+
 test("a release on another element, or on a non-http(s) link, doesn't peek", () => {
   const env = environment();
   env.handlers.peekConfig({ modifier: "alt" });

@@ -548,9 +548,11 @@
   };
 
   let peekKey = null;
+  let splitKey = null;
   let peekTrace = false;
   handlers.peekConfig = (config) => {
     peekKey = config && (config.modifier === "alt" || config.modifier === "shift") ? config.modifier : null;
+    splitKey = config && config.split === "alt" && peekKey !== "alt" ? "alt" : null;
     peekTrace = !!(config && config.trace);
   };
   try {
@@ -621,12 +623,13 @@
       !!hit && !!hit.url && !apply(hasAttribute, hit.link, ["download"]) && apply(test, /^https?:/i, [hit.url]) && !inEditable(hit.path);
     const keys = (e) => ({ alt: altKey(e), shift: shiftKey(e), meta: metaKey(e), ctrl: ctrlKey(e) });
     const chosen = (e) => {
-      if (metaKey(e) || ctrlKey(e)) return false;
-      if (peekKey === "alt") return altKey(e) && !shiftKey(e);
-      if (peekKey === "shift") return shiftKey(e) && !altKey(e);
-      return false;
+      if (metaKey(e) || ctrlKey(e)) return null;
+      if (peekKey === "alt") return altKey(e) && !shiftKey(e) ? "peek" : null;
+      if (peekKey === "shift" && shiftKey(e) && !altKey(e)) return "peek";
+      if (splitKey === "alt" && altKey(e) && !shiftKey(e)) return "split";
+      return null;
     };
-    const trace = (what, data) => peekTrace && send("peekTrace", { what, key: peekKey, ...data });
+    const trace = (what, data) => peekTrace && send("peekTrace", { what, key: peekKey, split: splitKey, ...data });
     let press = null;
     let peeked = null;
     let sent = null;
@@ -649,7 +652,7 @@
         const hit = linkAt(e);
         if (!peekable(hit)) return;
         press = { link: hit.link, url: hit.url, x: clientX(e), y: clientY(e) };
-        if (!peekKey) trace("no key chosen yet", { url: hit.url, ...keys(e) });
+        if (!peekKey && !splitKey) trace("no key chosen yet", { url: hit.url, ...keys(e) });
       }),
       true,
     );
@@ -658,8 +661,9 @@
       guard((e) => {
         const pressed = press;
         press = null;
-        if (!pressed || !peekKey || !e.isTrusted || button(e) !== 0) return;
-        if (!chosen(e)) return trace("other keys", { url: pressed.url, ...keys(e) });
+        if (!pressed || (!peekKey && !splitKey) || !e.isTrusted || button(e) !== 0) return;
+        const action = chosen(e);
+        if (!action) return trace("other keys", { url: pressed.url, ...keys(e) });
         const hit = linkAt(e);
         const moved = hypot(clientX(e) - pressed.x, clientY(e) - pressed.y);
         if (!hit || hit.link !== pressed.link) return trace("released off the link", { url: pressed.url, moved });
@@ -668,7 +672,7 @@
         peeked = { link: hit.link, stamp: timeStamp(e) };
         sent = { url: hit.url, at: now() };
         const scale = ratio(window);
-        send("peek", { url: hit.url, key: peekKey, origin: pageOrigin, x: clientX(e) * scale, y: clientY(e) * scale, moved });
+        send("peek", { url: hit.url, action, key: action === "split" ? splitKey : peekKey, origin: pageOrigin, x: clientX(e) * scale, y: clientY(e) * scale, moved });
       }),
       true,
     );
@@ -688,7 +692,7 @@
   } catch (e) {}
 
   handlers.config = (config) => {
-    handlers.peekConfig({ modifier: config.peek, trace: config.peekTrace });
+    handlers.peekConfig({ modifier: config.peek, split: config.split, trace: config.peekTrace });
     blockAutoplay = !!config.blockAutoplay;
     if (blockAutoplay)
       pauseUnasked([...playingMedia, ...document.querySelectorAll("video, audio")], !!(navigator.userActivation && navigator.userActivation.hasBeenActive));

@@ -3,11 +3,16 @@ import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { tabLayoutOf } from "../../../store/model";
-import { peekModifierOf, type PeekModifier, type Settings } from "../../../store/settings";
+import { peekModifierOf, splitModifierOf, type PeekModifier, type Settings, type SplitModifier } from "../../../store/settings";
 import { Checkbox, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 
 const PEEK_WITH: { value: PeekModifier; title: string }[] = [
   { value: "shift", title: "⇧-click" },
+  { value: "alt", title: "⌥-click" },
+  { value: "off", title: "Off" },
+];
+
+const SPLIT_WITH: { value: SplitModifier; title: string }[] = [
   { value: "alt", title: "⌥-click" },
   { value: "off", title: "Off" },
 ];
@@ -71,6 +76,9 @@ export function TabsPane() {
       <Group>
         <Row anchor="tabs.peekModifier">
           <PopUp value={peekModifierOf(settings)} options={PEEK_WITH} onChange={(peekModifier) => update({ peekModifier })} />
+        </Row>
+        <Row anchor="tabs.splitModifier">
+          <PopUp value={splitModifierOf(settings)} options={SPLIT_WITH} disabled={peekModifierOf(settings) === "alt"} onChange={(splitModifier) => update({ splitModifier })} />
         </Row>
       </Group>
 

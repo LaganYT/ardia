@@ -41,6 +41,7 @@ export type Settings = {
   cmdClickCreatesTabGroup: boolean;
   optShiftClickOpensInGroup: boolean;
   peekModifier: PeekModifier;
+  splitModifier: SplitModifier;
   autoGroupMeetingTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
   mutedSites: string[];
@@ -80,6 +81,11 @@ export const PEEK_MODIFIERS: readonly PeekModifier[] = ["alt", "shift", "off"];
 export const peekModifierOf = (settings: Pick<Settings, "peekModifier">): PeekModifier =>
   PEEK_MODIFIERS.includes(settings.peekModifier) ? settings.peekModifier : DEFAULT_SETTINGS.peekModifier;
 
+export type SplitModifier = "alt" | "off";
+export const SPLIT_MODIFIERS: readonly SplitModifier[] = ["alt", "off"];
+export const splitModifierOf = (settings: Pick<Settings, "splitModifier" | "peekModifier">): SplitModifier =>
+  peekModifierOf(settings) === "alt" ? "off" : SPLIT_MODIFIERS.includes(settings.splitModifier) ? settings.splitModifier : DEFAULT_SETTINGS.splitModifier;
+
 export const DEFAULT_PROFILE_ID = "default";
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -105,6 +111,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cmdClickCreatesTabGroup: true,
   optShiftClickOpensInGroup: true,
   peekModifier: "shift",
+  splitModifier: "alt",
   autoGroupMeetingTabs: true,
   cleanUpInactiveTabsAfterHours: null,
   mutedSites: [],

@@ -240,6 +240,7 @@ void NoteEvent(int browserId, NSString *name, NSDictionary *payload) {
 NSString *gSearchEngineName = @"Google";
 BOOL gDisplayMediaPicker = NO;
 NSString *gPeekModifier = @"shift";
+NSString *gSplitModifier = @"alt";
 static const NSEventModifierFlags kPeekKeyMask = NSEventModifierFlagOption | NSEventModifierFlagShift | NSEventModifierFlagCommand | NSEventModifierFlagControl;
 static NSEventModifierFlags gPeekUpKeys = 0;
 static CFTimeInterval gPeekUpAt = -1;
@@ -498,7 +499,7 @@ static void PeekTrace(NSDictionary *entry) {
 }
 
 static NSString *PeekConfigJSON() {
-  return JSONString(@{@"modifier" : gPeekModifier, @"trace" : @(PeekTracing())});
+  return JSONString(@{@"modifier" : gPeekModifier, @"split" : gSplitModifier, @"trace" : @(PeekTracing())});
 }
 
 const char kPageReportsKey = 0;
@@ -536,6 +537,7 @@ static void AnswerHello(ArdiaCoreTab *tab, NSString *profile, NSDictionary *hell
       config[@"displayMediaPicker"] = @YES;
     if (main && ACFieldTimingEnabled()) config[@"fieldTiming"] = @YES;
     config[@"peek"] = gPeekModifier;
+    config[@"split"] = gSplitModifier;
     if (PeekTracing()) config[@"peekTrace"] = @YES;
     static const BOOL broadThemeObserver = [@(getenv("ARDIA_THEME_OBSERVER") ?: "") isEqualToString:@"broad"];
     if (broadThemeObserver) config[@"broadThemeObserver"] = @YES;
@@ -2032,6 +2034,14 @@ void ArdiaCoreWebViewsSetFieldTiming(BOOL on) {
   for (ArdiaCoreWebView *view in LiveViews().allObjects) [view pushPeekModifier];
 }
 
++ (void)setSplitModifier:(NSString *)modifier {
+  InstallPeekMonitor();
+  NSString *next = [modifier isEqualToString:@"alt"] ? modifier : @"off";
+  if ([next isEqualToString:gSplitModifier]) return;
+  gSplitModifier = [next copy];
+  for (ArdiaCoreWebView *view in LiveViews().allObjects) [view pushPeekModifier];
+}
+
 + (void)setAutoPictureInPictureEnabled:(BOOL)enabled {
   if ([ArdiaCoreEngine respondsToSelector:@selector(setAutoPictureInPicture:)]) [ArdiaCoreEngine setAutoPictureInPicture:enabled];
 }
@@ -2399,6 +2409,11 @@ static NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
   [self emit:@"openWindow" payload:@{@"url" : url, @"disposition" : @"background", @"userGesture" : @YES}];
 }
 
+static NSEventModifierFlags SplitModifierFlag() {
+  if ([gSplitModifier isEqualToString:@"alt"] && ![gPeekModifier isEqualToString:@"alt"]) return NSEventModifierFlagOption;
+  return 0;
+}
+
 static NSEventModifierFlags PeekModifierFlag() {
   if ([gPeekModifier isEqualToString:@"alt"]) return NSEventModifierFlagOption;
   if ([gPeekModifier isEqualToString:@"shift"]) return NSEventModifierFlagShift;
@@ -2409,12 +2424,13 @@ static NSEventModifierFlags PeekModifierFlag() {
   NSString *url = Text(dict, @"url", 8192);
   NSString *scheme = (url.length ? [NSURL URLWithString:url].scheme.lowercaseString : nil) ?: @"";
   NSWindow *window = self.window;
-  const NSEventModifierFlags flag = PeekModifierFlag();
+  const BOOL split = [Text(dict, @"action", 8) isEqualToString:@"split"];
+  const NSEventModifierFlags flag = split ? SplitModifierFlag() : PeekModifierFlag();
   const CFTimeInterval sinceUp = gPeekUpAt < 0 ? -1 : CACurrentMediaTime() - gPeekUpAt;
   static const BOOL strict = getenv("ARDIA_PEEK_STRICT") != nullptr;
   const BOOL test = PeekTestHooks() && !strict;
   NSString *refused = nil;
-  if (!flag) refused = @"peek is off";
+  if (!flag) refused = split ? @"split is off" : @"peek is off";
   else if (!_visible || !window) refused = @"page not shown";
   else if (![@[ @"http", @"https" ] containsObject:scheme]) refused = @"not http(s)";
   else if (!test && gPeekUpAt < 0) refused = @"no left mouse-up yet";
@@ -2427,7 +2443,8 @@ static NSEventModifierFlags PeekModifierFlag() {
     @"event" : @"peek",
     @"url" : url ?: @"",
     @"main" : @(main),
-    @"chosen" : gPeekModifier,
+    @"chosen" : split ? gSplitModifier : gPeekModifier,
+    @"action" : split ? @"split" : @"peek",
     @"refused" : refused ?: NSNull.null,
     @"mouseUpKeys" : PeekKeyNames(gPeekUpKeys),
     @"sinceMouseUp" : @(sinceUp),
@@ -2442,6 +2459,7 @@ static NSEventModifierFlags PeekModifierFlag() {
   });
   if (refused) return [self fallBackFromPeek:dict url:url frame:frameId reason:refused test:test];
   if (!test) gPeekUsedSeq = gPeekUpSeq;
+  if (split) return [self emit:@"openWindow" payload:@{@"url" : url, @"disposition" : @"split", @"userGesture" : @YES}];
   double x, y;
   NSPoint point;
   if (main && Finite(dict, @"x", &x) && Finite(dict, @"y", &y)) {

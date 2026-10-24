@@ -57,6 +57,7 @@ public class CefModule: Module {
     AsyncFunction("isTracing") { ArdiaCoreHost.isTracing }.runOnQueue(.main)
     AsyncFunction("setSearchEngineName") { (name: String) in ArdiaCoreWebView.setSearchEngineName(name) }.runOnQueue(.main)
     AsyncFunction("setDisplayMediaPicker") { (enabled: Bool) in ArdiaCoreWebView.setDisplayMediaPicker(enabled) }.runOnQueue(.main)
+    AsyncFunction("setSplitModifier") { (modifier: String) in ArdiaCoreWebView.setSplitModifier(modifier) }.runOnQueue(.main)
     AsyncFunction("setPeekModifier") { (modifier: String) in ArdiaCoreWebView.setPeekModifier(modifier) }.runOnQueue(.main)
     AsyncFunction("devPostPeekMouseUp") { (keys: String, tabId: String) in ArdiaCoreWebView.devPostPeekMouseUp(keys, over: tabId) }.runOnQueue(.main)
     AsyncFunction("setAutoPictureInPicture") { (enabled: Bool) in ArdiaCoreWebView.setAutoPictureInPictureEnabled(enabled) }.runOnQueue(.main)

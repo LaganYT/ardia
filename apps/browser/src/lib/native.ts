@@ -263,7 +263,6 @@ export function menuState(s: BrowserState): MenuState {
   if (w && !w.sidebarOpen) checked.push("toggleSidebar");
 
   const titles: Record<string, string> = {};
-  if (tab?.pinned) titles.togglePin = "Unpin";
   if (page?.muted) titles.toggleMute = "Unmute Site";
   if (page?.url && isBookmarked(s.bookmarks, bookmarkProfile, page.url)) {
     titles.bookmarkPage = "Edit Bookmark…";

@@ -545,8 +545,8 @@ enum MainMenu {
     ] + selectTab + [
       cmd("Select Last Tab", "selectLastTab", "9").hiddenShortcut(),
       .separator(),
-      cmd("Pin", "togglePin"),
-      cmd("Move to Pinned", "togglePinnedRow", "d", [.command, .option, .shift]),
+      cmd("Pin to Top Apps", "togglePin"),
+      cmd("Move to Pinned Tabs", "togglePinnedRow", "d", [.command, .option, .shift]),
       cmd("Duplicate", "duplicateTab"),
       cmd("New Group with Tab", "newGroupWithTabs", "n", [.command, .control]),
       cmd("New Group with Tab", "newGroupWithTabs", "p", [.command, .control]).hiddenShortcut(),

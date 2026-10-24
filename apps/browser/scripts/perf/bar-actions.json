@@ -5,7 +5,7 @@
   {"id":"closeTab","title":"Close Tab"},
   {"id":"closeAllTabs","title":"Close All Tabs"},
   {"id":"reopenClosedTab","title":"Reopen Closed Tab","keywords":["undo close","restore tab"]},
-  {"id":"togglePin","title":"Move to Top Apps","keywords":["pin","unpin","pin tab","unpin tab","remove from top apps","favorites"]},
+  {"id":"togglePin","title":"Move to Top Apps","keywords":["pin","unpin","pin tab","unpin tab","remove from top apps","pin to top apps","unpin from top apps","favorites"]},
   {"id":"duplicateTab","title":"Duplicate Tab"},
   {"id":"renameTab","title":"Rename Tab"},
   {"id":"searchTabs","title":"Search Tabs"},

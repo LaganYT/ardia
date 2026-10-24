@@ -33,7 +33,7 @@ const DEFS: ActionDef[] = [
     command: "togglePin",
     title: ({ tab }) => (isPinnedRow(tab) ? "Unpin Tab" : tab?.pinned ? "Unpin from Top Apps" : "Move to Top Apps"),
     icon: "pin",
-    keywords: ["pin", "unpin", "pin tab", "unpin tab", "remove from top apps", "favorites"],
+    keywords: ["pin", "unpin", "pin tab", "unpin tab", "remove from top apps", "pin to top apps", "unpin from top apps", "favorites"],
     needs: "tab",
   },
   {
@@ -41,7 +41,7 @@ const DEFS: ActionDef[] = [
     arg: "row",
     title: ({ s, tab }) => (isPinnedRow(tab) ? "Move to Top Apps" : `Move to Pinned in ${s.profiles[tab?.profileId ?? ""]?.name ?? "Profile"}`),
     icon: "list.bullet",
-    keywords: ["pin", "pinned tabs", "pin as row", "move to pinned", "favorites"],
+    keywords: ["pin", "pinned tabs", "pin as row", "move to pinned", "move to pinned tabs", "favorites"],
     needs: "tab",
   },
   { command: "duplicateTab", title: "Duplicate Tab", icon: "plus.square.on.square", needs: "tab" },

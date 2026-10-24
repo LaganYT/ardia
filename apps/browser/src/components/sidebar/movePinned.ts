@@ -1,5 +1,5 @@
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTab } from "../../store/model";
+import { activeTab, isPinnedRow } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
 import { pinKeyOf } from "../../store/pinMirror";
 import type { Tab } from "../../store/types";
@@ -10,7 +10,9 @@ const listSpots = new Map<string, ListSpot>();
 let spotOrder = 0;
 const store = () => useBrowser.getState();
 
-export const movePinnedTitle = (tab: Tab | undefined) => (tab?.pinned ? "Move out of Pinned" : "Move to Pinned");
+export const movePinnedTitle = (tab: Tab | undefined) => (tab?.pinned ? "Move out of Pinned Tabs" : "Move to Pinned Tabs");
+
+export const pinTitle = (tab: Tab | undefined) => (isPinnedRow(tab) ? "Unpin from Pinned Tabs" : tab?.pinned ? "Unpin from Top Apps" : "Pin to Top Apps");
 
 const listTabIds = (s: BrowserState, windowId: string, profileId: string, except: Set<string>) =>
   (s.windows[windowId]?.tabIds ?? []).filter((id) => {

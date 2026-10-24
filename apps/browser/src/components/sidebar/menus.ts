@@ -22,6 +22,7 @@ import { isCalendarUrl } from "../../live/meetings";
 import { bookmarkTab } from "../bookmarks/actions";
 import { showToast } from "../layout/splitActions";
 import { canShare, shareTab } from "../site/share";
+import { pinTitle } from "./movePinned";
 import { calendarMenuItem, newLiveFolderMenuItem, runCalendarMenu, runNewLiveFolder } from "./liveMenus";
 import { openSyncedTab, syncedDevicesMenuItem } from "../../sync/menu";
 import { setSidebarUi } from "./state";
@@ -108,7 +109,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
     ...(tab.customIcon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
     sep,
-    { id: "pin", title: tab.pinned ? "Unpin" : "Pin", symbol: tab.pinned ? "pin.slash" : "pin" },
+    { id: "pin", title: pinTitle(tab), symbol: tab.pinned ? "pin.slash" : "pin" },
     ...(splitRow
       ? []
       : [
@@ -190,7 +191,7 @@ async function openMultiMenu(windowId: string, ids: string[]) {
   const incognito = tabs.some((t) => isIncognitoProfile(t.profileId));
   const groups = moveToGroupItems(windowId, undefined);
   const choice = await showMenu([
-    { id: "pin", title: allPinned ? `Unpin ${n} Tabs` : `Pin ${n} Tabs`, symbol: allPinned ? "pin.slash" : "pin" },
+    { id: "pin", title: allPinned ? `Unpin ${n} Tabs` : `Pin ${n} Tabs to Top Apps`, symbol: allPinned ? "pin.slash" : "pin" },
     ...(tabs.every(isPinnedRow) ? [] : [{ id: "pinRows", title: `Move ${n} Tabs to Pinned Tabs`, symbol: "list.bullet" }]),
     { id: "duplicate", title: `Duplicate ${n} Tabs`, symbol: "plus.square.on.square" },
     { id: "newGroup", title: `New Group with ${n} Tabs`, symbol: "plus.rectangle.on.rectangle", enabled: !allTiles, ...hint("n", "control", "command") },

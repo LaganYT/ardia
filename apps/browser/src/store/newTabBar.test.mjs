@@ -3,7 +3,7 @@ import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
 const model = await import("./model.ts");
 const { closeNewTabBar, openFromNewTabBar, toggleNewTabBar } = await import("../components/omnibox/newTabBar.ts");
-const { togglePinnedRows, forgetListSpots } = await import("../components/sidebar/movePinned.ts");
+const { togglePinnedRows, forgetListSpots, movePinnedTitle, pinTitle } = await import("../components/sidebar/movePinned.ts");
 
 const S = () => useBrowser.getState();
 const reset = (newTabOpens = "page") => {
@@ -118,6 +118,20 @@ test("Move to Pinned: a tab goes to the pinned rows and back to where it was, in
   togglePinnedRows(w);
   togglePinnedRows(w);
   assert.deepEqual(list(w), ["https://a.com/", "https://b.com/", "https://c.com/", "https://d.com/"], "the last tab goes back last");
+});
+
+test("Pin and Move to Pinned Tabs name where the tab goes", () => {
+  reset();
+  const { w, ids: [a, b] } = windowWith("a", "b");
+  const tab = (id) => S().tabs[id];
+  assert.equal(pinTitle(tab(a)), "Pin to Top Apps");
+  assert.equal(movePinnedTitle(tab(a)), "Move to Pinned Tabs");
+  S().togglePin(a);
+  assert.equal(pinTitle(tab(a)), "Unpin from Top Apps");
+  assert.equal(movePinnedTitle(tab(a)), "Move out of Pinned Tabs");
+  S().activate(b);
+  togglePinnedRows(w);
+  assert.equal(pinTitle(tab(b)), "Unpin from Pinned Tabs");
 });
 
 test("Move to Pinned on a selection, and on a tile", () => {

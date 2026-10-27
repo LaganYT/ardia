@@ -41,12 +41,12 @@ export const TabRowItem = memo(function TabRowItem({
   const onto = useDropOnto(`t:${tabId}`);
   return (
     <Animated.View ref={wrapper.ref} style={wrapper.style} {...handle}>
-      <TabRow tabId={tabId} onto={onto} shift={motion?.shift ?? null} />
+      <TabRow tabId={tabId} onto={onto} shift={motion?.shift ?? null} nativeMotion={!parentGroup} />
     </Animated.View>
   );
 });
 
-export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }: { tabId: string; onto?: boolean; shift?: Animated.Value | null }) {
+export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null, nativeMotion = true }: { tabId: string; onto?: boolean; shift?: Animated.Value | null; nativeMotion?: boolean }) {
   const theme = useTheme();
   const glow = useSelectedTabGlow();
   const tokens = useSidebarTokens();
@@ -59,7 +59,7 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
   const renaming = useSidebarUi((u) => u.renaming?.kind === "tab" && u.renaming.id === tabId);
   const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
   const [pressed, setPressed] = useState(false);
-  const [moved, movedRef] = useShift(shift, useCallback((v: View | null) => registerRow(windowId, tabId, v), [windowId, tabId]), usePressMotion(pressed));
+  const [moved, movedRef] = useShift(shift, useCallback((v: View | null) => registerRow(windowId, tabId, v), [windowId, tabId]), usePressMotion(pressed, nativeMotion));
   const backToPin = useHover();
   const closeControl = useTabCloseControlWhile(tabId, hovered && !renaming);
   const { backToPinHint } = useSidebarRowLook();

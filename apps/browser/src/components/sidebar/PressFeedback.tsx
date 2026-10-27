@@ -18,7 +18,7 @@ AccessibilityInfo.addEventListener("reduceMotionChanged", (on) => (reduceMotion 
 
 export type PressMotion = { opacity: Animated.AnimatedInterpolation<number>; transform: { scale: Animated.AnimatedInterpolation<number> }[] };
 
-export function usePressMotion(pressed: boolean): PressMotion | null {
+export function usePressMotion(pressed: boolean, native = true): PressMotion | null {
   const progress = useRef<Animated.Value | null>(null);
   if (pressed && !progress.current) progress.current = new Animated.Value(0);
   const value = progress.current;
@@ -33,10 +33,10 @@ export function usePressMotion(pressed: boolean): PressMotion | null {
   );
   useEffect(() => {
     if (!value) return;
-    const animation = Animated.timing(value, { toValue: pressed ? 1 : 0, duration: pressed ? PRESS_IN_MS : PRESS_OUT_MS, easing: PRESS_EASING, useNativeDriver: true });
+    const animation = Animated.timing(value, { toValue: pressed ? 1 : 0, duration: pressed ? PRESS_IN_MS : PRESS_OUT_MS, easing: PRESS_EASING, useNativeDriver: native });
     animation.start();
     return () => animation.stop();
-  }, [pressed, value]);
+  }, [pressed, value, native]);
   return motion;
 }
 

@@ -64,6 +64,10 @@ public class SystemModule: Module {
       return NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }.runOnQueue(.main)
 
+    AsyncFunction("installWebApp") { (name: String, url: String, profile: String, icon: String?) -> String? in
+      try? WebAppInstaller.install(name: name, url: url, profile: profile, icon: icon)
+    }.runOnQueue(.main)
+
     AsyncFunction("revealFile") { (path: String) -> Bool in
       guard FileManager.default.fileExists(atPath: path) else { return false }
       if FileDropView.background {

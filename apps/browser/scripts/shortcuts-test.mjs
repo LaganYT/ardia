@@ -98,7 +98,7 @@ const K = (key, keyCode, ...modifiers) => ({ key, keyCode, modifiers });
 const cmd = (key, keyCode, ...more) => K(key, keyCode, "command", ...more);
 
 const devToolsOwn = new Set([
-  "⌘O", "⌘P", "⇧⌘C", "⌘F", "⌥⌘F", "⌘G", "⇧⌘G", "⌘R", "⇧⌘R", "⌘0", "⌘+", "⌘=", "⌘-", "⌥⌘C", "⌘[", "⌘]",
+  "⌘O", "⌘P", "⇧⌘C", "⌘F", "⌥⌘F", "⌘G", "⇧⌘G", "⌘R", "⇧⌘R", "F5", "⇧F5", "⌘0", "⌘+", "⌘=", "⌘-", "⌥⌘C", "⌘[", "⌘]",
   "⌃⇧⇟", "⌃⇧⇞", "⌘↩", "⌥⌘B", "⇧⌘M",
 ]);
 const shortcuts = [
@@ -140,6 +140,8 @@ const shortcuts = [
   ["⌘.", cmd(".", 47), { command: "stop" }, "(Chrome's)"],
   ["⌘R", cmd("r", 15), { command: "reload" }, "⌘R"],
   ["⇧⌘R", cmd("R", 15, "shift"), { command: "forceReload" }, "⇧⌘R"],
+  ["F5", K(F(0xf708), 96, "function"), { command: "reload" }, "F5"],
+  ["⇧F5", K(F(0xf708), 96, "shift", "function"), { command: "forceReload" }, "⇧F5"],
   ["⇧⌘S", cmd("S", 1, "shift"), { command: "toggleTabLayout" }, "⇧⌘S"],
   ["⌘S", cmd("s", 1), { command: "toggleSidebar" }, "⌘S", "page-field"],
   ["⇧⌘L", cmd("L", 37, "shift"), { command: "toggleSidebar" }, "(Chrome's)", "page-field"],

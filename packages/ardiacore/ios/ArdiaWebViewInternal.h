@@ -196,7 +196,7 @@ enum class ArdiaPageFocus { Unknown, Page, DevTools, Elsewhere };
 + (BOOL)prewarmForMouseEvent:(NSEvent *)event;
 - (BOOL)canWakeFrames;
 - (void)commandScrollAnswered:(NSDictionary *)answer;
-- (void)offerCommandScroll:(double)dy at:(NSPoint)windowPoint;
+- (void)offerCommandScroll:(double)dy at:(NSPoint)windowPoint modifiers:(NSEventModifierFlags)modifiers;
 - (void)zoomByCommandScroll:(double)dy;
 @end
 

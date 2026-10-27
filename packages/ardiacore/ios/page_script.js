@@ -559,15 +559,30 @@
   };
   handlers.wakeFrames = () => apply(raf, window, [() => {}]);
 
-  const offerCommandWheel = ({ fx, fy, dy }) => {
+  const offerCommandWheel = ({ fx, fy, dy, until, shift, ctrl, alt }) => {
+    if (apply(dateNow, Date, []) > until) return null;
     const x = fx * innerWidth;
     const y = fy * innerHeight;
-    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, deltaY: -dy, deltaMode: 0, metaKey: true });
+    const wheel = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      clientX: x,
+      clientY: y,
+      deltaY: -dy,
+      deltaMode: 0,
+      metaKey: true,
+      shiftKey: shift,
+      ctrlKey: ctrl,
+      altKey: alt,
+    });
     (document.elementFromPoint(x, y) || document.documentElement).dispatchEvent(wheel);
     return wheel.defaultPrevented;
   };
   handlers.commandWheel = (offer) => {
-    if (isTop) send("commandWheel", { seq: offer.seq, dy: offer.dy, prevented: offerCommandWheel(offer) });
+    const prevented = isTop ? offerCommandWheel(offer) : null;
+    if (prevented !== null) send("commandWheel", { seq: offer.seq, dy: offer.dy, prevented });
   };
 
   const pauseUnasked = (media, activated) => {

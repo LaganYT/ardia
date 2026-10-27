@@ -70,7 +70,7 @@ bool CommandScrollZooms(NSEvent *event, bool trackpad) {
   gZoomAccumulated = 0;
 }
 
-- (void)offerCommandScroll:(double)dy at:(NSPoint)windowPoint {
+- (void)offerCommandScroll:(double)dy at:(NSPoint)windowPoint modifiers:(NSEventModifierFlags)modifiers {
   NSString *url = _tab.url;
   if (!([url hasPrefix:@"https:"] || [url hasPrefix:@"http:"] || [url hasPrefix:@"file:"]) || NSIsEmptyRect(_tab.view.bounds)) {
     [self zoomByCommandScroll:dy];
@@ -82,8 +82,13 @@ bool CommandScrollZooms(NSEvent *event, bool trackpad) {
   const double fy = local.y / NSHeight(b);
   NSNumber *sequence = @(++gCommandScrollSequence);
   CommandScrollsWaiting()[sequence] = @(dy);
+  const double until = NSDate.date.timeIntervalSince1970 * 1000 + kCommandScrollAnswerSeconds * 1000;
   [self callFrame:@"" kind:@"commandWheel"
-             json:[NSString stringWithFormat:@"{\"seq\":%@,\"dy\":%f,\"fx\":%f,\"fy\":%f}", sequence, dy, local.x / NSWidth(b), page.isFlipped ? fy : 1 - fy]];
+             json:[NSString stringWithFormat:@"{\"seq\":%@,\"dy\":%f,\"fx\":%f,\"fy\":%f,\"until\":%.0f,\"shift\":%@,\"ctrl\":%@,\"alt\":%@}", sequence, dy,
+                                             local.x / NSWidth(b), page.isFlipped ? fy : 1 - fy, until,
+                                             (modifiers & NSEventModifierFlagShift) ? @"true" : @"false",
+                                             (modifiers & NSEventModifierFlagControl) ? @"true" : @"false",
+                                             (modifiers & NSEventModifierFlagOption) ? @"true" : @"false"]];
   __weak ArdiaWebView *weakSelf = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kCommandScrollAnswerSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
     if (!CommandScrollsWaiting()[sequence]) return;
@@ -172,7 +177,7 @@ bool CommandScrollZooms(NSEvent *event, bool trackpad) {
     if (!view || !view->_tab) return event;
     if (event.phase == NSEventPhaseBegan) gZoomAccumulated = 0;
     gZoomScrolls++;
-    [view offerCommandScroll:event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 30 at:point];
+    [view offerCommandScroll:event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 30 at:point modifiers:event.modifierFlags];
     return nil;
   }];
 }

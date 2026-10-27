@@ -559,6 +559,17 @@
   };
   handlers.wakeFrames = () => apply(raf, window, [() => {}]);
 
+  const offerCommandWheel = ({ fx, fy, dy }) => {
+    const x = fx * innerWidth;
+    const y = fy * innerHeight;
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, deltaY: -dy, deltaMode: 0, metaKey: true });
+    (document.elementFromPoint(x, y) || document.documentElement).dispatchEvent(wheel);
+    return wheel.defaultPrevented;
+  };
+  handlers.commandWheel = (offer) => {
+    if (isTop) send("commandWheel", { seq: offer.seq, dy: offer.dy, prevented: offerCommandWheel(offer) });
+  };
+
   const pauseUnasked = (media, activated) => {
     if (activated) return 0;
     let paused = 0;

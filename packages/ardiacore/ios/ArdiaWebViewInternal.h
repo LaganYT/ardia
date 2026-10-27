@@ -195,6 +195,9 @@ enum class ArdiaPageFocus { Unknown, Page, DevTools, Elsewhere };
 @interface ArdiaWebView (InputMonitorsInternal)
 + (BOOL)prewarmForMouseEvent:(NSEvent *)event;
 - (BOOL)canWakeFrames;
+- (void)commandScrollAnswered:(NSDictionary *)answer;
+- (void)offerCommandScroll:(double)dy at:(NSPoint)windowPoint;
+- (void)zoomByCommandScroll:(double)dy;
 @end
 
 namespace ardia_web_view {

@@ -13,6 +13,14 @@ constexpr NSTimeInterval kSwitchPrewarmGapSeconds = 0.1;
 
 NSString *gDevZoomMiss = nil;
 bool gGestureTrackpad = false;
+double gZoomAccumulated = 0;
+NSUInteger gCommandScrollSequence = 0;
+constexpr NSTimeInterval kCommandScrollAnswerSeconds = 0.15;
+
+NSMutableDictionary<NSNumber *, NSNumber *> *CommandScrollsWaiting() {
+  static NSMutableDictionary *waiting = [NSMutableDictionary dictionary];
+  return waiting;
+}
 
 BOOL FromTrackpad(NSEvent *event) {
   if (gDevTrackpad >= 0) return gDevTrackpad;
@@ -55,6 +63,42 @@ bool CommandScrollZooms(NSEvent *event, bool trackpad) {
 
 @implementation ArdiaWebView (InputMonitors)
 
+- (void)zoomByCommandScroll:(double)dy {
+  gZoomAccumulated += dy;
+  if (fabs(gZoomAccumulated) < 30) return;
+  [self zoomStep:gZoomAccumulated > 0 ? 1 : -1];
+  gZoomAccumulated = 0;
+}
+
+- (void)offerCommandScroll:(double)dy at:(NSPoint)windowPoint {
+  NSString *url = _tab.url;
+  if (!([url hasPrefix:@"https:"] || [url hasPrefix:@"http:"] || [url hasPrefix:@"file:"]) || NSIsEmptyRect(self.bounds)) {
+    [self zoomByCommandScroll:dy];
+    return;
+  }
+  const NSPoint local = [self convertPoint:windowPoint fromView:nil];
+  const NSRect b = self.bounds;
+  const double fy = local.y / NSHeight(b);
+  NSNumber *sequence = @(++gCommandScrollSequence);
+  CommandScrollsWaiting()[sequence] = @(dy);
+  [self callFrame:@"" kind:@"commandWheel"
+             json:[NSString stringWithFormat:@"{\"seq\":%@,\"dy\":%f,\"fx\":%f,\"fy\":%f}", sequence, dy, local.x / NSWidth(b), self.isFlipped ? fy : 1 - fy]];
+  __weak ArdiaWebView *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kCommandScrollAnswerSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    if (!CommandScrollsWaiting()[sequence]) return;
+    [CommandScrollsWaiting() removeObjectForKey:sequence];
+    [weakSelf zoomByCommandScroll:dy];
+  });
+}
+
+- (void)commandScrollAnswered:(NSDictionary *)answer {
+  NSNumber *sequence = [answer[@"seq"] isKindOfClass:NSNumber.class] ? answer[@"seq"] : nil;
+  NSNumber *dy = sequence ? CommandScrollsWaiting()[sequence] : nil;
+  if (!dy) return;
+  [CommandScrollsWaiting() removeObjectForKey:sequence];
+  if (![answer[@"prevented"] isEqual:@YES]) [self zoomByCommandScroll:dy.doubleValue];
+}
+
 - (BOOL)canWakeFrames {
   if (!_tab || !_visible || _frozen || _tab.closed || _tab.discarded || self.isHiddenOrHasHiddenAncestor) return NO;
   NSString *url = _tab.url;
@@ -94,7 +138,6 @@ bool CommandScrollZooms(NSEvent *event, bool trackpad) {
 + (void)installScrollZoom {
   static id monitor, touchMonitor;
   if (monitor) return;
-  static double accumulated = 0;
   static NSUInteger touching = 0;
   static NSTimeInterval touchedAt = 0;
   touchMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskGesture handler:^NSEvent *(NSEvent *event) {
@@ -126,13 +169,9 @@ bool CommandScrollZooms(NSEvent *event, bool trackpad) {
       gDevZoomMiss = [NSString stringWithFormat:@"not over a page: window %ld %@, hit %@", (long)window.windowNumber,
                                                 NSStringFromPoint(point), [content hitTest:[content.superview convertPoint:point fromView:nil]]];
     if (!view || !view->_tab) return event;
-    if (event.phase == NSEventPhaseBegan) accumulated = 0;
-    accumulated += event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 30;
+    if (event.phase == NSEventPhaseBegan) gZoomAccumulated = 0;
     gZoomScrolls++;
-    if (fabs(accumulated) >= 30) {
-      [view zoomStep:accumulated > 0 ? 1 : -1];
-      accumulated = 0;
-    }
+    [view offerCommandScroll:event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 30 at:point];
     return nil;
   }];
 }

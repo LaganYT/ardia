@@ -23,6 +23,7 @@ function rubberBand(width: number): number {
   return width;
 }
 const panelKey = (p: SidePanel) => `${p.extensionId}|${p.pageProfile}|${p.url}`;
+const alive = (p: SidePanel, currentKey: string) => !p.tabId || !!useBrowser.getState().tabs[p.tabId] || panelKey(p) === currentKey;
 const clamp = (w: number) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, w));
 
 export function ExtensionSidePanel() {
@@ -47,14 +48,14 @@ export function ExtensionSidePanel() {
   useEffect(() => {
     if (!panel) return;
     setShown(panel);
-    setKept((k) => (k.some((p) => panelKey(p) === panelKey(panel)) ? k : [...k, panel]));
+    setKept((k) => (k.some((p) => panelKey(p) === panelKey(panel)) ? k : [...k, panel]).filter((p) => alive(p, panelKey(panel))));
   }, [panel && panelKey(panel)]);
   useEffect(
     () =>
       useBrowser.subscribe((s, prev) => {
         if (s.tabs === prev.tabs) return;
         setKept((k) => {
-          const open = k.filter((p) => !p.tabId || s.tabs[p.tabId] || panelKey(p) === shownKey.current);
+          const open = k.filter((p) => alive(p, shownKey.current));
           return open.length === k.length ? k : open;
         });
       }),

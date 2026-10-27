@@ -72,17 +72,18 @@ bool CommandScrollZooms(NSEvent *event, bool trackpad) {
 
 - (void)offerCommandScroll:(double)dy at:(NSPoint)windowPoint {
   NSString *url = _tab.url;
-  if (!([url hasPrefix:@"https:"] || [url hasPrefix:@"http:"] || [url hasPrefix:@"file:"]) || NSIsEmptyRect(self.bounds)) {
+  if (!([url hasPrefix:@"https:"] || [url hasPrefix:@"http:"] || [url hasPrefix:@"file:"]) || NSIsEmptyRect(_tab.view.bounds)) {
     [self zoomByCommandScroll:dy];
     return;
   }
-  const NSPoint local = [self convertPoint:windowPoint fromView:nil];
-  const NSRect b = self.bounds;
+  NSView *page = _tab.view;
+  const NSPoint local = [page convertPoint:windowPoint fromView:nil];
+  const NSRect b = page.bounds;
   const double fy = local.y / NSHeight(b);
   NSNumber *sequence = @(++gCommandScrollSequence);
   CommandScrollsWaiting()[sequence] = @(dy);
   [self callFrame:@"" kind:@"commandWheel"
-             json:[NSString stringWithFormat:@"{\"seq\":%@,\"dy\":%f,\"fx\":%f,\"fy\":%f}", sequence, dy, local.x / NSWidth(b), self.isFlipped ? fy : 1 - fy]];
+             json:[NSString stringWithFormat:@"{\"seq\":%@,\"dy\":%f,\"fx\":%f,\"fy\":%f}", sequence, dy, local.x / NSWidth(b), page.isFlipped ? fy : 1 - fy]];
   __weak ArdiaWebView *weakSelf = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kCommandScrollAnswerSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
     if (!CommandScrollsWaiting()[sequence]) return;

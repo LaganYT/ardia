@@ -18,19 +18,12 @@ enum WebAppInstaller {
     let identifier = "com.ardia.webapp." + SHA256.hash(data: Data("\(profile)\n\(url)".utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
     let files = FileManager.default
     try files.createDirectory(at: folder, withIntermediateDirectories: true)
-    for old in (try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] where old.pathExtension == "app" {
-      let plist = NSDictionary(contentsOf: old.appendingPathComponent("Contents/Info.plist"))
-      if plist?["CFBundleIdentifier"] as? String == identifier { try files.trashItem(at: old, resultingItemURL: nil) }
-    }
 
     let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
     let file = title.replacingOccurrences(of: "[/:\\\\]", with: "-", options: .regularExpression).trimmingCharacters(in: CharacterSet(charactersIn: ". "))
-    var bundle = folder.appendingPathComponent("\(file.isEmpty ? "App" : String(file.prefix(60))).app")
-    var copy = 2
-    while files.fileExists(atPath: bundle.path) {
-      bundle = folder.appendingPathComponent("\(file.isEmpty ? "App" : String(file.prefix(60))) \(copy).app")
-      copy += 1
-    }
+    let bundle = folder.appendingPathComponent(".installing-\(UUID().uuidString).app")
+    var moved = false
+    defer { if !moved { try? files.removeItem(at: bundle) } }
 
     let contents = bundle.appendingPathComponent("Contents")
     try files.createDirectory(at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
@@ -57,7 +50,20 @@ enum WebAppInstaller {
     ]
     try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
     try writeIcon(icon: icon, title: title, to: contents.appendingPathComponent("Resources/AppIcon.icns"))
-    return bundle.path
+
+    for old in (try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] where old.pathExtension == "app" && old.lastPathComponent != bundle.lastPathComponent {
+      let plist = NSDictionary(contentsOf: old.appendingPathComponent("Contents/Info.plist"))
+      if plist?["CFBundleIdentifier"] as? String == identifier { try files.trashItem(at: old, resultingItemURL: nil) }
+    }
+    var installed = folder.appendingPathComponent("\(file.isEmpty ? "App" : String(file.prefix(60))).app")
+    var copy = 2
+    while files.fileExists(atPath: installed.path) {
+      installed = folder.appendingPathComponent("\(file.isEmpty ? "App" : String(file.prefix(60))) \(copy).app")
+      copy += 1
+    }
+    try files.moveItem(at: bundle, to: installed)
+    moved = true
+    return installed.path
   }
 
   static func launchLink(url: String, profile: String) -> String {

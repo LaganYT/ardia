@@ -51,9 +51,13 @@ enum WebAppInstaller {
     try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
     try writeIcon(icon: icon, title: title, to: contents.appendingPathComponent("Resources/AppIcon.icns"))
 
+    var replaced: [(original: URL, backup: URL)] = []
     for old in (try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] where old.pathExtension == "app" && old.lastPathComponent != bundle.lastPathComponent {
       let plist = NSDictionary(contentsOf: old.appendingPathComponent("Contents/Info.plist"))
-      if plist?["CFBundleIdentifier"] as? String == identifier { try files.trashItem(at: old, resultingItemURL: nil) }
+      guard plist?["CFBundleIdentifier"] as? String == identifier else { continue }
+      let backup = folder.appendingPathComponent(".replaced-\(UUID().uuidString).app")
+      try files.moveItem(at: old, to: backup)
+      replaced.append((old, backup))
     }
     var installed = folder.appendingPathComponent("\(file.isEmpty ? "App" : String(file.prefix(60))).app")
     var copy = 2
@@ -61,8 +65,14 @@ enum WebAppInstaller {
       installed = folder.appendingPathComponent("\(file.isEmpty ? "App" : String(file.prefix(60))) \(copy).app")
       copy += 1
     }
-    try files.moveItem(at: bundle, to: installed)
+    do {
+      try files.moveItem(at: bundle, to: installed)
+    } catch {
+      for (original, backup) in replaced { try? files.moveItem(at: backup, to: original) }
+      throw error
+    }
     moved = true
+    for (_, backup) in replaced { try? files.trashItem(at: backup, resultingItemURL: nil) }
     return installed.path
   }
 

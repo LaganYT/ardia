@@ -13,6 +13,7 @@ function CodeField({ value, placeholder, onPreview, onCommit }: { value: string;
   const [text, setText] = useState(value);
   const latest = useRef({ text, value, onCommit });
   latest.current = { text, value, onCommit };
+  useEffect(() => setText(value), [value]);
   useEffect(
     () => () => {
       const { text: pending, value: saved, onCommit: commit } = latest.current;

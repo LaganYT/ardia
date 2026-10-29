@@ -1,4 +1,5 @@
 import type { Boost, BoostColors } from "./types";
+import { safeSelector } from "./valid";
 
 export type EngineBoost = {
   id: string;
@@ -27,7 +28,7 @@ export function colorMatrix(colors: BoostColors): number[] {
 }
 
 export function boostStylesheet(boost: Pick<Boost, "zaps" | "font" | "textCase" | "css">): string {
-  const rules = boost.zaps.map((selector) => `${selector}{display:none !important;}`);
+  const rules = boost.zaps.filter(safeSelector).map((selector) => `${selector}{display:none !important;}`);
   if (boost.font) rules.push(`${TEXT_ONLY}{font-family:${quoted(boost.font)} !important;}`);
   if (boost.textCase !== "none") rules.push(`${TEXT_ONLY}{text-transform:${TEXT_TRANSFORM[boost.textCase]} !important;}`);
   if (boost.css) rules.push(boost.css);

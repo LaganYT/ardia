@@ -8,7 +8,9 @@ import { useProfileBoosts } from "../../state/boosts/hooks";
 import type { Boost } from "../../state/boosts/types";
 import { useTab } from "../../state/browser/hooks";
 import { copyShareCode, showBoostMenu } from "../../state/boostUi/actions";
-import { previewDraft } from "../../state/boostUi/preview";
+import { dropPendingPreview, previewDraft } from "../../state/boostUi/preview";
+import { clearBoostPreview } from "../../platform/boosts";
+import { orWarn } from "../../lib/fallback";
 import { BoostCode } from "./BoostCode";
 import { BoostColorsSection } from "./BoostColors";
 import { BoostFonts, BoostTextControls } from "./BoostText";
@@ -33,6 +35,8 @@ function useDraft(profileId: string, tabId: string, boost: Boost) {
     if (settle) {
       setDraft({});
       updateBoost(profileId, boost.id, merged);
+      dropPendingPreview(tabId);
+      void Promise.resolve(clearBoostPreview(tabId)).catch(orWarn(undefined));
     } else {
       setDraft(merged);
       previewDraft(tabId, { ...boost, ...merged });

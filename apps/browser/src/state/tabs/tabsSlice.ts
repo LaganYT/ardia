@@ -53,7 +53,10 @@ function openOutsideTab(s: BrowserState, url: string, windowId: string): boolean
   const action = appUrlAction(url);
   if (!action) return false;
   if (action.kind === "newTab") s.newTab(windowId);
-  else if (action.kind === "boost") showImportBoost(action.code);
+  else if (action.kind === "boost") {
+    showImportBoost(action.code);
+    openSettings("boosts");
+  }
   else openSettings(action.pane);
   return true;
 }

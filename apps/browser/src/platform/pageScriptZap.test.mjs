@@ -368,18 +368,17 @@ test("the overlay is out of the tree while selectors are built", () => {
   assert.equal(t.html.children.length, 2);
 });
 
-test("zapStop removes the overlay and the listeners, and zapStart twice adds one overlay", () => {
+test("zapStop removes the overlay and stops swallowing events, and zapStart twice adds one overlay", () => {
   const t = page(feed);
   t.handlers.zapStart({});
   t.handlers.zapStart({});
   assert.equal(t.html.children.filter((c) => c.localName === "ardia-zap").length, 1);
-  assert.ok(t.listeners.length > 0);
+  assert.ok(t.dispatch("click").defaultPrevented);
   t.handlers.zapStop({});
   assert.equal(t.html.children.filter((c) => c.localName === "ardia-zap").length, 0);
-  assert.equal(t.listeners.length, 0);
   const e = t.dispatch("click");
   assert.ok(!e.defaultPrevented);
   t.handlers.zapStop({});
   t.handlers.zapStart({});
-  assert.ok(t.listeners.length > 0);
+  assert.ok(t.dispatch("click").defaultPrevented);
 });

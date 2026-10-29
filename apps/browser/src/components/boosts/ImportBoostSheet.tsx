@@ -7,9 +7,9 @@ import { Box, Button, hairline, radius, Sheet, Text, useTheme } from "../ui";
 import { SheetActions, SheetTitle } from "../settings/Form";
 import { CODE_FONT, IMPORT_SHEET } from "./tokens";
 
-export function ImportBoostSheet({ profileId }: { profileId: string }) {
+export function ImportBoostSheet({ profileId, initialCode = "" }: { profileId: string; initialCode?: string }) {
   const theme = useTheme();
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode);
   const result = previewImport(code);
   const boost = result && !("error" in result) ? result : null;
   const changes = boost ? boostChanges(boost) : [];

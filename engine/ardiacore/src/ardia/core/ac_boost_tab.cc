@@ -14,6 +14,7 @@
 #include "base/supports_user_data.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/zoom/zoom_controller.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -21,6 +22,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "net/base/url_util.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "url/gurl.h"
 #include "ardia/core/ac_boosts.h"
@@ -123,6 +125,7 @@ class BoostTab : public content::WebContentsObserver,
   void DidFinishNavigation(content::NavigationHandle* navigation) override {
     if (navigation->IsInPrimaryMainFrame() && navigation->HasCommitted() &&
         !navigation->IsSameDocument()) {
+      zoom_key_ = {-1, std::string()};
       ApplyPageState();
     }
   }
@@ -148,6 +151,11 @@ class BoostTab : public content::WebContentsObserver,
     }
     zoom_key_ = {zoom, host};
     if (zoom == 100) {
+      if (controller->zoom_mode() == zoom::ZoomController::ZOOM_MODE_ISOLATED) {
+        const GURL url = GetWebContents().GetLastCommittedURL();
+        controller->SetZoomLevel(content::HostZoomMap::GetForWebContents(&GetWebContents())
+                                     ->GetZoomLevelForHostAndScheme(url.GetScheme(), net::GetHostOrSpecFromURL(url)));
+      }
       controller->SetZoomMode(zoom::ZoomController::ZOOM_MODE_DEFAULT);
       return;
     }

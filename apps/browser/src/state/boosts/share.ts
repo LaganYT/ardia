@@ -1,3 +1,4 @@
+import { importableCss, safeSelector } from "./valid";
 import { BOOST_CASES, BOOST_FONTS, BOOST_SIZES, type Boost, type BoostColors } from "./types";
 
 export const SHARE_VERSION = 1;
@@ -178,8 +179,9 @@ export function decodeBoost(code: string): Boost | ShareError {
   if (font !== null && !(typeof font === "string" && (BOOST_FONTS as readonly string[]).includes(font))) return invalid("a font");
   if (!(BOOST_SIZES as readonly unknown[]).includes(size)) return invalid("a size");
   if (!(BOOST_CASES as readonly unknown[]).includes(textCase)) return invalid("a text case");
-  if (!Array.isArray(zaps) || zaps.length > MAX_SHARE_ZAPS || !zaps.every((zap) => typeof zap === "string" && zap.length > 0 && zap.length <= MAX_SHARE_SELECTOR && !CONTROL.test(zap))) return invalid("hidden elements");
+  if (!Array.isArray(zaps) || zaps.length > MAX_SHARE_ZAPS || !zaps.every((zap) => typeof zap === "string" && zap.length > 0 && zap.length <= MAX_SHARE_SELECTOR && !CONTROL.test(zap) && safeSelector(zap))) return invalid("hidden elements");
   if (typeof css !== "string" || css.length > MAX_SHARE_CSS) return invalid("CSS");
+  if (!importableCss(css)) return { error: "That Boost loads files from the web (@import or url()), which Ardia doesn't import." };
   return {
     id: "",
     name,

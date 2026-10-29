@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { setBoostEnabled } from "../../../state/boosts/actions";
+import { hideImportBoost, useImportBoostSheet } from "../../../state/boosts/importSheet";
 import { useProfileBoosts } from "../../../state/boosts/hooks";
 import type { Boost } from "../../../state/boosts/types";
 import { boostChanges } from "../../../state/boostUi/describe";
@@ -21,6 +22,12 @@ export function BoostsPane({ profileId: chosen }: { profileId: string | null }) 
   const [profileId, setProfileId] = useSettingsProfile(chosen);
   const boosts = useProfileBoosts(profileId);
   const sites = useMemo(() => bySite(boosts), [boosts]);
+  const pendingCode = useImportBoostSheet((s) => s.code);
+  useEffect(() => {
+    if (pendingCode === null) return;
+    showSettingsSheet(<ImportBoostSheet profileId={profileId} initialCode={pendingCode} />);
+    hideImportBoost();
+  }, [pendingCode, profileId]);
   return (
     <>
       <SectionHeader anchor="boosts.list" action={<ProfilePicker value={profileId} onChange={setProfileId} />} />

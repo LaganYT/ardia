@@ -54,3 +54,10 @@ export function validBoost(id: string, raw: unknown): Boost | null {
 }
 
 export const withoutId = ({ id: _id, ...rest }: Boost) => rest;
+
+const UNSAFE_SELECTOR = /[{};@<>\\]|\/\*/;
+const WEB_URL = /url\(\s*(?!["']?data:)/i;
+const IMPORT_RULE = /@import/i;
+
+export const safeSelector = (selector: string) => selector.trim().length > 0 && !UNSAFE_SELECTOR.test(selector);
+export const importableCss = (css: string) => !IMPORT_RULE.test(css) && !WEB_URL.test(css);

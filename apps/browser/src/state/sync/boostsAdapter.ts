@@ -22,7 +22,7 @@ export function boostsAdapter(profileId: string): Adapter {
           next = next.map((b) => (b.id === id ? remote : b));
         }
       }
-      if (next !== current) setBoostList(profileId, next);
+      if (next !== current) setBoostList(profileId, [...next].sort((a, b) => (a.id < b.id ? -1 : 1)));
     },
   };
 }

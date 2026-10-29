@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { clearBoostPreview } from "../../platform/boosts";
 import { orWarn } from "../../lib/fallback";
+import { dropPendingPreview } from "../boostUi/preview";
 
 export type BoostEditor = { tabId: string; boostId: string };
 
@@ -14,6 +15,7 @@ export function closeBoostEditor(windowId: string) {
   if (!open) return;
   const { [windowId]: _, ...rest } = useBoostEditors.getState().byWindow;
   useBoostEditors.setState({ byWindow: rest });
+  dropPendingPreview(open.tabId);
   void clearBoostPreview(open.tabId).catch(orWarn(undefined));
 }
 

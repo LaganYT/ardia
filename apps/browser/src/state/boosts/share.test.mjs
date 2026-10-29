@@ -200,3 +200,13 @@ test("limits are inclusive", async () => {
   const edge = shared({ name: "x".repeat(100), css: "a".repeat(50_000), zaps: Array.from({ length: 100 }, (_, i) => `.z${i}`), colors: { ...shared().colors, hue: 360, brightness: 1, offset: -360 } });
   assert.equal(decodeBoost(await codeFor(edge)).error, undefined);
 });
+
+test("css that loads from the web and selectors that escape their rule are refused", async () => {
+  for (const css of ["@import 'https://evil.test/x.css';", "a{background:url(https://evil.test/x.png)}", "a{background:URL( http://x )}"]) {
+    assert.match(decodeBoost(await codeFor(shared({ css }))).error, /web/);
+  }
+  assert.equal(decodeBoost(await codeFor(shared({ css: "a{background:url(data:image/png;base64,AAAA)}" }))).error, undefined);
+  for (const zap of [".a{}body{display:none}", ".a;b", "@media x", ".a/*", ".a\\"]) {
+    assert.match(decodeBoost(await codeFor(shared({ zaps: [zap] }))).error, /hidden elements/);
+  }
+});

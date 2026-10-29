@@ -57,3 +57,7 @@ test("a compiled boost carries zoom, scheme and matrix", () => {
   assert.ok(dark.css.includes("uppercase"));
   assert.equal(compileBoost({ ...blank, colors: { ...DEFAULT_COLORS, appearance: "light" } }).scheme, 0);
 });
+
+test("a zap that would break out of its rule is left out", () => {
+  assert.equal(boostStylesheet({ ...blank, zaps: [".ad", ".x{}body{display:none}", " "] }), ".ad{display:none !important;}");
+});

@@ -6,6 +6,10 @@ import type { Boost } from "../boosts/types";
 const inFlight = new Set<string>();
 const latest = new Map<string, Boost>();
 
+export function dropPendingPreview(tabId: string) {
+  latest.delete(tabId);
+}
+
 export function previewDraft(tabId: string, boost: Boost) {
   if (inFlight.has(tabId)) {
     latest.set(tabId, boost);

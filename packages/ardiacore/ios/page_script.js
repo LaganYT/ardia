@@ -1526,6 +1526,33 @@
     zap.pick = { levels, level: 0 };
     zapReport();
   };
+  const zapSwallow = (e) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  const zapListeners = [
+    ...ZAP_SWALLOWED.map((type) => [type, zapSwallow]),
+    [
+      "click",
+      (e) => {
+        zapSwallow(e);
+        if (e.isTrusted && e.button === 0) zapPick(e.clientX, e.clientY);
+      },
+    ],
+    [
+      "mousemove",
+      (e) => {
+        zap.point = [e.clientX, e.clientY];
+        zapSchedule();
+      },
+    ],
+    ["scroll", zapSchedule],
+    ["resize", zapSchedule],
+  ];
+  for (const [type, listener] of zapListeners) {
+    const gated = guard((e) => zap && listener(e));
+    addEventListener(type, gated, true);
+  }
   handlers.zapStart = () => {
     if (zap) return;
     const host = document.createElement("ardia-zap");
@@ -1539,36 +1566,11 @@
     pickedLayer.className = "picked";
     host.attachShadow({ mode: "closed" }).append(look, hoverLayer, pickedLayer);
     host.append(frames);
-    const swallow = (e) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    };
-    const listeners = [
-      ...ZAP_SWALLOWED.map((type) => [type, swallow]),
-      [
-        "click",
-        (e) => {
-          swallow(e);
-          if (e.isTrusted && e.button === 0) zapPick(e.clientX, e.clientY);
-        },
-      ],
-      [
-        "mousemove",
-        (e) => {
-          zap.point = [e.clientX, e.clientY];
-          zapSchedule();
-        },
-      ],
-      ["scroll", zapSchedule],
-      ["resize", zapSchedule],
-    ].map(([type, listener]) => [type, guard(listener)]);
-    zap = { host, hoverLayer, pickedLayer, listeners, hovered: null, picked: [], pick: null, point: null, queued: false };
-    for (const [type, listener] of listeners) addEventListener(type, listener, true);
+    zap = { host, hoverLayer, pickedLayer, hovered: null, picked: [], pick: null, point: null, queued: false };
     document.documentElement.append(host);
   };
   handlers.zapStop = () => {
     if (!zap) return;
-    for (const [type, listener] of zap.listeners) removeEventListener(type, listener, true);
     zap.host.remove();
     zap = null;
   };

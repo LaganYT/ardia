@@ -401,14 +401,14 @@ class ACPageObserver : public content::RenderFrameObserver,
     blink::WebDocument document = render_frame()->GetWebFrame()->GetDocument();
     const blink::WebString key = blink::WebString::FromUtf8(kBoostSheetKey);
     if (boost_sheet_inserted_) {
-      document.RemoveInsertedStyleSheet(key, blink::WebDocument::kUserOrigin);
+      document.RemoveInsertedStyleSheet(key, blink::WebCssOrigin::kUser);
       boost_sheet_inserted_ = false;
     }
     if (boost_css_.empty()) {
       return;
     }
     document.InsertStyleSheet(blink::WebString::FromUtf8(boost_css_), &key,
-                              blink::WebDocument::kUserOrigin);
+                              blink::WebCssOrigin::kUser);
     boost_sheet_inserted_ = true;
   }
 

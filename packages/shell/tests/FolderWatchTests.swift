@@ -99,6 +99,71 @@ final class FolderWatchTests: XCTestCase {
     wait(for: [counter.expect(self, atLeast: seen + 1)], timeout: 5)
   }
 
+  func swapOnFirstOpen(_ installation: URL, keepingOld: Bool) throws -> (opener: (String) -> Int32, swapped: () -> Bool) {
+    let child = installation.appendingPathComponent("copy", isDirectory: true)
+    try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+    let replacement = try folder("Replacement")
+    let old = scratch.appendingPathComponent("Old")
+    var swapped = false
+    let opener: (String) -> Int32 = { path in
+      let descriptor = open(path, O_EVTONLY)
+      guard !swapped else { return descriptor }
+      swapped = true
+      try? FileManager.default.moveItem(at: child, to: replacement.appendingPathComponent("copy"))
+      if keepingOld {
+        try? FileManager.default.moveItem(at: installation, to: old)
+      } else {
+        try? FileManager.default.removeItem(at: installation)
+      }
+      try? FileManager.default.moveItem(at: replacement, to: installation)
+      return descriptor
+    }
+    return (opener, { swapped })
+  }
+
+  func assertWatchesTheNewFolder(_ installation: URL, keepingOld: Bool) throws {
+    let swap = try swapOnFirstOpen(installation, keepingOld: keepingOld)
+    let counter = Counter()
+    let watch = FolderWatch(path: installation.path, queue: queue, open: swap.opener) { counter.bump() }
+    queue.sync { watch.start() }
+    wait(for: [counter.expect(self, atLeast: 1)], timeout: 5)
+    queue.sync {}
+    XCTAssertTrue(swap.swapped())
+    XCTAssertEqual(binding(watch), .watching)
+    let seen = counter.value
+    try FileManager.default.removeItem(at: installation.appendingPathComponent("copy"))
+    wait(for: [counter.expect(self, atLeast: seen + 1)], timeout: 5)
+  }
+
+  func testAFolderMovedAwayBetweenOpeningAndRegistrationIsRebound() throws {
+    try assertWatchesTheNewFolder(try folder(), keepingOld: true)
+  }
+
+  func testAFolderDeletedRightAfterItIsOpenedIsReopened() throws {
+    try assertWatchesTheNewFolder(try folder(), keepingOld: false)
+  }
+
+  func testAFolderSwappedBeforeItsRegistrationIsWatchedAfterIt() throws {
+    let installation = try folder()
+    let child = installation.appendingPathComponent("copy", isDirectory: true)
+    try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+    let replacement = try folder("Replacement")
+    let counter = Counter()
+    let watch = FolderWatch(path: installation.path, queue: queue) { counter.bump() }
+    try queue.sync {
+      watch.start()
+      try FileManager.default.moveItem(at: child, to: replacement.appendingPathComponent("copy"))
+      try FileManager.default.removeItem(at: installation)
+      try FileManager.default.moveItem(at: replacement, to: installation)
+    }
+    wait(for: [counter.expect(self, atLeast: 1)], timeout: 5)
+    queue.sync {}
+    XCTAssertEqual(binding(watch), .watching)
+    let seen = counter.value
+    try FileManager.default.removeItem(at: installation.appendingPathComponent("copy"))
+    wait(for: [counter.expect(self, atLeast: seen + 1)], timeout: 5)
+  }
+
   func testAMissingFolderReportsAbsent() throws {
     let counter = Counter()
     let watch = watch(scratch.appendingPathComponent("Installation"), counter)

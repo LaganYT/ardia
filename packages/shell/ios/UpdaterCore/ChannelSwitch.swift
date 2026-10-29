@@ -69,7 +69,6 @@ struct ChannelSwitch {
     case resetCycle
     case watch
     case unwatch
-    case discard(Set<Copy>)
     case release([Int])
     case log(String)
   }
@@ -90,14 +89,10 @@ struct ChannelSwitch {
     let kept = sighting.blind ? known : known.filter { sighting.residue.contains($0.residue) }
     known = sighting.copies.union(kept)
     let unknown = sighting.residue.subtracting(known.map(\.residue))
-    let blind = sighting.blind || (!unknown.isEmpty && busy)
+    let blind = sighting.blind || !unknown.isEmpty
     let facts = Facts(busy: busy, staged: known.isEmpty ? (blind ? .unreadable : .none) : .present(known), automaticChecks: automaticChecks)
     last = facts
     return facts
-  }
-
-  func orphans(_ sighting: Sighting, busy: Bool) -> Set<Residue> {
-    busy || sighting.blind ? [] : sighting.residue.subtracting(known.map(\.residue))
   }
 
   mutating func switched() -> [Effect] {
@@ -136,10 +131,6 @@ struct ChannelSwitch {
       phase = phase.with(round)
       return []
     }
-  }
-
-  mutating func noticed() {
-    roundWanted = true
   }
 
   mutating func quit(_ id: Int) {
@@ -211,10 +202,9 @@ struct ChannelSwitch {
       case .unreadable where !round.cancelled.isEmpty || !round.cancelledBuilds.isEmpty:
         phase = .cancelling(round)
         return [.watch]
-      case .present(let copies):
+      case .present:
         phase = .unconfirmed
-        return [.watch, .log("Sparkle's installer didn't confirm dropping the staged nightly; removing its copy"),
-                .discard(copies.subtracting(round.cancelled))]
+        return [.watch, .log("Sparkle's installer didn't confirm dropping the staged nightly; quitting waits for its deadline")]
       case .unreadable:
         phase = .unconfirmed
         return [.watch, .log("Sparkle's cache can't be read to confirm the staged nightly is gone; quitting waits for its deadline")]
@@ -236,11 +226,6 @@ struct ChannelSwitch {
       guard facts.staged == .none else { return [] }
       return [.unwatch] + settle(facts, reset: false)
     }
-  }
-
-  mutating func nearDeadline(_ id: Int) -> [Effect] {
-    guard waiting.contains(id), case .present(let copies) = last?.staged else { return [] }
-    return [.log("Sparkle hasn't dropped the staged nightly as the quit deadline nears; removing its copy"), .discard(copies)]
   }
 
   mutating func deadline(_ id: Int) -> [Effect] {

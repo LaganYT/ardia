@@ -12,7 +12,7 @@
 // Scratch: --scratch (default ~/ardia-scratch/channel-switch-test). Needs an Apple Development identity, swiftc,
 // python3 and Accessibility for this terminal (the window checks press Sparkle's buttons by pid, never by focus).
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -325,42 +325,36 @@ const scenarios = [
   },
   {
     key: "stale-copy",
-    what: "A leftover nightly copy with no installer, empty feed: the app moves it out of Sparkle's folder before it exits, nothing installs, and the next quit is fast",
+    what: "A leftover nightly copy with no installer, empty feed: quit is held at most to the deadline, nothing installs, and the copy is left for Sparkle",
     alone: true,
     start: { channel: "stable", stale: true },
     control: { feed: "empty" },
     async run(s) {
       await s.launch();
       const q = await s.quit(QUIT_HOLD_LIMIT);
-      check(!s.offChannelCopies().length, "the app quit with the leftover nightly still in Sparkle's folder");
+      s.expectUntouched();
       s.expectInstalled(false);
-      await s.launch();
-      await sleep(3000);
-      const again = await s.quit(2000);
-      return `quit in ${q} ms with the copy gone; the next quit took ${again} ms`;
+      return `quit in ${q} ms, the copy left alone`;
     },
   },
   {
     key: "stale-copy-beside-residue",
-    what: "A leftover nightly beside an abandoned copy with no Info.plist: the unreadable one doesn't hide the nightly, which is moved out; the abandoned one is left alone, and quit is fast",
+    what: "A leftover nightly beside an abandoned copy with no Info.plist: quit is held at most to the deadline and both are left alone",
     alone: true,
     start: { channel: "stable", stale: true, abandoned: true },
     control: { feed: "empty" },
     async run(s) {
       await s.launch();
       const q = await s.quit(QUIT_HOLD_LIMIT);
-      check(!s.offChannelCopies().length, "the app quit with the leftover nightly still in Sparkle's folder");
+      s.expectUntouched();
       check(existsSync(join(s.installation, "abandoned/Ardia.app/Contents")), "the abandoned copy was touched");
       s.expectInstalled(false);
-      await s.launch();
-      await sleep(3000);
-      const again = await s.quit(2000);
-      return `quit in ${q} ms with the nightly gone and the abandoned copy kept; the next quit took ${again} ms`;
+      return `quit in ${q} ms, both left alone`;
     },
   },
   {
     key: "stale-copy-slow-feed",
-    what: "A leftover nightly copy with no installer and a feed that answers after 20 s: quit is held to the deadline, the copy is moved out before exit, and the next quit is fast",
+    what: "A leftover nightly copy with no installer and a feed that answers after 20 s: quit is held to the deadline and no later, and the copy is left alone",
     alone: true,
     start: { channel: "stable", stale: true },
     control: { feed: "empty", feedDelay: 20 },
@@ -368,12 +362,9 @@ const scenarios = [
       await s.launch();
       const q = await s.quit(QUIT_HOLD_LIMIT);
       check(q >= 6000, `quit went at ${q} ms with nothing confirming the leftover's drop`);
-      check(!s.offChannelCopies().length, "the app quit with the leftover nightly still in Sparkle's folder");
+      s.expectUntouched();
       s.expectInstalled(false);
-      await s.launch();
-      await sleep(3000);
-      const again = await s.quit(2000);
-      return `quit held ${q} ms and the copy went; the next quit took ${again} ms`;
+      return `quit held ${q} ms, the copy left alone`;
     },
   },
   {
@@ -415,7 +406,7 @@ const scenarios = [
   },
   {
     key: "unresponsive-installer",
-    what: "Nightly → Stable and quit with Sparkle's installer not answering: quit ends by the deadline with the staged copy moved out, so the installer, resumed after, installs nothing",
+    what: "Nightly → Stable and quit with Sparkle's installer not answering: quit goes at the deadline, nothing is moved, and the nightly can still install (known limit)",
     alone: true,
     async run(s) {
       await s.launch();
@@ -425,14 +416,32 @@ const scenarios = [
       try {
         await s.eval(`U.setUpdateChannel("stable"); return true;`);
         q = await s.quit(QUIT_HOLD_LIMIT, { settle: false });
-        check(!s.offChannelCopies().length, "the app quit with the staged nightly still in Sparkle's folder");
+        s.expectUntouched();
       } finally {
         s.resume(stopped);
       }
       check(q >= 6000, `quit came early (${q} ms): something confirmed a drop that never happened`);
       await s.untilInstallerGone();
+      s.expectInstalled(true);
+      return `quit at ${q} ms; the installer, once it answered, installed the nightly as documented`;
+    },
+  },
+  {
+    key: "unreadable-staged-copy",
+    what: "Quit with a live staged nightly whose Info.plist can't be read, the saved channel no longer Nightly: quit asks Sparkle to resume it, Sparkle's Skip reaches the installer, and quit goes well inside 8 s",
+    alone: true,
+    async run(s) {
+      await s.launch();
+      await s.untilStaged();
+      for (const copy of s.staged()) chmodSync(join(copy.path, "Contents/Info.plist"), 0o000);
+      sh("defaults", ["write", s.prefs, "ACUpdateChannel", "stable"]);
+      await until(async () => (await s.state()).channel === "stable", 10000, "the app never saw the saved channel change");
+      const drops = (s.app.output().match(/dropping update/g) ?? []).length;
+      const q = await s.quit(QUIT_HOLD_LIMIT);
+      check((s.app.output().match(/dropping update/g) ?? []).length > drops, "quit didn't ask Sparkle to resume the unreadable copy");
+      check(!s.staged().length, "Sparkle's Skip didn't clear the unreadable copy");
       s.expectInstalled(false);
-      return `quit at ${q} ms with the copy moved out; the resumed installer installed nothing`;
+      return `Sparkle skipped it and quit went in ${q} ms`;
     },
   },
   {
@@ -810,7 +819,12 @@ class Scenario {
     if (settle) await this.untilInstallerGone();
     return ms;
   }
-  expectInstalled(expected) {
+  expectUntouched() {
+    check(this.def.start?.stale ? existsSync(join(this.installation, "stale-copy/Ardia.app/Contents/Info.plist")) : this.offChannelCopies().length,
+      "Ardia moved or deleted a staged copy");
+    check(!existsSync(join(this.caches, "ArdiaDiscardedUpdates")), "Ardia set staged copies aside");
+  }
+    expectInstalled(expected) {
     const build = Number(info(this.copy, "CFBundleVersion"));
     check(build === (expected ? candidateBuild : installedBuild), expected ? `the nightly didn't install (still ${build})` : `the nightly installed (now ${build})`);
   }

@@ -56,35 +56,6 @@ enum StagedUpdateCopies {
     if ended.wait(timeout: .now() + 1) == .timedOut { kill(tool.processIdentifier, SIGKILL) }
   }
 
-  static func sweep(installedBuild: String? = Bundle.main.infoDictionary?["CFBundleVersion"] as? String,
-                    bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches,
-                    running: URL = Bundle.main.bundleURL, tool: URL = launchServicesTool) {
-    guard let installedBuild, let root = installationRoot(bundleId: bundleId, caches: caches) else { return }
-    guard !StagedSurvey.contains(root, running) else {
-      return NSLog("Ardia: running from Sparkle's Installation folder (\(running.path)); leaving it alone")
-    }
-    for copy in copies(bundleId: bundleId, caches: caches) {
-      let bundle = copy.bundle.bundleURL
-      guard let folder = StagedSurvey.updateFolder(of: bundle, in: root), !sameFile(bundle, running), !StagedSurvey.contains(folder, running) else { continue }
-      unregister(bundle, tool: tool)
-      let build = copy.bundle.infoDictionary?["CFBundleVersion"] as? String ?? ""
-      guard build.compare(installedBuild, options: .numeric) != .orderedDescending, isPlainDirectory(folder) else { continue }
-      do {
-        try FileManager.default.removeItem(at: folder)
-        NSLog("Ardia: removed a leftover update copy (build \(build)) at \(folder.path)")
-      } catch {
-        NSLog("Ardia: couldn't remove a leftover update copy at \(folder.path): \(error.localizedDescription)")
-      }
-    }
-  }
-
-  static func sameFile(_ one: URL, _ other: URL) -> Bool {
-    var first = stat()
-    var second = stat()
-    guard stat(one.path, &first) == 0, stat(other.path, &second) == 0 else { return false }
-    return first.st_dev == second.st_dev && first.st_ino == second.st_ino
-  }
-
   static func isPlainDirectory(_ url: URL) -> Bool {
     var info = stat()
     return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFDIR

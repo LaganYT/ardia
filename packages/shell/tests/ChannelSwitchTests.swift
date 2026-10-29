@@ -10,9 +10,7 @@ final class ChannelSwitchTests: XCTestCase {
   let mayInstall = Effect.log("Sparkle didn't drop the staged nightly before the quit deadline; quitting, and it may install")
   let unreadableLine = Effect.log("Sparkle's cache can't be read to confirm the staged nightly is gone; quitting waits for its deadline")
 
-  func unconfirmed(_ copies: Set<Copy>) -> [Effect] {
-    [.watch, .log("Sparkle's installer didn't confirm dropping the staged nightly; removing its copy"), .discard(copies)]
-  }
+  let unconfirmed: [Effect] = [.watch, .log("Sparkle's installer didn't confirm dropping the staged nightly; quitting waits for its deadline")]
 
   func facts(busy: Bool = false, _ copies: Set<Copy> = [], checks: Bool = true) -> ChannelSwitch.Facts {
     ChannelSwitch.Facts(busy: busy, staged: copies.isEmpty ? .none : .present(copies), automaticChecks: checks)
@@ -74,16 +72,16 @@ final class ChannelSwitchTests: XCTestCase {
     XCTAssertEqual(machine.changed(facts([staged])), [.resume])
   }
 
-  func testAResumeThatEndsWithoutACancellationRemovesTheCopy() {
+  func testAResumeThatEndsWithoutACancellationWaitsForTheDeadlineAndTouchesNothing() {
     var machine = ChannelSwitch()
     _ = machine.switched()
     XCTAssertEqual(machine.changed(facts([staged])), [.resume])
     XCTAssertEqual(machine.changed(facts(busy: true, [staged])), [])
-    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed([staged]))
+    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed)
     XCTAssertEqual(machine.phase, .unconfirmed)
     XCTAssertEqual(machine.changed(facts([staged])), [])
     XCTAssertEqual(quit(&machine, 1, facts([staged])), [.unwatch, .resume])
-    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed([staged]))
+    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed)
     XCTAssertEqual(machine.deadline(1), [mayInstall, .release([1])])
   }
 
@@ -128,7 +126,6 @@ final class ChannelSwitchTests: XCTestCase {
   func testADeadlineWithAnUnreadableCacheQuitsWithTheWarningAndRemovesNothing() {
     var machine = ChannelSwitch()
     XCTAssertEqual(quit(&machine, 1, unreadable()), [.resume])
-    XCTAssertEqual(machine.nearDeadline(1), [])
     XCTAssertEqual(machine.deadline(1),
                    [.log("Sparkle's cache can't be read at the quit deadline; quitting, and a staged nightly may install"), .release([1])])
   }
@@ -138,31 +135,17 @@ final class ChannelSwitchTests: XCTestCase {
     _ = machine.switched()
     _ = machine.changed(facts([staged]))
     XCTAssertEqual(quit(&machine, 1, facts(busy: true, [staged])), [])
-    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed([staged]))
+    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed)
     XCTAssertEqual(machine.changed(facts()), [.unwatch, .release([1])])
     XCTAssertEqual(machine.phase, .idle)
   }
 
-  func testOnlyCopiesNoInstallerWasToldToCancelAreRemoved() {
+  func testACopyNoInstallerWasToldToCancelLeavesTheRoundUnconfirmed() {
     var machine = ChannelSwitch()
     _ = machine.switched()
     _ = machine.changed(facts([staged, newer]))
     _ = machine.installerCancelled(build: "91")
-    XCTAssertEqual(machine.changed(facts([staged, newer])), unconfirmed([newer]))
-  }
-
-  func testALeftoverNightlyAtLaunchStartsADropWithNoQuitOrSwitch() {
-    var machine = ChannelSwitch()
-    machine.noticed()
-    XCTAssertEqual(machine.changed(facts()), [])
-    XCTAssertFalse(machine.wantsFacts)
-    machine.noticed()
-    XCTAssertEqual(machine.changed(facts(busy: true, [staged])), [])
-    XCTAssertEqual(machine.changed(facts([staged])), [.resume])
-    machine.noticed()
-    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed([staged]))
-    XCTAssertEqual(machine.changed(facts()), [.unwatch])
-    XCTAssertEqual(machine.phase, .idle)
+    XCTAssertEqual(machine.changed(facts([staged, newer])), unconfirmed)
   }
 
   func testQuitWithNothingStagedAndNothingPendingGoesOnTheNextSurvey() {
@@ -212,14 +195,6 @@ final class ChannelSwitchTests: XCTestCase {
     XCTAssertEqual(quit(&machine, 1, facts([staged])), [])
     XCTAssertEqual(quit(&machine, 2, facts([staged])), [])
     XCTAssertEqual(machine.changed(facts()), [.unwatch, .resetCycle, .release([1, 2])])
-  }
-
-  func testNearTheDeadlineAStillStagedCopyIsRemoved() {
-    var machine = ChannelSwitch()
-    XCTAssertEqual(quit(&machine, 1, facts([staged])), [.resume])
-    XCTAssertEqual(machine.nearDeadline(2), [])
-    XCTAssertEqual(machine.nearDeadline(1),
-                   [.log("Sparkle hasn't dropped the staged nightly as the quit deadline nears; removing its copy"), .discard([staged])])
   }
 
   func testADeadlineReleasesItsQuitOnceAndTheLaterDropDoesntAgain() {
@@ -275,7 +250,7 @@ final class ChannelSwitchTests: XCTestCase {
     cancelling(&machine)
     XCTAssertEqual(machine.changed(facts(busy: true, [restaged])), [])
     XCTAssertEqual(machine.changed(facts([restaged])), [.unwatch, .resume])
-    XCTAssertEqual(machine.changed(facts([restaged])), unconfirmed([restaged]))
+    XCTAssertEqual(machine.changed(facts([restaged])), unconfirmed)
   }
 
   func testACancellationWithNoMatchingCopyIsNotEvidence() {
@@ -283,7 +258,7 @@ final class ChannelSwitchTests: XCTestCase {
     _ = machine.switched()
     _ = machine.changed(facts([staged]))
     XCTAssertEqual(machine.installerCancelled(build: "92"), [])
-    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed([staged]))
+    XCTAssertEqual(machine.changed(facts([staged])), unconfirmed)
   }
 
   func testACancellationInSparklesOwnSessionIsTrackedForQuit() {
@@ -323,23 +298,47 @@ final class ChannelSwitchTests: XCTestCase {
     var machine = ChannelSwitch()
     _ = seen(&machine, ChannelSwitch.Sighting(copies: [staged]))
     let replaced = ChannelSwitch.Residue(folder: staged.folder, device: 1, inode: 99)
-    XCTAssertEqual(seen(&machine, ChannelSwitch.Sighting(residue: [replaced])), .none)
+    XCTAssertEqual(seen(&machine, ChannelSwitch.Sighting(residue: [replaced])), .unreadable)
     XCTAssertEqual(machine.known, [])
   }
 
-  func testAnUnreadableEntryHoldsWhileSparkleIsBusyAndIsAnOrphanWhileItIsIdle() {
+  func testAnUnreadableEntryIsUncertainWhetherSparkleIsBusyOrIdle() {
     var machine = ChannelSwitch()
-    let residue = ChannelSwitch.Residue(folder: "/Installation/x", device: 1, inode: 20)
-    let sighting = ChannelSwitch.Sighting(residue: [residue])
+    let sighting = ChannelSwitch.Sighting(residue: [ChannelSwitch.Residue(folder: "/Installation/x", device: 1, inode: 20)])
     XCTAssertEqual(seen(&machine, sighting, busy: true), .unreadable)
-    XCTAssertEqual(machine.orphans(sighting, busy: true), [])
-    XCTAssertEqual(seen(&machine, sighting), .none)
-    XCTAssertEqual(machine.orphans(sighting, busy: false), [residue])
+    XCTAssertEqual(seen(&machine, sighting), .unreadable)
+  }
+
+  func testQuitWithOnlyAnUnreadableEntryWhileIdleAsksSparkleToResumeItAndIsReleasedByTheDeadline() {
+    var machine = ChannelSwitch()
+    let sighting = ChannelSwitch.Sighting(residue: [ChannelSwitch.Residue(folder: "/Installation/x", device: 1, inode: 20)])
+    let idle = machine.observe(sighting, busy: false, automaticChecks: true)
+    XCTAssertTrue(machine.holdsQuit(idle))
+    XCTAssertEqual(quit(&machine, 1, idle), [.resume])
+    XCTAssertEqual(machine.changed(machine.observe(sighting, busy: true, automaticChecks: true)), [])
+    XCTAssertEqual(machine.changed(machine.observe(sighting, busy: false, automaticChecks: true)), [.watch, unreadableLine])
+    XCTAssertEqual(machine.deadline(1),
+                   [.log("Sparkle's cache can't be read at the quit deadline; quitting, and a staged nightly may install"), .release([1])])
+  }
+
+  func testAnUnreadableEntryThatSparklesSkipClearsReleasesQuitAtOnce() {
+    var machine = ChannelSwitch()
+    let sighting = ChannelSwitch.Sighting(residue: [ChannelSwitch.Residue(folder: "/Installation/x", device: 1, inode: 20)])
+    XCTAssertEqual(quit(&machine, 1, machine.observe(sighting, busy: false, automaticChecks: true)), [.resume])
+    XCTAssertEqual(machine.installerCancelled(build: "91"), [])
+    XCTAssertEqual(machine.changed(machine.observe(sighting, busy: false, automaticChecks: true)), [.watch])
+    XCTAssertEqual(machine.changed(machine.observe(ChannelSwitch.Sighting(), busy: false, automaticChecks: true)), [.unwatch, .release([1])])
   }
 
   func testACacheThatCantBeReadAtAllIsNeverAbsent() {
     var machine = ChannelSwitch()
     XCTAssertEqual(seen(&machine, ChannelSwitch.Sighting(blind: true)), .unreadable)
-    XCTAssertEqual(machine.orphans(ChannelSwitch.Sighting(blind: true), busy: false), [])
+  }
+
+  func testAStagedNightlyWithNoSwitchOrQuitIsLeftToSparkle() {
+    var machine = ChannelSwitch()
+    XCTAssertFalse(machine.wantsFacts)
+    XCTAssertEqual(machine.changed(facts([staged])), [])
+    XCTAssertEqual(machine.phase, .idle)
   }
 }

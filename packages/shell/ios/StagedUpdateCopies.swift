@@ -20,11 +20,50 @@ enum StagedUpdateCopies {
     return folder
   }
 
+  static func installationPath(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches) -> URL? {
+    guard let bundleId, let caches else { return nil }
+    return ([bundleId] + sparkleInstallationPath).reduce(caches.resolvingSymlinksInPath().standardizedFileURL) {
+      $0.appendingPathComponent($1, isDirectory: true)
+    }
+  }
+
+  static func survey(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches) -> [(bundle: Bundle, folder: URL)]? {
+    guard let bundleId, let caches else { return nil }
+    var root = caches.resolvingSymlinksInPath().standardizedFileURL
+    for name in [bundleId] + sparkleInstallationPath {
+      root.appendPathComponent(name, isDirectory: true)
+      var info = stat()
+      guard lstat(root.path, &info) == 0 else { return errno == ENOENT ? [] : nil }
+      guard (info.st_mode & S_IFMT) == S_IFDIR else { return nil }
+    }
+    var unreadable = false
+    let found = copies(in: root, bundleId: bundleId) { error in
+      let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
+      if (error as NSError).code != NSFileReadNoSuchFileError, underlying?.code != Int(ENOENT) { unreadable = true }
+    }
+    guard !unreadable else { return nil }
+    return found.compactMap { copy in
+      guard let executable = copy.bundle.executableURL, FileManager.default.isExecutableFile(atPath: executable.path),
+        let folder = updateFolder(of: copy.bundle.bundleURL, in: root)
+      else { return nil }
+      return (copy.bundle, folder)
+    }
+  }
+
   static func copies(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches) -> [(bundle: Bundle, modified: Date)] {
     guard let bundleId, let root = installationRoot(bundleId: bundleId, caches: caches) else { return [] }
+    return copies(in: root, bundleId: bundleId) { _ in }
+  }
+
+  private static func copies(in root: URL, bundleId: String, failed: @escaping (Error) -> Void) -> [(bundle: Bundle, modified: Date)] {
     let keys: [URLResourceKey] = [.contentModificationDateKey, .isSymbolicLinkKey]
     guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys,
-                                                     options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+                                                     options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                                                     errorHandler: { _, error in failed(error); return true })
+    else {
+      failed(CocoaError(.fileReadUnknown))
+      return []
+    }
     var found: [(bundle: Bundle, modified: Date)] = []
     for case let url as URL in walk {
       if walk.level > 4 { walk.skipDescendants(); continue }

@@ -65,7 +65,6 @@ async function until(test, ms, what, every = 250) {
 
 const THROTTLED_SECONDS = 30;
 const QUIT_HOLD_LIMIT = 9500;
-const STALE_QUIT_LIMIT = 3000;
 
 const scenarios = [
   {
@@ -290,14 +289,14 @@ const scenarios = [
   },
   {
     key: "stale-copy",
-    what: `A leftover nightly copy with no installer, empty feed: quit isn't held past ${STALE_QUIT_LIMIT / 1000} s and nothing installs`,
+    what: "A leftover nightly copy with no installer, empty feed: nothing confirms a drop, so quit is held to the deadline and nothing installs",
     alone: true,
     start: { channel: "stable", stale: true },
     control: { feed: "empty" },
     async run(s) {
       await s.launch();
       await sleep(3000);
-      const q = await s.quit(STALE_QUIT_LIMIT);
+      const q = await s.quit(QUIT_HOLD_LIMIT);
       s.expectInstalled(false);
       return `quit in ${q} ms`;
     },
@@ -319,7 +318,6 @@ const scenarios = [
   {
     key: "quit-without-switch",
     what: "Quit with a live staged nightly the saved channel no longer allows, no switch made: quit drops it first",
-    broken: "quit only waits 1 s for a drop nobody started, then the nightly installs",
     async run(s) {
       await s.launch();
       await s.untilStaged();
@@ -404,7 +402,6 @@ const scenarios = [
   {
     key: "cancelled-quit-then-deadline",
     what: "A quit cancelled while it waits for the drop stays cancelled when the wait's deadline passes",
-    broken: "the cancel holds, but the next quit only waits 1 s after a drop nobody confirmed, then the nightly installs",
     async run(s) {
       await s.launch();
       await s.untilStaged();

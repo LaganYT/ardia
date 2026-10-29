@@ -67,6 +67,13 @@ every copy on Stable sees only stable items. A copy on Nightly allows `nightly` 
   nightly in the feed it takes the stable; on nightly it takes the nightly, a newer stable, and the newest of both. It
   also checks the build-number order with Sparkle's comparator. `update-test.sh` does the stable-ignores-it half for
   every nightly's own item.
+- **Switching.** Leaving Nightly drops a nightly Sparkle holds (staged for install on quit, downloading, or shown in
+  its window) by answering Skip, and quit waits until the staged copy's folder is gone, at most 8 s
+  (`ChannelSwitch` in `packages/shell/ios/UpdaterCore`, tested by `swift test` in `packages/shell`).
+  `.claude/skills/release/scripts/channel-switch-test.mjs <build>` runs the app's own switch on hidden copies against
+  a local feed. Two limits stay: when Sparkle's installer doesn't answer, quit goes on at the deadline and the nightly
+  can still install; and going back to Nightly inside Sparkle's own Nightly session (its window open) waits for the
+  next scheduled check, while going back after a drop checks at once.
 
 ## Source and licenses
 

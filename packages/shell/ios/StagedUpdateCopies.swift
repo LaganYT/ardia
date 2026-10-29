@@ -60,12 +60,12 @@ enum StagedUpdateCopies {
                     bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches,
                     running: URL = Bundle.main.bundleURL, tool: URL = launchServicesTool) {
     guard let installedBuild, let root = installationRoot(bundleId: bundleId, caches: caches) else { return }
-    guard !holds(root, running) else {
+    guard !StagedSurvey.contains(root, running) else {
       return NSLog("Ardia: running from Sparkle's Installation folder (\(running.path)); leaving it alone")
     }
     for copy in copies(bundleId: bundleId, caches: caches) {
       let bundle = copy.bundle.bundleURL
-      guard let folder = StagedSurvey.updateFolder(of: bundle, in: root), !sameFile(bundle, running), !holds(folder, running) else { continue }
+      guard let folder = StagedSurvey.updateFolder(of: bundle, in: root), !sameFile(bundle, running), !StagedSurvey.contains(folder, running) else { continue }
       unregister(bundle, tool: tool)
       let build = copy.bundle.infoDictionary?["CFBundleVersion"] as? String ?? ""
       guard build.compare(installedBuild, options: .numeric) != .orderedDescending, isPlainDirectory(folder) else { continue }
@@ -78,10 +78,18 @@ enum StagedUpdateCopies {
     }
   }
 
-  static func holds(_ folder: URL, _ item: URL) -> Bool {
-    let base = folder.resolvingSymlinksInPath().standardizedFileURL.pathComponents
-    let parts = item.resolvingSymlinksInPath().standardizedFileURL.pathComponents
-    return parts.count >= base.count && Array(parts.prefix(base.count)) == base
+  static func empty(_ trash: URL, tool: URL = launchServicesTool) {
+    guard isPlainDirectory(trash), let walk = FileManager.default.enumerator(at: trash, includingPropertiesForKeys: [.isSymbolicLinkKey],
+                                                                              options: [.skipsPackageDescendants]) else { return }
+    for case let url as URL in walk where url.pathExtension == "app" {
+      if (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true { continue }
+      unregister(url, tool: tool)
+    }
+    do {
+      try FileManager.default.removeItem(at: trash)
+    } catch {
+      NSLog("Ardia: couldn't empty \(trash.path): \(error.localizedDescription)")
+    }
   }
 
   static func sameFile(_ one: URL, _ other: URL) -> Bool {

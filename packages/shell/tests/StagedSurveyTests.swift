@@ -107,6 +107,86 @@ final class StagedSurveyTests: XCTestCase {
     XCTAssertNil(survey())
   }
 
+  let running = URL(fileURLWithPath: "/Applications/Elsewhere.app")
+
+  func discard(_ copy: ChannelSwitch.Copy, running: URL? = nil) -> StagedSurvey.Discard {
+    StagedSurvey.discard(copy, caches: caches, bundleId: bundleId, running: running ?? self.running)
+  }
+
+  func checkedCopy() throws -> ChannelSwitch.Copy {
+    try XCTUnwrap(survey()?.first?.copy)
+  }
+
+  func testAVerifiedCopyIsMovedOutOfSparklesFolderAtOnce() throws {
+    try stage()
+    let copy = try checkedCopy()
+    XCTAssertEqual(discard(copy), .gone)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: copy.folder))
+    XCTAssertEqual(survey(), [])
+    let trash = StagedSurvey.discarded(caches: caches, bundleId: bundleId)
+    XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path).count, 1)
+  }
+
+  func testACopyAlreadyGoneIsConfirmedGone() throws {
+    try stage()
+    let copy = try checkedCopy()
+    try FileManager.default.removeItem(atPath: copy.folder)
+    XCTAssertEqual(discard(copy), .gone)
+  }
+
+  func testAFolderReplacedUnderTheSameNameIsLeftAlone() throws {
+    try stage()
+    let copy = try checkedCopy()
+    try FileManager.default.removeItem(atPath: copy.folder)
+    try stage()
+    XCTAssertEqual(discard(copy), .refused("it isn't the copy that was checked"))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: copy.folder))
+  }
+
+  func testACopyWhoseBuildChangedIsLeftAlone() throws {
+    let app = try stage()
+    let copy = try checkedCopy()
+    try writeInfo(app, build: "92")
+    XCTAssertEqual(discard(copy), .refused("it isn't the copy that was checked"))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: copy.folder))
+  }
+
+  func testAFolderOutsideSparklesInstallationFolderIsLeftAlone() throws {
+    try stage()
+    let copy = try checkedCopy()
+    let outside = ChannelSwitch.Copy(folder: caches.appendingPathComponent("abc123").path, device: copy.device, inode: copy.inode, build: copy.build)
+    XCTAssertEqual(discard(outside), .refused("it isn't in Sparkle's Installation folder"))
+    let nested = ChannelSwitch.Copy(folder: root.appendingPathComponent("abc123/Ardia.app").path, device: copy.device, inode: copy.inode, build: copy.build)
+    XCTAssertEqual(discard(nested), .refused("it isn't in Sparkle's Installation folder"))
+  }
+
+  func testTheRunningAppsFolderIsLeftAlone() throws {
+    let app = try stage()
+    let copy = try checkedCopy()
+    XCTAssertEqual(discard(copy, running: app), .refused("it holds the running app"))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: copy.folder))
+  }
+
+  func testAMoveThatFailsIsAFailureNotGone() throws {
+    try stage()
+    let copy = try checkedCopy()
+    let trash = StagedSurvey.discarded(caches: caches, bundleId: bundleId)
+    try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+    chmod(trash.path, 0o500)
+    XCTAssertEqual(discard(copy), .failed(EACCES))
+    chmod(trash.path, 0o755)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: copy.folder))
+  }
+
+  func testNothingIsRemovedWhenTheCacheCantBeRead() throws {
+    let app = try stage()
+    let copy = try checkedCopy()
+    chmod(app.appendingPathComponent("Contents/Info.plist").path, 0o000)
+    XCTAssertEqual(discard(copy), .refused("Sparkle's cache can't be read"))
+    chmod(app.appendingPathComponent("Contents/Info.plist").path, 0o644)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: copy.folder))
+  }
+
   func testCopiesInTwoFoldersAreBothFound() throws {
     try stage("first")
     try stage("second", build: "92")

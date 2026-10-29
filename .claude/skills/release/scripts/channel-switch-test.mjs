@@ -325,30 +325,37 @@ const scenarios = [
   },
   {
     key: "stale-copy",
-    what: "A leftover nightly copy with no installer, empty feed: nothing confirms a drop, so quit is held to the deadline and nothing installs",
+    what: "A leftover nightly copy with no installer, empty feed: the app moves it out of Sparkle's folder before it exits, nothing installs, and the next quit is fast",
     alone: true,
     start: { channel: "stable", stale: true },
     control: { feed: "empty" },
     async run(s) {
       await s.launch();
-      await sleep(3000);
       const q = await s.quit(QUIT_HOLD_LIMIT);
+      check(!s.offChannelCopies().length, "the app quit with the leftover nightly still in Sparkle's folder");
       s.expectInstalled(false);
-      return `quit in ${q} ms`;
+      await s.launch();
+      await sleep(3000);
+      const again = await s.quit(2000);
+      return `quit in ${q} ms with the copy gone; the next quit took ${again} ms`;
     },
   },
   {
     key: "stale-copy-slow-feed",
-    what: "A leftover nightly copy with no installer and a feed that answers after 20 s: quit is held at most the deadline",
+    what: "A leftover nightly copy with no installer and a feed that answers after 20 s: quit is held to the deadline, the copy is moved out before exit, and the next quit is fast",
     alone: true,
     start: { channel: "stable", stale: true },
     control: { feed: "empty", feedDelay: 20 },
     async run(s) {
       await s.launch();
-      await sleep(3000);
       const q = await s.quit(QUIT_HOLD_LIMIT);
+      check(q >= 6000, `quit went at ${q} ms with nothing confirming the leftover's drop`);
+      check(!s.offChannelCopies().length, "the app quit with the leftover nightly still in Sparkle's folder");
       s.expectInstalled(false);
-      return `quit in ${q} ms`;
+      await s.launch();
+      await sleep(3000);
+      const again = await s.quit(2000);
+      return `quit held ${q} ms and the copy went; the next quit took ${again} ms`;
     },
   },
   {
@@ -390,24 +397,24 @@ const scenarios = [
   },
   {
     key: "unresponsive-installer",
-    what: "Nightly → Stable and quit with Sparkle's installer not answering: quit ends at the deadline, and the nightly can still install (known limit)",
+    what: "Nightly → Stable and quit with Sparkle's installer not answering: quit ends by the deadline with the staged copy moved out, so the installer, resumed after, installs nothing",
     alone: true,
     async run(s) {
       await s.launch();
       await s.untilStaged();
-      await s.untilIdle();
       const stopped = s.stopInstaller();
       let q;
       try {
         await s.eval(`U.setUpdateChannel("stable"); return true;`);
         q = await s.quit(QUIT_HOLD_LIMIT, { settle: false });
+        check(!s.offChannelCopies().length, "the app quit with the staged nightly still in Sparkle's folder");
       } finally {
         s.resume(stopped);
       }
       check(q >= 6000, `quit came early (${q} ms): something confirmed a drop that never happened`);
       await s.untilInstallerGone();
-      s.expectInstalled(true);
-      return `quit at ${q} ms; the installer, once it answered, installed the nightly as documented`;
+      s.expectInstalled(false);
+      return `quit at ${q} ms with the copy moved out; the resumed installer installed nothing`;
     },
   },
   {

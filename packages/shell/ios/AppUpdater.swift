@@ -65,12 +65,36 @@ public final class AppUpdater: NSObject {
       case .unwatch:
         installationWatch?.stop()
         installationWatch = nil
+      case .discard(let copies):
+        discard(copies)
       case .release(let waits):
         for wait in waits { quitWaits.removeValue(forKey: wait)?() }
       case .log(let line):
         NSLog("Ardia: \(line)")
       }
     }
+  }
+
+  private func discard(_ copies: Set<ChannelSwitch.Copy>) {
+    guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { return }
+    for copy in copies {
+      switch StagedSurvey.discard(copy, caches: caches, bundleId: bundleId, running: Bundle.main.bundleURL) {
+      case .gone:
+        NSLog("Ardia: moved the staged nightly (build \(copy.build)) out of Sparkle's Installation folder")
+      case .refused(let reason):
+        NSLog("Ardia: left the staged nightly at \(copy.folder) alone: \(reason); it may install")
+      case .failed(let error):
+        NSLog("Ardia: couldn't move the staged nightly at \(copy.folder): \(String(cString: strerror(error))); it may install")
+      }
+    }
+    emptyDiscarded()
+    DispatchQueue.main.async { [weak self] in self?.advanceChannelSwitch() }
+  }
+
+  private func emptyDiscarded() {
+    guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { return }
+    let trash = StagedSurvey.discarded(caches: caches, bundleId: bundleId)
+    DispatchQueue.global(qos: .utility).async { StagedUpdateCopies.empty(trash) }
   }
 
   static let quitWaitLimit: TimeInterval = 8
@@ -181,6 +205,11 @@ public final class AppUpdater: NSObject {
     sessionObservation = updater.observe(\.sessionInProgress, options: [.new]) { [weak self] _, change in
       guard change.newValue == false else { return }
       DispatchQueue.main.async { self?.advanceChannelSwitch() }
+    }
+    emptyDiscarded()
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.apply(self.channelSwitch.noticed(self.switchFacts))
     }
     NotificationCenter.default.addObserver(self, selector: #selector(fullScreenChanged), name: NSWindow.didExitFullScreenNotification, object: nil)
     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.leftoverSweepDelay) { StagedUpdateCopies.sweep() }

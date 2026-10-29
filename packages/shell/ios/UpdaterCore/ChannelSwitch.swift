@@ -38,6 +38,7 @@ struct ChannelSwitch {
     case resetCycle
     case watch
     case unwatch
+    case discard(Set<Copy>)
     case release([Int])
     case log(String)
   }
@@ -125,9 +126,13 @@ struct ChannelSwitch {
       case .unreadable where !round.cancelled.isEmpty:
         phase = .cancelling(round)
         return [.watch]
-      case .present, .unreadable:
+      case .present(let copies):
         phase = .unconfirmed
-        return [.watch, .log("Sparkle's installer didn't confirm dropping the staged nightly; quitting waits for its deadline")]
+        return [.watch, .log("Sparkle's installer didn't confirm dropping the staged nightly; removing its copy"),
+                .discard(copies.subtracting(round.cancelled))]
+      case .unreadable:
+        phase = .unconfirmed
+        return [.watch, .log("Sparkle's cache can't be read to confirm the staged nightly is gone; quitting waits for its deadline")]
       }
     case .cancelling(let round):
       switch facts.staged {
@@ -148,6 +153,12 @@ struct ChannelSwitch {
     }
   }
 
+  mutating func noticed(_ facts: Facts) -> [Effect] {
+    guard phase == .idle, facts.staged != .none else { return [] }
+    phase = .waitingForIdle(Round())
+    return changed(facts)
+  }
+
   mutating func quit(_ id: Int, _ facts: Facts) -> [Effect] {
     guard holdsQuit(facts) else { return [.release([id])] }
     waiting.append(id)
@@ -166,8 +177,14 @@ struct ChannelSwitch {
   mutating func deadline(_ id: Int, _ facts: Facts) -> [Effect] {
     guard let index = waiting.firstIndex(of: id) else { return [] }
     waiting.remove(at: index)
-    guard facts.staged != .none else { return [.release([id])] }
-    return [.log("Sparkle didn't drop the staged nightly before the quit deadline; quitting, and it may install"), .release([id])]
+    switch facts.staged {
+    case .none:
+      return [.release([id])]
+    case .present(let copies):
+      return [.log("Sparkle didn't drop the staged nightly before the quit deadline; removing its copy"), .discard(copies), .release([id])]
+    case .unreadable:
+      return [.log("Sparkle's cache can't be read at the quit deadline; quitting, and a staged nightly may install"), .release([id])]
+    }
   }
 
   private mutating func settle(_ facts: Facts, reset: Bool) -> [Effect] {

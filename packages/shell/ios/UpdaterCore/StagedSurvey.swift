@@ -95,6 +95,57 @@ enum StagedSurvey {
     return .copy(Found(copy: copy, bundle: app, channel: info["ACUpdateChannel"] as? String))
   }
 
+  enum Discard: Equatable {
+    case gone
+    case refused(String)
+    case failed(Int32)
+  }
+
+  static func discarded(caches: URL, bundleId: String) -> URL {
+    caches.resolvingSymlinksInPath().standardizedFileURL.appendingPathComponent(bundleId, isDirectory: true)
+      .appendingPathComponent("ArdiaDiscardedUpdates", isDirectory: true)
+  }
+
+  static func discard(_ copy: ChannelSwitch.Copy, caches: URL, bundleId: String, running: URL) -> Discard {
+    let root = root(caches: caches, bundleId: bundleId)
+    let folder = URL(fileURLWithPath: copy.folder, isDirectory: true).standardizedFileURL
+    guard folder.deletingLastPathComponent().standardizedFileURL.pathComponents == root.pathComponents else {
+      return .refused("it isn't in Sparkle's Installation folder")
+    }
+    guard !contains(folder, running) else { return .refused("it holds the running app") }
+    guard let found = survey(caches: caches, bundleId: bundleId) else { return .refused("Sparkle's cache can't be read") }
+    let inFolder = found.filter { $0.copy.folder == folder.path }
+    if inFolder.isEmpty { return kind(folder.path) == .missing ? .gone : .refused("it no longer holds the checked copy") }
+    guard inFolder.allSatisfy({ $0.copy == copy }) else { return .refused("it isn't the copy that was checked") }
+    let trash = discarded(caches: caches, bundleId: bundleId)
+    do {
+      try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+    } catch {
+      return .refused("there's nowhere to move it: \(error.localizedDescription)")
+    }
+    var place = stat()
+    guard lstat(trash.path, &place) == 0, (place.st_mode & S_IFMT) == S_IFDIR, UInt64(place.st_dev) == copy.device else {
+      return .refused("there's nowhere on its volume to move it")
+    }
+    let target = trash.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    guard rename(folder.path, target.path) == 0 else {
+      let failure = errno
+      return kind(folder.path) == .missing ? .gone : .failed(failure)
+    }
+    var moved = stat()
+    guard lstat(target.path, &moved) == 0, UInt64(moved.st_dev) == copy.device, UInt64(moved.st_ino) == copy.inode else {
+      rename(target.path, folder.path)
+      return .refused("a different folder took its place")
+    }
+    return kind(folder.path) == .missing ? .gone : .failed(EEXIST)
+  }
+
+  static func contains(_ folder: URL, _ item: URL) -> Bool {
+    let base = folder.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+    let parts = item.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+    return parts.count >= base.count && Array(parts.prefix(base.count)) == base
+  }
+
   static func updateFolder(of bundle: URL, in root: URL) -> URL? {
     let base = root.standardizedFileURL.pathComponents
     let parts = bundle.standardizedFileURL.pathComponents

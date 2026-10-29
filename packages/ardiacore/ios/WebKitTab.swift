@@ -402,9 +402,9 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     emit("security", securityInfo())
   }
 
-  func clearSiteData(_ completion: @escaping ([String: Any]) -> Void) {
-    guard !host.isEmpty else { return completion(["cookies": false, "storage": false]) }
-    WebKitHub.shared.clearSiteData(profile: profile, host: host, completion: completion)
+  func clearSiteData(_ reply: @escaping (Any?, String?) -> Void) {
+    guard !host.isEmpty else { return reply(["cookies": false, "storage": false], nil) }
+    WebKitHub.shared.clearSiteData(profile: profile, host: host) { reply($0, nil) }
   }
 
   func pageMessage(_ kind: String, data: Any?, frame: String, frameInfo: WKFrameInfo) {

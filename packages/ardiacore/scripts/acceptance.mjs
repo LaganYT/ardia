@@ -70,7 +70,7 @@ const usesPageA = [
   "webkit-tab", "webkit-move-tab", "webkit-zoom", "webkit-now-playing", "webkit-scroll", "webkit-js-reload",
   "window-close-before-reveal", "window-close-during-exit", "window-close-while-full-screen-restore-waits",
   "webkit-clearing-keeps-zoom", "webkit-private-session-ends-mid-transfer", "webkit-now-playing-frames",
-  "tab-close-then-load", "tab-close-before-create", "tab-load-before-attach", "tab-create-interrupted-by-move", "tab-close-while-lent",
+  "page-view-calls", "tab-close-then-load", "tab-close-before-create", "tab-load-before-attach", "tab-create-interrupted-by-move", "tab-close-while-lent",
   "page-reports-follow-the-tab",
 ];
 const needs = {
@@ -4850,6 +4850,48 @@ try {
     } finally {
       await dropWindow(windowId);
       await backToMain();
+    }
+  });
+
+  await check("page-view-calls", async () => {
+    const raw = (id, module, view, fn, ...args) => evalApp(`const tag = ac.webviews.get(${q(id)}).nativeTag();
+      return globalThis.expo.modules.${module}.ViewPrototypes.${module}_${view}.${fn}.call({ nativeTag: tag }, ...${q(args)})`);
+    const exercise = async (id, module, view, path) => {
+      const call = (fn, ...args) => raw(id, module, view, fn, ...args).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+      const out = {};
+      out.loadUrl = await call("loadUrl", path);
+      await until(`${view} on Page B`, () => loadedAs(id, "Page B"), 15000);
+      for (const [fn, args] of [
+        ["evaluate", [`post("result", JSON.stringify(document.title))`]], ["navigationEntries", []], ["capturePicture", [0.25]],
+        ["downloadFavicon", [`${base}/icon.png`]], ["downloadImage", [`${base}/icon.png`, 64]], ["getSecurityInfo", []],
+        ["pageCookies", [[`${base}/`]]], ["clearSiteData", []], ["mediaCommand", ["pause"]], ["requestPictureInPicture", [null, null]],
+        ["takeControlPress", []], ["exitPictureInPicture", []], ["openBlockedPopup", ["no-such-popup"]], ["executeExtensionAction", ["no-such-extension"]],
+        ["mediaCaptureSourceId", []], ["resolveDisplayMedia", ["no-such-request", null, false]], ["notificationAction", ["no-such-note", "click"]],
+        ["resolveUnresponsive", [false]], ["showDevTools", []], ["setFrozen", [false]], ["discard", []],
+      ]) out[fn] = await call(fn, ...args);
+      return out;
+    };
+    const chromium = await freshTab(`${base}/a?view-calls`);
+    let webkit = null;
+    try {
+      const c = await exercise(chromium, "ArdiaWebView", "ChromiumTabView", `${base}/b?view-calls`);
+      webkit = await webkitTab("/a?view-calls", "Page A");
+      const w = await exercise(webkit, "ArdiaWebKit", "WebKitTabView", `${webkitBase}/b?view-calls`);
+      const errors = [...Object.entries(c).map(([k, v]) => ["chromium", k, v]), ...Object.entries(w).map(([k, v]) => ["webkit", k, v])].filter(([, , v]) => v && v.error);
+      if (errors.length) throw new Error(`calls that didn't complete: ${q(errors)}`);
+      const expect = (what, ok) => { if (!ok) throw new Error(`${what}: ${q({ chromium: c, webkit: w }).slice(0, 1500)}`); };
+      expect("evaluate answers on both", JSON.parse(c.evaluate) === "Page B" && JSON.parse(w.evaluate) === "Page B");
+      expect("history entries on both", Array.isArray(c.navigationEntries) && c.navigationEntries.length >= 2 && Array.isArray(w.navigationEntries) && w.navigationEntries.length >= 2);
+      expect("security info on both", typeof c.getSecurityInfo?.level === "string" && typeof w.getSecurityInfo?.level === "string");
+      expect("Chromium's own answers", typeof c.mediaCaptureSourceId === "string" && c.discard !== "unsupported" && typeof c.takeControlPress === "boolean");
+      expect("WebKit's unsupported answers", w.discard === "unsupported" && w.takeControlPress === true && w.executeExtensionAction == null &&
+        w.mediaCaptureSourceId == null && Array.isArray(w.pageCookies) && w.pageCookies.length === 0);
+      expect("site data cleared on both", typeof c.clearSiteData === "object" && typeof w.clearSiteData === "object");
+      return { chromium: Object.keys(c).length, webkit: Object.keys(w).length, discard: c.discard };
+    } finally {
+      await closeTab(chromium).catch(() => null);
+      if (webkit) await closeTab(webkit).catch(() => null);
+      await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
     }
   });
 

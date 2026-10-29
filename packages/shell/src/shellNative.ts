@@ -18,10 +18,13 @@ export type Rect4 = [number, number, number, number];
 
 export type MenuBookmarkKey = "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks";
 
+export type AppearanceMode = "auto" | "light" | "dark";
+
 export type ShellNative = {
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
   showMenu(items: MenuItem[]): Promise<string | null>;
   copyText(text: string): void;
+  readText(): Promise<string>;
   setSwitcherCapture(active: boolean): Promise<void>;
   setDragEscapeCapture(active: boolean): Promise<void>;
   cancelFocusMove(generation: number, restoringSource: boolean): Promise<void>;
@@ -55,7 +58,7 @@ export type ShellNative = {
   dragPreviewEnd(windowId: string | null, frame: Rect4 | null): Promise<void>;
   setWindowTitle(id: string, title: string): Promise<void>;
   windowIds(): Promise<string[]>;
-  setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
+  setAppearance(mode: AppearanceMode): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
   setMenuBookmarks(bookmarks: Pick<MenuState, MenuBookmarkKey>): Promise<void>;

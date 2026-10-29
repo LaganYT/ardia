@@ -45,7 +45,7 @@ test("a folder's menu lists its tabs and its nested folders as submenus, the act
   assert.equal(items[0].title, "b.example");
   assert.equal(items[1].title, "Deep");
   assert.equal(items[1].children.length, 1);
-  assert.equal(items[1].children[0].id, `t:${c}`);
+  assert.equal(items[1].children[0].value.tabId, c);
   assert.equal(items[1].children[0].checked, true);
   assert.ok(w);
 });

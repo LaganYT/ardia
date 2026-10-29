@@ -5,3 +5,5 @@ export const startDictation = () => Shell.startDictation();
 export function copyText(text: string) {
   Shell.copyText(text);
 }
+
+export const readText = () => Shell.readText();

@@ -1,9 +1,11 @@
 import { ContextMenuArea, Symbol, Box, Button, font, PopUp, TextField, Toggle, useHover } from "../../ui";
-import { hapticTick, showMenu } from "../../../state/app/system";
+import { hapticTick } from "../../../state/app/system";
+import { chooseFromMenu } from "../../../state/app/menuChoice";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
-import { createProfile, deleteProfile } from "../../../state/browser/actions";
+import { deleteProfile } from "../../../state/browser/actions";
+import { requestCreateProfile } from "../../../state/profiles/createProfileRequest";
 import { hex, profileAccent, useTheme } from "../../ui/theme";
 import { useProfileDataStats, useProfileOrder, useProfileRecords } from "../../../state/profiles/hooks";
 import { currentProfileOrder, currentProfiles } from "../../../state/browser/current";
@@ -68,8 +70,7 @@ export function ProfilesPane() {
 
       <SectionHeader
         anchor="profiles.list"
-        description="Drag to reorder. ⌃1–⌃9 switch to the first nine."
-        action={<Button title="Create Profile" icon="plus" onPress={() => void createProfile()} />}
+        action={<Button title="Create Profile" icon="plus" onPress={() => void requestCreateProfile()} />}
       />
       <ProfileList />
     </View>
@@ -238,13 +239,13 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
   const stats = useProfileDataStats(profileId);
   const [name, setName] = useState(profile?.name ?? "");
   if (!profile) return null;
-  const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon">>) => updateProfile(profileId, patch);
+  const update = (patch: Partial<Pick<Profile, "name" | "icon">>) => updateProfile(profileId, patch);
   const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
   const sharing = shared.length > 1;
 
   const pickIcon = async () => {
-    const choice = await showMenu(iconMenuItems(profile.icon));
-    if (choice?.startsWith("icon:")) update({ icon: choice.slice("icon:".length) || null });
+    const choice = await chooseFromMenu(iconMenuItems(profile.icon));
+    if (choice && typeof choice === "object") update({ icon: choice.icon });
   };
 
   return (

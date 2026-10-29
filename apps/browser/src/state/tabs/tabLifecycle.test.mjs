@@ -15,7 +15,7 @@ const stubs = {
     export const setMemorySaver = async (request) => (globalThis.engineCalls.push(["memorySaver", request]), { ...request, active: request.state === "on", invalid: [] });`,
   "../../platform/profiles": `export * from ${JSON.stringify(profiles)};
     export const releaseProfile = async () => {};`,
-  "../splits/actions": "export const showToast = () => {};",
+  "../app/toasts": "export const showToast = () => {};",
   "../settings/settingsWindows": "export const openSettings = () => {};",
   "../pages/urls": "export const isInternalTab = (t) => !/^https?:/.test(t.url ?? '');",
 };
@@ -28,7 +28,7 @@ registerHooks({
 
 const { useBrowser } = await import("../browser/store.ts");
 const lifecycle = await import("./tabLifecycle.ts");
-const { memorySaverRequest } = await import("./memorySaver.ts");
+const { keepActiveSiteOf, memorySaverRequest } = await import("./memorySaver.ts");
 const { reloadRecentTabs } = await import("./recentTabWarmup.ts");
 
 const S = () => useBrowser.getState();
@@ -61,6 +61,18 @@ test("the app's Memory Saver settings reach the engine at launch and on every ch
 test("a saved Memory Saver mode or site list the engine wouldn't take falls back instead of reaching it", () => {
   assert.deepEqual(memorySaverRequest({ memorySaver: true, memorySaverMode: "turbo", keepActiveSites: ["a.com", 3] }), { state: "on", aggressiveness: "balanced", sites: ["a.com"] });
   assert.deepEqual(memorySaverRequest({ memorySaver: undefined, memorySaverMode: undefined, keepActiveSites: undefined }), { state: "on", aggressiveness: "balanced", sites: [] });
+});
+
+test("a kept-active site lowercases only its scheme and host, since Chrome matches the path and query as typed", () => {
+  assert.equal(keepActiveSiteOf("  HTTPS://Example.COM/Editor?Doc=AbC "), "https://example.com/Editor?Doc=AbC");
+  assert.equal(keepActiveSiteOf("Docs.Google.com/Document/D/XyZ"), "docs.google.com/Document/D/XyZ");
+  assert.equal(keepActiveSiteOf("[*.]YouTube.com"), "[*.]youtube.com");
+  assert.equal(keepActiveSiteOf("https://Figma.com/"), "https://figma.com", "a bare trailing slash goes, as before");
+  assert.equal(keepActiveSiteOf("music.youtube.com"), "music.youtube.com");
+});
+
+test("a synced list saved with lowercased entries reaches the engine unchanged", () => {
+  assert.deepEqual(memorySaverRequest({ memorySaver: true, memorySaverMode: "balanced", keepActiveSites: ["https://example.com/editor"] }).sites, ["https://example.com/editor"]);
 });
 
 test("a tab Chrome discarded shows as sleeping until it's ready again or gone", () => {

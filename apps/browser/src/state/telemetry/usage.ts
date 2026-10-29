@@ -5,6 +5,7 @@ import { useTranslate } from "../site/translate";
 import { useBrowser } from "../browser/store";
 import { useSync } from "../sync/engine";
 import { capture, endSession, flush, isSharing, startClient } from "./client";
+import { percentile } from "./transport";
 import { reportNativeCrashes } from "./errors";
 import { emitJourneys, journeysEnding, startJourneys } from "./journeys";
 import { takeOmniboxLatency } from "./track";
@@ -115,7 +116,7 @@ async function sampleMemory() {
 function emitOmniboxLatency() {
   const samples = takeOmniboxLatency().sort((a, b) => a - b);
   if (!samples.length || !isSharing()) return;
-  const at = (p: number) => samples[Math.min(samples.length - 1, Math.floor(p * samples.length))]!;
+  const at = (p: number) => percentile(samples, p);
   capture("perf_omnibox", { samples: samples.length, p50_ms: at(0.5), p95_ms: at(0.95), max_ms: samples.at(-1)! });
 }
 

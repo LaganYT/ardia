@@ -9,7 +9,7 @@ import type { BrowserState } from "../browser/store";
 import { activeTabId } from "../browser/model";
 import { peekTabId } from "../peek/peek";
 import { splitOf } from "../splits/splits";
-import { hostOf } from "../../lib/url";
+import { hostOf } from "@ardia/core";
 import { isSleeping } from "../tabs/sleepingTabs";
 
 export type Session = NowPlaying & {
@@ -32,7 +32,10 @@ export type TabShare = {
   dismissed: Record<string, true>;
 };
 
-export const useMedia = create<Store>()(() => ({ sessions: {}, dismissed: {}, leftPaused: {}, pip: {}, pipOpen: {}, displayRequests: {}, tabShares: {} }));
+const noMedia = (): Store => ({ sessions: {}, dismissed: {}, leftPaused: {}, pip: {}, pipOpen: {}, displayRequests: {}, tabShares: {} });
+const PER_TAB = Object.keys(noMedia()) as (keyof Store)[];
+
+export const useMedia = create<Store>()(noMedia);
 
 export function setPictureInPictureState(tabId: string, { kind, active }: PictureInPictureState) {
   useMedia.setState((s) => {
@@ -261,11 +264,10 @@ export function usePictureInPicture(tabId: string): [boolean, (press: GestureRes
 useBrowser.subscribe((s, prev) => {
   if (s.tabs === prev.tabs) return;
   const m = useMedia.getState();
-  const keys = ["sessions", "dismissed", "pip", "pipOpen", "displayRequests", "tabShares"] as const;
-  const gone = [...new Set(keys.flatMap((k) => Object.keys(m[k])))].filter((id) => !s.tabs[id]);
+  const gone = [...new Set(PER_TAB.flatMap((k) => Object.keys(m[k])))].filter((id) => !s.tabs[id]);
   if (!gone.length) return;
-  const next = Object.fromEntries(keys.map((k) => [k, { ...m[k] }])) as Pick<Store, (typeof keys)[number]>;
-  for (const id of gone) for (const k of keys) delete next[k][id];
+  const next = Object.fromEntries(PER_TAB.map((k) => [k, { ...m[k] }])) as Store;
+  for (const id of gone) for (const k of PER_TAB) delete next[k][id];
   useMedia.setState(next);
 });
 

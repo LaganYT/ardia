@@ -1,4 +1,4 @@
-import type { MenuItem } from "../../state/app/system";
+import type { IconMenuItem } from "../../state/profiles/profileMenu";
 import { Text, View } from "react-native";
 import { ink, Symbol, weight } from "../ui";
 import { profileAccent } from "../ui/theme";
@@ -33,17 +33,17 @@ const EMOJI = ["😀", "😎", "🤓", "🧑‍💻", "💼", "🏠", "🎓", "�
 const SYMBOL_PREFIX = "symbol:";
 export const profileSymbol = (icon: string | null) => (icon?.startsWith(SYMBOL_PREFIX) ? icon.slice(SYMBOL_PREFIX.length) : null);
 
-export function iconMenuItems(current: string | null, noneTitle = "Initial"): MenuItem[] {
+export function iconMenuItems(current: string | null, noneTitle = "Initial"): IconMenuItem[] {
   return [
-    { id: "icon:", title: noneTitle, checked: !current },
+    { value: { icon: null }, title: noneTitle, checked: !current },
     { separator: true },
-    ...PROFILE_SYMBOLS.map((s) => ({ id: `icon:${SYMBOL_PREFIX}${s.name}`, title: s.title, symbol: s.name, checked: current === SYMBOL_PREFIX + s.name })),
+    ...PROFILE_SYMBOLS.map((s) => ({ value: { icon: SYMBOL_PREFIX + s.name }, title: s.title, symbol: s.name, checked: current === SYMBOL_PREFIX + s.name })),
     { separator: true },
     {
       id: "emoji",
       title: "Emoji",
       checked: !!current && !profileSymbol(current),
-      children: EMOJI.map((e) => ({ id: `icon:${e}`, title: e, checked: current === e })),
+      children: EMOJI.map((e) => ({ value: { icon: e }, title: e, checked: current === e })),
     },
   ];
 }

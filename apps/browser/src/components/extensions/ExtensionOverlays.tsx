@@ -1,5 +1,5 @@
+import { permissionWarnings } from "@ardia/core";
 import {
-  permissionWarnings,
   cancelInstall,
   closeExtensionPopup,
   confirmInstall,
@@ -176,10 +176,12 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
 }
 
 function InstallDialog({ request }: { request: InstallRequest }) {
-  const pkg = request.pkg;
-  const name = pkg?.name ?? "Extension";
-  const warnings = request.prompt ? request.prompt.permissions : pkg ? permissionWarnings(pkg) : [];
-  const kind = request.prompt?.type;
+  const pkg = request.status === "ready" || request.status === "installing" ? request.pkg : null;
+  const prompt = request.status === "prompt" ? request.prompt : null;
+  const name = pkg?.name ?? prompt?.name ?? "Extension";
+  const icon = pkg?.icon ?? (prompt?.icon || null);
+  const warnings = prompt ? prompt.permissions : pkg ? permissionWarnings(pkg) : [];
+  const kind = prompt?.type;
   const title = kind === "re-enable" ? `Turn “${name}” back on?` : kind === "permissions" ? `“${name}” needs new permissions` : `Add “${name}”?`;
   const action = kind === "re-enable" ? "Turn On" : kind === "permissions" ? "Allow" : "Add Extension";
   const busy = request.status === "installing";
@@ -196,7 +198,7 @@ function InstallDialog({ request }: { request: InstallRequest }) {
     body = (
       <>
         <Box row gap="l" style={ALIGN_CENTER}>
-          {pkg?.icon ? <Image source={{ uri: pkg.icon }} style={{ width: 36, height: 36 }} /> : null}
+          {icon ? <Image source={{ uri: icon }} style={{ width: 36, height: 36 }} /> : null}
           <Text weight="semibold" style={[FLEX, DIALOG_TITLE]}>{title}</Text>
         </Box>
         {warnings.length ? (

@@ -18,8 +18,6 @@ export type Download = {
   profile?: string;
   offTheRecord?: boolean;
   staging?: string | null;
-  stagingId?: string;
-  destination?: string | null;
 };
 
 export type PermissionKind =

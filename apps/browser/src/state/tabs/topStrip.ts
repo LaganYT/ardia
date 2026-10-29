@@ -1,4 +1,3 @@
-import { showMenu, type MenuItem } from "../../platform/menus";
 import { create } from "zustand";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId, tabLabel, viewTabIds } from "../browser/model";
@@ -10,6 +9,8 @@ import { folderIn, folderLabel, folderMembers, tileFolderOf } from "../pins/tile
 import { clickTab } from "../sidebar/actions";
 import { groupEntries } from "../sidebar/entries";
 import { renameFolder } from "../sidebar/tileFolderUi";
+import { chooseFromMenu, type ChoiceItem } from "../app/menuChoice";
+import { entryKey, parseEntry } from "../sidebar/entryKey";
 
 export function tuckTarget(s: BrowserState, windowId: string, profileId: string, groupId: string): string | undefined {
   const members = new Set(s.groups[groupId]?.tabIds ?? []);
@@ -51,8 +52,9 @@ export function stripEntries(s: BrowserState, windowId: string, profileId: strin
     if (hiddenEmptyCard(s, t)) continue;
     const tileFolder = tileFolderOf(t);
     if (tileFolder) {
-      if (!seen.has(`tf:${tileFolder.id}`)) dock.push(`tilefolder:${tileFolder.id}:${folderMembers(s, windowId, tileFolder.id).join(",")}`);
-      seen.add(`tf:${tileFolder.id}`);
+      const folderKey = entryKey("tileFolder", tileFolder.id);
+      if (!seen.has(folderKey)) dock.push(`tilefolder:${tileFolder.id}:${folderMembers(s, windowId, tileFolder.id).join(",")}`);
+      seen.add(folderKey);
       if (id === activeId) dock.push(`pinned:${id}`);
       continue;
     }
@@ -85,23 +87,25 @@ export function stripEntries(s: BrowserState, windowId: string, profileId: strin
   return result;
 }
 
-export function tileFolderMenuItems(s: BrowserState, windowId: string, folderId: string, activeId: string | undefined): MenuItem[] {
+type FolderMenuItem = ChoiceItem<{ tabId: string }>;
+
+export function tileFolderMenuItems(s: BrowserState, windowId: string, folderId: string, activeId: string | undefined): FolderMenuItem[] {
   return [
-    ...folderMembers(s, windowId, folderId).map((id): MenuItem => ({ id: `t:${id}`, title: tabLabel(s.tabs[id]!), checked: id === activeId })),
+    ...folderMembers(s, windowId, folderId).map((id): FolderMenuItem => ({ value: { tabId: id }, title: tabLabel(s.tabs[id]!), checked: id === activeId })),
     { separator: true },
     { id: "rename", title: "Rename…", symbol: "pencil" },
   ];
 }
 
-export function folderMenuItems(s: BrowserState, groupId: string, activeId: string | undefined): MenuItem[] {
-  return groupEntries(s, groupId).flatMap((entry): MenuItem[] => {
-    const id = entry.slice(2);
-    if (entry.startsWith("g:")) {
+export function folderMenuItems(s: BrowserState, groupId: string, activeId: string | undefined): FolderMenuItem[] {
+  return groupEntries(s, groupId).flatMap((entry): FolderMenuItem[] => {
+    const { kind, id } = parseEntry(entry);
+    if (kind === "group") {
       const g = s.groups[id];
       return g ? [{ id: entry, title: groupLabel(s, g), symbol: "folder", children: folderMenuItems(s, id, activeId) }] : [];
     }
-    const tabIds = entry.startsWith("s:") ? (s.splits[id]?.tabIds ?? []) : [id];
-    return tabIds.flatMap((t): MenuItem[] => (s.tabs[t] ? [{ id: `t:${t}`, title: tabLabel(s.tabs[t]!), checked: t === activeId }] : []));
+    const tabIds = kind === "split" ? (s.splits[id]?.tabIds ?? []) : [id];
+    return tabIds.flatMap((t): FolderMenuItem[] => (s.tabs[t] ? [{ value: { tabId: t }, title: tabLabel(s.tabs[t]!), checked: t === activeId }] : []));
   });
 }
 
@@ -148,15 +152,15 @@ export const storeChangedSince = (mark: StoreMark) => useBrowser.getState() !== 
 
 export async function openFolderMenu(windowId: string, groupId: string) {
   const s = useBrowser.getState();
-  const choice = await showMenu(folderMenuItems(s, groupId, activeTabId(s, windowId)));
-  if (choice?.startsWith("t:") && useBrowser.getState().tabs[choice.slice(2)]) clickTab(windowId, choice.slice(2));
+  const choice = await chooseFromMenu(folderMenuItems(s, groupId, activeTabId(s, windowId)));
+  if (typeof choice === "object" && choice && useBrowser.getState().tabs[choice.tabId]) clickTab(windowId, choice.tabId);
 }
 
 export async function openTileFolderStripMenu(windowId: string, folderId: string) {
   const s = useBrowser.getState();
-  const choice = await showMenu(tileFolderMenuItems(s, windowId, folderId, activeTabId(s, windowId)));
+  const choice = await chooseFromMenu(tileFolderMenuItems(s, windowId, folderId, activeTabId(s, windowId)));
   if (choice === "rename") void renameFolder(windowId, folderId);
-  else if (choice?.startsWith("t:") && useBrowser.getState().tabs[choice.slice(2)]) clickTab(windowId, choice.slice(2));
+  else if (typeof choice === "object" && choice && useBrowser.getState().tabs[choice.tabId]) clickTab(windowId, choice.tabId);
 }
 
 const useStripOnto = create<{ key: string | null }>()(() => ({ key: null }));

@@ -1,4 +1,5 @@
 import AppKit
+import ArdiaCore
 
 enum MainMenu {
   private static var moveToProfile = NSMenu(title: "Move to Profile")
@@ -265,7 +266,7 @@ enum MainMenu {
       .separator(),
       cmd("Rename…", "renameTab"),
       cmd("Change Icon…", "changeTabIcon"),
-      cmd("Mute Site", "toggleMute"),
+      cmd("Mute Tab", "toggleMute"),
     ])
 
     bookmarks = top("Bookmarks", [
@@ -360,11 +361,9 @@ enum MainMenu {
   }
 
   private static func extensionIcon(_ dataURL: String?) -> NSImage? {
-    guard let dataURL, let comma = dataURL.firstIndex(of: ",") else { return nil }
+    guard let dataURL else { return nil }
     if let cached = extensionIcons[dataURL] { return cached }
-    guard let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])),
-      let image = NSImage(data: data)
-    else { return nil }
+    guard let image = NSImage(dataURL: dataURL) else { return nil }
     image.size = NSSize(width: 16, height: 16)
     extensionIcons[dataURL] = image
     return image

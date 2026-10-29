@@ -4,7 +4,6 @@ final class LeftEdgeWatcher {
   static let shared = LeftEdgeWatcher()
   static let reach: CGFloat = 24
 
-  var emit: ((String, [String: Any]) -> Void)?
   var pointerOverride: NSPoint?
   private var watched: [String: CGFloat] = [:]
   private var over: Set<String> = []
@@ -55,7 +54,7 @@ final class LeftEdgeWatcher {
       guard fresh || now != over.contains(id) else { continue }
       if now { over.insert(id) } else { over.remove(id) }
       let frame = window.frame
-      emit?("onWindowEvent", ["type": "leftEdge", "id": id, "over": now, "point": [point.x - frame.minX, frame.maxY - point.y]])
+      ShellEvents.send(.window, ["type": "leftEdge", "id": id, "over": now, "point": [point.x - frame.minX, frame.maxY - point.y]])
     }
     if watched.isEmpty { return stop() }
     updateGlobalMonitor()

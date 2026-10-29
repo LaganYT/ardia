@@ -20,8 +20,8 @@ const { useBrowser } = await import("../browser/store.ts");
 const cli = await import("./cliControl.ts");
 const settle = () => new Promise((r) => setImmediate(r));
 const setOn = (on) => useBrowser.getState().updateSettings({ cliControl: on });
-const { engineEvent } = await import("../../test-native/index.ts");
-const emit = (status) => engineEvent("cliControl", status);
+const { emitEvent } = await import("../../test-native/index.ts");
+const emit = (status) => emitEvent("engine.cliControl", status);
 const { markTabReady } = await import("../tabs/pageState.ts");
 const ready = (tabId) => (markTabReady(tabId), cli.noteTabReady(tabId));
 

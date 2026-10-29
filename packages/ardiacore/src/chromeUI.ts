@@ -60,10 +60,6 @@ export const stopCasting = (dialogId: number, routeId: string) => call("media.st
 export const closeCastDialog = (dialogId: number) => call("media.closeCastDialog", { id: dialogId });
 export const watchCastRoutes = (profile: string) => call("media.watchCastRoutes", { profile });
 export const terminateCastRoute = (routeId: string) => call("media.terminateCastRoute", { route: routeId });
-export function preferredCastMode(modes: number): number {
-  for (const mode of [CastMode.presentation, CastMode.tab, CastMode.screen, CastMode.remotePlayback]) if (modes & mode) return mode;
-  return 0;
-}
 
 export const onExtensionSidePanel = (listener: (e: SidePanelRequest) => void) => on("extensions.sidePanel", listener);
 export const extensionSidePanelUrl = (tabId: string, extensionId: string) => call("extensions.sidePanelUrl", { tabId, extensionId });

@@ -12,7 +12,6 @@ enum KeyEquivalents {
   private static var matched: [[String: Any]] = []
   private static var watching = false
   private static var pressing = 0, dryPressing = 0
-  private static var handler: ((String, String?, String?) -> Void)?
   private static var menuKeyIMP: IMP?
   private(set) static var trace: [String] = []
 
@@ -163,16 +162,15 @@ enum KeyEquivalents {
     }
     pressing += 1
     if dry {
-      if dryPressing == 0 { handler = MenuTarget.shared.handler }
       dryPressing += 1
-      MenuTarget.shared.handler = { _, _, _ in }
+      MenuTarget.shared.swallowsCommands = true
     }
   }
 
   private static func end(dry: Bool) {
     if dry {
       dryPressing -= 1
-      if dryPressing == 0 { MenuTarget.shared.handler = handler }
+      if dryPressing == 0 { MenuTarget.shared.swallowsCommands = false }
     }
     pressing -= 1
     if pressing == 0, let imp = menuKeyIMP, let method = class_getInstanceMethod(NSMenu.self, #selector(NSMenu.performKeyEquivalent(with:))) {

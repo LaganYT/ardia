@@ -1,3 +1,4 @@
+import { REPO } from "./release";
 type RawBrowser = {
   name: string;
   version?: string | null;
@@ -283,4 +284,4 @@ function build(source: RawBench | undefined, isSample: boolean): Bench | null {
 
 export const bench: Bench | null = real ? build(real, false) : build(sample, true);
 export const display = (f: Figure) => number(f.value, f.decimals);
-export const BENCH_METHOD = "https://github.com/mantrakp04/ardia/blob/main/docs/perf/vs-browsers.md";
+export const BENCH_METHOD = `${REPO}/blob/main/docs/perf/vs-browsers.md`;

@@ -1,4 +1,5 @@
 import AppKit
+import ArdiaCore
 import CryptoKit
 import ImageIO
 import UniformTypeIdentifiers
@@ -7,7 +8,7 @@ enum WebAppInstaller {
   static let iconSizes = [1024, 512, 256, 128, 64, 32, 16]
 
   static var folder: URL {
-    if FileDropView.background { return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ArdiaWebApps") }
+    if LaunchConfig.shared.background { return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ArdiaWebApps") }
     return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Ardia Apps")
   }
 

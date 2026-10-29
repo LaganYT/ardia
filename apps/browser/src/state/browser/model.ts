@@ -2,14 +2,15 @@ import { appUrlOrigin, displayHost } from "@ardia/core";
 import type { BrowserState } from "./store";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
 import type { BrowserWindow, Profile, Tab, TabGroup, TabLive, TabSnapshot } from "./types";
+import { pinnedGroupMembers } from "./structure";
 
 
 const launch = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 let counter = 0;
 export const newId = (prefix: string) => `${prefix}-${launch}-${(++counter).toString(36)}`;
-export const restoreId = (tabId: string) => `restore:${tabId}`;
-export const pendingRestore = (t: Pick<Tab, "wakeAdoptId">): string | undefined =>
-  t.wakeAdoptId?.startsWith("restore:") ? t.wakeAdoptId.slice("restore:".length) : undefined;
+
+export const pinKeyOf = (x: { id: string; pinKey?: string }) => x.pinKey ?? x.id;
+export const familyKeyOf = (t: Pick<Tab, "profileId" | "id" | "pinKey">) => `${t.profileId}\u0001${pinKeyOf(t)}`;
 
 let navSeq = 0;
 export const navigationTo = (url: string, userInitiated = false) => ({ url, seq: ++navSeq, ...(userInitiated ? { userInitiated } : {}) });
@@ -21,22 +22,17 @@ export const incognitoOriginal = (profileId: string) => {
   return at < 0 ? DEFAULT_PROFILE_ID : profileId.slice(at + 1);
 };
 
-let sharedDataIds: Record<string, string> = {};
-export const setSharedDataIds = (map: Record<string, string>) => {
-  sharedDataIds = map;
-};
-
-export const engineProfile = (profileId: string): string => {
+export const engineProfile = (s: Pick<BrowserState, "profiles">, profileId: string): string => {
   if (isIncognitoProfile(profileId)) {
     const at = profileId.indexOf("@");
-    return `${at < 0 ? profileId : profileId.slice(0, at)}@${engineProfile(incognitoOriginal(profileId))}`;
+    return `${at < 0 ? profileId : profileId.slice(0, at)}@${engineProfile(s, incognitoOriginal(profileId))}`;
   }
-  const id = sharedDataIds[profileId] ?? profileId;
+  const id = s.profiles[profileId]?.dataId ?? profileId;
   return id === DEFAULT_PROFILE_ID ? "" : id;
 };
 
-export const privateSession = (profileId: string): string | null =>
-  isIncognitoProfile(profileId) ? engineProfile(incognitoOriginal(profileId)) : null;
+export const privateSession = (s: Pick<BrowserState, "profiles">, profileId: string): string | null =>
+  isIncognitoProfile(profileId) ? engineProfile(s, incognitoOriginal(profileId)) : null;
 
 const INCOGNITO_PROFILE: Profile = { id: "incognito", name: "Incognito", color: "neutral", icon: null, createdAt: 0 };
 
@@ -98,22 +94,10 @@ export const togglePinTitle = (tab: Pick<Tab, "pinned" | "pinnedAsRow"> | undefi
 export type PinSection = "tile" | "row" | "none";
 export const pinSection = (t: Pick<Tab, "pinned" | "pinnedAsRow"> | undefined): PinSection => (!t?.pinned ? "none" : t.pinnedAsRow ? "row" : "tile");
 
-export function pinnedFirst(ids: string[], tabs: Record<string, Tab>, groups?: Record<string, TabGroup>): string[] {
-  const pinnedGroup = new Set(groups ? Object.values(groups).filter((g) => g.pinned).flatMap((g) => g.tabIds) : []);
-  const pinnedArea = (id: string) => pinSection(tabs[id]) === "row" || (!tabs[id]?.pinned && pinnedGroup.has(id));
-  return [
-    ...ids.filter((id) => pinSection(tabs[id]) === "tile"),
-    ...ids.filter(pinnedArea),
-    ...ids.filter((id) => !tabs[id]?.pinned && !pinnedArea(id)),
-  ];
-}
-
 export function inPinnedContainer(s: Pick<BrowserState, "tabs" | "groups">, id: string): boolean {
   const tab = s.tabs[id];
   if (!tab) return false;
-  if (tab.pinned) return true;
-  for (const g of Object.values(s.groups)) if (g.pinned && g.tabIds.includes(id)) return true;
-  return false;
+  return tab.pinned || pinnedGroupMembers(s.groups).has(id);
 }
 
 export function viewTabIds(s: BrowserState, windowId: string, profileId?: string): string[] {
@@ -188,6 +172,11 @@ export function tabLabel(t: Pick<Tab, "url" | "title" | "customTitle">): string 
     return t.title || t.url;
   }
 }
+
+const urlLabel = (url: string) => url.replace(/^[a-z][\w+.-]*:\/\//i, "").replace(/^www\./, "").replace(/\/$/, "");
+export const tabTitle = (t: Pick<Tab, "customTitle" | "title" | "url">) => t.customTitle || t.title || (t.url && urlLabel(t.url)) || "New Tab";
+
+export const tabTooltip = (t: Pick<Tab, "customTitle" | "title" | "url">) => (t.url ? `${tabTitle(t)}\n${t.url}` : tabTitle(t));
 
 export function findLast<T>(list: readonly T[], test: (item: T) => boolean): T | undefined {
   for (let i = list.length - 1; i >= 0; i--) if (test(list[i]!)) return list[i];

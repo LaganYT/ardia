@@ -6,9 +6,10 @@ import { tabDragOutside } from "../../state/drag/tabDrag";
 import { dragMarksOf, markDrag } from "../../state/sidebar/dragMarks";
 import { folderPanel } from "../../state/sidebar/tileFolderUi";
 import { overPins, pinGridHeight, pinSlot } from "./pinZone";
-import { boxed, FOLDER_HOLD_MS, inside, pinnedBlock, PIN_SLOT, ROW_GAP, spring, type Drop, type Item } from "./dragModel";
+import { boxed, type Drop, FOLDER_HOLD_MS, folderOf, inside, isGroupItem, type Item, PIN_SLOT, pinnedBlock, ROW_GAP, spring, tailKey } from "./dragModel";
 import { DragGeometry } from "./dragGeometry";
 import { hapticTick } from "../../state/drag/dragNative";
+import { entryKey } from "../../state/sidebar/entryKey";
 
 export class DragTargeting extends DragGeometry {
   protected clearHold() {
@@ -22,7 +23,7 @@ export class DragTargeting extends DragGeometry {
     if (this.holdKey === target.key) return;
     this.clearHold();
     this.holdKey = target.key;
-    if (target.folderId) return void (this.holdReady = target.key);
+    if (folderOf(target)) return void (this.holdReady = target.key);
     this.holdTimer = setTimeout(() => {
       if (this.holdKey !== target.key || !this.sources.length) return;
       this.holdReady = target.key;
@@ -34,9 +35,9 @@ export class DragTargeting extends DragGeometry {
     const { x, y } = this.pointer;
     const source = this.sources[0]!;
     const sourceKeys = new Set(this.sources.map((s) => s.key));
-    const subtree = source.kind === "group" && source.groupId ? new Set([source.groupId, ...descendantGroupIds(source.groupId)]) : null;
+    const subtree = source.kind === "group" ? new Set([source.groupId, ...descendantGroupIds(source.groupId)]) : null;
     const live = [...this.items.values()].filter(
-      (i) => !sourceKeys.has(i.key) && i.frame && !(subtree && ((i.parentGroup && subtree.has(i.parentGroup)) || (i.groupId && subtree.has(i.groupId)))),
+      (i) => !sourceKeys.has(i.key) && i.frame && !(subtree && ((i.parentGroup && subtree.has(i.parentGroup)) || (i.kind === "group" && subtree.has(i.groupId)))),
     );
     const cy = (i: Item) => {
       const f = this.shown(i);
@@ -46,14 +47,14 @@ export class DragTargeting extends DragGeometry {
     const dragged = new Set(this.sources.flatMap((s) => s.tabIds));
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
-    const count = this.external || (source.folderId ? 1 : dragged.size);
-    const rowPitch = (boxed(source) ? (source.foldedHeight?.() ?? this.ghost?.height ?? layout.rowHeight) : layout.rowHeight * (source.kind === "split" ? 1 : Math.max(1, this.ghost?.count ?? this.external ?? 1))) + ROW_GAP;
+    const count = this.external || (folderOf(source) ? 1 : dragged.size);
+    const rowPitch = (boxed(source) ? source.foldedHeight() : layout.rowHeight * (source.kind === "split" ? 1 : Math.max(1, this.ghost?.count ?? this.external ?? 1))) + ROW_GAP;
     const blocks = live.filter(pinnedBlock).sort(byY);
     const rest = blocks.map((b) => b.key);
     const moved = this.sources
       .filter((s) => s.frame)
       .sort(byY)
-      .flatMap((s) => (s.kind === "group" || s.kind === "live" || s.kind === "split" ? [s.key] : s.tabIds.map((id) => `t:${id}`)));
+      .flatMap((s) => (s.kind === "group" || s.kind === "live" || s.kind === "split" ? [s.key] : s.tabIds.map((id) => entryKey("tab", id))));
     const pinnedAt = (): { before: Item | undefined; beforeId: string | null; sequence: string[] } => {
       const before = blocks.find((b) => cy(b) > y);
       const at = before ? blocks.indexOf(before) : blocks.length;
@@ -62,8 +63,8 @@ export class DragTargeting extends DragGeometry {
     };
     const dragSource: DragSource = {
       kind: source.kind === "group" || source.kind === "split" || source.kind === "live" ? source.kind : "tab",
-      groupId: source.groupId,
-      folderId: source.folderId,
+      groupId: source.kind === "group" ? source.groupId : undefined,
+      folderId: folderOf(source),
       external: !!this.external,
     };
     let aim: DropSpot | null = null;
@@ -90,7 +91,7 @@ export class DragTargeting extends DragGeometry {
     const wasAway = dragMarksOf(this.marks).folderAway;
     const inPanel = !away && !wasAway && tabsDrag && !this.external && !!panelFrame && inside(panelFrame, x, y);
     if (source.section === "folder" && !inPanel) folderAway = true;
-    const canFolder = tabsDrag && !this.external && !source.folderId;
+    const canFolder = tabsDrag && !this.external && !folderOf(source);
     const home = source.section === "tiles" && source.frame ? cells.filter((c) => byY(c, source) < 0).length : null;
     const spot = !away && tabsDrag && overTiles && tiles ? this.pointed(tiles, cells, count, home, x, y, canFolder) : null;
     const target = spot?.part === "centre" ? spot.cell : null;
@@ -103,7 +104,7 @@ export class DragTargeting extends DragGeometry {
       const before = members.find((m) => cy(m) > y);
       const anchor = members.find((m) => firstTab(m) !== null);
       aim = anchor ? { zone: "folder", ontoId: firstTab(anchor)!, beforeId: firstTab(before) } : null;
-      gapKey = anchor ? (before?.key ?? "tail:folder") : null;
+      gapKey = anchor ? (before?.key ?? tailKey("folder")) : null;
     } else if (target && this.holdReady === target.key) {
       aim = { zone: "folder", ontoId: firstTab(target)! };
       gapKey = this.gapKey;
@@ -114,13 +115,13 @@ export class DragTargeting extends DragGeometry {
       const before = this.gridBase ? cells[index] : undefined;
       aim = { zone: "tiles", beforeId: firstTab(before) };
       sequence = rest;
-      gapKey = before?.key ?? "tail:tiles";
+      gapKey = before?.key ?? tailKey("tiles");
       pitch = PIN_SLOT;
     } else {
       const hits =
         tabsDrag || source.kind === "group" || source.kind === "split"
           ? live
-              .filter((i) => i.kind === "group")
+              .filter(isGroupItem)
               .flatMap((g) => {
                 const f = this.shown(g);
                 const start = this.at(g.headerFrame);
@@ -133,15 +134,15 @@ export class DragTargeting extends DragGeometry {
           : [];
       const hit = hits[0];
       if (hit?.into) {
-        aim = { zone: "group", groupId: hit.g.groupId!, beforeId: null };
+        aim = { zone: "group", groupId: hit.g.groupId, beforeId: null };
         sequence = rest;
-        into = hit.g.groupId!;
+        into = hit.g.groupId;
       } else if (hit) {
         const members = live.filter((i) => (i.kind === "row" || i.kind === "group" || i.kind === "split") && i.parentGroup === hit.g.groupId).sort(byY);
         const before = members.find((m) => cy(m) > y);
-        aim = { zone: "group", groupId: hit.g.groupId!, beforeId: firstTab(before) };
+        aim = { zone: "group", groupId: hit.g.groupId, beforeId: firstTab(before) };
         sequence = rest;
-        gapKey = before?.key ?? `tail:group:${hit.g.groupId}`;
+        gapKey = before?.key ?? tailKey({ group: hit.g.groupId });
       } else if ((onto = tabsDrag && !this.external ? this.ontoTarget(live, y, this.overPinnedRows(y) ? "pinnedRows" : "list") : null)) {
         aim = { zone: "onto", targetId: this.items.get(onto)!.tabIds[0]! };
         gapKey = this.gapKey;
@@ -150,11 +151,11 @@ export class DragTargeting extends DragGeometry {
         const pinned = pinnedAt();
         aim = { zone: "pinnedRows", beforeId: pinned.beforeId };
         sequence = pinned.sequence;
-        gapKey = pinned.before?.key ?? "tail:pinnedGroups";
+        gapKey = pinned.before?.key ?? tailKey("pinnedGroups");
       } else if (source.kind !== "live") {
         const items = live.filter((i) => i.section === "list" && !i.parentGroup && i.kind !== "tail" && i.kind !== "tile").sort(byY);
         const before = items.find((b) => cy(b) > y && firstTab(b) !== null);
-        gapKey = before?.key ?? "tail:list";
+        gapKey = before?.key ?? tailKey("list");
         aim = { zone: "list", beforeId: firstTab(before) };
         sequence = rest;
       }

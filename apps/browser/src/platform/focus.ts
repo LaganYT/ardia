@@ -5,7 +5,6 @@ export {
   restoreKeyResponder,
   discardKeyResponder,
   setSwitcherCapture,
-  restartSwitcherPointer,
   switcherPointerMoved,
   setDragEscapeCapture,
 } from "@ardia/shell";

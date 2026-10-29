@@ -5,7 +5,6 @@ import { engineProfile } from "../browser/model";
 export const useWindowUiOf = <T>(windowId: string, select: (ui: BrowserState["windowUi"][string] | undefined) => T): T =>
   useBrowser((s) => select(s.windowUi[windowId]));
 
-export const useWindowTabLayout = (windowId: string) => useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
 
 export const useNativeWindowProfile = (windowId: string) =>
   useBrowser(
@@ -13,8 +12,8 @@ export const useNativeWindowProfile = (windowId: string) =>
       const w = s.windows[windowId];
       if (!w) return ["", "[]", ""];
       const at = w.incognito ? -1 : s.profileOrder.indexOf(w.profileId);
-      const next = at < 0 ? [] : [s.profileOrder[at - 1], s.profileOrder[at + 1]].filter((p): p is string => !!p).map(engineProfile);
-      return [engineProfile(w.profileId), JSON.stringify(next), w.profileId];
+      const next = at < 0 ? [] : [s.profileOrder[at - 1], s.profileOrder[at + 1]].filter((p): p is string => !!p).map((id) => engineProfile(s, id));
+      return [engineProfile(s, w.profileId), JSON.stringify(next), w.profileId];
     }),
   );
 

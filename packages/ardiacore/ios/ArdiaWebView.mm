@@ -65,10 +65,11 @@ bool Finite(NSDictionary *d, NSString *key, double *out) {
 }
 
 NSString *OriginOf(NSString *url) {
-  NSURLComponents *c = [NSURLComponents componentsWithString:url ?: @""];
-  if (!c.scheme.length || !c.host.length) return nil;
-  return c.port ? [NSString stringWithFormat:@"%@://%@:%@", c.scheme, c.host, c.port] : [NSString stringWithFormat:@"%@://%@", c.scheme, c.host];
+  NSString *origin = [ArdiaCoreTab originForURL:url ?: @""];
+  return origin.length ? origin : nil;
 }
+
+NSString *VerifiedOrigin(NSString *origin) { return origin.length && ![origin isEqualToString:@"null"] ? origin : nil; }
 
 NSString *JSONString(id value) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:value ?: NSNull.null options:NSJSONWritingFragmentsAllowed error:nil];

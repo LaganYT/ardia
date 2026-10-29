@@ -41,7 +41,7 @@ test("an empty lookup that started before an import doesn't wipe the imported ic
     await new Promise((resolve) => setTimeout(resolve, 40));
     assert.equal(resolveFavicon(page, null, "default")?.uri, "data:image/png;base64,AAAA");
     await waitFor(() => globalThis.storedFavicons.length === 1);
-    assert.deepEqual(globalThis.storedFavicons[0], [engineProfile("default"), page, `${page}favicon.png`, "AAAA"]);
+    assert.deepEqual(globalThis.storedFavicons[0], [engineProfile(useBrowser.getState(), "default"), page, `${page}favicon.png`, "AAAA"]);
   } finally {
     row.unmount();
     delete globalThis.faviconsForTest;
@@ -71,11 +71,11 @@ test("an icon remembers its page across an engine switch, so the new engine's vi
   adoptIconPage(tabId);
   S().updateTab(tabId, { favicon: "https://assets.nflxext.com/favicon.ico" });
   noteIconPage(tabId);
-  S().navigated(tabId, { url: local, title: "" }, { isLoading: true });
+  S().updateTab(tabId, { url: local, title: "" }, { isLoading: true });
   dropOutlivedFavicon(tabId, local, true);
   assert.equal(S().tabs[tabId].favicon, "https://assets.nflxext.com/favicon.ico");
   adoptIconPage(tabId);
-  S().navigated(tabId, { url: local, title: "Local" }, { isLoading: false });
+  S().updateTab(tabId, { url: local, title: "Local" }, { isLoading: false });
   dropOutlivedFavicon(tabId, local, false);
   assert.equal(S().tabs[tabId].favicon, null);
 });
@@ -88,7 +88,7 @@ test("an icon stays when the tab finishes loading another page on the icon's sit
   const tabId = S().windows[windowId].tabIds[0];
   S().updateTab(tabId, { url: page, favicon: "https://assets.nflxext.com/favicon.ico" });
   noteIconPage(tabId);
-  S().navigated(tabId, { url: "https://www.netflix.com/title/1", title: "" }, { isLoading: false });
+  S().updateTab(tabId, { url: "https://www.netflix.com/title/1", title: "" }, { isLoading: false });
   dropOutlivedFavicon(tabId, "https://www.netflix.com/title/1", false);
   assert.equal(S().tabs[tabId].favicon, "https://assets.nflxext.com/favicon.ico");
 });

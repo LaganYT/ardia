@@ -1,8 +1,8 @@
 import type { BrowserState } from "../browser/store";
 import type { SplitView, TabGroup } from "../browser/types";
-import { newId } from "../browser/model";
+import { newId, pinKeyOf } from "../browser/model";
 import { descendantIds, nestGroups, withGroupsPlaced, withParent } from "../groups/groups";
-import { keyField, pinKeyOf } from "../pins/pinMirror";
+import { keyField } from "../pins/pinMirror";
 
 export function groupTree(groups: Record<string, TabGroup>, groupId: string): TabGroup[] {
   const root = groups[groupId];

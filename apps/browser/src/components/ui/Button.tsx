@@ -10,12 +10,9 @@ export type ButtonHit = { width: number; height: number; plateX: number; plateY:
 
 export type IconPalette = { icon: string; iconDisabled: string; hover: string; pressed: string };
 
-type IconProps = {
+type IconBase = {
   variant: "icon";
   icon: string;
-  onPress?: (modifiers: ClickModifiers) => void;
-  onLongPress?: () => void;
-  onContextMenu?: () => void;
   disabled?: boolean;
   active?: boolean;
   size?: number;
@@ -28,8 +25,10 @@ type IconProps = {
   color?: string;
   style?: ViewStyle;
   hit?: ButtonHit;
-  toolbar?: boolean;
 };
+
+type IconProps = IconBase &
+  ({ toolbar?: false; onPress?: () => void } | { toolbar: true; onPress?: (modifiers: ClickModifiers) => void; onLongPress?: () => void; onContextMenu?: () => void });
 
 type TextProps = {
   variant: "text";
@@ -47,30 +46,14 @@ type TextProps = {
   label?: string;
 };
 
-type PillProps = {
-  variant: "pill";
-  onPress: () => void;
-  title?: string;
-  icon?: string;
-  tone?: "prompt" | "chip" | "control";
-  primary?: boolean;
-  disabled?: boolean;
-  flex?: boolean;
-  height?: number;
-  width?: number;
-  tooltip?: string;
-};
+type PillProps = { variant: "pill"; onPress: () => void; title: string; primary?: boolean } & ({ tone?: "prompt" } | { tone: "chip"; icon?: string; height?: number });
 
-type CloseProps = {
-  variant: "close";
-  onPress: () => void;
-  look: "hud" | "panel" | "art";
-  tooltip?: string;
-  label?: string;
-  box?: number;
-  radius?: number;
-  style?: StyleProp<ViewStyle>;
-};
+type StepperProps = { variant: "stepper"; icon: string; onPress: () => void; width: number; height: number; tooltip: string; disabled?: boolean };
+
+type CloseProps = { variant: "close"; onPress: () => void; tooltip?: string; label?: string; style?: StyleProp<ViewStyle> } & (
+  | { look: "hud" | "panel" }
+  | { look: "art"; box?: number; radius?: number }
+);
 
 type PushProps = {
   variant?: "push";
@@ -82,7 +65,7 @@ type PushProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export type ButtonProps = IconProps | TextProps | PillProps | CloseProps | PushProps;
+export type ButtonProps = IconProps | TextProps | PillProps | StepperProps | CloseProps | PushProps;
 
 export const Button = memo(function Button(props: ButtonProps) {
   switch (props.variant) {
@@ -92,6 +75,8 @@ export const Button = memo(function Button(props: ButtonProps) {
       return <TextButtonView {...props} />;
     case "pill":
       return <PillButtonView {...props} />;
+    case "stepper":
+      return <StepperButtonView {...props} />;
     case "close":
       return <CloseButtonView {...props} />;
     default:
@@ -99,7 +84,8 @@ export const Button = memo(function Button(props: ButtonProps) {
   }
 });
 
-function IconButtonView({ icon, onPress, onLongPress, onContextMenu, disabled, active, size = 15, box = 30, glyphBox, radius = 7, weight = "regular", tooltip, palette, color, style, hit, toolbar }: IconProps) {
+function IconButtonView(props: IconProps) {
+  const { icon, disabled, active, size = 15, box = 30, glyphBox, radius = 7, weight = "regular", tooltip, palette, color, style, hit } = props;
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const hover = palette ? palette.hover : theme.toolbarHover;
@@ -128,14 +114,15 @@ function IconButtonView({ icon, onPress, onLongPress, onContextMenu, disabled, a
       />
     </View>
   );
-  if (!toolbar)
+  if (!props.toolbar)
     return (
       <View tooltip={tooltip} style={style} {...hoverProps}>
-        <Pressable onPress={onPress as (() => void) | undefined} disabled={disabled}>
+        <Pressable onPress={props.onPress} disabled={disabled}>
           {({ pressed }) => plate(pressed)}
         </Pressable>
       </View>
     );
+  const { onPress, onLongPress, onContextMenu } = props;
   const button = (
     <Pressable
       onPress={(e) => onPress?.(modifiersOf(e))}
@@ -183,45 +170,50 @@ function TextButtonView({ title, onPress, disabled, plate = "toolbar", height, p
   );
 }
 
-function pillLook(theme: Theme, tone: NonNullable<PillProps["tone"]>, primary: boolean, pressed: boolean, hovered: boolean) {
+function pillLook(theme: Theme, tone: "prompt" | "chip", primary: boolean, pressed: boolean, hovered: boolean) {
   if (tone === "chip")
     return primary
       ? { fill: theme.textPrimary, text: theme.onPrimary, dim: pressed || hovered }
       : { fill: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.urlPill, text: theme.textPrimary, dim: false };
-  if (tone === "control") return { fill: pressed ? theme.controlPressed : hovered ? theme.controlHover : theme.control, text: theme.icon, dim: false };
   return primary
     ? { fill: pressed ? theme.goButtonPressed : hovered ? theme.goButtonHover : theme.goButton, text: theme.onPrimary, dim: false }
     : { fill: pressed ? theme.promptFillPressed : hovered ? theme.promptFillHover : theme.promptFill, text: theme.textPrimary, dim: false };
 }
 
-function PillButtonView({ onPress, title, icon, tone = "prompt", primary = false, disabled, flex, height, width, tooltip }: PillProps) {
+function StepperButtonView({ icon, onPress, width, height, tooltip, disabled }: StepperProps) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
-  if (tone === "control")
-    return (
-      <View {...hoverProps} style={{ opacity: disabled ? CONTROL_DISABLED_OPACITY : 1 }}>
-        <Pressable disabled={disabled} onPress={onPress} tooltip={tooltip}>
-          {({ pressed }) => (
-            <View
-              style={{
-                width,
-                height,
-                borderRadius: radii.field,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: pillLook(theme, tone, false, pressed, hovered).fill,
-                borderWidth: StyleSheet.hairlineWidth * 2,
-                borderColor: theme.controlBorder,
-              }}
-            >
-              {icon ? <Symbol name={icon} size={10} weight="semibold" color={theme.icon} style={{ width: 12, height: 12 }} /> : null}
-            </View>
-          )}
-        </Pressable>
-      </View>
-    );
-  if (tone === "chip") {
-    const chipHeight = height ?? 24;
+  return (
+    <View {...hoverProps} style={{ opacity: disabled ? CONTROL_DISABLED_OPACITY : 1 }}>
+      <Pressable disabled={disabled} onPress={onPress} tooltip={tooltip}>
+        {({ pressed }) => (
+          <View
+            style={{
+              width,
+              height,
+              borderRadius: radii.field,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: pressed ? theme.controlPressed : hovered ? theme.controlHover : theme.control,
+              borderWidth: StyleSheet.hairlineWidth * 2,
+              borderColor: theme.controlBorder,
+            }}
+          >
+            <Symbol name={icon} size={10} weight="semibold" color={theme.icon} style={{ width: 12, height: 12 }} />
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+function PillButtonView(props: PillProps) {
+  const { onPress, title, primary = false } = props;
+  const theme = useTheme();
+  const { hovered, hoverProps } = useHover();
+  if (props.tone === "chip") {
+    const { icon, tone } = props;
+    const chipHeight = props.height ?? 24;
     return (
       <View {...hoverProps}>
         <Pressable onPress={onPress}>
@@ -252,12 +244,12 @@ function PillButtonView({ onPress, title, icon, tone = "prompt", primary = false
     );
   }
   return (
-    <View {...hoverProps} style={flex ? FLEX : undefined}>
+    <View {...hoverProps}>
       <Pressable onPress={onPress}>
         {({ pressed }) => {
-          const look = pillLook(theme, tone, primary, pressed, hovered);
+          const look = pillLook(theme, "prompt", primary, pressed, hovered);
           return (
-            <View style={{ height: height ?? 28, paddingHorizontal: space.l, borderRadius: radii.l, alignItems: "center", justifyContent: "center", backgroundColor: look.fill }}>
+            <View style={{ height: 28, paddingHorizontal: space.l, borderRadius: radii.l, alignItems: "center", justifyContent: "center", backgroundColor: look.fill }}>
               <Text numberOfLines={1} style={{ ...typeScale.body, fontWeight: weights.medium, color: look.text }}>
                 {title}
               </Text>
@@ -269,10 +261,10 @@ function PillButtonView({ onPress, title, icon, tone = "prompt", primary = false
   );
 }
 
-const FLEX = { flex: 1 } as const;
 const CONTROL_DISABLED_OPACITY = 0.4;
 
-function CloseButtonView({ onPress, look, tooltip = "Dismiss", label, box, radius, style }: CloseProps) {
+function CloseButtonView(props: CloseProps) {
+  const { onPress, look, tooltip = "Dismiss", label, style } = props;
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   if (look === "panel")
@@ -285,8 +277,9 @@ function CloseButtonView({ onPress, look, tooltip = "Dismiss", label, box, radiu
         </Pressable>
       </View>
     );
-  if (look === "art") {
-    const size = box ?? HUD_CLOSE_BOX;
+  if (props.look === "art") {
+    const size = props.box ?? HUD_CLOSE_BOX;
+    const radius = props.radius;
     return (
       <View {...hoverProps} style={style} tooltip={tooltip}>
         <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label ?? tooltip}>

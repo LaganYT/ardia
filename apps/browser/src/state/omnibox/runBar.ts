@@ -1,3 +1,4 @@
+import { tabTitle } from "../browser/model";
 import type { Suggestion } from "@ardia/core";
 import { prompt } from "../../platform/dialogs";
 import { showMenu, type MenuItem } from "../../platform/menus";
@@ -10,7 +11,6 @@ import { openExtensionFromMenu } from "../extensions/bridge";
 import { openOptions, shownIn } from "../extensions/actions";
 import { openSplitPane } from "../splits/actions";
 import { openSettings } from "../settings/settingsWindows";
-import { tabTitle } from "../sidebar/actions";
 import { isOrganizeId, shownOrganizeContext, sideBySide, splitCandidates, type OrganizeContext, type OrganizeId } from "./organizeActions";
 
 const store = () => useBrowser.getState();

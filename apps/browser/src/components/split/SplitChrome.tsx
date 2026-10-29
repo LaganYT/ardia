@@ -1,13 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../ui/theme";
-import { withAlpha } from "../sidebar/tokens";
 import { updateSplit } from "../../state/splits/actions";
 import { useDragFallbackPane } from "../../state/splits/hooks";
 import type { SplitView } from "../../state/browser/types";
 import { resize, type Divider, type Rect } from "../window/geometry";
-import { font, Panel, radius, space, Symbol, useHover, VisualEffect, weight } from "../ui";
-import { hideToast, useToasts } from "../../state/splits/actions";
+import { font, Panel, radius, space, Symbol, useHover, VisualEffect, weight, withAlpha } from "../ui";
+import { hideToast, useToasts } from "../../state/app/toasts";
 import { useWindowId } from "../../state/browser/hooks";
 import { overPeek } from "../../state/windows/dockMotion";
 import { zoneHit, zoneRect, type ZoneStage } from "./splitDrop";

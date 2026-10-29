@@ -2,6 +2,7 @@ import { useBrowser, type BrowserState } from "../browser/store";
 import { bookmarkDraft, hasLinks, MAX_DRAFT_LINKS, withDraftGroups, type DraftGroups, type GroupDraft } from "../groups/draftGroups";
 import { bookmarkProfileId, plural } from "../browser/model";
 import { mainWindowFor } from "../windows/small";
+import { showToast } from "../app/toasts";
 
 export const ARC_HOLDER = " (Arc)";
 
@@ -16,7 +17,7 @@ export function addGroupsFromDrafts(profileId: string, drafts: GroupDraft[], nea
   const windowId = sidebarWindow(s, profileId, near) ?? s.createWindow({ profileId });
   const [next, result] = withDraftGroups(useBrowser.getState(), windowId, profileId, drafts);
   if (result.made.length) useBrowser.setState(next);
-  if (result.skipped) (require("../splits/actions") as typeof import("../splits/actions")).showToast(windowId, `${plural(result.skipped, "link")} left out`, `A folder brings up to ${MAX_DRAFT_LINKS.toLocaleString("en-US")} links.`);
+  if (result.skipped) showToast(windowId, `${plural(result.skipped, "link")} left out`, `A folder brings up to ${MAX_DRAFT_LINKS.toLocaleString("en-US")} links.`);
   return result;
 }
 

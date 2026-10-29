@@ -13,8 +13,9 @@ public class WindowsModule: Module {
   static let calls = CallTable(domain: "windows", handlers: [
     "list": { _, reply in reply.ok(ArdiaHost.chromeWindows) },
     "dev": { args, reply in
-      guard let window = NSApp.window(withWindowNumber: args.int("window") ?? 0) else { return reply.ok("") }
-      reply.ok(ArdiaChromeWindowHost.devAction(args.text("action"), window: window) ?? "")
+      let action = try args.text("action")
+      guard let window = NSApp.window(withWindowNumber: try args.int("window")) else { return reply.ok("") }
+      reply.ok(ArdiaChromeWindowHost.devAction(action, window: window) ?? "")
     },
   ])
 }

@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { hex, useTheme } from "../../ui/theme";
 import { useWindowId } from "../../../state/browser/hooks";
 import type { Rect } from "../../window/geometry";
-import { Button, Surface, useHover } from "../../ui";
+import { Button, Surface, useHover, usePresence } from "../../ui";
 import { useOnboardingColors } from "../Parts";
 import { locateAnchor } from "./anchors";
 import { endToolTour, openVideoTour, stepToolTour, useTour, videoTourUrl, type TourStop } from "../../../state/onboarding/tour";
@@ -16,23 +16,16 @@ const GAP = 14;
 const MARGIN = 12;
 const SCRIM_REACH = 6000;
 
+const TOUR_PRESENCE = {
+  show: { duration: onboardingMotion.tourIn, easing: curve.outQuad },
+  hide: { duration: onboardingMotion.tourOut, easing: curve.inQuad },
+};
+
 export function ToolTour() {
   const windowId = useWindowId();
   const active = useTour((s) => s.windowId === windowId && s.stops.length > 0);
   const session = useTour((s) => s.session);
-  const [shown, setShown] = useState<number | null>(null);
-  const presence = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (active) {
-      setShown(session);
-      Animated.timing(presence, { toValue: 1, duration: onboardingMotion.tourIn, easing: curve.outQuad, useNativeDriver: true }).start();
-    } else if (shown !== null) {
-      Animated.timing(presence, { toValue: 0, duration: onboardingMotion.tourOut, easing: curve.inQuad, useNativeDriver: true }).start(({ finished }) => {
-        if (finished) setShown(null);
-      });
-    }
-  }, [active, session]);
+  const { shown, appear: presence } = usePresence(active ? session : null, TOUR_PRESENCE);
 
   if (shown === null) return null;
   return (

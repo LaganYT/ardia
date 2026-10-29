@@ -198,7 +198,7 @@ static NSString *LinkKeyAction(NSString *key) {
   const BOOL userClicked = test || (fresh && gPeekUpSeq != gPeekUsedSeq && gPeekUpView == self && gPeekUpKeys == pageFlag);
   const BOOL fallsBack = !split && pageFlag && [@[ @"http", @"https" ] containsObject:scheme] && userClicked;
   NSString *origin = Text(dict, @"origin", 1024).lowercaseString;
-  const BOOL sameOrigin = origin.length && [OriginOf(url).lowercaseString isEqualToString:origin];
+  const BOOL sameOrigin = origin.length && [OriginOf(url) isEqualToString:origin];
   NSString *action = !fallsBack ? @"none" : pageFlag == NSEventModifierFlagShift ? @"new window" : sameOrigin ? @"page download" : @"background tab";
   PeekTrace(@{@"event" : @"fallback", @"url" : url ?: @"", @"key" : key, @"reason" : reason, @"userClicked" : @(userClicked), @"split" : @(split), @"action" : action});
   if (split && userClicked && !test) gPeekUsedSeq = gPeekUpSeq;

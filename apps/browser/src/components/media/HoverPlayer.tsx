@@ -1,3 +1,4 @@
+import { devRegister } from "../dev/devRegister";
 import { Surface } from "../ui";
 import { hex, layout, useTheme } from "../ui/theme";
 import { ink } from "../ui/tokens";
@@ -5,7 +6,7 @@ import { clickTab } from "../../state/sidebar/actions";
 import { cardHoverProps, dismissHover } from "../../state/sidebar/hover";
 import { hoverCardOrigin } from "../sidebar/hoverMotion";
 import { measureRow, setSidebarUi, type Anchor } from "../../state/sidebar/sidebarUi";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarWidth } from "../../state/sidebar/hooks";
 import { MINI_PLAYER_HEIGHT, MINI_PLAYER_WIDTH, MiniPlayer } from "./MiniPlayer";
 import { useMedia, usePinnedWithMediaControls } from "../../state/media/media";
 import { useMediaTokens } from "./tokens";
@@ -52,11 +53,9 @@ export function HoverPlayer({ tabId, windowId, anchor }: { tabId: string; window
   );
 }
 
-if (__DEV__) {
-  (globalThis as { acMediaHover?: unknown }).acMediaHover = async (windowId: string, tabId: string | null) => {
-    if (!tabId) return setSidebarUi({ hover: null });
-    const anchor = await measureRow(windowId, tabId);
-    if (anchor) setSidebarUi({ hover: { windowId, kind: "tab", id: tabId, anchor } });
-    return anchor;
-  };
-}
+devRegister("acMediaHover", null, async (windowId: string, tabId: string | null) => {
+  if (!tabId) return setSidebarUi({ hover: null });
+  const anchor = await measureRow(windowId, tabId);
+  if (anchor) setSidebarUi({ hover: { windowId, kind: "tab", id: tabId, anchor } });
+  return anchor;
+});

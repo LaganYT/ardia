@@ -3,7 +3,9 @@ import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
 const { isPeekTab, otherSitePeekTabIds, peekSourceOf, peekTabId } = await import("./peek.ts");
 const { PRESETS } = await import("../onboarding/presets.ts");
-const { DEFAULT_SETTINGS, peekModifierOf, splitLinkModifierOf } = await import("../settings/settings.ts");
+const { DEFAULT_SETTINGS } = await import("../settings/settings.ts");
+const peekModifierOf = (settings) => settings.peekModifier;
+const splitLinkModifierOf = (settings) => settings.splitLinkModifier;
 const { stripPlan } = await import("../tabs/liveTabs.ts");
 const { viewTabIds } = await import("../browser/model.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("../session/persist.ts");
@@ -68,7 +70,7 @@ test("closing a peek throws its page away without a closed-tab entry", () => {
 test("Open as Tab keeps the same tab, puts it right after its source and shows it, without reloading", () => {
   const { w, a, b } = windowWithTabs();
   const id = S().openPeek(a, "https://peek.example/");
-  S().navigated(id, { url: "https://peek.example/next", title: "Next" }, { isLoading: false, canGoBack: true });
+  S().updateTab(id, { url: "https://peek.example/next", title: "Next" }, { isLoading: false, canGoBack: true });
   const moved = S().peekToTab(w);
   assert.equal(moved, id);
   assert.equal(S().peeks[w], undefined);
@@ -116,9 +118,9 @@ test("switching tab closes the peek", () => {
 test("the source tab closing or navigating away closes the peek, a same-page hash change doesn't", () => {
   const { w, a } = windowWithTabs();
   let id = S().openPeek(a, "https://peek.example/");
-  S().navigated(a, { url: "https://a.example/#section", title: "A" }, {});
+  S().updateTab(a, { url: "https://a.example/#section", title: "A" }, {});
   assert.equal(peekTabId(S(), w), id);
-  S().navigated(a, { url: "https://a.example/elsewhere", title: "A" }, {});
+  S().updateTab(a, { url: "https://a.example/elsewhere", title: "A" }, {});
   assert.equal(S().peeks[w], undefined);
   assert.equal(S().tabs[id], undefined);
 
@@ -179,8 +181,8 @@ test("the Peek modifier setting: ⇧-click by default, ⌥-click or Off, synced,
   assert.ok(S().settings.chosen.includes("peekModifier"));
   S().updateSettings({ peekModifier: "off" });
   assert.equal(peekModifierOf(S().settings), "off");
-  assert.equal(peekModifierOf({ peekModifier: "control" }), "shift");
-  assert.equal(peekModifierOf({}), "shift");
+  S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"], settings: { peekModifier: "control" } });
+  assert.equal(peekModifierOf(S().settings), "shift");
   assert.ok(SYNCED_SETTINGS.includes("peekModifier"));
   S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"], settings: { peekModifier: "alt" } });
   assert.equal(peekModifierOf(S().settings), "alt");
@@ -206,8 +208,10 @@ test("the split link setting: ⌥⇧-click by default or ⌥-click, synced, neve
   assert.deepEqual(keys(), ["shift", "altShift"]);
   S().updateSettings({ peekModifier: "alt", splitLinkModifier: "alt" }, { fromSync: true });
   assert.deepEqual(keys(), ["alt", "altShift"]);
-  assert.equal(splitLinkModifierOf({ splitLinkModifier: "shift" }), "altShift");
-  assert.equal(splitLinkModifierOf({}), "altShift");
+  S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"], settings: { peekModifier: "alt", splitLinkModifier: "alt" } });
+  assert.deepEqual(keys(), ["alt", "altShift"]);
+  S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"], settings: { splitLinkModifier: "shift" } });
+  assert.deepEqual(keys(), ["shift", "altShift"]);
   S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"], settings: { splitLinkModifier: "alt" } });
   assert.deepEqual(keys(), ["shift", "alt"]);
 });

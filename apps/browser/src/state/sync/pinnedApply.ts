@@ -1,12 +1,11 @@
 import type { ApplyRecords } from "../../platform/sync";
 import { useBrowser } from "../browser/store";
 import { depthOf, leaveGroups, orderSections, syncGroupOrder, withParent } from "../groups/groups";
-import { makeTab, newId, pinnedFirst, without } from "../browser/model";
+import { makeTab, newId, pinKeyOf, without } from "../browser/model";
 import { noteRemotePinDeletion, type PinSyncEntry } from "../pins/organize";
 import { adoptParkedPins, parkWindowPins } from "../pins/parkedPins";
 import { arrangePinnedArea } from "../pins/pinnedArea";
 import { fromSync } from "../pins/pinOrderChoices";
-import { pinKeyOf } from "../pins/pinMirror";
 import { removeTabs } from "../tabs/tabs";
 import type { Tab, TabGroup } from "../browser/types";
 import {
@@ -14,9 +13,11 @@ import {
   folderMark,
   GROUP_LOOK,
   lookedColor,
+  PIN_GROUP,
   PIN_NEST,
   PIN_ORDER,
   PIN_ROW,
+  PIN_TAB,
   ROW,
   syncedHomeIn,
   type NestGroupValue,
@@ -28,7 +29,7 @@ import { hasPage, homeWindow, store, type Window } from "./pinnedSyncState";
 
 export function applyPinned(profileId: string, visible: Map<string, unknown>, changed: Set<string>, base: (key: string) => unknown, records: ApplyRecords): boolean | void {
   if ([...changed].every((k) => k.startsWith(PIN_ROW))) return true;
-  const pinItem = (k: string) => k.startsWith("pin:t:") || k.startsWith("pin:g:") || k.startsWith(`${PIN_NEST}g:`);
+  const pinItem = (k: string) => k.startsWith(PIN_TAB) || k.startsWith(PIN_GROUP) || k.startsWith(`${PIN_NEST}g:`);
   if ([...changed].some((k) => pinItem(k) && !visible.has(k))) noteRemotePinDeletion(profileId);
   const sync = store().pinSync[profileId] ?? {};
   let s = store();
@@ -80,20 +81,20 @@ export function applyPinned(profileId: string, visible: Map<string, unknown>, ch
   const nestValues = new Map<string, NestGroupValue>();
   const awaiting = new Map<string, string>();
   const hadGroup = new Set([...Object.values(s.groups).filter((g) => g.profileId === profileId).map(pinKeyOf), ...(s.parkedPins[profileId]?.groups ?? []).map((g) => g.id)]);
-  const expired = (k: string, g: string) => sync[k.slice(6)]?.g === g && (sync[k.slice(6)]!.w ?? 0) <= records.now;
-  const listed = (g: string) => visible.has(`pin:g:${g}`) || visible.has(`${PIN_NEST}g:${g}`);
-  const unresolved = (k: string, g: string) => !listed(g) && !hadGroup.has(g) && !records.known(`pin:g:${g}`) && !expired(k, g);
+  const expired = (k: string, g: string) => sync[k.slice(PIN_TAB.length)]?.g === g && (sync[k.slice(PIN_TAB.length)]!.w ?? 0) <= records.now;
+  const listed = (g: string) => visible.has(`${PIN_GROUP}${g}`) || visible.has(`${PIN_NEST}g:${g}`);
+  const unresolved = (k: string, g: string) => !listed(g) && !hadGroup.has(g) && !records.known(`${PIN_GROUP}${g}`) && !expired(k, g);
   const contained = (id: string) => !!s.tabs[id] && (s.tabs[id]!.pinned || pinnedMember.has(id));
   const retainedIn = (id: string, g: string) =>
     !contained(id) && Object.values(s.groups).some((x) => !x.pinned && x.profileId === profileId && pinKeyOf(x) === g && x.tabIds.includes(id));
   for (const [k, v] of visible) {
-    if (k.startsWith("pin:t:")) {
+    if (k.startsWith(PIN_TAB)) {
       const g = (v as PinValue).g;
-      const id = tid(k.slice(6));
+      const id = tid(k.slice(PIN_TAB.length));
       if (g && !listed(g) && retainedIn(id, g)) continue;
       if (g && unresolved(k, g)) awaiting.set(id, g);
       pins.set(id, { ...(v as PinValue), g: g && gid(g) });
-    } else if (k.startsWith("pin:g:")) groupValues.set(gid(k.slice(6)), v as PinGroupValue);
+    } else if (k.startsWith(PIN_GROUP)) groupValues.set(gid(k.slice(PIN_GROUP.length)), v as PinGroupValue);
     else if (k.startsWith(`${PIN_NEST}g:`)) nestValues.set(gid(k.slice(PIN_NEST.length + 2)), v as NestGroupValue);
   }
   const all = new Set([...groupValues.keys(), ...nestValues.keys()]);
@@ -126,7 +127,7 @@ export function applyPinned(profileId: string, visible: Map<string, unknown>, ch
     if (!k.startsWith(`${PIN_NEST}t:`)) continue;
     const key = k.slice(PIN_NEST.length + 2);
     const inner = (v as NestTabValue).g;
-    if (!visible.has(`pin:t:${key}`) || !listed(inner)) continue;
+    if (!visible.has(`${PIN_TAB}${key}`) || !listed(inner)) continue;
     const id = tid(key);
     const pin = pins.get(id);
     if (pin?.g && all.has(pin.g) && all.has(gid(inner)) && chainUp(gid(inner)).at(-1) === chainUp(pin.g).at(-1)) pins.set(id, { ...pin, g: gid(inner) });
@@ -156,7 +157,7 @@ export function applyPinned(profileId: string, visible: Map<string, unknown>, ch
   const tileOrder = areaSlots.filter((x) => !x.group).map((x) => x.id);
   const memberOrder = new Map([...all].map((g) => [g, walk(g).filter((x) => !x.group).map((x) => x.id)]));
 
-  const goneTabs = [...changed].filter((k) => k.startsWith("pin:t:") && !visible.has(k)).map((k) => tid(k.slice(6))).filter((id) => contained(id) && scope.has(s.tabs[id]!.windowId));
+  const goneTabs = [...changed].filter((k) => k.startsWith(PIN_TAB) && !visible.has(k)).map((k) => tid(k.slice(PIN_TAB.length))).filter((id) => contained(id) && scope.has(s.tabs[id]!.windowId));
   const removable = goneTabs.filter((id) => {
     const t = s.tabs[id]!;
     const w = s.windows[t.windowId];
@@ -168,7 +169,7 @@ export function applyPinned(profileId: string, visible: Map<string, unknown>, ch
   for (const id of goneTabs) if (tabs[id]) tabs[id] = { ...tabs[id]!, pinned: false, pinnedUrl: null, pinnedAsRow: undefined, tileFolder: undefined, pinKey: undefined };
   let groups = { ...s.groups };
   for (const k of changed) {
-    const key = k.startsWith("pin:g:") ? k.slice(6) : k.startsWith(`${PIN_NEST}g:`) ? k.slice(PIN_NEST.length + 2) : null;
+    const key = k.startsWith(PIN_GROUP) ? k.slice(PIN_GROUP.length) : k.startsWith(`${PIN_NEST}g:`) ? k.slice(PIN_NEST.length + 2) : null;
     if (key === null || visible.has(k) || all.has(gid(key))) continue;
     if (groups[gid(key)]?.pinned && scope.has(groups[gid(key)]!.windowId)) delete groups[gid(key)];
   }
@@ -279,7 +280,7 @@ export function applyPinned(profileId: string, visible: Map<string, unknown>, ch
     const slots = ids.map((id, i) => (rank.has(id) ? i : -1)).filter((i) => i >= 0);
     const sorted = slots.map((i) => ids[i]!).sort((a, z) => rank.get(a)! - rank.get(z)!);
     slots.forEach((slot, i) => (ids[slot] = sorted[i]!));
-    const sectioned = { ...w, tabIds: orderSections(pinnedFirst(ids, tabs, groups), tabs, groups) };
+    const sectioned = { ...w, tabIds: orderSections(ids, tabs, groups) };
     const window = { ...sectioned, tabIds: arrangePinnedArea({ tabs, groups }, sectioned, profileId, (group) => anchorIn(base(`${PIN_ORDER}${group}`))) };
     windows[w.id] = window;
     groups = syncGroupOrder(groups, window);

@@ -24,18 +24,18 @@ final class MenuChoice: NSObject {
     return pick?.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  static func testPick(_ items: [[String: Any]], dumpingTo file: URL) -> String? {
-    guard let pick = testAnswer(dumping: items, to: file), enabledIds(items).contains(pick) else { return nil }
+  static func testPick(_ items: [MenuItem], dumpingTo file: URL, appContext: AppContext?) -> String? {
+    guard let pick = testAnswer(dumping: items.map { $0.toDictionary(appContext: appContext) }, to: file), enabledIds(items).contains(pick) else { return nil }
     return pick
   }
 
-  private static func enabledIds(_ items: [[String: Any]]) -> Set<String> {
+  private static func enabledIds(_ items: [MenuItem]) -> Set<String> {
     var ids = Set<String>()
-    for item in items where item["enabled"] as? Bool ?? true {
-      if let children = item["children"] as? [[String: Any]] {
+    for item in items where item.enabled && !item.separator {
+      if let children = item.children {
         ids.formUnion(enabledIds(children))
-      } else if let id = item["id"] as? String {
-        ids.insert(id)
+      } else {
+        ids.insert(item.id)
       }
     }
     return ids

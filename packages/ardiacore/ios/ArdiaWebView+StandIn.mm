@@ -1,20 +1,16 @@
 #import "ArdiaWebViewInternal.h"
+#import "ArdiaRuntime.h"
 
 #import <QuartzCore/QuartzCore.h>
 
 using namespace ardia_web_view;
+using namespace ardia_runtime;
 
 namespace {
 
 constexpr CFTimeInterval kStandInTeardownDelay = 0.1;
 constexpr CFTimeInterval kTakeOverLendSeconds = 1;
 
-void WithoutActions(void (^block)(void)) {
-  [CATransaction begin];
-  [CATransaction setDisableActions:YES];
-  block();
-  [CATransaction commit];
-}
 }
 
 @implementation ArdiaWebView (StandIn)

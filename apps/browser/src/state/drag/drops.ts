@@ -4,6 +4,7 @@ import { activeTabId, pinSection, viewTabIds } from "../browser/model";
 import { canMoveGroup, groupingOnto, movingGroup, placing, selectedTabIds, type GroupPlacement, type TabPlacement } from "../pins/organize";
 import { splitOf } from "../splits/splits";
 import { addToTileFolder } from "../pins/tileFolders";
+import { entryKey } from "../sidebar/entryKey";
 
 type Slot = { readonly tabIds: readonly string[] };
 type Order = Pick<BrowserState, "tabs" | "windows">;
@@ -123,9 +124,9 @@ export function stepDrop(s: BrowserState, tabId: string, delta: 1 | -1): Drop {
     const chain = chainOf(id);
     const at = container ? chain.indexOf(container.id) : chain.length;
     if (at < 0) return null;
-    if (at > 0) return `g:${chain[at - 1]}`;
+    if (at > 0) return entryKey("group", chain[at - 1]!);
     const folder = s.tabs[id]?.tileFolder;
-    return folder ? `f:${folder.id}` : `t:${splitOf(s, id)?.id ?? id}`;
+    return folder ? entryKey("tileFolder", folder.id) : entryKey("tab", splitOf(s, id)?.id ?? id);
   };
   const blocks: { key: string; ids: string[] }[] = [];
   for (const id of w.tabIds) {

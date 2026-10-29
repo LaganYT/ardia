@@ -1,5 +1,5 @@
 import { useBrowser } from "../browser/store";
-import { bookmarkProfileId } from "../browser/model";
+import { bookmarkProfileId, tabLayoutOf } from "../browser/model";
 import type { Bookmarks } from "../browser/types";
 import type { Settings } from "../settings/settings";
 
@@ -13,7 +13,7 @@ export const useBookmarksBarMode = (windowId: string): Settings["bookmarksBar"] 
 export const useSidebarEdge = (windowId: string, width: number) =>
   useBrowser((s) => {
     const w = s.windows[windowId];
-    return w?.sidebarOpen && (w.tabLayout ?? s.settings.tabLayout) !== "top" ? width : 0;
+    return w?.sidebarOpen && tabLayoutOf(s, w.id) !== "top" ? width : 0;
   });
 
 export const useTabBookmarkProfileId = (tabId: string): string =>

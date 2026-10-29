@@ -236,7 +236,16 @@ separated on the next publish.
 Per profile: each synced profile is its own scope, with its own opt-in (Settings › Sync ›
 Profiles).
 - On joining, Personal pairs with the synced default profile and other profiles pair by name.
-- A synced profile this Mac lacks is offered as "Add to This Mac".
+  - Pairing waits until the folder shows what to pair with: the synced default profile's record, or other profiles'
+    records with nothing left downloading or damaged in the app scope. A Mac that joined while the other Mac hadn't
+    written its profiles yet, or while iCloud Drive was still downloading that file, used to pair with what it had
+    read so far: Personal got an id of its own, received none of the other Mac's Personal data, and both Macs then
+    offered the other's Personal as a new profile (#514). A day after joining it pairs with whatever it has, so a folder
+    whose other devices sync no profile doesn't keep it waiting. Until it pairs, no profile is offered to add. Known
+    residuals: once the default record is in, other profiles pair by name with what has arrived, even while a file
+    with a later profile is still downloading; and a Mac that paired early before this fix keeps its pairing, with two
+    default records left in the folder.
+- A synced profile this Mac lacks is offered as "Add to This Mac", with "Add All" when there are several.
 - Profiles that share another's data (Dia's "Share data with another profile") sync their tabs;
   the shared data syncs with the profile that owns it.
 - Which profile's data a profile shares travels as `share:<sync id>` (the owner's sync id), so "Add to This Mac" makes
@@ -378,6 +387,9 @@ Settings › Sync. Dia puts sync in Account › Sync, with the section icon
   - Dia's copy: "Enter your 24-word recovery phrase to sync with another device.", the
     placeholder "Enter your 24-word recovery phrase", the "%d/%d words" counter, "too many
     words", and Connect / "Connecting…" / Cancel.
+  - Once connected, the sheet says "This Mac Is Syncing" and lists the synced profiles this Mac lacks, each with Add
+    to This Mac, and Add All (Settings › Sync › Profiles offers the same). Until the profiles have paired it says
+    "Looking for the profiles on your other devices…", with the files still downloading.
   - It also shows the folder the phrase is checked against, with Change….
 - **On.**
   - The status line uses Dia's words: "starting up", "updating", "updated just now", "not

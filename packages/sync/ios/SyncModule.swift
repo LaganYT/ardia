@@ -105,7 +105,12 @@ public class SyncModule: Module {
 
     AsyncFunction("read") { (folder: String, scope: String, known: [String]) throws -> [String: Any] in
       let vault = try self.vault(folder)
-      let listing = try vault.read(scope: scope, skipping: Set(known))
+      let listing: SyncVault.Listing
+      do {
+        listing = try vault.read(scope: scope, skipping: Set(known))
+      } catch {
+        throw Exception(name: "folderUnreadable", description: "The sync folder couldn't be read: \(error.localizedDescription)", code: "ERR_SYNC_FOLDER_UNREADABLE")
+      }
       var files: [[String: Any]] = []
       var damaged: [[String: Any]] = listing.damaged.map { ["id": $0.id, "age": $0.age * 1000] }
       for file in listing.files {

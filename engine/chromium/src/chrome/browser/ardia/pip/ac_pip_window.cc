@@ -195,12 +195,21 @@ void ArdiaVideoOverlayWindow::SetMediaPosition(
 
 gfx::Rect ArdiaVideoOverlayWindow::CalculateAndUpdateWindowBounds() {
   std::optional<gfx::Rect> saved;
-  if (!has_been_shown_) {
+  if (!has_been_shown_ || !views::Widget::IsVisible()) {
     saved = LoadArdiaPictureInPictureBounds();
+    if (!saved && has_been_shown_) {
+      saved = GetBounds();
+    }
   }
-  if (saved) {
+  if (saved && !saved->IsEmpty()) {
+    display::Screen* screen = display::Screen::Get();
+    const bool on_a_display = std::ranges::any_of(
+        screen->GetAllDisplays(), [&](const display::Display& display) {
+          return display.bounds().Intersects(*saved);
+        });
     const gfx::Rect work_area =
-        display::Screen::Get()->GetDisplayMatching(*saved).work_area();
+        on_a_display ? screen->GetDisplayMatching(*saved).work_area()
+                     : screen->GetPrimaryDisplay().work_area();
     UpdateMaxSize(work_area);
     gfx::Rect rect = *saved;
     gfx::Size size = rect.size();
@@ -221,6 +230,13 @@ gfx::Rect ArdiaVideoOverlayWindow::CalculateAndUpdateWindowBounds() {
           static_cast<float>(natural_size_.width()) / natural_size_.height(),
           GetMinimumSize(), max_size_, &rect);
       UpdateLayerBoundsWithLetterboxing(rect.size());
+    }
+    if (!on_a_display) {
+      const int margin = (work_area.width() - rect.width() +
+                          work_area.height() - rect.height()) /
+                         2 * 0.02;
+      rect.set_origin({work_area.right() - rect.width() - margin,
+                       work_area.bottom() - rect.height() - margin});
     }
     rect.AdjustToFit(work_area);
     return rect;

@@ -12,7 +12,7 @@ public class SearchModule: Module {
   static let calls = CallTable(domain: "search", handlers: [
     "engines": { args, reply in ArdiaServices.searchEngineList(profile: args.profile) { reply.service($0, $1) } },
     "setEngineName": { args, reply in
-      ArdiaWebView.setSearchEngineName(args.text("name"))
+      ArdiaWebView.setSearchEngineName(try args.text("name"))
       reply.ok()
     },
   ])

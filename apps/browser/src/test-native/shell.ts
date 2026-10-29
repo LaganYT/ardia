@@ -5,7 +5,6 @@ import type {
   LaunchConfig,
   OpenWindowOptions,
   ShellNativeModules,
-  ShellOptionalNativeModules,
   SystemInfo,
   UserScriptsFolder,
   WindowEvent,
@@ -13,7 +12,6 @@ import type {
 import { nativeEvents, unfaked } from "./events";
 
 type Modules = ShellNativeModules;
-type OptionalModules = { [Name in keyof ShellOptionalNativeModules]: () => ShellOptionalNativeModules[Name] | null };
 
 type UserScriptsHost = {
   watching: boolean[];
@@ -56,6 +54,7 @@ const shell: Modules["ArdiaShell"] = {
   addListener: shellEvents.addListener,
   showMenu: () => Promise.resolve(null),
   copyText: () => {},
+  readText: () => Promise.resolve(""),
   setSwitcherCapture: () => Promise.resolve(),
   setDragEscapeCapture: () => Promise.resolve(),
   saveKeyResponder: () => Promise.resolve(0),
@@ -220,29 +219,17 @@ const fileDrop: Modules["ArdiaFileDrop"] = {
   devLastFileDrag: () => Promise.resolve([]),
 };
 
-export const shellNativeModules: Modules = {
-  ArdiaShell: shell,
-  ArdiaApp: app,
-  ArdiaSystem: system,
-  ArdiaCalendar: calendar,
-  ArdiaKeychain: keychain,
-  ArdiaGlassEffect: { isLiquidGlass: () => false },
-  ArdiaDockSelection: { iconTheme: () => Promise.resolve(null) },
-  ArdiaInlineCompletion: { complete: () => Promise.resolve(0) },
-  ArdiaTranslate: translate,
-  ArdiaMagnifyArea: magnifyArea,
-  ArdiaFileDrop: fileDrop,
-};
 
 const cliEvents = nativeEvents();
-const cli: ShellOptionalNativeModules["ArdiaCli"] = {
+const cli: Modules["ArdiaCli"] = {
   installedVersion: () => null,
   install: () => Promise.resolve({ ok: false, appVersion: appInfo.appVersion ?? "", error: "no installs in tests", lines: [] }),
   addListener: cliEvents.addListener,
 };
 
-const userScriptsHost = () => testGlobals.acTestUserScripts!;
-const userScripts: ShellOptionalNativeModules["ArdiaUserScripts"] = {
+const noUserScripts: UserScriptsHost = { watching: [], writes: [], status: null, change: null, read: async () => ({ state: "empty" }) };
+const userScriptsHost = () => testGlobals.acTestUserScripts ?? noUserScripts;
+const userScripts: Modules["ArdiaUserScripts"] = {
   watch: (on) => void userScriptsHost().watching.push(on),
   read: () => userScriptsHost().read(),
   readStatus: async () => userScriptsHost().status,
@@ -256,7 +243,18 @@ const userScripts: ShellOptionalNativeModules["ArdiaUserScripts"] = {
   },
 };
 
-export const shellOptionalNativeModules: OptionalModules = {
-  ArdiaCli: () => cli,
-  ArdiaUserScripts: () => (testGlobals.acTestUserScripts ? userScripts : null),
+export const shellNativeModules: Modules = {
+  ArdiaShell: shell,
+  ArdiaApp: app,
+  ArdiaSystem: system,
+  ArdiaCalendar: calendar,
+  ArdiaKeychain: keychain,
+  ArdiaGlassEffect: { isLiquidGlass: () => false },
+  ArdiaDockSelection: { iconTheme: () => Promise.resolve(null) },
+  ArdiaInlineCompletion: { complete: () => Promise.resolve(0) },
+  ArdiaTranslate: translate,
+  ArdiaMagnifyArea: magnifyArea,
+  ArdiaFileDrop: fileDrop,
+  ArdiaCli: cli,
+  ArdiaUserScripts: userScripts,
 };

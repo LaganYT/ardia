@@ -1,3 +1,4 @@
+import { devRegister } from "../dev/devRegister";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "../onboarding/Personalize";
@@ -93,4 +94,4 @@ function PersonalizePanel({ windowId, onClose }: { windowId: string; onClose: ()
 
 const SUBTITLE = { lineHeight: SUBTITLE_LINE } as const;
 
-if (__DEV__) (globalThis as { acPersonalize?: unknown }).acPersonalize = { open: setOpen };
+devRegister("acPersonalize", "open", setOpen);

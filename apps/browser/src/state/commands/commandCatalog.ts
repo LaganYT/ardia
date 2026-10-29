@@ -8,11 +8,13 @@ type Variant = { title?: string; barTitle?: string; symbol?: string; keys?: Keys
 type CommandSpec = Variant & {
   scope?: Scope;
   onInternalPages?: true;
+  app?: true;
   littleArdia?: InLittleArdia;
   variants?: Readonly<Record<string, Variant>>;
 };
 
 const inWindow = { scope: "window" } as const;
+const appWide = { app: true } as const;
 const pageInLittleArdia = { scope: "page", littleArdia: "page" } as const;
 const offInLittleArdia = { littleArdia: "off" } as const;
 const windowOffInLittleArdia = { scope: "window", littleArdia: "off" } as const;
@@ -88,7 +90,7 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   openBookmark: { scope: "window", littleArdia: "page" },
   addFolderToSidebar: {},
   restoreArcFolders: {},
-  toggleMute: { title: "Mute Site", symbol: "speaker.slash", ...pageInLittleArdia },
+  toggleMute: { title: "Mute Tab", symbol: "speaker.slash", ...pageInLittleArdia },
   togglePageEngine: { title: "Open Page in WebKit" },
   downloads: { title: "Downloads", symbol: "arrow.down.circle", keys: ["⇧⌘J", "⌥⌘L"], scope: "window", littleArdia: "page" },
   mergeAllWindows: { title: "Merge All Windows", symbol: "rectangle.stack", ...windowOffInLittleArdia },
@@ -121,15 +123,15 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
     },
   },
   share: { title: "Share", symbol: "square.and.arrow.up", ...pageInLittleArdia },
-  sendFeedback: { title: "Send Feedback…", keys: ["⌥⇧⌘I"] },
+  sendFeedback: { title: "Send Feedback…", keys: ["⌥⇧⌘I"], ...appWide },
   keyboardShortcuts: { title: "Keyboard Shortcuts", symbol: "keyboard" },
-  copyDiagnostics: { title: "Copy Diagnostics" },
-  recordPerformanceIssue: { title: "Record Performance Issue…" },
-  toolTour: { title: "Tool Tour" },
-  videoTour: { title: "Video Tour" },
-  releaseNotes: { title: "Release Notes" },
-  showOnboarding: { title: "Show Onboarding" },
-  taskManager: { title: "Task Manager" },
+  copyDiagnostics: { title: "Copy Diagnostics", ...appWide },
+  recordPerformanceIssue: { title: "Record Performance Issue…", ...appWide },
+  toolTour: { title: "Tool Tour", ...appWide },
+  videoTour: { title: "Video Tour", ...appWide },
+  releaseNotes: { title: "Release Notes", ...appWide },
+  showOnboarding: { title: "Show Onboarding", ...appWide },
+  taskManager: { title: "Task Manager", ...appWide },
   openExtension: { littleArdia: "page" },
   addExtension: { title: "Add Extension…", littleArdia: "page" },
   manageExtensions: { title: "Manage Extensions…" },
@@ -197,6 +199,7 @@ export const PAGE_COMMANDS = commandsWhere((c) => c.scope === "page");
 export const PAGE_COMMANDS_OFF_INTERNAL_PAGES = commandsWhere((c) => c.scope === "page" && !c.onInternalPages);
 export const WINDOW_COMMANDS = commandsWhere((c) => c.scope !== undefined);
 export const LITTLE_ARDIA_DISABLED_COMMANDS = commandsWhere((c) => c.littleArdia === "off");
+export const APP_COMMANDS: ReadonlySet<string> = new Set(commandsWhere((c) => !!c.app));
 export const LITTLE_ARDIA_PAGE_COMMANDS: ReadonlySet<string> = new Set(commandsWhere((c) => c.littleArdia === "page"));
 
 const variantOf = (command: BrowserCommand, arg: string | undefined): Variant => {

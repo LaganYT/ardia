@@ -239,6 +239,7 @@ bool SamePage(NSString *a, NSString *b);
 id JSONValue(NSString *json);
 NSString *JSONString(id value);
 NSString *OriginOf(NSString *url);
+NSString *VerifiedOrigin(NSString *origin);
 void NoteEvent(int browserId, NSString *name, NSDictionary *payload);
 void AcceptDrops(NSView *root, BOOL accept);
 NSView *PaneUnder(NSView *view, NSView *ancestor);

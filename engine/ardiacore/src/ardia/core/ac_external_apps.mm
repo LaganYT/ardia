@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/common/constants.h"
 #include "ardia/core/ac_hooks.h"
 #include "ardia/core/ac_browser.h"
 #include "ardia/core/ac_launch_switches.h"
@@ -72,6 +73,14 @@ NSString* IconDataURI(NSURL* app, CGFloat size) {
              : nil;
 }
 
+NSURL* StandInAppForTests() {
+  const std::optional<std::string> path = TestValue("externalProtocolApp");
+  if (!path || !TestFlag("externalProtocolNoLaunch")) {
+    return nil;
+  }
+  return [NSURL fileURLWithPath:base::SysUTF8ToNSString(*path)];
+}
+
 bool AskHost(const GURL& url,
              content::WebContents* contents,
              const std::optional<url::Origin>& initiating_origin,
@@ -90,6 +99,9 @@ bool AskHost(const GURL& url,
   NSURL* ns_url = [NSURL URLWithString:base::SysUTF8ToNSString(url.spec())];
   NSURL* app = ns_url ? [NSWorkspace.sharedWorkspace URLForApplicationToOpenURL:ns_url]
                       : nil;
+  if (!app) {
+    app = StandInAppForTests();
+  }
   NSString* name =
       app ? [NSFileManager.defaultManager displayNameAtPath:app.path]
                 .stringByDeletingPathExtension
@@ -176,7 +188,11 @@ void ResolveExternalApp(const std::string& request_id, bool open, bool remember)
   Pending pending = std::move(it->second);
   PendingRequests().erase(it);
   content::WebContents* contents = pending.contents.get();
-  if (!open || !contents || !pending.initiator.AsRenderFrameHostIfValid()) {
+  const bool asked_by_browser_or_extension =
+      !pending.origin || pending.origin->scheme() == extensions::kExtensionScheme;
+  const bool asking_page_gone =
+      !asked_by_browser_or_extension && !pending.initiator.AsRenderFrameHostIfValid();
+  if (!open || !contents || asking_page_gone) {
     return;
   }
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());

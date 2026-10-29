@@ -1,5 +1,5 @@
 import { prompt } from "../../platform/dialogs";
-import { showMenu, type MenuItem } from "../../platform/menus";
+import { chooseFromMenu, type ChoiceItem } from "../app/menuChoice";
 import { menuSections } from "../app/menuSections";
 import { deleteProfile } from "../browser/actions";
 import { currentProfile, currentProfileOrder, currentSettings } from "../browser/current";
@@ -10,31 +10,34 @@ import { choosePresetColor } from "./themeActions";
 
 export type ProfileMenuPlace = "sidebar" | "settings";
 export type ProfileColorChoice = { id: ProfileColor; title: string; swatch: string };
+export type IconChoice = { icon: string | null };
+export type IconMenuItem = ChoiceItem<IconChoice, "emoji">;
+type ProfileMenuItem = ChoiceItem<IconChoice | { color: ProfileColor }, "rename" | "icon" | "color" | "settings" | "details" | "default" | "delete" | "emoji">;
 
 export type ProfileMenuState = {
   place: ProfileMenuPlace;
   hasIcon: boolean;
-  iconItems: MenuItem[];
+  iconItems: IconMenuItem[];
   colors: ProfileColorChoice[];
   color: ProfileColor | null;
   isDefault: boolean;
   only: boolean;
 };
 
-export function profileMenuItems({ place, hasIcon, iconItems, colors, color, isDefault, only }: ProfileMenuState): MenuItem[] {
-  return menuSections(
+export function profileMenuItems({ place, hasIcon, iconItems, colors, color, isDefault, only }: ProfileMenuState): ProfileMenuItem[] {
+  return menuSections<ProfileMenuItem>(
     [
-      { id: "rename", title: "Rename…", symbol: "pencil" },
-      { id: "icon", title: hasIcon ? "Change Icon" : "Add Icon", symbol: "photo", children: iconItems },
-      { id: "color", title: "Color", symbol: "paintpalette", children: colors.map((c) => ({ id: `color:${c.id}`, title: c.title, swatch: c.swatch, checked: c.id === color })) },
+      { id: "rename" as const, title: "Rename…", symbol: "pencil" },
+      { id: "icon" as const, title: hasIcon ? "Change Icon" : "Add Icon", symbol: "photo", children: iconItems },
+      { id: "color" as const, title: "Color", symbol: "paintpalette", children: colors.map((c) => ({ value: { color: c.id }, title: c.title, swatch: c.swatch, checked: c.id === color })) },
     ],
     place === "sidebar"
-      ? [{ id: "settings", title: "Profile Settings…", symbol: "gearshape" }]
+      ? [{ id: "settings" as const, title: "Profile Settings…", symbol: "gearshape" }]
       : [
-          { id: "details", title: "Show Profile Details", symbol: "info.circle" },
-          { id: "default", title: "Make Default Profile", symbol: "star", enabled: !isDefault },
+          { id: "details" as const, title: "Show Profile Details", symbol: "info.circle" },
+          { id: "default" as const, title: "Make Default Profile", symbol: "star", enabled: !isDefault },
         ],
-    [{ id: "delete", title: "Delete Profile…", symbol: "trash", enabled: !only }],
+    [{ id: "delete" as const, title: "Delete Profile…", symbol: "trash", enabled: !only }],
   );
 }
 
@@ -47,11 +50,11 @@ export async function renameProfile(profileId: string, windowId?: string) {
 
 export async function showProfileMenu(
   profileId: string,
-  { place, windowId, iconItems, colors }: { place: ProfileMenuPlace; windowId?: string; iconItems: (current: string | null) => MenuItem[]; colors: ProfileColorChoice[] },
+  { place, windowId, iconItems, colors }: { place: ProfileMenuPlace; windowId?: string; iconItems: (current: string | null) => IconMenuItem[]; colors: ProfileColorChoice[] },
 ) {
   const profile = currentProfile(profileId);
   if (!profile) return;
-  const choice = await showMenu(
+  const choice = await chooseFromMenu(
     profileMenuItems({
       place,
       hasIcon: !!profile.icon,
@@ -63,11 +66,10 @@ export async function showProfileMenu(
     }),
   );
   if (!choice) return;
-  if (choice.startsWith("icon:")) {
-    const icon = choice.slice("icon:".length) || null;
-    return place === "sidebar" ? setSwitcherIcon(profileId, icon) : updateProfile(profileId, { icon });
+  if (typeof choice === "object") {
+    if ("color" in choice) return choosePresetColor(profileId, choice.color);
+    return place === "sidebar" ? setSwitcherIcon(profileId, choice.icon) : updateProfile(profileId, { icon: choice.icon });
   }
-  if (choice.startsWith("color:")) return choosePresetColor(profileId, choice.slice("color:".length) as ProfileColor);
   if (choice === "rename") return void renameProfile(profileId, windowId);
   if (choice === "settings") return openSettings("profiles", profileId);
   if (choice === "details") return goToSettingsPane("profiles", profileId);

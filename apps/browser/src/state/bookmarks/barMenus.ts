@@ -2,7 +2,7 @@ import { prompt } from "../../platform/dialogs";
 import { showMenu, type MenuItem } from "../../platform/menus";
 import { addFolderToSidebar, makesGroup, restorableArcHolder, restoreArcFolders } from "./bookmarkGroups";
 import { folderChildren, folderLinks } from "./bookmarks";
-import { addBookmarkFolder, FOLDER_MANY, openFolder, openUrl, removeBookmark } from "./actions";
+import { addBookmarkFolder, FOLDER_MANY, removeBookmark } from "./actions";
 import { copyLinkItems, openAllItems, openLinkItems, runLinkChoice } from "./linkMenus";
 import { menuSections, type MenuKey } from "../app/menuSections";
 import { menuShortcut } from "../commands/commandShortcuts";
@@ -13,6 +13,7 @@ import { currentBookmarks } from "../browser/current";
 import type { BookmarkNode } from "../browser/types";
 import { openInternalPage } from "../pages/urls";
 import { updateSettings } from "../settings/actions";
+import type { Settings } from "../settings/settings";
 
 export type ClickMods = { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
 
@@ -21,47 +22,19 @@ export async function openImportButtonMenu() {
   if (choice === "hide") updateSettings({ hideBookmarksBarImport: true });
 }
 
-export async function openFolderMenu(windowId: string, ids: string[], _e?: ClickMods, folderId?: string) {
-  const b = currentBookmarks();
-  const build = (list: string[], parent?: string, depth = 0): MenuItem[] => {
-    const items: MenuItem[] = list
-      .map((id) => b.nodes[id])
-      .filter((n): n is BookmarkNode => !!n)
-      .map((n) =>
-        n.kind === "url"
-          ? { id: `open:${n.id}`, title: n.title || n.url, symbol: "globe" }
-          : { id: `folder:${n.id}`, title: n.title, symbol: "folder", children: depth < 8 ? build(n.children, n.id, depth + 1) : [] },
-      );
-    if (!items.length) items.push({ id: "empty", title: "Empty", enabled: false });
-    const links = parent ? folderLinks(b, parent).length : 0;
-    if (links > 0) {
-      items.push(
-        { separator: true },
-        ...openAllItems(links).map((item) => ("id" in item ? { ...item, id: `${item.id}:${parent}` } : item)),
-        { id: `addGroup:${parent}`, title: "Add to Sidebar as Group", symbol: "sidebar.left", enabled: !!parent && makesGroup({ bookmarks: currentBookmarks() }, parent) },
-      );
-    }
-    return items;
-  };
-  const choice = await showMenu(build(ids, folderId));
-  if (!choice) return;
-  const [action, id] = splitChoice(choice);
-  const node = id ? currentBookmarks().nodes[id] : undefined;
-  if (action === "open" && node?.kind === "url") openUrl(node.url, windowId, "current");
-  if (action === "openAll" && id) void openFolder(id, windowId, "tabs");
-  if (action === "openAllWindow" && id) void openFolder(id, windowId, "window");
-  if (action === "openAllIncognito" && id) void openFolder(id, windowId, "incognito");
-  if (action === "addGroup" && id) addFolderToSidebar(id, windowId);
-}
-
-const splitChoice = (choice: string): [string, string] => {
-  const i = choice.indexOf(":");
-  return i < 0 ? [choice, ""] : [choice.slice(0, i), choice.slice(i + 1)];
-};
-
 export type BarMenuTarget = { kind: "url" } | { kind: "folder"; links: number; makesGroup: boolean; restoresArc: boolean } | null;
 
-export function barMenuItems(target: BarMenuTarget, { barShown, keys = menuShortcut }: { barShown: boolean; keys?: (command: string) => MenuKey }): MenuItem[] {
+type BarSizeChoice = Settings["bookmarksBarSize"];
+
+const BAR_SIZES: { id: BarSizeChoice; title: string }[] = [
+  { id: "default", title: "Default" },
+  { id: "large", title: "Large" },
+];
+
+export function barMenuItems(
+  target: BarMenuTarget,
+  { barShown, size = "default", keys = menuShortcut }: { barShown: boolean; size?: BarSizeChoice; keys?: (command: string) => MenuKey },
+): MenuItem[] {
   if (target?.kind === "url") return menuSections(openLinkItems(), copyLinkItems(), [{ id: "edit", title: "Edit…", symbol: "pencil" }], [{ id: "delete", title: "Delete", symbol: "trash" }]);
   if (target?.kind === "folder")
     return menuSections(
@@ -84,6 +57,7 @@ export function barMenuItems(target: BarMenuTarget, { barShown, keys = menuShort
     [
       { id: "manage", title: "Manage Bookmarks", symbol: "book", ...keys("manageBookmarks") },
       { id: "toggleBar", title: "Show Bookmarks Bar", checked: barShown, ...keys("toggleBookmarksBar") },
+      { id: "size", title: "Bookmarks Bar Size", children: BAR_SIZES.map((s) => ({ id: `size:${s.id}`, title: s.title, checked: s.id === size })) },
     ],
   );
 }
@@ -104,7 +78,7 @@ export async function openBarMenu(windowId: string, profileId: string, node: Boo
       : node?.kind === "folder"
         ? { kind: "folder", links: folderLinks(s.bookmarks, node.id).length, makesGroup: makesGroup(s, node.id), restoresArc: restorableArcHolder(s, node.id) }
         : null;
-  const choice = await showMenu(barMenuItems(target, { barShown }));
+  const choice = await showMenu(barMenuItems(target, { barShown, size: useBrowser.getState().settings.bookmarksBarSize }));
   if (!choice) return;
   const bar = s.bookmarks.roots[profileId]?.bar;
   if (node?.kind === "url") {
@@ -127,4 +101,6 @@ export async function openBarMenu(windowId: string, profileId: string, node: Boo
   }
   if (choice === "manage") openInternalPage("bookmarks", windowId);
   if (choice === "toggleBar") updateSettings({ bookmarksBar: barShownIn(windowId) ? "never" : "always" });
+  const size = BAR_SIZES.find((s) => choice === `size:${s.id}`);
+  if (size) updateSettings({ bookmarksBarSize: size.id });
 }

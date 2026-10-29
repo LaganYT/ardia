@@ -17,4 +17,5 @@ export const setSiteSetting = (profile: string, origin: string, type: SiteSettin
 export const getSiteSettings = (profile: string, origin: string, engine: PageEngine = "chromium") => call("sites.settings", { profile, origin, engine });
 export const getSiteSettingsOrigins = (profile: string) => call("sites.origins", { profile });
 export const resetSiteSettings = (profile: string, origin: string) => call("sites.reset", { profile, origin });
-export const clearSiteData = (profile: string, origin: string) => call("sites.clearData", { profile, origin });
+export const clearSiteData = (profile: string, origin: string, engine: PageEngine = "chromium") =>
+  call("sites.clearData", { profile, origin, engine });

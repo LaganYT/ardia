@@ -6,13 +6,15 @@ import { lastPicture, startTabPictures } from "../tabs/tabPictures";
 import { webviews } from "../../platform/webviews";
 import { useBrowser } from "../browser/store";
 import type { Frame } from "../browser/types";
+import { tabTitle } from "../browser/model";
 import { splitOf, type SplitSide } from "../splits/splits";
 import { dropTabIntoSplit } from "../splits/actions";
 import { dropTabsOutside, screenPoint, windowUnder } from "./windowDrop";
+import { dropTabsOnBar, followTabDragOnBar } from "../bookmarks/barDrag";
 
 export type DropTarget = { tabId: string; side: SplitSide };
 
-type TabDrag = {
+export type TabDrag = {
   tabId: string | null;
   tabIds: string[];
   windowId: string | null;
@@ -41,6 +43,8 @@ export const useTabDrag = create<TabDrag>()(() => ({
   overPoint: null,
   insert: null,
 }));
+
+useTabDrag.subscribe(followTabDragOnBar);
 
 if (__DEV__) (globalThis as { acTabDrag?: typeof useTabDrag }).acTabDrag = useTabDrag;
 
@@ -152,7 +156,7 @@ function takePicture({ chip, grab }: Picture, windowId: string) {
     if (!shown || (onScreen && !tab?.url)) return;
     const last = lastPicture(shown);
     if (last) return dragPreview.page(last.data, last.frame);
-    if (tab) dragPreview.placeholder(tab.customTitle || tab.title || tab.url || "New Tab", tab.favicon);
+    if (tab) dragPreview.placeholder(tabTitle(tab), tab.favicon);
   });
 }
 
@@ -199,6 +203,10 @@ export function endTabDrag(): boolean {
   picture = null;
   const shown = begun;
   sentShape = "hidden";
+  if (!outside && windowId && tabIds.length && dropTabsOnBar(tabIds, windowId, x, y)) {
+    if (shown) dragPreview.end();
+    return true;
+  }
   if (target && tabId) {
     dragPreview.end();
     dropTabIntoSplit(tabId, target.tabId, target.side);

@@ -68,6 +68,7 @@ export type RemoteProfile = { syncId: string; name: string; color: Profile["colo
 export type SyncUi = {
   status: SyncStatus;
   enabled: boolean;
+  joining: boolean;
   folder: string | null;
   types: Record<DataType, boolean>;
   profiles: Record<string, ProfileLink>;

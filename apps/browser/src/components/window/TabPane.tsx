@@ -7,7 +7,8 @@ import { shallowEqual, useBrowserWhile, useStoreWhile, useTabValue } from "../..
 import { useSettings } from "../../state/browser/hooks";
 import { splitOf } from "../../state/splits/splits";
 import type { Tab } from "../../state/browser/types";
-import { BOOKMARKS_BAR_HEIGHT, BookmarksBar, bookmarksBarShown, type BookmarksBarMode } from "../bookmarks/BookmarksBar";
+import { BookmarksBar, bookmarksBarShown, type BookmarksBarMode } from "../bookmarks/BookmarksBar";
+import { useBookmarksBarHeight } from "../bookmarks/barSize";
 import type { Rect, ToolbarGeometry } from "./geometry";
 import { patchPage, usePages } from "../../state/tabs/pageState";
 import { SplitEmptyState } from "../split/SplitEmptyState";
@@ -20,7 +21,8 @@ import { AutoHideBackdrop, AutoHideToolbar, useToolbarMode, useToolbarMotion } f
 import { publishPaneChrome } from "../toolbar/WindowToolbar";
 import { revealToolbar } from "../../state/windows/toolbarAutoHide";
 import { useToolbarRow } from "../toolbar/useToolbarRow";
-import { pageKey, TabWebView } from "./TabWebView";
+import { TabWebView } from "./TabWebView";
+import { withoutFragment } from "../../lib/url";
 import { PageOverlays } from "./PageOverlays";
 import { useProfileTheme } from "./ThemeScope";
 
@@ -91,9 +93,10 @@ export const TabPane = memo(function TabPane({
   const hideBar = autoHide && visible && !fullscreen;
   const mode = useToolbarMode(tabId, windowId, hideBar);
   const bookmarksBar = bookmarksBarShown(barMode, own.exists ? own : undefined) && !fullscreen && !inSplit && !small;
-  const doc = pageKey(own.url);
+  const barHeight = useBookmarksBarHeight();
+  const doc = withoutFragment(own.url);
   const autoLayout = autoHide && toolbar && !fullscreen;
-  const motion = useToolbarMotion({ enabled: autoLayout, mode, height: frame.height, extra: bookmarksBar ? BOOKMARKS_BAR_HEIGHT : 0, doc });
+  const motion = useToolbarMotion({ enabled: autoLayout, mode, height: frame.height, extra: bookmarksBar ? barHeight : 0, doc });
   useEffect(() => {
     if (visible) revealToolbar(tabId);
   }, [visible]);

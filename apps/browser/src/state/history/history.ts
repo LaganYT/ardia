@@ -3,6 +3,7 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import type { HistoryEntry } from "../browser/types";
+import { isWebPageUrl } from "../../lib/url";
 
 export type HistorySlice = {
   history: Record<string, HistoryEntry[]>;
@@ -27,7 +28,7 @@ function withoutVisitsSince(entry: HistoryEntry, since: number): HistoryEntry | 
 
 const failed = (what: string) => (error: unknown) => console.warn(`[history] ${what}`, error);
 
-export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice> = (set) => ({
+export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice> = (set, get) => ({
   history: {},
   historyReady: {},
   historyFloor: {},
@@ -35,12 +36,12 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
   removeHistory(profileId, urls) {
     if (!urls.length || isIncognitoProfile(profileId)) return;
     set((s) => ({ history: { ...s.history, [profileId]: (s.history[profileId] ?? []).filter((h) => !urls.includes(h.url)) } }));
-    void deleteHistoryUrls(engineProfile(profileId), urls).catch(failed("delete"));
+    void deleteHistoryUrls(engineProfile(get(), profileId), urls).catch(failed("delete"));
   },
 
   importHistory(profileId, entries) {
     if (isIncognitoProfile(profileId)) return 0;
-    const rows = entries.filter((e) => /^(https?|file):/.test(e.url));
+    const rows = entries.filter((e) => isWebPageUrl(e.url));
     let added = 0;
     set((s) => {
       const byUrl = new Map((s.history[profileId] ?? []).map((h) => [h.url, h]));
@@ -53,7 +54,7 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
       const merged = [...byUrl.values()].sort((a, b) => b.lastVisit - a.lastVisit).slice(0, MAX_HISTORY);
       return { history: { ...s.history, [profileId]: merged } };
     });
-    void importHistoryRows(engineProfile(profileId), rows).catch(failed("import"));
+    void importHistoryRows(engineProfile(get(), profileId), rows).catch(failed("import"));
     return added;
   },
 

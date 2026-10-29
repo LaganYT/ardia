@@ -53,6 +53,8 @@ provideNativeModule("ArdiaApp", {
   appIcon: async () => null,
 });
 provideNativeModule("ArdiaCalendar", { authorizationStatus: () => "notDetermined" });
+provideNativeModule("ArdiaCli", { installedVersion: () => null });
+provideNativeModule("ArdiaUserScripts", { watch: () => {}, read: async () => ({ state: "empty" }), readStatus: async () => null });
 
 const documents = new Map<string, string>();
 export const readDocument = (name: string) => documents.get(name) ?? null;

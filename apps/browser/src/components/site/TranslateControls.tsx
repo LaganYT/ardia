@@ -1,4 +1,5 @@
 import { showMenu } from "../../state/app/system";
+import { chooseFromMenu } from "../../state/app/menuChoice";
 import {
   translation,
   defaultTarget,
@@ -9,7 +10,8 @@ import {
   setNeverTranslate,
   toggleTranslation,
   translatePage,
-  translateStateOf,
+  isTranslated,
+  translationTarget,
   useTranslateState,
 } from "../../state/site/translate";
 import { translateMenuItems } from "../../state/site/translateMenu";
@@ -46,7 +48,7 @@ export const TranslateButton = memo(function TranslateButton({ tabId, palette, b
 
 async function chooseLanguage(tabId: string) {
   const languages = await otherLanguages();
-  const current = translateStateOf(tabId).target;
+  const current = translationTarget(tabId);
   const choice = await showMenu(languages.map((l) => ({ id: l.id, title: l.name, checked: l.id === current })));
   if (choice) void translatePage(tabId, choice);
 }
@@ -54,19 +56,19 @@ async function chooseLanguage(tabId: string) {
 async function showTranslateMenu(tabId: string) {
   const tab = currentTab(tabId);
   if (!tab) return;
-  const state = translateStateOf(tabId);
+  const target = translationTarget(tabId);
   const languages = await otherLanguages();
-  const choice = await showMenu(
+  const choice = await chooseFromMenu(
     translateMenuItems({
-      translated: state.status !== "idle",
+      translated: isTranslated(tabId),
       target: languageName(defaultTarget()),
-      languages: languages.map((l) => ({ id: l.id, name: l.name, current: l.id === state.target })),
+      languages: languages.map((l) => ({ id: l.id, name: l.name, current: l.id === target })),
       neverTranslate: isIncognitoProfile(tab.profileId) ? null : isNeverTranslated(tab.profileId, tab.url),
     }),
   );
   if (choice === "original") void revertPage(tabId);
   else if (choice === "translate") void translatePage(tabId);
-  else if (choice?.startsWith("language:")) void translatePage(tabId, choice.slice("language:".length));
+  else if (choice && typeof choice === "object") void translatePage(tabId, choice.language);
   else if (choice === "never") setNeverTranslate(tabId, !isNeverTranslated(tab.profileId, tab.url));
 }
 

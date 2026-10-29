@@ -1,9 +1,8 @@
 import { useBrowser, type BrowserState } from "../browser/store";
-import { tabLabel } from "../browser/model";
+import { tabTitle } from "../browser/model";
 import type { Tab } from "../browser/types";
 import { isPeekTab } from "../peek/peek";
 import { sharedTabsIn, sharesTabs } from "../tabs/tabShare";
-import { tabTitle } from "./actions";
 
 export type Row =
   | { kind: "tab"; id: string; title: string; url: string; favicon: string | null; icon: string | null; where: string | null; current: boolean }
@@ -32,7 +31,7 @@ function candidates(s: BrowserState, windowId: string): { open: Row[]; closed: R
   const closed: Row[] = [
     ...s.closedTabs
       .filter((c) => c.tab.profileId === profileId)
-      .map((c) => ({ kind: "closed" as const, id: c.id, title: c.tab.customTitle || c.tab.title || tabLabel(c.tab), url: c.tab.url, favicon: c.tab.favicon, icon: c.tab.customIcon, detail: "", at: c.closedAt })),
+      .map((c) => ({ kind: "closed" as const, id: c.id, title: tabTitle(c.tab), url: c.tab.url, favicon: c.tab.favicon, icon: c.tab.customIcon, detail: "", at: c.closedAt })),
     ...s.closedGroups.map((c) => ({
       kind: "closed" as const,
       id: c.id,

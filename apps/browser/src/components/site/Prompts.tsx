@@ -13,8 +13,7 @@ import { useState } from "react";
 import { Image, Pressable, View } from "react-native";
 import { useTheme } from "../ui/theme";
 import { webviews } from "../../state/tabs/webviewHandles";
-import { currentTab } from "../../state/browser/current";
-import { engineProfile } from "../../state/browser/model";
+import { currentEngineProfile, currentTab } from "../../state/browser/current";
 import { Button, MenuRow, MenuSeparator, PANEL, PanelCloseButton, Popover, Symbol, Text, useHover } from "../ui";
 import { answerPermission, describePermission } from "../../state/site/permissions";
 import { hostOrOrigin } from "../../lib/url";
@@ -58,13 +57,16 @@ export function PromptBody({
   );
 }
 
+export const PERMISSION_PROMPT_WIDTH = 300;
+export const EXTERNAL_APP_WIDTH = 340;
+
 export function PermissionPrompt({ tabId, left, top }: { tabId: string; left: number; top: number }) {
   const request = usePage(tabId, (p) => p.permission);
   const guard = usePromptInputGuard(request?.id);
   if (!request) return null;
   const { icons, question } = describePermission(request);
   return (
-    <Popover key={request.id} width={300} top={top} left={left} modal={false}>
+    <Popover key={request.id} width={PERMISSION_PROMPT_WIDTH} top={top} left={left} modal={false}>
       <View>
         <PromptBody icons={icons} title={question} message="Click the lock to change this any time">
           <Button variant="pill" title="Don't Allow" onPress={guard(() => answerPermission(tabId, request.id, "deny"))} />
@@ -89,7 +91,7 @@ export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string
     patchPage(tabId, { popups: [] });
     close();
   };
-  const profile = () => engineProfile(currentTab(tabId)?.profileId ?? "");
+  const profile = () => currentEngineProfile(currentTab(tabId)?.profileId ?? "");
   return (
     <Popover width={BLOCKED_POPUPS_WIDTH} top={top} right={right} left={left} onDismiss={close}>
       <View style={{ paddingBottom: PANEL.listPadding }}>
@@ -282,7 +284,7 @@ export function ExternalAppPrompt({ tabId, left, top }: { tabId: string; left: n
     setAlways(false);
   });
   return (
-    <Popover key={request.id} width={340} top={top} left={left} modal={false}>
+    <Popover key={request.id} width={EXTERNAL_APP_WIDTH} top={top} left={left} modal={false}>
       <View>
         <PromptBody
           icons={request.icon ? [] : [request.app ? "app" : "questionmark.app.dashed"]}

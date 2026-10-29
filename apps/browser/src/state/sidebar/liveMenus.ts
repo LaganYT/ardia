@@ -7,12 +7,13 @@ import { calendarConnected, connectCalendar, setCalendarHidden, useCalendar } fr
 import { deleteLiveFolder, manualRefresh, newLiveFolder, openLiveItem, refreshFolder, statusText } from "../live/engine";
 import { ALERT_LEADS, nowBadgeEvent } from "../live/meetings";
 import { SOURCES } from "../live/sources";
-import { dismissNowBadge, hideItems, live, markRead, setLive, updateCalendarSettings, updateFolder } from "../live/store";
+import { dismissNowBadge, hideItems, live, markRead, markUnread, updateCalendarSettings, updateFolder } from "../live/store";
 import type { LiveItem, LiveSourceId } from "../live/types";
 import { useBrowser } from "../browser/store";
 import { openSettings } from "../settings/settingsWindows";
 import { openIconPicker } from "../sidebar/actions";
-import { LIVE, moveLiveFolder, pinnedSequence } from "./pinnedOrder";
+import { moveLiveFolder, pinnedSequence } from "./pinnedOrder";
+import { entryKey } from "./entryKey";
 import { activeTabId } from "../browser/model";
 import { hintWhen, sections, sep, withAlternate } from "./menuParts";
 
@@ -45,7 +46,7 @@ function folderPlace(windowId: string, folderId: string) {
   const s = live();
   const folder = s.folders[folderId]!;
   const sequence = pinnedSequence(useBrowser.getState(), s.folders, s.folderOrder, windowId, folder.profileId);
-  const index = sequence.indexOf(`${LIVE}${folderId}`);
+  const index = sequence.indexOf(entryKey("live", folderId));
   return { canMoveUp: index > 0, canMoveDown: index >= 0 && index < sequence.length - 1 };
 }
 
@@ -153,7 +154,7 @@ export async function openLiveItemMenu(windowId: string, folderId: string, item:
   else if (choice === "copyMd") copyText(markdownLink(item.title, item.url));
   else if (choice === "unread") {
     if (unread) markRead(folderId, [item.id]);
-    else setLive((s) => ({ unread: { ...s.unread, [folderId]: [...(s.unread[folderId] ?? []), item.id] } }));
+    else markUnread(folderId, item.id);
   } else if (choice === "hide") hideItems(folderId, [item]);
   else if (choice === "close" && tabId) void closeTab(tabId);
 }

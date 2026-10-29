@@ -1,5 +1,7 @@
 import { showMenu, type MenuItem } from "../../platform/menus";
-import { createProfile, switchProfile } from "../browser/actions";
+import { tabLayoutOf } from "../browser/model";
+import { switchProfile } from "../browser/actions";
+import { requestCreateProfile } from "../profiles/createProfileRequest";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { menuShortcut } from "../commands/commandShortcuts";
 import { bookmarkAllTabs } from "../bookmarks/actions";
@@ -25,7 +27,7 @@ export function sidebarMenuItems(s: BrowserState, windowId: string): MenuItem[] 
     [{ id: "bookmarkAll", title: "Bookmark All Tabs…", symbol: "bookmark", ...menuShortcut("bookmarkAllTabs", s) }],
     [
       ...pinnedFoldMenuItem(s, windowId),
-      { id: "tabLayout", title: "Show Tabs in Sidebar", symbol: "sidebar.left", checked: (w?.tabLayout ?? s.settings.tabLayout) === "sidebar", ...menuShortcut("toggleTabLayout", s) },
+      { id: "tabLayout", title: "Show Tabs in Sidebar", symbol: "sidebar.left", checked: tabLayoutOf(s, windowId) === "sidebar", ...menuShortcut("toggleTabLayout", s) },
       { id: "autoHide", title: "Auto-Hide Tabs", checked: !!w && !w.sidebarOpen, ...menuShortcut("toggleSidebar", s) },
     ],
     [{ id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...menuShortcut("closeAllTabs", s) }],
@@ -42,7 +44,7 @@ export async function openSidebarMenu(windowId: string) {
   else if (choice === "newGroup") {
     const id = s.newTab(windowId);
     if (id) newGroupWithSelection(windowId, [id]);
-  } else if (choice === "newProfile") void createProfile(windowId).then((id) => id && switchProfile(windowId, id));
+  } else if (choice === "newProfile") void requestCreateProfile(windowId).then((id) => id && switchProfile(windowId, id));
   else if (choice === "bookmarkAll") bookmarkAllTabs(windowId);
   else if (choice === "tabLayout") s.toggleTabLayout(windowId);
   else if (choice === "autoHide") s.toggleSidebar(windowId);

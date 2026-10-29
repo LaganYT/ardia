@@ -1,4 +1,4 @@
-import { requireNativeModule, requireOptionalNativeModule } from "expo-modules-core";
+import { requireNativeModule } from "expo-modules-core";
 import type { AppModule } from "./app";
 import type { CliNative } from "./cli";
 import type { InlineCompletionNative } from "./inlineCompletion";
@@ -21,14 +21,8 @@ export type ShellNativeModules = {
   ArdiaTranslate: TranslationModule;
   ArdiaMagnifyArea: MagnifyAreaNative;
   ArdiaFileDrop: FileDropNative;
-};
-
-export type ShellOptionalNativeModules = {
   ArdiaCli: CliNative;
   ArdiaUserScripts: UserScriptsNative;
 };
 
 export const nativeModule = <Name extends keyof ShellNativeModules>(name: Name) => requireNativeModule<ShellNativeModules[Name]>(name);
-
-export const optionalNativeModule = <Name extends keyof ShellOptionalNativeModules>(name: Name) =>
-  requireOptionalNativeModule<ShellOptionalNativeModules[Name]>(name);

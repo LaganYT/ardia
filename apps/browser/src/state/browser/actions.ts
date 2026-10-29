@@ -2,22 +2,22 @@ import { listExtensions } from "../../platform/extensions";
 import { stepPager } from "../../platform/pager";
 import { confirm } from "../../platform/dialogs";
 import { focusWindow } from "../../platform/windows";
-import { showMenu, type MenuItem } from "../../platform/menus";
+import { chooseFromMenu, type ChoiceItem } from "../app/menuChoice";
 import { pageToProfile } from "../windows/profilePager";
-import { profileNames, requestCreateProfile, type CreateProfilePreset } from "../profiles/createProfileRequest";
-import { useBrowser, type CreateWindowOptions } from "./store";
+import { profileNames, requestCreateProfile } from "../profiles/createProfileRequest";
+import { storeAction, useBrowser } from "./store";
 import { rootOf } from "../groups/groups";
 import { closesWindow, engineProfile, isIncognitoProfile, plural, resolveWindowId } from "./model";
 import { leavesEmptyWindow } from "../omnibox/newTabBarPolicy";
 import { groupLabel } from "../pins/organize";
-import { engineIdOf, sharingProfiles } from "../profiles/profiles";
+import { sharingProfiles } from "../profiles/profiles";
 import { closeWindowAnimated } from "../windows/closeAnimated";
 import { applyHeldReports } from "../../platform/nativeEvents";
-import { webviews } from "../../platform/webviews";
 import { closeWindowDialog } from "../windows/windowClose";
 import { menuCommandAlternate, menuShortcut } from "../commands/commandShortcuts";
 import { openSettings } from "../settings/settingsWindows";
 import { profileAccentOf } from "../profiles/looks";
+import { isSiteMuted } from "../tabs/mute";
 
 const store = () => useBrowser.getState();
 
@@ -26,9 +26,7 @@ export function focus(windowId: string) {
   void focusWindow(windowId);
 }
 
-export function openWindow(options?: CreateWindowOptions): string {
-  return store().createWindow(options);
-}
+export const openWindow = storeAction("createWindow");
 
 export function switchToTab(tabId: string) {
   const tab = store().tabs[tabId];
@@ -77,14 +75,20 @@ export async function closeGroup(groupId: string) {
 }
 
 export function toggleMute(tabId: string) {
-  const tab = store().tabs[tabId];
+  const s = store();
+  const tab = s.tabs[tabId];
   if (!tab) return;
-  store().setSiteMuted(tabId, !tab.muted);
-  void webviews.get(tabId)?.setMuted(!tab.muted);
+  if (!isSiteMuted(s, tab)) return s.setMuted([tabId], !tab.muted);
+  s.setSiteMuted(tabId, false);
+  if (tab.muted) s.setMuted([tabId], false);
 }
 
-export function createProfile(windowId?: string, preset?: CreateProfilePreset): Promise<string | null> {
-  return requestCreateProfile(windowId, preset);
+export const setSiteMuted = storeAction("setSiteMuted");
+
+export function toggleSiteMute(tabId: string) {
+  const s = store();
+  const tab = s.tabs[tabId];
+  if (tab) s.setSiteMuted(tabId, !isSiteMuted(s, tab));
 }
 
 export async function deleteProfile(profileId: string, windowId?: string) {
@@ -96,7 +100,7 @@ export async function deleteProfile(profileId: string, windowId?: string) {
     title: `Delete “${profile.name}”?`,
     message: sharing.length
       ? `Its tabs will be closed. Its cookies, passwords, extensions, bookmarks and history stay with ${profileNames(sharing)}, which share them.`
-      : `All data associated with this Profile will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
+      : `All data associated with this Profile will be removed. This action cannot be undone.${engineProfile(s, profileId) === "" ? await keptExtensionsNote() : ""}`,
     confirmTitle: "Delete Profile",
     destructive: true,
     windowId,
@@ -116,11 +120,11 @@ async function keptExtensionsNote(): Promise<string> {
 
 type ProfileMove = { windowId: string; fromProfileId: string; title: (profileName: string) => string; confirmTitle: string };
 
-async function profileMoveTarget(move: ProfileMove, target: string): Promise<string | null> {
+async function profileMoveTarget(move: ProfileMove, target: string | null): Promise<string | null> {
   if (isIncognitoProfile(move.fromProfileId)) return null;
-  const profileId = target === "new" ? await createProfile(move.windowId) : target;
+  const profileId = target ?? (await requestCreateProfile(move.windowId));
   if (!profileId || profileId === move.fromProfileId) return null;
-  const shared = engineProfile(profileId) === engineProfile(move.fromProfileId);
+  const shared = engineProfile(useBrowser.getState(), profileId) === engineProfile(useBrowser.getState(), move.fromProfileId);
   if (!store().settings.warnBeforeMovingTabsToProfile || shared) return profileId;
   const { confirmed, suppressed } = await confirm({
     title: move.title(store().profiles[profileId]?.name ?? "Profile"),
@@ -133,7 +137,7 @@ async function profileMoveTarget(move: ProfileMove, target: string): Promise<str
   return confirmed ? profileId : null;
 }
 
-export async function moveTabsToProfile(tabIds: string[], target: string) {
+export async function moveTabsToProfile(tabIds: string[], target: string | null) {
   const tabs = tabIds.map((id) => store().tabs[id]).filter((t) => !!t);
   const first = tabs[0];
   if (!first) return;
@@ -151,22 +155,22 @@ export async function moveTabsToProfile(tabIds: string[], target: string) {
   for (const tab of tabs) if (!isIncognitoProfile(tab.profileId)) store().moveTabToProfile(tab.id, profileId);
 }
 
-export const moveTabToProfile = (tabId: string, target: string) => moveTabsToProfile([tabId], target);
+export const moveTabToProfile = (tabId: string, target: string | null) => moveTabsToProfile([tabId], target);
 
-export async function moveGroupToProfile(groupId: string, target: string) {
+export async function moveGroupToProfile(groupId: string, target: string | null) {
   const g = store().groups[groupId];
   if (!g) return;
   const profileId = await profileMoveTarget({ windowId: g.windowId, fromProfileId: g.profileId, title: (name) => `Move Group to ${name}?`, confirmTitle: "Move Group" }, target);
   if (profileId) store().moveGroupToProfile(groupId, profileId);
 }
 
-export function moveGroupToWindow(groupId: string, target: string) {
-  const windowId = store().moveGroupToWindow(groupId, target === "new" ? null : target);
+export function moveGroupToWindow(groupId: string, target: string | null) {
+  const windowId = store().moveGroupToWindow(groupId, target);
   if (windowId) focus(windowId);
 }
 
-export function moveTabToWindow(tabId: string, target: string) {
-  const windowId = store().moveTabsToWindow([tabId], target === "new" ? null : target);
+export function moveTabToWindow(tabId: string, target: string | null) {
+  const windowId = store().moveTabsToWindow([tabId], target);
   if (windowId) focus(windowId);
 }
 
@@ -204,26 +208,27 @@ export function openUrls(urls: string[], windowId?: string | null) {
 export async function openProfileMenu(windowId: string) {
   const s = useBrowser.getState();
   const current = s.windows[windowId]?.profileId;
-  const items: MenuItem[] = [
-    ...s.profileOrder.flatMap((id): MenuItem[] => {
+  const items: ChoiceItem<{ open: "switch" | "window"; profileId: string }>[] = [
+    ...s.profileOrder.flatMap((id) => {
       const profile = s.profiles[id]!;
       const swatch = profileAccentOf(profile);
       const shortcut = menuShortcut(`switchProfile:${id}`, s);
       const alternate = menuCommandAlternate(`switchProfile:${id}`, s);
-      const switchItem: MenuItem = { id: `switch:${id}`, title: profile.name, checked: id === current, swatch, ...shortcut, modifiers: shortcut.modifiers ?? [] };
+      const switchItem = { value: { open: "switch" as const, profileId: id }, title: profile.name, checked: id === current, swatch, ...shortcut, modifiers: shortcut.modifiers ?? [] };
       if (!alternate) return [switchItem];
-      return [switchItem, { id: `window:${id}`, title: `${profile.name} ↗`, alternate: true, swatch, ...alternate }];
+      return [switchItem, { value: { open: "window" as const, profileId: id }, title: `${profile.name} ↗`, alternate: true, swatch, ...alternate }];
     }),
     { separator: true },
     { id: "new", title: "New Profile", symbol: "plus" },
     { id: "edit", title: "Edit Profiles…", symbol: "pencil" },
   ];
-  const choice = await showMenu(items);
+  const choice = await chooseFromMenu(items);
   if (!choice) return;
-  if (choice.startsWith("switch:")) switchProfile(windowId, choice.slice("switch:".length), true);
-  else if (choice.startsWith("window:")) openWindow({ profileId: choice.slice("window:".length) });
-  else if (choice === "new") {
-    const id = await createProfile(windowId);
+  if (typeof choice !== "string") {
+    if (choice.open === "switch") switchProfile(windowId, choice.profileId, true);
+    else openWindow({ profileId: choice.profileId });
+  } else if (choice === "new") {
+    const id = await requestCreateProfile(windowId);
     if (id) switchProfile(windowId, id);
   } else if (choice === "edit") openSettings("profiles", current);
 }

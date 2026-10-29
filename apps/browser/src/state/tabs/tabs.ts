@@ -1,16 +1,10 @@
-import { resolveInput } from "@ardia/core";
-import { fromLegacyUrl } from "../../lib/legacy";
 import type { BrowserState } from "../browser/store";
-import { ancestorIds, closedGroupInfo, innermostGroupOf, leaveGroups } from "../groups/groups";
+import { leaveGroups } from "../groups/groups";
 import {
   IDLE_LIVE,
   inPinnedContainer,
   makeTab,
   navigationTo,
-  newId,
-  pendingRestore,
-  pinnedFirst,
-  snapshotTab,
   viewTabIds,
   wake,
   without,
@@ -19,11 +13,14 @@ import { forgetOpeners, insertionIndex, openerSuccessor } from "./openers";
 import { isClosedPin, onUrlChange, pruneSelection, samePage } from "../pins/organize";
 import { hasOwnOrSharedPage, hasPage, isLazy } from "./pageSession";
 import { isPeekTab, withoutPeek } from "../peek/peek";
-import { searchUrlPrefix } from "../settings/settings";
+import { resolveTyped } from "../settings/settings";
 import { leavesEmptyWindow } from "../omnibox/newTabBarPolicy";
 import { holderOf, withSharedFamily } from "../pins/pinShare";
 import { removeFromSplits, splitOf, withPinnedPanes } from "../splits/splits";
+import { closedTabEntry, MAX_CLOSED_TABS } from "../pins/closedTabs";
+import { pendingRestore } from "./adoptIds";
 import type { BrowserWindow, ClosedTab, Tab, TabSnapshot } from "../browser/types";
+import { orderSections } from "../groups/groups";
 
 export type NewTabOptions = {
   url?: string;
@@ -38,7 +35,6 @@ export type NewTabOptions = {
   newTabCommand?: boolean;
 };
 
-const MAX_CLOSED_TABS = 50;
 
 export type CloseOptions = { lastClosesWindow?: boolean };
 export type CloseKind = "close" | "unload" | "removePin";
@@ -128,21 +124,7 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
       w.tabIds.forEach((id, index) => {
         const t = s.tabs[id];
         if (!t || !gone.has(id) || (!t.url && !t.pinned)) return;
-        const group = innermostGroupOf(s.groups, id);
-        const parents = group ? ancestorIds(s.groups, group.id).map((x) => closedGroupInfo(s.groups[x]!)) : [];
-        closed.push({
-          kind: "tab",
-          id: newId("ct"),
-          tab: snapshotTab(t),
-          tabId: id,
-          ...(pendingRestore(t) ? { restoreFrom: pendingRestore(t) } : {}),
-          windowId: w.id,
-          index,
-          group: group ? closedGroupInfo(group) : null,
-          ...(parents.length ? { parents } : {}),
-          closedAt: now,
-          ...(w.kind === "small" ? { small: true } : {}),
-        });
+        closed.push({ ...closedTabEntry(s, t, { windowId: w.id, index }, now), ...(w.kind === "small" ? { small: true } : {}) });
       });
     }
     const tabIds = w.tabIds.filter((id) => !gone.has(id));
@@ -215,7 +197,7 @@ export function unloadPinnedTabs(s: BrowserState, requested: string[]): BrowserS
     const w = s.windows[t.windowId];
     const loaded = hasPage(t);
     if (loaded && t.url) {
-      closed.push({ kind: "tab", id: newId("ct"), tab: snapshotTab(t), tabId: id, windowId: t.windowId, index: w?.tabIds.indexOf(id) ?? 0, group: null, closedAt: now, pinnedTile: true });
+      closed.push({ ...closedTabEntry(s, t, { windowId: t.windowId, index: w?.tabIds.indexOf(id) ?? 0 }, now, undefined), pinnedTile: true });
     }
     const back = backToPin(s, t);
     const pending = !back.url && pendingRestore(t) ? t.wakeAdoptId : undefined;
@@ -276,7 +258,7 @@ export function withNewTab(s: BrowserState, windowId: string, o: NewTabOptions =
   const w = s.windows[windowId];
   if (!w) return [s, ""];
   const profileId = w.incognito ? w.profileId : o.profileId && s.profiles[o.profileId] ? o.profileId : w.profileId;
-  const url = o.url ? resolveInput(fromLegacyUrl(o.url.trim()), searchUrlPrefix(s.settings)) : "";
+  const url = o.url ? resolveTyped(s.settings, o.url) : "";
   const tab = makeTab(windowId, profileId, url, { ...o.snapshot, pinned: o.pinned ?? o.snapshot?.pinned ?? false });
   if (tab.navigation && !o.snapshot) tab.navigation = navigationTo(url, true);
   tab.openerId = o.openerId ?? null;
@@ -294,7 +276,7 @@ export function withNewTab(s: BrowserState, windowId: string, o: NewTabOptions =
   tabIds.splice(Math.min(at, tabIds.length), 0, tab.id);
   const window: BrowserWindow = {
     ...w,
-    tabIds: pinnedFirst(tabIds, tabs, s.groups),
+    tabIds: orderSections(tabIds, tabs, s.groups),
     activeTabIds: w.activeTabIds[profileId] ? w.activeTabIds : { ...w.activeTabIds, [profileId]: tab.id },
   };
   let next: BrowserState = {

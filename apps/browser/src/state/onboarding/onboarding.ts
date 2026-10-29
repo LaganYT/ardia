@@ -8,8 +8,10 @@ import type { Settings } from "../settings/settings";
 import type { ProfileColor, ProfileTheme } from "../browser/types";
 import { PRESETS, presetFor, setsUpLikeBrowser, type BrowserSourceId, type Preset } from "./presets";
 import { endToolTour, startToolTour } from "./tour";
+import { choosePresetColor, setProfileTheme } from "../profiles/themeActions";
 import { stepsForThisSurface } from "./demoSteps";
 import { parseSaved, unchanged, versionedJson, type Migrations } from "../../lib/savedDocument";
+import { hasSavedSession } from "../session/sessionDocument";
 
 export { playIntroMusic, setIntroMusicMuted, stopIntroMusic, type IntroMusicCues } from "../../platform/introMusic";
 export { PRESET_NAMES, PRESETS, presetFor, setsUpLikeBrowser, type BrowserSourceId, type Preset } from "./presets";
@@ -44,7 +46,7 @@ export type QuestionId =
 
 type Question = { id: QuestionId; keys: readonly (keyof Settings)[]; askedWithPreset?: true };
 
-const QUESTIONS: Record<Exclude<OnboardingStep, "intro">, Question[]> = {
+export const QUESTIONS: Record<Exclude<OnboardingStep, "intro">, Question[]> = {
   source: [{ id: "source", keys: [] }],
   layout: [
     { id: "tabs", keys: ["tabLayout"] },
@@ -207,7 +209,7 @@ export function previewColor(color: ProfileColor) {
   const profileId = windowId ? b.windows[windowId]?.profileId : undefined;
   if (!profileId) return;
   recordLookBaseline(profileId);
-  b.updateProfile(profileId, { color, theme: null });
+  choosePresetColor(profileId, color);
 }
 
 export function previewTheme(theme: ProfileTheme) {
@@ -216,7 +218,7 @@ export function previewTheme(theme: ProfileTheme) {
   const profileId = windowId ? b.windows[windowId]?.profileId : undefined;
   if (!profileId) return;
   recordLookBaseline(profileId);
-  b.updateProfile(profileId, { theme });
+  setProfileTheme(profileId, theme);
 }
 
 function recordLookBaseline(profileId: string) {
@@ -266,7 +268,7 @@ function revertLive(keys: readonly (keyof LiveBaseline)[]) {
   const window = windowId ? b.windows[windowId] : undefined;
   if (tabLayout && windowId) setWindowLayout(windowId, tabLayout);
   if (Object.keys(rest).length) b.updateSettings(rest, { fromSync: true });
-  if ((color || "theme" in restore) && window) b.updateProfile(window.profileId, { ...(color ? { color } : {}), ...("theme" in restore ? { theme } : {}) });
+  if ((color || "theme" in restore) && window) b.setProfileLook(window.profileId, { ...(color ? { color } : {}), ...("theme" in restore ? { theme } : {}) });
   const kept = { ...baseline };
   for (const key of keys) delete kept[key];
   useOnboarding.setState({ baseline: kept });
@@ -279,7 +281,7 @@ export function resolveDraft<K extends keyof Settings>(
   settings: Settings,
 ): Pick<Settings, K> {
   const presetValues = PRESETS[preset];
-  const chosen = settings.chosen ?? [];
+  const chosen = settings.chosen;
   return Object.fromEntries(
     keys.map((k) => [k, k in draft ? draft[k] : k in presetValues && !chosen.includes(k) ? presetValues[k] : settings[k]]),
   ) as Pick<Settings, K>;
@@ -386,7 +388,7 @@ export function maybeStartOnboarding() {
   const saved = readSaved();
   if (saved?.completedAt) return;
   if (saved?.startedAt) return resumeOnboarding(saved);
-  if (readDocument("session.json")) return markCompleted();
+  if (hasSavedSession()) return markCompleted();
   if (__DEV__ && devTestValue("onboarding") !== "1") return;
   save({ startedAt: Date.now() });
   startOnboarding();

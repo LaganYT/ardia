@@ -1,14 +1,14 @@
 import { lastTabClosesWindow } from "../../platform/tabs";
 import { onDownload } from "../../platform/downloads";
 import { releaseProfile } from "../../platform/profiles";
-import { cancelFocusMove, claimFocus } from "../../platform/focus";
 import { closeWindow, onWindowEvent, openWindow, restoreFullScreen, setTrafficLightsCenter, setWindowTitle, windowIds } from "../../platform/windows";
-import { isDarkAppearance, onAppEvent, onOpenURLs, replyToTerminate, setAppearance, setThinScrollBars } from "../../platform/app";
+import { isDarkAppearance, onAppEvent, onOpenURLs, replyToTerminate } from "../../platform/app";
+import { startNativeSettings } from "../settings/nativeSettings";
 import { menuShortcuts, onCommand, setMenuStateParts, type MenuBookmark, type MenuState } from "../../platform/commands";
 import { Appearance } from "react-native";
-import { folderChildren, isBookmarked } from "../bookmarks/bookmarks";
+import { folderChildren, isBookmarked, isWithin, ROOT_TITLES } from "../bookmarks/bookmarks";
 import { useBrowser, type BrowserState } from "../browser/store";
-import { activeTab, bookmarkProfileId, IDLE_LIVE, isPinnedRow, tabLabel, togglePinTitle, windowTitle } from "../browser/model";
+import { activeTab, bookmarkProfileId, IDLE_LIVE, isPinnedRow, tabLabel, togglePinTitle, windowTitle, tabLayoutOf } from "../browser/model";
 import { canSwitchEngine, tabEngine } from "../engines/engines";
 import { setLastTabKeepsWindow } from "../omnibox/newTabBarPolicy";
 import { peekTabId } from "../peek/peek";
@@ -18,6 +18,7 @@ import type { Bookmarks, BookmarkNode } from "../browser/types";
 import { isUtilityWindowId } from "../settings/settingsWindows";
 import { openingLightsCenter } from "../windows/layout";
 import { isInternalTab } from "../pages/urls";
+import { muteState, muteTitle } from "../tabs/mute";
 import { sidebarMenuState } from "../sidebar/commands";
 import { openWindow as createWindow } from "../browser/actions";
 import { createWindowSync, type WindowPort } from "../windows/windowSync";
@@ -28,7 +29,6 @@ import { runCommand } from "../commands/commands";
 import { LITTLE_ARDIA_DISABLED_COMMANDS, PAGE_COMMANDS, PAGE_COMMANDS_OFF_INTERNAL_PAGES, WINDOW_COMMANDS } from "../commands/commandCatalog";
 import { setMenuBarShortcuts } from "../commands/commandShortcuts";
 import { finishAnimatedCloses } from "../windows/closeAnimated";
-import { setFocusSenders } from "../focus/focusClaims";
 import { cancelAbandonedFocusMoves, settlingCommandFocus } from "../focus/focusHandoff";
 import { flushPersistence, resumePersistence } from "../session/persist";
 import { startWindowCloseGuard } from "../windows/windowClose";
@@ -55,7 +55,6 @@ export function startNativeSync() {
   const store = useBrowser;
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
-  setFocusSenders(claimFocus, cancelFocusMove);
   cancelAbandonedFocusMoves();
   onCommand((e) => settlingCommandFocus(e, runCommand));
   startWindowCloseGuard();
@@ -70,8 +69,7 @@ export function startNativeSync() {
   onDownload((d) => store.getState().upsertDownload(d));
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
-  void setAppearance(store.getState().settings.appearance);
-  void setThinScrollBars(store.getState().settings.pageScrollBars === "thin");
+  startNativeSettings();
   void isDarkAppearance().then((dark) => store.getState().setAppDark(dark));
 
   onAppEvent((e) => {
@@ -128,10 +126,6 @@ export function startNativeSync() {
     windows.sync(s, prev);
     menuTimer ??= setTimeout(syncMenu, 120);
   });
-  store.subscribe((s, prev) => {
-    if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
-    if (s.settings.pageScrollBars !== prev.settings.pageScrollBars) void setThinScrollBars(s.settings.pageScrollBars === "thin");
-  });
   useExtensions.subscribe((e, prev) => {
     if (e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
   });
@@ -158,14 +152,14 @@ function bookmarkMenus(b: Bookmarks, profileId: string): BookmarkMenus {
   const menus: BookmarkMenus = roots
     ? {
         bookmarkFolders: [
-          { id: roots.bar, title: "Bookmarks Bar" },
-          { id: roots.other, title: "Other Bookmarks" },
+          { id: roots.bar, title: ROOT_TITLES.bar },
+          { id: roots.other, title: ROOT_TITLES.other },
           ...[...folderChildren(b, roots.bar), ...folderChildren(b, roots.other)]
             .filter((n) => n.kind === "folder")
             .map((n) => ({ id: n.id, title: n.title })),
         ],
         recentBookmarks: Object.values(b.nodes)
-          .filter((n): n is Extract<BookmarkNode, { kind: "url" }> => n.kind === "url" && isInTree(b, n.id, [roots.bar, roots.other]))
+          .filter((n): n is Extract<BookmarkNode, { kind: "url" }> => n.kind === "url" && isWithin(b, n.id, [roots.bar, roots.other]))
           .sort((x, y) => y.addedAt - x.addedAt)
           .slice(0, 5)
           .map((n) => ({ id: n.id, title: n.title || n.url, url: n.url })),
@@ -189,7 +183,7 @@ export function menuState(s: BrowserState): MenuState {
 
   const disabled: string[] = [];
   if (!tab || !splitOf(s, tab.id)) disabled.push("focusNextPane", "focusPreviousPane");
-  if (w && (w.tabLayout ?? s.settings.tabLayout) === "top") disabled.push("toggleAddressBar");
+  if (w && tabLayoutOf(s, w.id) === "top") disabled.push("toggleAddressBar");
   if (!w) disabled.push(...WINDOW_COMMANDS);
   else {
     if (!page?.url) disabled.push(...PAGE_COMMANDS);
@@ -209,14 +203,14 @@ export function menuState(s: BrowserState): MenuState {
   if (s.settings.allowJavaScriptFromAppleEvents) checked.push("toggleJavaScriptFromAppleEvents");
   if (s.settings.addressBar === "sidebar") checked.push("toggleAddressBar");
   checked.push(`setBookmarksBar:${s.settings.bookmarksBar}`);
-  if ((w?.tabLayout ?? s.settings.tabLayout) === "sidebar") checked.push("toggleTabLayout");
+  if (tabLayoutOf(s, windowId) === "sidebar") checked.push("toggleTabLayout");
   if (w && !w.sidebarOpen) checked.push("toggleSidebar");
 
   const titles: Record<string, string> = {};
   if (tab?.pinned) titles.togglePin = togglePinTitle(tab);
   if (isPinnedRow(tab)) titles["togglePin:tile"] = "Move to Top Apps";
   else disabled.push("togglePin:tile");
-  if (page?.muted) titles.toggleMute = "Unmute Site";
+  if (page) titles.toggleMute = muteTitle(muteState(s, page));
   if (page && tabEngine(s, page.id) === "webkit") titles.togglePageEngine = "Open Page in Chromium";
   if (!canSwitchEngine(page?.url)) disabled.push("togglePageEngine");
   if (page?.url && isBookmarked(s.bookmarks, bookmarkProfile, page.url)) {
@@ -263,11 +257,3 @@ export function menuState(s: BrowserState): MenuState {
   };
 }
 
-function isInTree(b: Bookmarks, id: string, roots: string[]): boolean {
-  let node = b.nodes[id];
-  for (let i = 0; node && i < 64; i++) {
-    if (roots.includes(node.id)) return true;
-    node = node.parentId ? b.nodes[node.parentId] : undefined;
-  }
-  return false;
-}

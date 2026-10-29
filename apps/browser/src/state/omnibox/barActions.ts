@@ -8,6 +8,7 @@ import { commandBarTitle, commandSymbol } from "../commands/commandCatalog";
 import { menuBarRevision, shortcutHint } from "../commands/commandShortcuts";
 import type { Tab } from "../browser/types";
 import { organizeActions } from "./organizeActions";
+import { muteState, muteTitle, siteMuteTitle } from "../tabs/mute";
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
 
@@ -51,7 +52,15 @@ const DEFS: ActionDef[] = [
   { command: "newGroupWithTabs", keywords: ["tab group"], needs: "tab" },
   { command: "reload", keywords: ["refresh"], needs: page },
   { command: "forceReload", keywords: ["hard reload", "hard refresh"], needs: page },
-  { command: "toggleMute", title: ({ tab }) => (tab?.muted ? "Unmute Site" : "Mute Site"), keywords: ["mute", "unmute", "silence"], needs: page },
+  { command: "toggleMute", title: ({ s, tab }) => muteTitle(tab ? muteState(s, tab) : null), keywords: ["mute", "unmute", "silence", "mute tab"], needs: page },
+  {
+    command: "toggleMute",
+    arg: "site",
+    title: ({ s, tab }) => siteMuteTitle(tab ? muteState(s, tab) : null),
+    icon: "speaker.slash",
+    keywords: ["mute site", "unmute site", "silence site"],
+    needs: page,
+  },
   { command: "copyUrl", keywords: ["copy link"], needs: page },
   { command: "copyUrlAsMarkdown", keywords: ["markdown link"], needs: page },
   { command: "findInPage", needs: page },

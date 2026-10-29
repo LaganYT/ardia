@@ -5,7 +5,7 @@ import { layout } from "../ui/theme";
 import { useSettings, useWindowId, useWindowProfileId } from "../../state/browser/hooks";
 import { useHasDownloads, useNoTiles } from "../../state/sidebar/hooks";
 import { useAddressBarInSidebar, useToolbarLightsCenter } from "../../state/windows/layout";
-import { DownloadsButton } from "../downloads/Downloads";
+import { DownloadsButton } from "../downloads/DownloadsButton";
 import { PROFILE_INDICATOR_X, ProfileIndicator } from "../profiles/ProfileIndicator";
 import { usePagerPages } from "../../state/windows/profilePager";
 import { PROFILE_DOTS_HEIGHT, ProfileDots, useProfileDotsShown } from "../profiles/ProfileDots";

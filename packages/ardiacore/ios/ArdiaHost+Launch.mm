@@ -351,7 +351,7 @@ void StartEarlyWindow() {
   };
   const bool mockKeychain = gScratchDataDir || !IsTeamSigned();
   if (mockKeychain) extra.push_back("--use-mock-keychain");
-  ardia_host::PrepareStartup(gDataDirectory, extra);
+  ardia_host::PrepareStartup(gDataDirectory);
   @autoreleasepool {
     [ArdiaEarlyWindow setDataDirectory:AppDataDirectory()];
     [ArdiaEarlyWindow prefetchForSession:SavedSession(AppDataDirectory()) ?: @{}];

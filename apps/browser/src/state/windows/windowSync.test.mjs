@@ -67,7 +67,7 @@ test("after launch: a new window opens animated, a closed one closes and its pri
   assert.equal(opened[1], priv);
   assert.equal(opened[2].animated, true);
   assert.equal(opened[2].incognito, true);
-  const profile = engineProfile(S().windows[priv].profileId);
+  const profile = engineProfile(S(), S().windows[priv].profileId);
   prev = S();
   S().closeWindow(priv);
   sync.sync(S(), prev);

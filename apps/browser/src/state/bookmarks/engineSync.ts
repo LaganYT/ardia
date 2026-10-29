@@ -1,7 +1,7 @@
 import { applyBookmarkOps, bookmarkTree, onBookmarksChanged, watchBookmarks, type BookmarkOp, type EngineBookmark } from "../../platform/bookmarks";
 import { readDocument, removeDocument, writeDocument } from "../../platform/documents";
-import { versionedJson, upgraded, type Migrations } from "../../lib/savedDocument";
-import { bookmarkUuidFor, isBookmarkUuid, rootIdsFor } from "./bookmarks";
+import { parseSaved, versionedJson, type Migrations } from "../../lib/savedDocument";
+import { bookmarkUuidFor, isBookmarkUuid, ROOT_TITLES, rootIdsFor } from "./bookmarks";
 import { applyOps, bookmarkOps, flatFromEngine, flatFromStore, type Flat } from "./flatBookmarks";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
@@ -31,9 +31,9 @@ const stateOf = (engine: string) => {
 let legacyMoved = false;
 
 const engineProfiles = (s: Pick<BrowserState, "profiles">) =>
-  [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map(engineProfile))];
+  [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map((id) => engineProfile(s, id)))];
 const profilesUsing = (s: Pick<BrowserState, "profiles">, engine: string) =>
-  Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfile(id) === engine);
+  Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfile(s, id) === engine);
 
 function adopt(engine: string, flat: Flat, { ready = legacyMoved } = {}) {
   useBrowser.setState((s) => {
@@ -49,8 +49,8 @@ function adopt(engine: string, flat: Flat, { ready = legacyMoved } = {}) {
           ? { kind: "url", id, parentId: n.parent!, title: n.title, url: n.url ?? "", favicon: was?.kind === "url" ? was.favicon : null, addedAt: n.addedAt, ...key }
           : ({ kind: "folder", id, parentId: n.parent, title: n.title, children: flat.children.get(id) ?? [], addedAt: n.addedAt, ...key } satisfies BookmarkFolder);
     }
-    nodes[roots.bar] = { ...(nodes[roots.bar] as BookmarkFolder), title: "Bookmarks Bar" };
-    nodes[roots.other] = { ...(nodes[roots.other] as BookmarkFolder), title: "Other Bookmarks" };
+    nodes[roots.bar] = { ...(nodes[roots.bar] as BookmarkFolder), title: ROOT_TITLES.bar };
+    nodes[roots.other] = { ...(nodes[roots.other] as BookmarkFolder), title: ROOT_TITLES.other };
     const ids = profilesUsing(s, engine);
     return {
       bookmarks: { nodes, roots: { ...s.bookmarks.roots, ...Object.fromEntries(ids.map((id) => [id, roots])) } },
@@ -136,14 +136,20 @@ const CACHE_MIGRATIONS: Migrations = {};
 
 type CacheDoc = { trees: Record<string, BookmarkNode[]> };
 
+const isFields = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+const isCachedNode = (n: unknown): n is BookmarkNode =>
+  isFields(n) &&
+  typeof n.id === "string" &&
+  typeof n.title === "string" &&
+  typeof n.addedAt === "number" &&
+  ((n.kind === "url" && typeof n.url === "string" && typeof n.parentId === "string") ||
+    (n.kind === "folder" && Array.isArray(n.children) && n.children.every((c) => typeof c === "string")));
+
 function readCache(): CacheDoc["trees"] {
-  try {
-    const json = readDocument(CACHE_FILE);
-    const doc = json ? (upgraded(JSON.parse(json), CACHE_VERSION, CACHE_MIGRATIONS) as CacheDoc | null) : null;
-    return doc?.trees ?? {};
-  } catch {
-    return {};
-  }
+  const trees = parseSaved(readDocument(CACHE_FILE), CACHE_VERSION, CACHE_MIGRATIONS)?.trees;
+  if (!isFields(trees)) return {};
+  return Object.fromEntries(Object.entries(trees).flatMap(([engine, nodes]) => (Array.isArray(nodes) && nodes.every(isCachedNode) ? [[engine, nodes]] : [])));
 }
 
 function launchTrees(): Record<string, Flat> {
@@ -165,7 +171,7 @@ function launchTrees(): Record<string, Flat> {
     };
     for (const [profileId, roots] of Object.entries(legacy?.roots ?? {})) {
       if (!s.profiles[profileId] || isIncognitoProfile(profileId)) continue;
-      const engine = engineProfile(profileId);
+      const engine = engineProfile(s, profileId);
       if (out[engine]) continue;
       const ids = rootIdsFor(engine);
       const id = (old: string) => (old === roots.bar ? ids.bar : old === roots.other ? ids.other : uuidOf(old));
@@ -213,7 +219,7 @@ export async function migrateBookmarksFile({ keepMs = LEGACY_KEPT_MS } = {}): Pr
   try {
     for (const [profileId, roots] of Object.entries(b.roots ?? {})) {
       if (!s.profiles[profileId] || isIncognitoProfile(profileId)) continue;
-      const engine = engineProfile(profileId);
+      const engine = engineProfile(s, profileId);
       if (done.has(engine)) continue;
       done.add(engine);
       const ops: BookmarkOp[] = [];

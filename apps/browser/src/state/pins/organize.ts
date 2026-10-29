@@ -1,16 +1,17 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import { nestGroups, syncGroupOrder, withGroupsPlaced, withParent } from "../groups/groups";
-import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, snapshotTab, viewTabIds, without } from "../browser/model";
+import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, snapshotTab, tabTitle, viewTabIds, without } from "../browser/model";
 import { activated, apply, removeTabs, withNewTab } from "../tabs/tabs";
 import { clickedSelection, dropping, type ClickMods, type Drop } from "../drag/drops";
 import type { ClosedGroup, ClosedTab, Tab, TabGroup } from "../browser/types";
-import { hostOf } from "../../lib/url";
+import { hostOf } from "@ardia/core";
 import type { PinChoices, PinSync } from "./pinChoices";
 import { groupLabel, groupOf, movingGroup, withGroup, withRowsGrouped, type GroupPlacement } from "./tabGrouping";
 import { groupingOnto, placing, type TabPlacement } from "./placing";
 import { closedEntries, closeQuietly, closingGroup, keptCleanedTabs, nestedSnapshot, rebuildNested, regroupRestored, restoreSnapshots, restoreTarget } from "./closedTabs";
 import { abandonedNewTabs, canUndoClear, CLEAN_UP_AFTER_MS, cleanUpCandidates, clearedTabIds, isClosedPin, MAX_CLEANED, undoable, type ClearedTabs } from "./tabCleanup";
+import { pinnedGroupMembers } from "../browser/structure";
 
 export { groupChoiceKey, livePinTable, nextPinChoice, notePinChoices, orderChoiceKey, placeChoiceKey, type PinChoices, type PinSync, type PinSyncEntry } from "./pinChoices";
 export { canMoveGroup, groupLabel, groupOf, groupWithOpener, movingGroup, pinnedChildGroup, withGroup, withRowsGrouped, type GroupPlacement } from "./tabGrouping";
@@ -69,19 +70,8 @@ export function samePage(a: string, b: string): boolean {
 
 export const awayFromPin = (t: Pick<Tab, "url" | "pinnedUrl">) => !!t.pinnedUrl && !!t.url && !samePage(t.url, t.pinnedUrl);
 
-function isSiteMuted(s: Pick<BrowserState, "settings" | "privateSiteMutes">, tab: Pick<Tab, "windowId" | "profileId">, host: string): boolean {
-  const own = isIncognitoProfile(tab.profileId) ? s.privateSiteMutes[tab.windowId]?.[host] : undefined;
-  return own ?? (s.settings.mutedSites ?? []).includes(host);
-}
-
 export function onUrlChange(s: BrowserState, tab: Tab, url: string): Partial<Tab> {
   const patch: Partial<Tab> = {};
-  const before = hostOf(tab.url);
-  const after = hostOf(url);
-  if (before !== after) {
-    if (isSiteMuted(s, tab, after)) patch.muted = true;
-    else if (isSiteMuted(s, tab, before)) patch.muted = false;
-  }
   if (!tab.pinnedUrl && url && inPinnedContainer(s, tab.id)) patch.pinnedUrl = url;
   return patch;
 }
@@ -156,8 +146,8 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     const first = s.tabs[ids[0] ?? ""];
     const w = first && s.windows[first.windowId];
     if (!w) return;
-    const pinnedGroupMembers = new Set(Object.values(s.groups).filter((g) => g.pinned).flatMap((g) => g.tabIds));
-    const beforeId = pinned ? null : w.tabIds.find((id) => !s.tabs[id]?.pinned && !pinnedGroupMembers.has(id) && !ids.includes(id));
+    const members = pinnedGroupMembers(s.groups);
+    const beforeId = pinned ? null : w.tabIds.find((id) => !s.tabs[id]?.pinned && !members.has(id) && !ids.includes(id));
     set(placing(s, ids, { pinned, row, beforeId }));
   },
 
@@ -195,18 +185,12 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     const tab = s.tabs[tabId];
     if (!tab) return;
     const host = hostOf(tab.url);
-    if (!host) return get().setMuted([tabId], muted);
-    get().setMuted(
-      Object.values(s.tabs)
-        .filter((t) => t.profileId === tab.profileId && hostOf(t.url) === host)
-        .map((t) => t.id),
-      muted,
-    );
+    if (!host) return;
     if (isIncognitoProfile(tab.profileId)) {
       const own = { ...s.privateSiteMutes[tab.windowId], [host]: muted };
       return set({ privateSiteMutes: { ...get().privateSiteMutes, [tab.windowId]: own } });
     }
-    const sites = new Set(s.settings.mutedSites ?? []);
+    const sites = new Set(s.settings.mutedSites);
     if (muted) sites.add(host);
     else sites.delete(host);
     get().updateSettings({ mutedSites: [...sites] });
@@ -278,7 +262,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
           continue;
         }
         const t = s.tabs[id];
-        if (t?.url) get().addBookmark({ profileId, url: t.url, title: t.customTitle || t.title || t.url, favicon: t.favicon, parentId: folder });
+        if (t?.url) get().addBookmark({ profileId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId: folder });
       }
     };
     file(g);

@@ -63,10 +63,10 @@ for (const shared of [false, true]) {
     const { w, ids } = windowWith("a", "b", "c");
     if (shared) S().createWindow({ url: "https://x.com/" }), S().updateSettings({ shareTabsAcrossWindows: true });
     const work = S().createProfile({ name: "Work" });
-    S().navigated(ids[1], { url: "https://b.com/home", title: "B" }, {});
+    S().updateTab(ids[1], { url: "https://b.com/home", title: "B" }, {});
     const g = S().groupTabs([ids[1], ids[2]], { name: "Docs" });
     assert.equal(S().tabs[ids[1]].pinnedUrl, "https://b.com/home");
-    S().navigated(ids[1], { url: "https://b.com/away", title: "B" }, {});
+    S().updateTab(ids[1], { url: "https://b.com/away", title: "B" }, {});
     S().moveGroupToProfile(g, work);
     const moved = Object.values(S().groups).find((x) => x.windowId === w && x.profileId === work && x.name === "Docs");
     assert.ok(moved, "the group is in the profile");

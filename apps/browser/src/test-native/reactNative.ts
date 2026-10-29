@@ -1,6 +1,8 @@
 export const View = () => null;
 
-export const NativeModules: Record<string, unknown> = {};
+export const NativeModules: Record<string, unknown> = {
+  ACFieldTiming: { setEnabled: () => {}, markFrame: () => {}, lastInput: () => [0, 0], drain: () => [] },
+};
 
 export const Animated = { createAnimatedComponent: <Component>(component: Component) => component };
 

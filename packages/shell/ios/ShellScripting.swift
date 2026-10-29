@@ -29,7 +29,6 @@ public enum ShellScripting {
   static var windowInfos: [WindowInfo] = []
   static var profileInfos: [ProfileInfo] = []
 
-  static var send: (([String: Any]) -> Void)?
   private static var pending: [String: (Any?, String?) -> Void] = [:]
   private static var seq = 0
 
@@ -83,7 +82,7 @@ public enum ShellScripting {
     #if DEBUG
     if !Thread.isMainThread { NSLog("Ardia: an Apple event is being handled off the main thread") }
     #endif
-    guard let send else {
+    guard ShellEvents.isAttached(.scriptCommand) else {
       NSScriptCommand.current()?.setError("Ardia isn't ready yet.")
       return nil
     }
@@ -106,7 +105,7 @@ public enum ShellScripting {
     }
     var request = body
     request["id"] = id
-    send(request)
+    ShellEvents.send(.scriptCommand, request)
     DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
       reply(id, result: nil, error: "Ardia didn't respond in time.")
     }

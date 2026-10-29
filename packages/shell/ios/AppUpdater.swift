@@ -11,21 +11,20 @@ public final class AppUpdater: NSObject {
     return config.background ? "https://github.com/mantrakp04/ardia/releases/latest/download/appcast.xml" : nil
   }
 
-  public static let channels = ["stable", "nightly"]
   static let channelDefaultsKey = "ACUpdateChannel"
 
-  static var buildChannel: String {
-    Bundle.main.object(forInfoDictionaryKey: "ACUpdateChannel") as? String == "nightly" ? "nightly" : "stable"
+  static var buildChannel: UpdateChannel {
+    Bundle.main.object(forInfoDictionaryKey: "ACUpdateChannel") as? String == "nightly" ? .nightly : .stable
   }
 
-  public var channel: String {
-    let chosen = UserDefaults.standard.string(forKey: Self.channelDefaultsKey) ?? ""
-    return Self.channels.contains(chosen) ? chosen : Self.buildChannel
+  private static var savedChannel: UpdateChannel? {
+    UserDefaults.standard.string(forKey: channelDefaultsKey).flatMap(UpdateChannel.init(rawValue:))
   }
 
-  public func setChannel(_ channel: String) {
-    guard Self.channels.contains(channel) else { return }
-    UserDefaults.standard.set(channel, forKey: Self.channelDefaultsKey)
+  public var channel: UpdateChannel { Self.savedChannel ?? Self.buildChannel }
+
+  public func setChannel(_ channel: UpdateChannel) {
+    UserDefaults.standard.set(channel.rawValue, forKey: Self.channelDefaultsKey)
     guard started else { return }
     channelChangePending = true
     userDriver.leaveOffChannelUpdate()
@@ -79,12 +78,12 @@ public final class AppUpdater: NSObject {
   }
 
   var allowedChannels: Set<String> {
-    channel == "nightly" ? ["nightly"] : []
+    channel == .nightly ? [UpdateChannel.nightly.rawValue] : []
   }
 
   private func rememberChannel() {
-    guard !Self.channels.contains(UserDefaults.standard.string(forKey: Self.channelDefaultsKey) ?? "") else { return }
-    UserDefaults.standard.set(Self.buildChannel, forKey: Self.channelDefaultsKey)
+    guard Self.savedChannel == nil else { return }
+    UserDefaults.standard.set(Self.buildChannel.rawValue, forKey: Self.channelDefaultsKey)
   }
 
   public static var displayVersion: String {
@@ -126,7 +125,7 @@ public final class AppUpdater: NSObject {
   }
 
   private static var isOff: Bool {
-    ArdiaIsolatedDataDirectory() != nil && LaunchConfig.shared.instance("updateFeed") == nil
+    LaunchConfig.shared.isolated && LaunchConfig.shared.instance("updateFeed") == nil
   }
 
   private lazy var userDriver = ChannelUserDriver(standard: SPUStandardUserDriver(hostBundle: .main, delegate: self)) { [unowned self] item in
@@ -191,8 +190,8 @@ public final class AppUpdater: NSObject {
       "lastCheck": updater.lastUpdateCheckDate.map { $0.timeIntervalSince1970 * 1000 } as Any,
       "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as Any,
       "displayVersion": Self.displayVersion,
-      "channel": channel,
-      "buildChannel": Self.buildChannel,
+      "channel": channel.rawValue,
+      "buildChannel": Self.buildChannel.rawValue,
     ]
   }
 

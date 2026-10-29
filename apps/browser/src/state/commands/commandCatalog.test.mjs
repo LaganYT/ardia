@@ -131,3 +131,11 @@ test("profiles get ⌃1 to ⌃9 in order, as the Profiles menu numbers them", ()
   assert.deepEqual(keys.get("switchProfile:p9"), []);
   assert.ok(swift.includes(`key: i < 9 ? "\\(i + 1)" : "", .control)`), "MainMenu.swift still numbers profiles with ⌃");
 });
+
+test("the app-wide commands are exactly the ones the app integration runs, so the window router never acts on them", () => {
+  const source = readFileSync(new URL("../app/appIntegration.ts", import.meta.url), "utf8");
+  const body = source.slice(source.indexOf("function runAppCommand("), source.indexOf("export async function sendFeedback"));
+  const handled = [...body.matchAll(/case "(\w+)":/g)].map((m) => m[1]).sort();
+  const appWide = Object.entries(COMMANDS).filter(([, spec]) => spec.app).map(([command]) => command).sort();
+  assert.deepEqual(appWide, handled);
+});

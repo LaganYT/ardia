@@ -14,5 +14,5 @@ export * from "./translation";
 export * from "./userScripts";
 export * from "./views";
 export * from "./windows";
-export type { ShellNativeModules, ShellOptionalNativeModules } from "./nativeModules";
+export type { ShellNativeModules } from "./nativeModules";
 export type { ShellNative } from "./shellNative";

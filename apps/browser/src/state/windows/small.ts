@@ -27,11 +27,11 @@ export const linkProfileOf = (s: Pick<BrowserState, "profiles">, w: BrowserWindo
   isSmallWindow(w) ? undefined : originalProfile(s, w);
 
 export function privateWindowProfile(s: Pick<BrowserState, "profiles" | "profileOrder">, w: BrowserWindow | undefined, engineName?: string) {
-  const named = engineName !== undefined ? s.profileOrder.find((p) => engineProfile(p) === engineName) : undefined;
+  const named = engineName !== undefined ? s.profileOrder.find((p) => engineProfile(s, p) === engineName) : undefined;
   return named ?? originalProfile(s, w);
 }
 
-export function lastActiveProfile(s: BrowserState): string {
+export function lastActiveProfile(s: Pick<BrowserState, "profiles" | "windows" | "windowOrder" | "ui" | "settings">): string {
   const last = s.ui.lastProfileId;
   if (last && s.profiles[last]) return last;
   for (const id of [...s.ui.focusOrder, ...[...s.windowOrder].reverse()]) {

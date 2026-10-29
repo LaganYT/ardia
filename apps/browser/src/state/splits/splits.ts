@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import { innermostGroupOf, leaveGroups, syncGroupOrder } from "../groups/groups";
-import { inPinnedContainer, isPinnedRow, newId } from "../browser/model";
+import { inPinnedContainer, isPinnedRow, newId, tabLayoutOf } from "../browser/model";
 import { placing } from "../pins/organize";
 import { choose } from "../settings/settings";
 import { activated, apply, removeTabs, withNewTab } from "../tabs/tabs";
@@ -335,7 +335,7 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     set((s) => {
       const w = s.windows[windowId];
       if (!w) return {};
-      const tabLayout = (w.tabLayout ?? s.settings.tabLayout) === "sidebar" ? "top" : "sidebar";
+      const tabLayout = tabLayoutOf(s, windowId) === "sidebar" ? "top" : "sidebar";
       return { windows: { ...s.windows, [windowId]: { ...w, tabLayout } }, settings: choose(s.settings, { tabLayout }) };
     });
   },

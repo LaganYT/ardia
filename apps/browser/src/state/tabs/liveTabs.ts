@@ -1,14 +1,17 @@
+import { TAB_GROUP_COLORS } from "@ardia/core";
 import type { StripGroup, StripState, StripTab } from "../../platform/tabs";
 import type { BrowserState } from "../browser/store";
 import type { TabGroup } from "../browser/types";
 import { rootOf } from "../groups/groups";
-import { engineProfile, pinnedFirst } from "../browser/model";
+import { engineProfile } from "../browser/model";
 import { forgetOpeners, switchKeepsOpeners } from "./openers";
 import { groupOf, placing, withGroup } from "../pins/organize";
 import { isPeekTab, withoutPeek } from "../peek/peek";
 import { settleMovedPins } from "../pins/pinMirror";
 import { splitOf } from "../splits/splits";
 import { activated, apply, removeTabs } from "./tabs";
+import { isAdoptKind } from "./adoptIds";
+import { orderSections } from "../groups/groups";
 
 type Keyed = StripTab & { key: string };
 const known = (s: BrowserState, t: StripTab | undefined): t is Keyed => !!t?.key && !!s.tabs[t.key] && !isPeekTab(s, t.key);
@@ -18,8 +21,8 @@ const chromeGroupOf = (s: BrowserState, key: string | undefined) => {
   return g && rootOf(s.groups, g.id);
 };
 
-const madeByChrome = (s: BrowserState, key: string) => !!s.tabs[key]?.adoptId?.startsWith("tab:");
-const CHROME_COLORS = new Set<string>(["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"] satisfies StripGroup["color"][]);
+const madeByChrome = (s: BrowserState, key: string) => isAdoptKind(s.tabs[key]?.adoptId, "tab");
+const CHROME_COLORS = new Set<string>(TAB_GROUP_COLORS);
 const chromeColor = (color: TabGroup["color"]): StripGroup["color"] => (color && CHROME_COLORS.has(color) ? (color as StripGroup["color"]) : "grey");
 
 export type Pending = { arranged: ReadonlySet<string>; grouped?: ReadonlySet<string>; regrouped?: ReadonlySet<string>; active: boolean };
@@ -40,7 +43,7 @@ export function chromeChanged(
   const firstFromChrome = (t: Keyed) => !stayed(t) && !seen.has(t.key) && madeByChrome(s, t.key);
   const home = homeWindow(s, after, siblings, stayed);
   const movedIn = (t: Keyed) =>
-    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.profileId) === after.profile;
+    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s, s.tabs[t.key]!.profileId) === after.profile;
   const taken = new Set(now.filter((t) => firstFromChrome(t) || movedIn(t)).map((t) => t.key));
 
   for (const t of now) if (movedIn(t)) s = intoWindow(s, t.key, home!);
@@ -264,7 +267,7 @@ function intoWindow(s: BrowserState, key: string, to: string): BrowserState {
     ...next,
     tabs,
     live: live ? { ...next.live, [key]: live } : next.live,
-    windows: { ...next.windows, [to]: { ...w, tabIds: pinnedFirst([...w.tabIds, key], tabs, next.groups) } },
+    windows: { ...next.windows, [to]: { ...w, tabIds: orderSections([...w.tabIds, key], tabs, next.groups) } },
   };
   return settleMovedPins(s, next, [key], to);
 }

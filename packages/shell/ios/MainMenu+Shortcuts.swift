@@ -2,9 +2,6 @@ import AppKit
 import ArdiaCore
 
 extension MainMenu {
-  private static let modifierNames: [(String, NSEvent.ModifierFlags)] = [
-    ("control", .control), ("option", .option), ("shift", .shift), ("command", .command), ("function", .function),
-  ]
   private static let dynamicCommands: Set<String> = [
     "openBookmark", "restoreClosed", "moveTabToProfile", "moveTabToWindow", "addBookmarkToFolder",
     "addFolderToSidebar", "restoreArcFolders",
@@ -69,11 +66,6 @@ extension MainMenu {
     return unsafeBitCast(page.method(for: textInputType), to: Getter.self)(page, textInputType) != 0
   }
 
-  private static func modifiers(_ names: some Sequence<String>) -> NSEvent.ModifierFlags {
-    let names = Set(names)
-    return NSEvent.ModifierFlags(modifierNames.filter { names.contains($0.0) }.map(\.1))
-  }
-
   static func comboKey(_ key: String, _ mods: NSEvent.ModifierFlags) -> String {
     let relevant = mods.intersection([.control, .option, .shift, .command, .function])
     let shift: NSEvent.ModifierFlags = key != key.lowercased() ? .shift : []
@@ -130,13 +122,13 @@ extension MainMenu {
     let liveIds = Set(groups.map(\.id))
     let taken = Set(overrides.compactMap { id, o -> String? in
       guard liveIds.contains(id), let key = o.first, !key.isEmpty else { return nil }
-      return comboKey(key, modifiers(o.dropFirst()))
+      return comboKey(key, ModifierName.flags(named: o.dropFirst()))
     })
     for (id, group) in groups {
       let carriesOverride: (Rebindable) -> Bool = { $0 === group.primary || !$0.isHidden }
       for item in group.items {
         if let o = overrides[id] {
-          if carriesOverride(item) { setShortcut(item, o.first ?? "", modifiers(o.dropFirst())) } else { setShortcut(item, "", []) }
+          if carriesOverride(item) { setShortcut(item, o.first ?? "", ModifierName.flags(named: o.dropFirst())) } else { setShortcut(item, "", []) }
         } else if !item.defaultKey.isEmpty, taken.contains(comboKey(item.defaultKey, item.defaultModifiers)) {
           setShortcut(item, "", [])
         } else {
@@ -154,9 +146,6 @@ extension MainMenu {
 
   static func shortcutList() -> [[String: Any]] {
     var list: [[String: Any]] = []
-    func names(_ mods: NSEvent.ModifierFlags) -> [String] {
-      modifierNames.filter { mods.contains($0.1) }.map(\.0)
-    }
     for (id, group) in shortcutGroups() {
       let item = group.primary
       if let command = item as? CommandItem, dynamicCommands.contains(command.command) { continue }
@@ -167,13 +156,13 @@ extension MainMenu {
       var seen: Set<String> = [defaultCombo]
       for other in group.items where other !== item && !other.defaultKey.isEmpty {
         if seen.insert(comboKey(other.defaultKey, other.defaultModifiers)).inserted {
-          aliases.append([other.defaultKey] + names(other.defaultModifiers))
+          aliases.append([other.defaultKey] + ModifierName.names(other.defaultModifiers))
         }
       }
       list.append([
         "id": id, "title": item.defaultTitle, "path": group.path, "key": current.key,
-        "modifiers": current.key.isEmpty ? [] : names(current.mods), "defaultKey": item.defaultKey,
-        "defaultModifiers": item.defaultKey.isEmpty ? [] : names(item.defaultModifiers), "remappable": true,
+        "modifiers": current.key.isEmpty ? [] : ModifierName.names(current.mods), "defaultKey": item.defaultKey,
+        "defaultModifiers": item.defaultKey.isEmpty ? [] : ModifierName.names(item.defaultModifiers), "remappable": true,
         "aliases": aliases,
       ])
     }
@@ -183,7 +172,7 @@ extension MainMenu {
       let id = "system:" + (path + [item.title]).joined(separator: " > ")
       guard seen.insert(id).inserted else { return }
       let current = shortcut(of: item)
-      let mods = names(current.mods)
+      let mods = ModifierName.names(current.mods)
       list.append([
         "id": id, "title": item.title, "path": path, "key": current.key, "modifiers": mods,
         "defaultKey": current.key, "defaultModifiers": mods, "remappable": false, "aliases": [[String]](),

@@ -45,7 +45,7 @@ lib/                    pure helpers: url, time, keys
   come from `components/ui`.
 - Components never import `platform/`. A platform value a component uses (a web view handle, a kill switch, the
   import module) reaches it as a re-export from its domain in `state/`: `state/tabs/webviewHandles.ts`,
-  `state/tabs/prewarm.ts`, `state/app/switches.ts`, `state/app/slowTimers.ts`, `state/app/nativeApiSkew.ts`,
+  `state/app/switches.ts`, `state/app/slowTimers.ts`, `state/app/nativeApiSkew.ts`,
   `state/import/importApi.ts`, and `isWebDemo` from `state/onboarding/demoSteps.ts`. Each re-export file imports
   only its platform module, so modules still load in the same order.
 - The one exception is the dev harness (`components/dev/devHarness.ts`): it hands the whole shell module to CDP
@@ -98,7 +98,7 @@ lib/                    pure helpers: url, time, keys
 | `<Text style={{ fontSize: 13, fontWeight: "600", color: theme.textSecondary }}>` | `<Text size="body" weight="semibold" tone="textSecondary">` |
 | a pressable square with an SF Symbol and a hover plate | `<Button variant="icon" icon="…">` (add `toolbar` for toolbar buttons: modifier clicks, long press, context menu, no window drag; `palette` for site-coloured toolbars) |
 | a hover-plated text link ("Replace", "Clear", "Skip Tour") | `<Button variant="text" title plate="toolbar" \| "hover" \| "none">` |
-| a filled rounded button with a title | `<Button variant="pill" tone="prompt" \| "chip" \| "control" primary>` |
+| a filled rounded button with a title | `<Button variant="pill" tone="prompt" \| "chip" primary>`; a bordered +/− control is `<Button variant="stepper" icon width height tooltip>` |
 | a dismiss ✕ | `<Button variant="close" look="panel" \| "hud" \| "art">` |
 | a macOS push button (settings, dialogs) | `<Button title kind="default" \| "primary" \| "destructive" \| "plain">` |
 | a menu-material panel with a scale-in | `Popover` (or `PopoverSurface` for the material alone); a panel placed by its own math uses `usePopoverMotion` + `usePopoverMotionStyle`; open/close state from `usePopoverPresence` |
@@ -173,13 +173,14 @@ writeDocument(DOC, versionedJson(data, VERSION));
   depends on: a version says which shape to expect, not that the data is valid.
 - The field is `version`, except in `sync.json` (`v`) and `ardia-cli.json` (`schemaVersion`; its `version` is the
   installed CLI's version).
-- Covered: `session.json` (3), `downloads.json` (2), `launch-look.json` (2), `bookmarks-cache.json`, `telemetry.json`,
+- Covered: `session.json` (4), `downloads.json` (3), `launch-look.json` (2), `bookmarks-cache.json`, `telemetry.json`,
   `telemetry-queue.json`, `telemetry-daily.json`, `release-notes.json`, `onboarding.json`,
   `default-browser-offer.json`, `sync.json`, `sync-extensions.json`, `live.json`, `ardia-cli.json`,
   `bangs-state.json` and `Scripts/status.json` (all 1).
-- Not versioned yet: the sealed `sync-state.nns` and `sync-journal.nns`. Each gets its own version in its envelope
-  (`{ version, scopes }`, and inside the journal's `{ journal }`) before its first format change; `sync.json`'s `v`
-  doesn't cover them, because they're written separately.
+- The sealed sync files carry their own `version` inside the sealed JSON, because they're written apart from
+  `sync.json` and its `v` doesn't cover them: the `sync-state.nns` checkpoint (`{ covers, clock, scopes }`, 1; version 0
+  includes the older bare scope map) and each `sync-journal-<n>.nns` part (1). The single `sync-journal.nns` from before
+  numbered parts is still read first and emptied with them.
 - Out of scope: the Keychain token JSON, logs (`dev-console.log`, `telemetry-requests.log`), dev and bench results
   (`dev-eval-result.json`, `layout-watch.json`), test fixtures (`calendar-fixture.json`), and the legacy
   `bookmarks.json` / `history.json`, which are migration inputs read once. The sync payload (log and snapshot files,
@@ -214,7 +215,8 @@ writeDocument(DOC, versionedJson(data, VERSION));
   (`packages/ardiacore/src/engine/api.ts`); native dispatches by name to the matching `ac_*` call. Only secrets
   (`callWithSecret`) and views get dedicated functions.
 - **One error model:** engine errors reject with `{code, message}` (`ERR_ENGINE`, `ERR_UNKNOWN_CALL`,
-  `ERR_CONTENT_BLOCKER`, `ERR_BAD_REPLY`); JS throws `ArdiaError` with the code. Refused, absent or unavailable
+  `ERR_CONTENT_BLOCKER`, `ERR_BAD_REPLY`, and `ERR_BAD_ARGS` when an argument is missing or of the wrong type: native
+  reads each one as required or optional, never with a silent default); JS throws `ArdiaError` with the code. Refused, absent or unavailable
   answers are values in the function's return type (`false`, `null`, `[]`), not errors. The bridge never falls back
   silently; callers decide (`orWarn(x)` in `lib/fallback.ts` logs and falls back).
 - **One event channel per module.** Event names are `domain.event`; payloads are parsed once.

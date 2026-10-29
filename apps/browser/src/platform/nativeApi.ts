@@ -1,6 +1,7 @@
 import { requireNativeModule, requireOptionalNativeModule } from "expo-modules-core";
+import { DEV_EVAL_RESULT, watchDevEval } from "../lib/devEval";
 
-export const NATIVE_API_VERSION = 25;
+export const NATIVE_API_VERSION = 30;
 
 const built = requireOptionalNativeModule<{ apiVersion?: number }>("ArdiaApp")?.apiVersion ?? 0;
 
@@ -20,14 +21,7 @@ export function openSkewWindow() {
   void requireNativeModule<Shell>("ArdiaShell").openWindow("native-api-skew", { kind: "settings", title: "Ardia", focus: false });
 }
 
-export function answerWithSkew(message: string, command: string, result: string) {
+export function answerWithSkew(message: string) {
   const shell = requireNativeModule<Shell>("ArdiaShell");
-  const idOf = (source: string | null) => source?.match(/^\/\/ *(\S+)/)?.[1];
-  let lastId = idOf(shell.readDocument(command)) ?? "";
-  setInterval(() => {
-    const id = idOf(shell.readDocument(command));
-    if (!id || id === lastId) return;
-    lastId = id;
-    shell.writeDocument(result, JSON.stringify({ id, error: message }));
-  }, 250);
+  watchDevEval(shell.readDocument, 250, (id) => shell.writeDocument(DEV_EVAL_RESULT, JSON.stringify({ id, error: message })));
 }

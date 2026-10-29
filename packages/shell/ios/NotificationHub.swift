@@ -4,7 +4,6 @@ import UserNotifications
 final class NotificationHub: NSObject, UNUserNotificationCenterDelegate {
   static let shared = NotificationHub()
 
-  var onResponse: ((String, String, [String: Any]) -> Void)?
   private var pending: [(String, String, [String: Any])] = []
   private static let dismissibleCategory = "ardia.dismissible"
 
@@ -18,9 +17,13 @@ final class NotificationHub: NSObject, UNUserNotificationCenterDelegate {
   }
 
   func flushPending() {
-    guard let onResponse else { return }
-    pending.forEach(onResponse)
-    pending = []
+    while let (id, action, info) = pending.first, deliver(id, action, info) { pending.removeFirst() }
+  }
+
+  private func deliver(_ id: String, _ action: String, _ info: [String: Any]) -> Bool {
+    ShellEvents.send(.notificationResponse, [
+      "id": id, "action": action, "tabId": info["tabId"] as Any, "windowId": info["windowId"] as Any, "data": info["data"] as Any,
+    ])
   }
 
   func permission(_ completion: @escaping (String) -> Void) {
@@ -104,7 +107,7 @@ final class NotificationHub: NSObject, UNUserNotificationCenterDelegate {
     DispatchQueue.main.async { [self] in
       if let action {
         if action == "click" { NSApp.activate() }
-        if let onResponse { onResponse(id, action, info) } else { pending.append((id, action, info)) }
+        if !deliver(id, action, info) { pending.append((id, action, info)) }
       }
       completionHandler()
     }

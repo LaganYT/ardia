@@ -2,7 +2,6 @@ import { confirm } from "../../platform/dialogs";
 import { showMenu, type MenuItem } from "../../platform/menus";
 import { webviews } from "../../platform/webviews";
 import { clearSiteData } from "../../platform/siteSettings";
-import { clearWebKitSiteData } from "../../platform/webkit";
 import { getContentBlocker, isContentBlockerAllowed, setContentBlockerAllowed } from "../../platform/contentBlocker";
 import { menuSections } from "../app/menuSections";
 import { currentTab } from "../browser/current";
@@ -11,7 +10,7 @@ import type { Tab } from "../browser/types";
 import { tabEngine } from "../engines/engines";
 import { useBrowser } from "../browser/store";
 import { openSettings } from "../settings/settingsWindows";
-import { showToast } from "../splits/actions";
+import { showToast } from "../app/toasts";
 import { setPopover } from "../tabs/pageState";
 
 export function siteOrigin(url: string): string | null {
@@ -36,7 +35,7 @@ export async function setSiteBlocking(tab: Pick<Tab, "id" | "windowId">, host: s
 
 export async function clearSiteDataAfterConfirm(tab: Pick<Tab, "id" | "windowId" | "profileId">, origin: string): Promise<number | null> {
   const host = new URL(origin).hostname;
-  const webkit = tabEngine(useBrowser.getState(), tab.id) === "webkit";
+  const engine = tabEngine(useBrowser.getState(), tab.id);
   const { confirmed } = await confirm({
     title: `Clear cookies and site data for ${host}?`,
     message: "You'll be signed out of this site, and its offline data will be deleted.",
@@ -45,8 +44,8 @@ export async function clearSiteDataAfterConfirm(tab: Pick<Tab, "id" | "windowId"
     windowId: tab.windowId,
   });
   if (!confirmed) return null;
-  const profile = engineProfile(tab.profileId);
-  const result = await (webkit ? clearWebKitSiteData(profile, origin) : clearSiteData(profile, origin)).catch(() => null);
+  const profile = engineProfile(useBrowser.getState(), tab.profileId);
+  const result = await clearSiteData(profile, origin, engine).catch(() => null);
   const now = currentTab(tab.id);
   if (now && now.profileId === tab.profileId && siteOrigin(now.url) === origin) void webviews.get(tab.id)?.reload();
   return result && typeof result.cookies === "number" ? result.cookies : 0;

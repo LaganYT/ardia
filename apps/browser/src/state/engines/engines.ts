@@ -1,6 +1,8 @@
 import type { PageEngine } from "../../platform/tabs";
 import type { BrowserState } from "../browser/store";
 import type { Tab } from "../browser/types";
+import { isWebPageUrl } from "../../lib/url";
+import { adoptKind } from "../tabs/adoptIds";
 
 export type { PageEngine } from "../../platform/tabs";
 
@@ -21,7 +23,7 @@ export function siteOf(url: string | undefined | null): string | null {
   }
 }
 
-export const canSwitchEngine = (url: string | undefined | null) => !!url && /^(https?|file):/i.test(url);
+export const canSwitchEngine = (url: string | undefined | null) => !!url && isWebPageUrl(url);
 export const chromiumOnly = (url: string | undefined | null) => !!url && /^(ardia|chrome|chrome-extension|chrome-untrusted|devtools|view-source):/i.test(url);
 
 export const defaultEngine = (s: Pick<BrowserState, "settings">): PageEngine => (s.settings.pageEngine === "webkit" ? "webkit" : "chromium");
@@ -66,15 +68,12 @@ export const recommendedEngineFor = (s: Pick<BrowserState, "settings">, url: str
 export const engineForUrl = (s: Pick<BrowserState, "settings">, url: string | undefined | null): PageEngine => chosenEngine(s, url) ?? defaultEngine(s);
 
 const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undefined => {
-  const id = t.adoptId;
-  if (!id) return undefined;
-  if (id.startsWith("webkit:")) return "webkit";
-  if (id.startsWith("ardiacore:") || id.startsWith("tab:")) return "chromium";
-  if (id.startsWith("clone:")) {
-    const source = s.tabs[id.slice("clone:".length)];
-    return source && depth < 8 ? engineOf(s, source, depth + 1) : undefined;
-  }
-  return undefined;
+  const id = adoptKind(t.adoptId);
+  if (id?.kind === "webkit") return "webkit";
+  if (id?.kind === "ardiacore" || id?.kind === "tab") return "chromium";
+  if (id?.kind !== "clone") return undefined;
+  const source = s.tabs[id.key];
+  return source && depth < 8 ? engineOf(s, source, depth + 1) : undefined;
 };
 
 function engineOf(s: EngineState, t: Tab, depth: number): PageEngine {

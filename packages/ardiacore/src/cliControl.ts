@@ -1,19 +1,16 @@
 import { call, on } from "./engine/call";
 
-export type CliControlStatus = {
-  state: "off" | "starting" | "on" | "external";
-  port?: number;
-  connections?: number;
-  generation?: number;
-  file?: string;
-  reason?: string;
-};
+type CliServer = { connections: number; generation: number; file: string; reason?: string };
 
-export const setCliControl = (on: boolean) => call("engine.cliControl", { on });
+export type CliControlStatus =
+  | { state: "external" }
+  | ({ state: "off" | "starting" } & CliServer)
+  | ({ state: "on"; port: number } & CliServer);
 
-export const setCliActiveTab = (tabId: string | null) => call("engine.cliControl", { activeTab: tabId });
+export const setCliControl = (on: boolean) => call("engine.setCliControl", { on });
 
-export const cliControlStatus = () => call("engine.cliControl");
+export const setCliActiveTab = (tabId: string | null) => call("engine.setCliActiveTab", { tabId });
 
-export const onCliControlChanged = (listener: (status: CliControlStatus) => void) =>
-  on("engine.cliControl", (payload) => listener(payload as unknown as CliControlStatus));
+export const cliControlStatus = () => call("engine.cliControlStatus");
+
+export const onCliControlChanged = (listener: (status: CliControlStatus) => void) => on("engine.cliControl", listener);

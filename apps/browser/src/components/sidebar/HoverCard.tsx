@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, Text, View, type AccessibilityActionEv
 import { displayUrl } from "@ardia/core";
 import { useTheme } from "../ui/theme";
 import { useIsBookmarked, useTab } from "../../state/browser/hooks";
-import { plural } from "../../state/browser/model";
+import { plural, tabTitle } from "../../state/browser/model";
 import { useTileFolderLabel, useTileFolderMembers } from "../../state/pins/hooks";
 import { returnToPinnedUrl } from "../../state/pins/actions";
 import { togglePin } from "../../state/tabs/actions";
@@ -16,7 +16,7 @@ import { LiveItemCard } from "../live/LiveItemCard";
 import { useIsSleeping } from "../../state/tabs/tabLifecycle";
 import { FadeLabel, font, Panel, radius, Symbol, useHover, weight } from "../ui";
 import { SIDEBAR_SHADOW, SIDEBAR_TYPE } from "./tokens";
-import { clickTab, tabTitle, toggleBookmarkInWindow } from "../../state/sidebar/actions";
+import { clickTab, toggleBookmarkInWindow } from "../../state/sidebar/actions";
 import { GroupPanel } from "./GroupPanel";
 import { cardHoverProps, dismissHover, setHoverSpace } from "../../state/sidebar/hover";
 import { hoverCardOrigin, useHoverCardMotion, useHoverCardPlacement } from "./hoverMotion";

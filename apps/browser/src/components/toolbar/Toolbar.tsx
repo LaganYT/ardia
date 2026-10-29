@@ -1,4 +1,5 @@
-import { appUrlOrigin, breadcrumb, urlForDisplay } from "@ardia/core";
+import { appUrlOrigin, urlForDisplay } from "@ardia/core";
+import { pageHostLabel } from "../../lib/url";
 import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Animated, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
@@ -14,7 +15,8 @@ import { popoverOf, setPopover, usePage, usePages, type PageState } from "../../
 import { useHistoryAvailability } from "../../state/tabs/navigation";
 import { toggleBookmarkOfTab } from "../../state/bookmarks/actions";
 import { closePane, openSplitPane, showSplitMenu } from "../../state/splits/actions";
-import { toolbarPalette, useEasedColor, type ToolbarPalette } from "../ui/toolbarColors";
+import { useEasedColor, type ToolbarPalette } from "../ui/toolbarColors";
+import { useSitePalette } from "./useSitePalette";
 import { setToolbarExtensionsWidth } from "../../state/windows/layout";
 import { SIDEBAR_FIELD } from "../sidebar/geometry";
 import { FieldSiteButton, SidebarFieldFill } from "../sidebar/SidebarField";
@@ -62,10 +64,7 @@ export function Toolbar({
   const sidebarHint = useShortcutHint("toggleSidebar");
   const tab = useToolbarTab(tabId);
   const isLoading = useTabLive(tabId, (l) => l.isLoading);
-  const themeColor = useTabLive(tabId, (l) => l.themeColor);
-  const extendColor = useSettings((s) => s.extendWebsiteColor);
-  const website = extendColor && tab?.url ? themeColor : null;
-  const palette = toolbarPalette(theme, website);
+  const palette = useSitePalette(tabId);
   const band = useEasedColor(bare ? null : palette.background);
   const history = useHistoryAvailability(tabId);
   const row = useToolbarRow();
@@ -130,11 +129,8 @@ export function Toolbar({
 }
 
 export function ToolbarBackdrop({ tabId }: { tabId: string }) {
-  const theme = useTheme();
   const url = useTab(tabId, (t) => t?.url ?? "");
-  const themeColor = useTabLive(tabId, (l) => l.themeColor);
-  const extendColor = useSettings((s) => s.extendWebsiteColor);
-  const palette = toolbarPalette(theme, extendColor && url ? themeColor : null);
+  const palette = useSitePalette(tabId);
   const band = useEasedColor(palette.background);
   const row = useToolbarRow();
   return (
@@ -187,7 +183,7 @@ export const UrlField = memo(function UrlField({
   const popover = usePages((p) => p.popover[tab.id] ?? null);
   const hovered = pointerOver || popover === "siteControls";
   const isFile = tab.url.startsWith("file:");
-  const host = isFile ? "File" : breadcrumb(tab.url).host;
+  const host = pageHostLabel(tab.url);
   const full = isFile ? ` ${safeDecode(tab.url.slice("file://".length))}` : urlForDisplay(tab.url);
   const path = !isFile && full.startsWith(host) ? full.slice(host.length) : full;
   const web = isWebUrl(tab.url);

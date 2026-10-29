@@ -1,10 +1,13 @@
 import type { BrowserState } from "../browser/store";
-import { ancestorIds, closedGroupInfo, descendantIds, insertAll, nestGroups, orderSections, placeGroups, rejoinGroups, syncGroupOrder } from "../groups/groups";
-import { inPinnedContainer, newId, pendingRestore, restoreId, snapshotTab, viewTabIds } from "../browser/model";
+import { ancestorIds, closedGroupInfo, descendantIds, innermostGroupOf, insertAll, nestGroups, orderSections, placeGroups, rejoinGroups, syncGroupOrder } from "../groups/groups";
+import { inPinnedContainer, newId, snapshotTab, viewTabIds } from "../browser/model";
+import { pendingRestore, restoreId } from "../tabs/adoptIds";
 import { activated, apply, removeTabs, withNewTab } from "../tabs/tabs";
-import { groupLabel, groupOf, withGroup } from "./tabGrouping";
-import type { ClosedGroup, ClosedTab, NestedGroupSnapshot, Tab, TabGroup } from "../browser/types";
+import { groupLabel, withGroup } from "./tabGrouping";
+import type { BrowserWindow, ClosedGroup, ClosedTab, ClosedWindow, NestedGroupSnapshot, Tab, TabGroup } from "../browser/types";
 
+export const MAX_CLOSED_TABS = 50;
+export const MAX_CLOSED_WINDOWS = 10;
 const MAX_CLOSED_GROUPS = 20;
 const PURGED_AFTER_MS = 7 * 86_400_000;
 function keptAWeek<T extends { closedAt: number }>(list: T[], now: number): T[] {
@@ -18,27 +21,37 @@ export const cleanedTabsFor = (s: Pick<BrowserState, "windows" | "cleanedTabs" |
   keptCleanedTabs(s.windows[windowId]?.incognito ? (s.privateCleanedTabs[windowId] ?? NO_CLEANED) : s.cleanedTabs);
 const NO_CLEANED: ClosedTab[] = [];
 
+export function closedTabEntry(s: Pick<BrowserState, "groups">, t: Tab, at: { windowId: string; index: number }, closedAt: number, group = innermostGroupOf(s.groups, t.id)): ClosedTab {
+  const parents = group ? ancestorIds(s.groups, group.id).map((id) => closedGroupInfo(s.groups[id]!)) : [];
+  return {
+    kind: "tab",
+    id: newId("ct"),
+    tab: snapshotTab(t),
+    tabId: t.id,
+    ...(pendingRestore(t) ? { restoreFrom: pendingRestore(t) } : {}),
+    windowId: at.windowId,
+    index: at.index,
+    group: group ? closedGroupInfo(group) : null,
+    ...(parents.length ? { parents } : {}),
+    closedAt,
+  };
+}
+
+export const closedWindowEntry = (w: BrowserWindow, tabs: ClosedWindow["tabs"], groups: ClosedWindow["groups"], closedAt: number): ClosedWindow => ({
+  kind: "window",
+  id: newId("cw"),
+  window: { profileId: w.profileId, sidebarOpen: w.sidebarOpen, frame: w.frame },
+  tabs,
+  groups,
+  closedAt,
+});
+
 export function closedEntries(s: BrowserState, ids: string[]): ClosedTab[] {
   const now = Date.now();
   return ids
     .map((id) => s.tabs[id])
     .filter((t): t is Tab => !!t && !!t.url)
-    .map((t) => {
-      const group = groupOf(s, t.id);
-      const parents = group ? ancestorIds(s.groups, group.id).map((id) => closedGroupInfo(s.groups[id]!)) : [];
-      return {
-        kind: "tab" as const,
-        id: newId("ct"),
-        tab: snapshotTab(t),
-        tabId: t.id,
-        ...(pendingRestore(t) ? { restoreFrom: pendingRestore(t) } : {}),
-        windowId: t.windowId,
-        index: s.windows[t.windowId]?.tabIds.indexOf(t.id) ?? 0,
-        group: group ? closedGroupInfo(group) : null,
-        ...(parents.length ? { parents } : {}),
-        closedAt: now,
-      };
-    });
+    .map((t) => closedTabEntry(s, t, { windowId: t.windowId, index: s.windows[t.windowId]?.tabIds.indexOf(t.id) ?? 0 }, now));
 }
 
 export function closeQuietly(s: BrowserState, ids: string[]): BrowserState {

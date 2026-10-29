@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
 const model = await import("../browser/model.ts");
-const { pinKeyOf } = await import("../pins/pinMirror.ts");
+const { pinKeyOf } = model;
 
 const S = () => useBrowser.getState();
 const reset = () => S().hydrate({});
@@ -77,7 +77,7 @@ test("rows of a tab live elsewhere follow its title and address", () => {
   reset();
   const { a, b, a1 } = twoWindows();
   share(true);
-  S().navigated(a1, { url: "https://a1.com/page", title: "Page" }, {});
+  S().updateTab(a1, { url: "https://a1.com/page", title: "Page" }, {});
   const copy = S().tabs[list(b)[0]];
   assert.equal(copy.pageIn, a1);
   assert.equal(copy.url, "https://a1.com/page");
@@ -252,11 +252,11 @@ for (const where of ["pinned split", "split in a pinned group"]) {
     const y = S().newTab(b, { url: "https://y.com", background: true });
     const z = S().newTab(b, { background: true });
     S().navigate(z, "https://z.com");
-    S().navigated(z, { url: "https://z.com/", title: "Z" }, {});
+    S().updateTab(z, { url: "https://z.com/", title: "Z" }, {});
     const splitId = S().createSplit([y, z]);
     if (where === "pinned split") S().pinTabs([y], true);
     else S().placeTabs([y], { pinned: false, groupId: S().groupTabs([b1], { pinned: true, name: "P" }) });
-    S().navigated(z, { url: "", title: "New Tab" }, {});
+    S().updateTab(z, { url: "", title: "New Tab" }, {});
     const copy = rowOf(b, "https://x.com");
     assert.equal(S().tabs[copy].pageIn, x);
     S().replaceSplitPane(z, copy);

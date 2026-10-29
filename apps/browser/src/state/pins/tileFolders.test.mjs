@@ -174,7 +174,7 @@ test("the top strip's pinned dock shows a folder as one cell, the active member 
   S().activate(c);
   assert.deepEqual(dock(), [`pinned:${a}`, `tilefolder:${fid}:${b},${c},${d}`, `pinned:${c}`]);
   const items = tileFolderMenuItems(S(), w, fid, c);
-  assert.deepEqual(items.slice(0, 3).map((i) => [i.id, !!i.checked]), [[`t:${b}`, false], [`t:${c}`, true], [`t:${d}`, false]]);
+  assert.deepEqual(items.slice(0, 3).map((i) => [i.value.tabId, !!i.checked]), [[b, false], [c, true], [d, false]]);
   assert.equal(items.at(-1).id, "rename");
 });
 

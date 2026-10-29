@@ -116,3 +116,17 @@ test("Arc favorites land as tiles after the space's rows and folders came in", a
   const tiles = Object.values(S().tabs).filter((t) => t.pinned && !t.pinnedAsRow).map((t) => t.url).sort();
   assert.deepEqual(tiles, ["https://row.example/", "https://www.youtube.com/"]);
 });
+
+test("importing history into a full list reports the pages it added, not the change in list length", async () => {
+  const { importHistory } = await import("./apply.ts");
+  const { MAX_HISTORY } = await import("../history/history.ts");
+  S().hydrate({});
+  const full = Array.from({ length: MAX_HISTORY }, (_, i) => ({ url: `https://old${i}.example/`, title: "", favicon: null, visits: 1, lastVisit: 1000 + i }));
+  useBrowser.setState({ history: { [P]: full } });
+  const added = importHistory(P, [
+    { url: "https://new1.example/", title: "New 1", visits: 1, lastVisit: 999_999 },
+    { url: "https://new2.example/", title: "New 2", visits: 1, lastVisit: 999_998 },
+  ]);
+  assert.equal(added, 2);
+  assert.equal(S().history[P].length, MAX_HISTORY);
+});

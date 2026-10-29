@@ -1,16 +1,17 @@
 import { addHistoryVisits } from "../../platform/history";
-import type { PageEngine } from "../../platform/tabs";
+import type { PageEngine, ProtectedMediaRequest } from "../../platform/tabs";
 import { confirm } from "../../platform/dialogs";
 import { create } from "zustand";
 import { useBrowser } from "../browser/store";
 import { pageOf, patchPage } from "../tabs/pageState";
-import { hideKeyedToast, showToast } from "../splits/actions";
+import { hideKeyedToast, showToast } from "../app/toasts";
 import { canSwitchEngine, chosenEngine, ENGINE_NAMES, siteOf, tabEngine, visitRecorder, type WebKitPage } from "./engines";
 import { engineProfile, isIncognitoProfile, navigationTo } from "../browser/model";
 import type { Tab } from "../browser/types";
 import { carrySignInToWebKit, signInCarryOn } from "./engineSignIn";
 import { wantsPage } from "../tabs/tabPages";
 import { webviews } from "../../platform/webviews";
+import { withDeadline } from "../../lib/deadline";
 
 export type EngineOffer = { site: string; host: string; keySystem: string; canRemember: boolean };
 
@@ -33,7 +34,7 @@ const UNSAVED_WORK = `(() => {
 async function hasUnsavedWork(tabId: string): Promise<boolean> {
   const web = webviews.get(tabId);
   if (!web) return false;
-  return (await Promise.race([web.evaluate<boolean>(UNSAVED_WORK), new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))])) === true;
+  return (await withDeadline(web.evaluate<boolean>(UNSAVED_WORK), 1500, null)) === true;
 }
 
 export function setWebsiteEngine(url: string, engine: PageEngine | null) {
@@ -94,7 +95,7 @@ export async function openPageIn(tabId: string, engine: PageEngine, options: { r
 
 export const togglePageEngine = (tabId: string) => openPageIn(tabId, tabEngine(store(), tabId) === "webkit" ? "chromium" : "webkit");
 
-export function offerWebKit(tabId: string, data: unknown) {
+export function offerWebKit(tabId: string, { keySystem }: ProtectedMediaRequest) {
   const s = store();
   const t = s.tabs[tabId];
   if (!t || tabEngine(s, tabId) === "webkit") return;
@@ -104,7 +105,6 @@ export function offerWebKit(tabId: string, data: unknown) {
   if (rule === "chromium" || declinedSites.has(site)) return;
   if (rule === "webkit") return void moveForProtectedVideo(tabId, site);
   if (useEngineOffers.getState()[tabId]?.site === site) return;
-  const keySystem = typeof (data as { keySystem?: unknown } | null)?.keySystem === "string" ? (data as { keySystem: string }).keySystem : "";
   useEngineOffers.setState({ [tabId]: { site, host: hostLabel(site), keySystem, canRemember: !isIncognitoProfile(t.profileId) } });
 }
 
@@ -193,5 +193,5 @@ export function noteWebKitPage(tabId: string, page: WebKitPage) {
   if (!t) return;
   watchClosedTabs();
   visitedTabs.add(tabId);
-  visits.note(tabId, isIncognitoProfile(t.profileId) ? null : engineProfile(t.profileId), page);
+  visits.note(tabId, isIncognitoProfile(t.profileId) ? null : engineProfile(useBrowser.getState(), t.profileId), page);
 }

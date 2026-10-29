@@ -4,11 +4,13 @@ export type MenuEntry = Extract<MenuItem, { id: string }>;
 export type MenuModifier = NonNullable<MenuEntry["modifiers"]>[number];
 export type MenuKey = { key?: string; modifiers?: MenuModifier[] };
 
-type Slot = MenuItem | false | null | undefined;
+type Slot<I> = I | false | null | undefined;
 
-export function menuSections(...sections: Slot[][]): MenuItem[] {
+export function menuSections(...sections: Slot<MenuItem>[][]): MenuItem[];
+export function menuSections<I extends object>(...sections: Slot<I>[][]): (I | { separator: true })[];
+export function menuSections<I extends object>(...sections: Slot<I>[][]): (I | { separator: true })[] {
   return sections
-    .map((section) => section.filter((item): item is MenuItem => !!item))
+    .map((section) => section.filter((item): item is I => !!item))
     .filter((section) => section.length > 0)
     .flatMap((section, i) => (i ? [{ separator: true as const }, ...section] : section));
 }

@@ -1,7 +1,7 @@
-import { breadcrumb } from "@ardia/core";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useTheme } from "../ui/theme";
+import { pageHostLabel } from "../../lib/url";
 import { useSettings, useTab, useTabLive } from "../../state/browser/hooks";
 import { useBrowserWhile, useStoreWhile } from "../../state/tabs/tabWatch";
 import type { ToolbarGeometry } from "../window/geometry";
@@ -12,7 +12,7 @@ import { useExtensions } from "../../state/extensions/store";
 import { needsBar, revealToolbar, setToolbarPeek, STRIP_HEIGHT, toolbarMode, useToolbarAutoHide, type ToolbarMode } from "../../state/windows/toolbarAutoHide";
 import { Toolbar } from "./Toolbar";
 import { curve } from "../ui/motion";
-import { font, weight } from "../ui";
+import { font, reduceMotion, weight } from "../ui";
 import { TOOLBAR_MOTION } from "./tokens";
 import { useToolbarRow } from "./useToolbarRow";
 
@@ -23,13 +23,6 @@ const SHOW_EASING = curve.outCubic;
 const PEEK_DELAY = 150;
 const UNPEEK_DELAY = 250;
 const SHRINK = 0.94;
-
-let reduceMotion = false;
-AccessibilityInfo.isReduceMotionEnabled().then(
-  (on) => (reduceMotion = on),
-  () => {},
-);
-AccessibilityInfo.addEventListener("reduceMotionChanged", (on) => (reduceMotion = on));
 
 export function useToolbarMode(tabId: string, windowId: string, enabled: boolean): ToolbarMode {
   const scrolledDown = useStoreWhile(useToolbarAutoHide, enabled, (s) => !!s.scrolledDown[tabId]);
@@ -109,7 +102,7 @@ export function useToolbarMotion({
       const to = collapsed ? 1 : 0;
       const barTo = hidden ? 1 : 0;
       v.laid.setValue(to);
-      if (reduceMotion) {
+      if (reduceMotion()) {
         v.page.setValue(to);
         v.bar.setValue(barTo);
         glide(v.fade, barTo, !collapsed).start();
@@ -121,7 +114,7 @@ export function useToolbarMotion({
     } else if (!hidden) {
       v.bar.setValue(0);
       v.fade.setValue(0);
-    } else if (reduceMotion) {
+    } else if (reduceMotion()) {
       v.bar.setValue(1);
       glide(v.fade, 1, false).start();
     } else Animated.parallel([glide(v.bar, 1, false), glide(v.fade, 1, false)]).start();
@@ -227,7 +220,7 @@ export function AutoHideToolbar({
       },
     [moved, bar, fade, H],
   );
-  const host = url.startsWith("file:") ? "File" : breadcrumb(url).host;
+  const host = pageHostLabel(url);
 
   return (
     <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, top: 0, height: H }}>

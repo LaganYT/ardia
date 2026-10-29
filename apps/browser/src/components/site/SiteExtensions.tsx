@@ -1,5 +1,5 @@
 import type { InstalledExtension } from "../../state/extensions/store";
-import { showMenu } from "../../state/app/system";
+import { chooseFromMenu } from "../../state/app/menuChoice";
 import { useRef } from "react";
 import type { View } from "react-native";
 import { activateExtension, EXTENSION_LIST_ITEMS, openWebStore, runExtensionListChoice, showExtensionMenu, useWindowExtensions, type Anchor } from "../../state/extensions/actions";
@@ -52,7 +52,7 @@ function ExtensionGridTile({ ext, windowId, tabId, onClose }: { ext: InstalledEx
 }
 
 async function addMenu(windowId: string, onClose: () => void) {
-  const choice = await showMenu(EXTENSION_LIST_ITEMS);
+  const choice = await chooseFromMenu(EXTENSION_LIST_ITEMS);
   if (!choice) return;
   onClose();
   runExtensionListChoice(choice, windowId);

@@ -6,7 +6,8 @@ export { FIELD_GLASS_HOVER_OPACITY, FIELD_GLASS_OPACITY, GlassFill, liquidGlass 
 export { HoverSlot } from "./HoverSlot";
 export { MenuRow, menuRowFill, MenuSeparator } from "./Menu";
 export { Panel, type PanelProps } from "./Panel";
-export { curve, duration, spring, type SpringSpec } from "./motion";
+export { curve, duration, spring, usePresence, type Fade, type SpringSpec } from "./motion";
+export { reduceMotion, reduceMotionKnown } from "./reduceMotion";
 export { PANEL, PanelCloseButton, PanelHeader, Popover, POPOVER_MARGIN, POPOVER_MOTION, PopoverSurface, PopoverValue, usePopoverMotion, usePopoverMotionStyle, usePopoverPresence } from "./Popover";
 export { Radio } from "./Radio";
 export { Group, Row } from "./Row";
@@ -14,7 +15,7 @@ export { Swatch } from "./Swatch";
 export { Switch, Toggle, type SwitchLook } from "./Switch";
 export { Text, type TextProps } from "./Text";
 export { hex, layout, PROFILE_COLORS, useFormColors, useTheme, type FormColors, type Theme } from "./theme";
-export { colorRoles, font, hairline, ink, opacity, radius, shadow, space, swatch, weight, type ColorRole, type Radius, type ShadowLevel, type Space, type TypeSize, type Weight } from "./tokens";
+export { colorRoles, font, hairline, ink, opacity, radius, shadow, space, swatch, weight, withAlpha, type ColorRole, type Radius, type ShadowLevel, type Space, type TypeSize, type Weight } from "./tokens";
 export { TooltipAbove } from "./TooltipAbove";
 export { useHover } from "./useHover";
 export {

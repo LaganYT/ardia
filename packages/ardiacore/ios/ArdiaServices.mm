@@ -4,6 +4,7 @@
 #import "ArdiaEngineBridge.h"
 #import "ArdiaInternal.h"
 #import "ArdiaExtensionPackage.h"
+#import "ArdiaWebViewInternal.h"
 
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
@@ -72,14 +73,10 @@ NSMutableData *WithSecrets(NSDictionary *plain, NSDictionary<NSString *, NSStrin
   return data;
 }
 
-NSString *OriginOf(NSString *url) {
-  NSURLComponents *c = [NSURLComponents componentsWithString:url ?: @""];
-  if (!c.scheme.length || !c.host.length) return url ?: @"";
-  return c.port ? [NSString stringWithFormat:@"%@://%@:%@", c.scheme, c.host, c.port] : [NSString stringWithFormat:@"%@://%@", c.scheme, c.host];
-}
+NSString *LoginOrigin(NSString *url) { return ardia_web_view::OriginOf(url) ?: url ?: @""; }
 
 NSDictionary *Login(NSString *origin, NSString *username) {
-  return @{@"origin" : OriginOf(origin), @"username" : username ?: @""};
+  return @{@"origin" : LoginOrigin(origin), @"username" : username ?: @""};
 }
 
 void Answer(NSDictionary *result, ArdiaServiceReply reply) {
@@ -192,7 +189,7 @@ NSString *StoreFolder(NSString *profile, NSString *extensionId, id version) {
 }
 
 + (void)allowSaving:(NSString *)profile origin:(NSString *)origin reply:(ArdiaServiceReply)reply {
-  [self callBase:@"ac_passwords_allow" profile:profile args:@{@"origin" : OriginOf(origin)} completion:^(NSDictionary *result) { Answer(result, reply); }];
+  [self callBase:@"ac_passwords_allow" profile:profile args:@{@"origin" : LoginOrigin(origin)} completion:^(NSDictionary *result) { Answer(result, reply); }];
 }
 
 + (void)exportPasswords:(NSString *)profile path:(NSString *)path reply:(ArdiaServiceReply)reply {

@@ -6,6 +6,8 @@ import { switchToTab, toggleMute } from "../../state/browser/actions";
 import { hex, useTheme } from "../ui/theme";
 import { font, radius, weight } from "../ui/tokens";
 import { useTab } from "../../state/browser/hooks";
+import { useMuteState } from "../../state/tabs/hooks";
+import { muteTitle } from "../../state/tabs/mute";
 import { Favicon } from "../favicon/Favicon";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useArtwork } from "../../state/media/artwork";
@@ -43,6 +45,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
   const media = useMediaTokens();
   const session = useSession(tabId);
   const tab = useTab(tabId);
+  const mute = useMuteState(tabId);
   const playing = isPlaying(session);
   const { hovered, hoverProps } = useHover();
   const artwork = useArtwork(tabId, session?.artwork);
@@ -65,7 +68,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
             {artwork ? <Image source={{ uri: artwork }} resizeMode="cover" style={{ width: ART, height: ART }} /> : <Favicon url={tab.url} favicon={tab.favicon} size={16} profileId={tab.profileId} />}
           </View>
           {isLive(session) ? <View accessibilityLabel="Live" style={{ width: LIVE_DOT, height: LIVE_DOT, borderRadius: LIVE_DOT / 2, marginLeft: 7, backgroundColor: theme.destructive }} /> : null}
-          {tab.muted ? <Symbol name="speaker.slash.fill" size={9} color={theme.textSecondary} style={{ width: 13, height: 12, marginLeft: 6 }} /> : null}
+          {mute ? <Symbol name="speaker.slash.fill" size={9} color={theme.textSecondary} style={{ width: 13, height: 12, marginLeft: 6 }} /> : null}
           <View style={{ flex: 1, minWidth: 0, marginLeft: 6, marginRight: hovered ? HOVER_BUTTONS_WIDTH : 0 }}>
             <Marquee id="title" text={title} group={marquee} height={TITLE_HEIGHT} style={{ ...font.small, fontWeight: weight.semibold, color: theme.textPrimary }} />
           </View>
@@ -74,11 +77,11 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
           <View style={{ position: "absolute", top: 0, bottom: 0, right: TRAILING_INSET + BUTTON + BUTTON_GAP, flexDirection: "row", alignItems: "center", gap: BUTTON_GAP }}>
             <Button variant="icon" icon="xmark" size={11} box={BUTTON} radius={radius.m} tooltip="Close Player" onPress={() => dismissPlayer(tabId)} />
             <Button variant="icon"
-              icon={tab.muted ? "speaker.slash.fill" : "speaker.wave.2.fill"}
+              icon={mute ? "speaker.slash.fill" : "speaker.wave.2.fill"}
               size={12}
               box={BUTTON}
               radius={radius.m}
-              tooltip={tab.muted ? "Unmute Site" : "Mute Site"}
+              tooltip={muteTitle(mute)}
               onPress={() => toggleMute(tabId)}
             />
           </View>

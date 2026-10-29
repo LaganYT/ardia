@@ -4,7 +4,7 @@ import { startChromeTabs } from "../../state/tabs/chromeTabs";
 import { useIsSmallWindow, useSplitOf } from "../../state/windows/card";
 import { usePeeks } from "../../state/peek/hooks";
 import { useActiveTabId, useSettings, useWindowId } from "../../state/browser/hooks";
-import { BOOKMARKS_BAR_HEIGHT } from "../bookmarks/BookmarksBar";
+import { useBookmarksBarHeight } from "../bookmarks/barSize";
 import { useBookmarksBarMode } from "../../state/bookmarks/hooks";
 import { POPOVER_MARGIN } from "../ui";
 import { NO_TOOLBAR, toolbarGeometry, type Rect, type ToolbarGeometry } from "./geometry";
@@ -15,7 +15,6 @@ import { dockMoving, usePeekEdge, whenDockStill } from "../../state/windows/dock
 import { FrozenPage } from "./FrozenPage";
 import { setCardAnchor, setUrlAnchor, useAddressBarInSidebar, useTabLayout, watchToolbarExtensionsWidth } from "../../state/windows/layout";
 import { startSelectionTools } from "../../state/site/selection";
-import { startCommandScrollZoom } from "../../state/site/commandScrollZoom";
 import { startMedia } from "../../state/media/pip";
 import { urlFieldRight } from "../toolbar/Toolbar";
 import { WindowToolbar } from "../toolbar/WindowToolbar";
@@ -39,6 +38,7 @@ export function ContentCard() {
   const showSidebarButton = useSettings((st) => st.showSidebarButton !== false);
   const barMode = useBookmarksBarMode(windowId);
   const toolbarRow = useToolbarRow();
+  const barHeight = useBookmarksBarHeight();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   const container = useRef<View>(null);
@@ -46,7 +46,6 @@ export function ContentCard() {
   useEffect(startChromeTabs, []);
   useEffect(startMedia, []);
   useEffect(startSelectionTools, []);
-  useEffect(startCommandScrollZoom, []);
   useEffect(startPeeks, []);
   const peekId = usePeeks((p) => p[windowId]?.tabId);
   const peekFullscreen = !!peekId && fullscreenTab === peekId;
@@ -146,7 +145,7 @@ export function ContentCard() {
         <WindowToolbar windowId={windowId} tabId={activeId} geometry={geometryFor(panes[activeId])} autoHide={hideWhileScrolling} />
       )}
       {size.width > 0 && !split && !fullscreenTab && (
-        <FrozenPage windowId={windowId} tabId={activeId} top={(!addressInSidebar && !small && !hideWhileScrolling ? toolbarRow.height : 0) + (barMode === "always" && !small && !hideWhileScrolling ? BOOKMARKS_BAR_HEIGHT : 0)} />
+        <FrozenPage windowId={windowId} tabId={activeId} top={(!addressInSidebar && !small && !hideWhileScrolling ? toolbarRow.height : 0) + (barMode === "always" && !small && !hideWhileScrolling ? barHeight : 0)} />
       )}
       {split && !fullscreenTab && <SplitDividers split={split} dividers={dividers} width={size.width} height={size.height} />}
       {size.width > 0 && popoversOverCard && origin && activeRect && peekEdge !== undefined && (

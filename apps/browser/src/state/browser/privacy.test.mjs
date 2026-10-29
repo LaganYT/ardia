@@ -306,7 +306,7 @@ test("deleting a profile keeps the data others share", () => {
   const b = S().createProfile({ name: "B", shareWith: a });
   S().deleteProfile(a);
   assert.equal(S().profiles[a], undefined);
-  assert.equal(model.engineProfile(b), a, "still on A's engine context");
+  assert.equal(model.engineProfile(S(), b), a, "still on A's engine context");
   assert.ok(S().bookmarks.nodes[bookmark], "shared bookmarks stay");
   assert.deepEqual(S().history[b].map((h) => h.url), ["https://a.com/"]);
   S().importHistory(b, [{ url: "https://c.com/", title: "C", visits: 1, lastVisit: 3 }]);

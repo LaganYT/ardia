@@ -1,10 +1,11 @@
 import { confirm } from "../../platform/dialogs";
 import { create } from "zustand";
 import { focus, openWindow } from "../browser/actions";
-import { folderLinks } from "./bookmarks";
+import { folderLinks, isWithin, ownerOfBookmark } from "./bookmarks";
 import { storeAction, useBrowser } from "../browser/store";
-import { activeTabId, bookmarkProfileId, resolveWindowId, viewTabIds } from "../browser/model";
+import { activeTabId, bookmarkProfileId, resolveWindowId, tabTitle, viewTabIds } from "../browser/model";
 import { originalProfile } from "../windows/small";
+import { isWebPageUrl } from "../../lib/url";
 
 type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";
 
@@ -82,13 +83,7 @@ export const useBookmarkDialog = create<{ open: BookmarkDialogState | null }>()(
 
 export const closeBookmarkDialog = () => useBookmarkDialog.setState({ open: null });
 
-export function profileOfBookmark(id: string): string | null {
-  const b = useBrowser.getState().bookmarks;
-  let node = b.nodes[id];
-  for (let i = 0; node?.parentId && i < 64; i++) node = b.nodes[node.parentId];
-  if (!node) return null;
-  return Object.entries(b.roots).find(([, r]) => r.bar === node!.id || r.other === node!.id)?.[0] ?? null;
-}
+export const profileOfBookmark = (id: string) => ownerOfBookmark(useBrowser.getState().bookmarks, id);
 
 export function bookmarkTab(windowId: string, tabId: string) {
   const s = useBrowser.getState();
@@ -98,10 +93,10 @@ export function bookmarkTab(windowId: string, tabId: string) {
   const profileId = bookmarkProfileId(s, s.windows[id]);
   const roots = s.bookmarks.roots[profileId];
   const existing = Object.values(s.bookmarks.nodes).find(
-    (n) => n.kind === "url" && n.url === tab.url && roots && isUnder(n.id, [roots.bar, roots.other]),
+    (n) => n.kind === "url" && n.url === tab.url && roots && isWithin(useBrowser.getState().bookmarks, n.id, [roots.bar, roots.other]),
   );
   const bookmarkId =
-    existing?.id ?? s.addBookmark({ profileId, url: tab.url, title: tab.customTitle || tab.title || tab.url, favicon: tab.favicon });
+    existing?.id ?? s.addBookmark({ profileId, url: tab.url, title: tabTitle(tab), favicon: tab.favicon });
   useBookmarkDialog.setState({ open: { kind: "page", windowId: id, bookmarkId } });
 }
 
@@ -111,21 +106,12 @@ export function bookmarkAllTabs(windowId: string | null | undefined) {
   if (!id) return;
   const tabs = viewTabIds(s, id)
     .map((t) => s.tabs[t]!)
-    .filter((t) => /^(https?|file):/.test(t.url))
-    .map((t) => ({ url: t.url, title: t.customTitle || t.title || t.url }));
+    .filter((t) => isWebPageUrl(t.url))
+    .map((t) => ({ url: t.url, title: tabTitle(t) }));
   if (!tabs.length) return;
   useBookmarkDialog.setState({ open: { kind: "allTabs", windowId: id, profileId: bookmarkProfileId(s, s.windows[id]), tabs } });
 }
 
-function isUnder(id: string, roots: string[]): boolean {
-  const { nodes } = useBrowser.getState().bookmarks;
-  let node = nodes[id];
-  for (let i = 0; node && i < 64; i++) {
-    if (roots.includes(node.id)) return true;
-    node = node.parentId ? nodes[node.parentId] : undefined;
-  }
-  return false;
-}
 
 export const addBookmark = storeAction("addBookmark");
 export const addBookmarkFolder = storeAction("addBookmarkFolder");

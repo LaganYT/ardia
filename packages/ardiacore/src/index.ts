@@ -1,5 +1,6 @@
 export * from "./WebView";
 export * from "./pageTypes";
+export type { PageEventName } from "./pageEvents";
 export * from "./module";
 export * from "./contentBlocker";
 export * from "./siteSettings";
@@ -17,6 +18,6 @@ export * from "./bookmarks";
 export * from "./swipe";
 export * from "./tabStrip";
 export * from "./webkit";
-export { ArdiaError, call, on, type CallName, type EventName } from "./engine/call";
-export type { EngineCalls, EngineEvents, EnginePayload } from "./engine/api";
+export { call, on, type CallArgs, type CallName, type CallResult, type EventName } from "./engine/call";
+export type { EngineCalls, EngineEvents } from "./engine/api";
 export type { ArdiaCoreNativeModules } from "./nativeModules";

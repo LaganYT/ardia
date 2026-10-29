@@ -139,6 +139,10 @@ export type AutofillPrompt = {
 export type AutofillPromptAnswer = "accept" | "decline" | "dismiss";
 export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 
+export type PageSelection = { text: string; rect: { x: number; y: number; width: number; height: number } };
+export type ScrollState = "down" | "up" | "top";
+export type ProtectedMediaRequest = { keySystem: string; main: boolean };
+
 export type WebViewProps = ViewProps & {
   engine?: PageEngine;
   url?: string;
@@ -185,7 +189,9 @@ export type WebViewProps = ViewProps & {
   onCommand?: (command: PageCommand) => void;
   onPageFocus?: () => void;
   onPagePress?: () => void;
-  onPageMessage?: (kind: string, data: unknown) => void;
+  onSelection?: (selection: PageSelection | null) => void;
+  onScroll?: (state: ScrollState) => void;
+  onProtectedMedia?: (request: ProtectedMediaRequest) => void;
   onReady?: () => void;
   onDiscarded?: (url: string) => void;
   onPasswordPrompt?: (prompt: PasswordPrompt) => void;

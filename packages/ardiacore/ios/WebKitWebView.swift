@@ -38,7 +38,7 @@ final class WebKitWebView: WKWebView {
 
   override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
     super.willOpenMenu(menu, with: event)
-    if WebKitHub.background {
+    if LaunchConfig.shared.background {
       NSLog("[webkit] context menu (background mode, not shown): %@", menu.items.map(\.title).joined(separator: ", "))
       menu.removeAllItems()
       return

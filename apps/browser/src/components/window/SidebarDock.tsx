@@ -1,10 +1,10 @@
 import { onWindowEvent, setTrafficLightsCenter, watchLeftEdge } from "../../state/windows/nativeWindow";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AccessibilityInfo, Animated, StyleSheet, View } from "react-native";
+import { Animated, StyleSheet, View } from "react-native";
 import { switchOn } from "../../state/app/switches";
 import { layout, useTheme } from "../ui/theme";
 import { spring, curve } from "../ui/motion";
-import { Panel, WindowDragRegion } from "../ui";
+import { Panel, reduceMotion, WindowDragRegion } from "../ui";
 import { SHADOWS } from "./tokens";
 import { useWindowId } from "../../state/browser/hooks";
 import { useSidebarDockState } from "../../state/windows/hooks";
@@ -36,13 +36,6 @@ import {
 import { useTabDrag } from "../../state/drag/tabDrag";
 import { usePeek } from "./usePeek";
 
-let reduceMotion = false;
-AccessibilityInfo.isReduceMotionEnabled().then(
-  (on) => (reduceMotion = on),
-  () => {},
-);
-AccessibilityInfo.addEventListener("reduceMotionChanged", (on) => (reduceMotion = on));
-
 const SPRING = spring(DOCK_SPRING);
 const STRIP_WIDTH = 8;
 const HOLD_SLACK = 24;
@@ -55,7 +48,7 @@ function useSidebarDock(open: boolean, animate: boolean, arc: boolean): { dock: 
   useEffect(() => {
     if (was.current === open) return;
     was.current = open;
-    if (!animate || reduceMotion || !switchOn("sidebarSlide")) {
+    if (!animate || reduceMotion() || !switchOn("sidebarSlide")) {
       dock.stopAnimation();
       dock.setValue(open ? 1 : 0);
       setDockMoving(windowId, false);
@@ -121,8 +114,7 @@ export function DockedLayout({
 }) {
   const windowId = useWindowId();
   const [open, sidebarWidth, addressBar] = useSidebarDockState(windowId);
-  const savedWidth = sidebarWidth ?? layout.sidebarWidth;
-  const width = useSidebarUi((u) => u.dragWidth[windowId]) ?? savedWidth;
+  const width = useSidebarUi((u) => u.dragWidth[windowId]) ?? sidebarWidth;
   const arc = addressBar && !topTabs && switchOn("sidebarSlide");
   const toolbarLights = useToolbarLightsCenter();
   const lights = addressBar && !topTabs ? ARC_LIGHTS_CENTER : toolbarLights;

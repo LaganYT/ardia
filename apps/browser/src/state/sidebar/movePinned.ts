@@ -1,7 +1,6 @@
 import { useBrowser, type BrowserState } from "../browser/store";
-import { activeTab, pinnedSectionTitle } from "../browser/model";
+import { activeTab, pinKeyOf, pinnedSectionTitle } from "../browser/model";
 import { groupOf, selectedTabIds } from "../pins/organize";
-import { pinKeyOf } from "../pins/pinMirror";
 import type { Tab } from "../browser/types";
 
 type ListSpot = { windowId: string; key: string; list: string[]; index: number; order: number; groupId: string | null };

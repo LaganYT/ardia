@@ -82,7 +82,9 @@ test("the bar's actions and known hosts follow the store: bookmark, mute, pin, p
   S().toggleBookmark("default", { url: "https://start.example/", title: "Start", favicon: null });
   assert.ok(titles().includes("Bookmark This Page"), "unbookmarked");
   S().updateTab(tab, { muted: true });
-  assert.ok(titles().includes("Unmute Site"), "muted");
+  assert.ok(titles().includes("Unmute Tab"), "muted");
+  S().setSiteMuted(tab, true);
+  assert.ok(titles().includes("Unmute Site"), "site muted");
   S().togglePin(tab);
   assert.ok(titles().includes("Unpin from Top Apps"), "pinned");
   S().updateProfile(work, { name: "Office" });

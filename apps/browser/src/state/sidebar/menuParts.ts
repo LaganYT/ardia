@@ -1,6 +1,7 @@
 import type { MenuItem } from "../../platform/menus";
+import type { ChoiceItem } from "../app/menuChoice";
 import { menuShortcut } from "../commands/commandShortcuts";
-import { folderChildren } from "../bookmarks/bookmarks";
+import { folderChildren, ROOT_TITLES } from "../bookmarks/bookmarks";
 import type { BrowserState } from "../browser/store";
 import { bookmarkProfileId, windowTitle } from "../browser/model";
 import { groupLabel } from "../pins/organize";
@@ -9,6 +10,17 @@ import { groupPath } from "../groups/groups";
 export { menuSections as sections } from "../app/menuSections";
 
 export type Choice = Extract<MenuItem, { id: string }>;
+
+export type Destination =
+  | { kind: "profile"; profileId: string | null }
+  | { kind: "window"; windowId: string | null }
+  | { kind: "group"; groupId: string }
+  | { kind: "folder"; parentId: string | undefined }
+  | { kind: "newFolder" };
+
+export type BookmarkFolderChoice = Extract<Destination, { kind: "folder" | "newFolder" }>;
+
+type DestinationItem = ChoiceItem<Destination>;
 
 export const sep = { separator: true } as const;
 
@@ -28,39 +40,47 @@ export function withAlternate(primary: Choice, alternate: Choice, commands: read
   ];
 }
 
-export function profileItems(s: BrowserState, isCurrent: (profileId: string) => boolean): MenuItem[] {
+export function profileItems(s: BrowserState, isCurrent: (profileId: string) => boolean): DestinationItem[] {
   return [
-    ...s.profileOrder.map((id) => ({ id: `profile:${id}`, title: s.profiles[id]!.name, checked: isCurrent(id), enabled: !isCurrent(id) })),
+    ...s.profileOrder.map((id) => ({ value: { kind: "profile" as const, profileId: id }, title: s.profiles[id]!.name, checked: isCurrent(id), enabled: !isCurrent(id) })),
     sep,
-    { id: "profile:new", title: "New Profile…" },
+    { value: { kind: "profile", profileId: null }, title: "New Profile…" },
   ];
 }
 
-export function windowItems(s: BrowserState, windowId: string): MenuItem[] {
+export function windowItems(s: BrowserState, windowId: string): DestinationItem[] {
   const others = s.windowOrder.filter((id) => id !== windowId && !s.windows[id]!.incognito && s.windows[id]!.kind !== "small");
-  return [...others.map((id) => ({ id: `window:${id}`, title: windowTitle(s, id) })), ...(others.length ? [sep] : []), { id: "window:new", title: "New Window" }];
+  return [
+    ...others.map((id) => ({ value: { kind: "window" as const, windowId: id }, title: windowTitle(s, id) })),
+    ...(others.length ? [sep] : []),
+    { value: { kind: "window", windowId: null }, title: "New Window" },
+  ];
 }
 
-export function groupItems(s: BrowserState, windowId: string, exclude: string | undefined): MenuItem[] {
+export function groupItems(s: BrowserState, windowId: string, exclude: string | undefined): DestinationItem[] {
   const w = s.windows[windowId];
-  const byTitle = (a: Choice, z: Choice) => (a.title < z.title ? -1 : a.title > z.title ? 1 : 0);
+  const byTitle = (a: { title: string }, z: { title: string }) => (a.title < z.title ? -1 : a.title > z.title ? 1 : 0);
   const listed = Object.values(s.groups)
     .filter((g) => g.windowId === windowId && g.profileId === w?.profileId && g.id !== exclude)
-    .map((g) => ({ pinned: g.pinned, item: { id: `group:${g.id}`, title: groupPath(s.groups, g.id).map((id) => groupLabel(s, s.groups[id]!)).join(" › ") } }));
+    .map((g) => ({
+      pinned: g.pinned,
+      item: { value: { kind: "group" as const, groupId: g.id }, title: groupPath(s.groups, g.id).map((id) => groupLabel(s, s.groups[id]!)).join(" › ") },
+    }));
   const pinned = listed.filter((g) => g.pinned).map((g) => g.item).sort(byTitle);
   const rest = listed.filter((g) => !g.pinned).map((g) => g.item).sort(byTitle);
   if (!pinned.length) return rest;
-  return [{ id: "group:header", title: "Pinned", enabled: false }, ...pinned, ...(rest.length ? [sep, ...rest] : [])];
+  return [{ id: "pinnedGroupsHeader", title: "Pinned", enabled: false }, ...pinned, ...(rest.length ? [sep, ...rest] : [])];
 }
 
-export function bookmarkFolderItems(s: BrowserState, windowId: string): MenuItem[] {
+export function bookmarkFolderItems(s: BrowserState, windowId: string): DestinationItem[] {
   const roots = s.bookmarks.roots[bookmarkProfileId(s, s.windows[windowId])];
   const folders = roots ? [...folderChildren(s.bookmarks, roots.bar), ...folderChildren(s.bookmarks, roots.other)].filter((n) => n.kind === "folder") : [];
+  const folder = (parentId: string | undefined, title: string): DestinationItem => ({ value: { kind: "folder", parentId }, title });
   return [
-    { id: "folder:bar", title: "Bookmarks Bar" },
-    ...(roots ? [{ id: `folder:${roots.other}`, title: "Other Bookmarks" }] : []),
-    ...folders.map((f) => ({ id: `folder:${f.id}`, title: f.title })),
+    folder(undefined, ROOT_TITLES.bar),
+    ...(roots ? [folder(roots.other, ROOT_TITLES.other)] : []),
+    ...folders.map((f) => folder(f.id, f.title)),
     sep,
-    { id: "folder:new", title: "New Folder…" },
+    { value: { kind: "newFolder" }, title: "New Folder…" },
   ];
 }

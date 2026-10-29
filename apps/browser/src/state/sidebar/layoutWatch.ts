@@ -3,6 +3,7 @@ import { sidebarEntries } from "./entries";
 import { shownPinnedEntries } from "./pinnedFold";
 import { rowIds, rowView } from "./sidebarUi";
 import { useBrowser } from "../browser/store";
+import { parseEntry } from "./entryKey";
 
 const WATCH_MS = 8000;
 const MOVED = 0.5;
@@ -39,7 +40,7 @@ function missingRows(): string[] {
     if (!w || !w.sidebarOpen) continue;
     const { tiles, pinned: all, list } = sidebarEntries(s, windowId, w.profileId);
     const pinned = shownPinnedEntries(s, windowId, w.profileId, all);
-    const ids = [...tiles, ...[...pinned, ...list].map((e) => (e.startsWith("s:") ? e : e.slice(2)))];
+    const ids = [...tiles, ...[...pinned, ...list].map((e) => (parseEntry(e).kind === "split" ? e : parseEntry(e).id))];
     for (const id of ids) if (!rowView(windowId, id)) missing.push(`${windowId}|${id}`);
   }
   return missing;

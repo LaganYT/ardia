@@ -1,5 +1,5 @@
 import type { EventSubscription } from "expo-modules-core";
-import { optionalNativeModule } from "./nativeModules";
+import { nativeModule } from "./nativeModules";
 
 export type UserScriptsFolder = { token?: string } & (
   | { state: "empty" | "busy" | "pending"; generation?: number }
@@ -16,16 +16,14 @@ export type UserScriptsNative = {
   addListener(name: "onChange", listener: () => void): EventSubscription;
 };
 
-const UserScripts = optionalNativeModule("ArdiaUserScripts");
+const UserScripts = nativeModule("ArdiaUserScripts");
 
-export const userScriptsAvailable = () => !!UserScripts;
+export const watchUserScripts = (on: boolean) => UserScripts.watch(on);
 
-export const watchUserScripts = (on: boolean) => UserScripts?.watch(on);
+export const readUserScripts = () => UserScripts.read();
 
-export const readUserScripts = (): Promise<UserScriptsFolder> => UserScripts?.read() ?? Promise.resolve({ state: "empty" });
+export const readUserScriptsStatus = () => UserScripts.readStatus();
 
-export const readUserScriptsStatus = (): Promise<string | null> => UserScripts?.readStatus() ?? Promise.resolve(null);
+export const writeUserScriptsStatus = (json: string) => UserScripts.writeStatus(json);
 
-export const writeUserScriptsStatus = (json: string): Promise<void> => UserScripts?.writeStatus(json) ?? Promise.resolve();
-
-export const onUserScriptsChange = (listener: () => void) => UserScripts?.addListener("onChange", listener) ?? { remove() {} };
+export const onUserScriptsChange = (listener: () => void) => UserScripts.addListener("onChange", listener);

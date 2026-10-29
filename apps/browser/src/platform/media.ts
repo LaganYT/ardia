@@ -8,7 +8,6 @@ export {
   closeCastDialog,
   watchCastRoutes,
   terminateCastRoute,
-  preferredCastMode,
   changeCaptureSource,
   stopCapture,
   getDisplayMediaSources,

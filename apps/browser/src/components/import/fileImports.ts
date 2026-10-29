@@ -3,11 +3,10 @@ import type { ImportApi, ImportCore } from "./importActions";
 import type { ImportKind } from "./model";
 import type { ImportState } from "./useImportState";
 
-export function fileImports(s: ImportState, api: ImportApi | null, core: ImportCore) {
+export function fileImports(s: ImportState, api: ImportApi, core: ImportCore) {
   const { target, safariCookies } = s;
 
   const importSafari = async (path: string) => {
-    if (!api) return;
     s.setError(null);
     s.setStatus({ bookmarks: "active", history: "active", passwords: "active", autofill: "active" });
     s.setPreparing(1);
@@ -27,7 +26,6 @@ export function fileImports(s: ImportState, api: ImportApi | null, core: ImportC
   };
 
   const importSafariDirect = async () => {
-    if (!api) return;
     s.setError(null);
     s.setStatus({ bookmarks: "active", history: "active", tabs: "active", ...(safariCookies ? { cookies: "active" as const } : {}) });
     s.setPreparing(1);
@@ -54,7 +52,6 @@ export function fileImports(s: ImportState, api: ImportApi | null, core: ImportC
   };
 
   const importHtml = async () => {
-    if (!api) return;
     const path = await api.chooseImportFile("bookmarksHTML");
     if (!path) return;
     try {
@@ -70,7 +67,7 @@ export function fileImports(s: ImportState, api: ImportApi | null, core: ImportC
     }
   };
 
-  const chooseSafariExport = async () => (await api?.chooseImportFile("safariExport")) ?? null;
+  const chooseSafariExport = async () => api.chooseImportFile("safariExport");
 
   return { importSafari, importSafariDirect, importHtml, chooseSafariExport };
 }

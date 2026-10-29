@@ -4,7 +4,7 @@ import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "../bookm
 import { changedIds } from "./changes";
 import { createGroupsSlice, settleNesting, type GroupsSlice } from "../groups/groups";
 import { createHistorySlice, type HistorySlice } from "../history/history";
-import { IDLE_LIVE, isIncognitoProfile, pinnedFirst } from "./model";
+import { engineProfile, IDLE_LIVE, isIncognitoProfile } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptCleanedTabs, keptDeletedGroups, livePinTable, notePinChoices, type OrganizeSlice } from "../pins/organize";
 import { createPeekSlice, settlePeeks, type PeekSlice } from "../peek/peek";
 import { settlePinHomes } from "../pins/pinHomes";
@@ -12,8 +12,8 @@ import { mirrorPins } from "../pins/pinMirror";
 import { settleSharedPins } from "../pins/pinShare";
 import { mirrorTabs, pagesIntoSplits, unshareTabs } from "../tabs/tabShare";
 import { settleTileFolders } from "../pins/tileFolders";
-import { createProfilesSlice, DEFAULT_PROFILE, engineIdOf, type ProfilesSlice } from "../profiles/profiles";
-import { createSettingsSlice, DEFAULT_SETTINGS, migrateSavedSettings, type SettingsSlice } from "../settings/settings";
+import { createProfilesSlice, DEFAULT_PROFILE, type ProfilesSlice } from "../profiles/profiles";
+import { createSettingsSlice, migrateSavedSettings, parseSettings, type SettingsSlice } from "../settings/settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "../splits/splits";
 import { activated, apply } from "../tabs/tabs";
 import { createTabsSlice, type TabsSlice } from "../tabs/tabsSlice";
@@ -21,6 +21,7 @@ import { transactional } from "./transaction";
 import type { BrowserWindow, Tab } from "./types";
 import { createUiSlice, type UiSlice } from "../windows/ui";
 import { createWindowsSlice, type WindowsSlice } from "../windows/windows";
+import { orderSections } from "../groups/groups";
 
 export type BrowserState = ProfilesSlice &
   WindowsSlice &
@@ -106,9 +107,7 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
       ...(data.profileOrder ?? []).filter((id) => profiles[id]),
       ...Object.keys(profiles).filter((id) => !data.profileOrder?.includes(id)),
     ];
-    const saved = migrateSavedSettings(data.settings);
-    const legacy = saved && !saved.chosen ? Object.keys(saved) : null;
-    const settings = { ...DEFAULT_SETTINGS, ...saved, chosen: legacy ?? saved?.chosen ?? [], inferred: legacy ?? saved?.inferred ?? [] };
+    const settings = parseSettings(migrateSavedSettings(data.settings));
     if (!profiles[settings.defaultProfileId]) settings.defaultProfileId = profileOrder[0]!;
 
     notePinChoices(data.pinChoices ?? {});
@@ -129,7 +128,7 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
     }
     const windows: Record<string, BrowserWindow> = {};
     for (const w of Object.values(rawWindows)) {
-      const tabIds = pinnedFirst(w.tabIds.filter((id) => tabs[id]?.windowId === w.id), tabs, data.groups ?? {});
+      const tabIds = orderSections(w.tabIds.filter((id) => tabs[id]?.windowId === w.id), tabs, data.groups ?? {});
       if (!tabIds.length) continue;
       const activeTabIds = Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => tabs[id]?.profileId === p));
       const profileId = tabIds.some((id) => tabs[id]!.profileId === w.profileId) ? w.profileId : tabs[tabIds[0]!]!.profileId;
@@ -147,10 +146,10 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
     );
     const splits = sanitizeSplits(data.splits ?? {}, tabs);
     let bookmarks = data.bookmarks ?? s.bookmarks;
-    for (const id of profileOrder) bookmarks = ensureRoots(bookmarks, id)[0];
+    for (const id of profileOrder) bookmarks = ensureRoots({ profiles, bookmarks }, id)[0];
     const focused = data.focusedWindowId && windows[data.focusedWindowId] ? data.focusedWindowId : (windowOrder.at(-1) ?? null);
 
-    const engines = new Set(Object.values(profiles).map(engineIdOf));
+    const engines = new Set(Object.keys(profiles).map((id) => engineProfile({ profiles }, id)));
     let next: BrowserState = {
       ...s,
       profiles,

@@ -68,7 +68,8 @@ test("a shown tab's menu follows Dia's sections, and its hints are the keys that
     "---",
     "Rename… [pencil]",
     "Change Icon… [photo]",
-    "Mute Site [speaker.slash]",
+    "Mute Tab [speaker.slash]",
+    "Mute Site [speaker.slash] ⌥ (alt)",
     "---",
     "Close [xmark] ⌘W",
     "Close Other Tabs",
@@ -134,7 +135,8 @@ test("a Top Apps tile: unpin first, folders instead of groups, Open in New Windo
     "---",
     "Rename… [pencil]",
     "Change Icon… [photo]",
-    "Mute Site [speaker.slash]",
+    "Mute Tab [speaker.slash]",
+    "Mute Site [speaker.slash] ⌥ (alt)",
   ]);
   assert.deepEqual(sub(tabMenuItems(S(), w, S().tabs[ids[0]]), "pinnedPage"), [
     "Back to Pinned URL [arrow.uturn.backward] (off)",
@@ -192,8 +194,7 @@ test("several tabs: counts in the titles, Move N Tabs to Profile, and Close N Ta
 test("a group header: pin, open, move, customise, copy, then the ways to end it", () => {
   const { w, ids } = windowWith("a", "b", "c");
   const g = S().groupTabs([ids[1], ids[2]], { name: "G", pinned: false });
-  const colors = [{ id: "color:", title: "None", checked: true }];
-  assert.deepEqual(top(groupMenuItems(S(), w, g, colors)), [
+  assert.deepEqual(top(groupMenuItems(S(), w, g)), [
     "Pin Group [pin]",
     "---",
     "New Tab in Group [plus.app] ⌥⌘T",
@@ -216,11 +217,41 @@ test("a group header: pin, open, move, customise, copy, then the ways to end it"
     "Delete Group [trash]",
   ]);
   S().moveGroup(g, { pinned: true });
-  const pinned = top(groupMenuItems(S(), w, g, colors));
+  const pinned = top(groupMenuItems(S(), w, g));
   assert.equal(pinned[0], "Unpin Group [pin.slash]");
   assert.ok(!pinned.some((l) => l.startsWith("Move to Window")), "a pinned group is in every window already");
   S().activate(ids[0]);
-  assert.ok(top(groupMenuItems(S(), w, g, colors)).includes("Close Group [xmark]"), "⌃⌘W closes the shown tab's group, not this one");
+  assert.ok(top(groupMenuItems(S(), w, g)).includes("Close Group [xmark]"), "⌃⌘W closes the shown tab's group, not this one");
+});
+
+test("a group's colour menu: None, Neutral, the site's colour, then the palette; picking one sets it", async () => {
+  const { w, ids } = windowWith("a", "b");
+  const g = S().groupTabs([ids[1]], { name: "G", pinned: false });
+  const items = groupMenuItems(S(), w, g);
+  assert.deepEqual(sub(items, "color").slice(0, 4), ["None", "Neutral ✓", "Match Site Color (off)", "---"]);
+  const shell = shellNativeModules.ArdiaShell;
+  const real = shell.showMenu;
+  shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "color").children.find((it) => it.title === "Blue").id);
+  try {
+    await openGroupMenu(w, g);
+  } finally {
+    shell.showMenu = real;
+  }
+  assert.equal(S().groups[g].color, "blue");
+});
+
+test("Move to Window › New Window moves the tab to a new window", async () => {
+  const { w, ids } = windowWith("a", "b");
+  const shell = shellNativeModules.ArdiaShell;
+  const real = shell.showMenu;
+  shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "moveToWindow").children.at(-1).id);
+  try {
+    await openTabMenu(w, S().tabs[ids[1]]);
+  } finally {
+    shell.showMenu = real;
+  }
+  assert.notEqual(S().tabs[ids[1]].windowId, w);
+  assert.equal(S().windowOrder.length >= 2, true);
 });
 
 test("the sidebar background menu: new things, then the sidebar toggles, Close All Tabs last", () => {
@@ -304,7 +335,7 @@ test("a group menu whose group moved to another window meanwhile does nothing", 
   const { w, ids } = windowWith("a", "b", "c");
   const other = S().createWindow({ url: "https://x.com/" });
   const g = S().groupTabs([ids[1], ids[2]], { name: "Trip", pinned: false });
-  await whileMenuIsUp(() => openGroupMenu(w, g, () => []), () => S().moveGroupToWindow(g, other), "delete");
+  await whileMenuIsUp(() => openGroupMenu(w, g), () => S().moveGroupToWindow(g, other), "delete");
   const trip = Object.values(S().groups).find((x) => x.name === "Trip");
   assert.equal(trip?.windowId, other, "the group is still there, in the other window");
   assert.deepEqual(trip.tabIds, [ids[1], ids[2]]);

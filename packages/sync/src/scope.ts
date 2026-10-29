@@ -11,6 +11,30 @@ const DEFAULTS: Required<Omit<ScopeOptions, "persist">> = {
   damagedGiveUp: 86_400_000,
 };
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+const isTime = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const isMapOf = (v: unknown, item: (x: unknown) => boolean) => isObject(v) && Object.values(v).every(item);
+const isOrigin = (v: unknown) => Array.isArray(v) && v.length === 2 && typeof v[0] === "string" && isCount(v[1]);
+const isValue = (o: Record<string, unknown>) => Object.prototype.hasOwnProperty.call(o, "v") && o.v !== undefined;
+const isOp = (v: unknown) => isObject(v) && typeof v.k === "string" && typeof v.h === "string" && isValue(v);
+const isRecord = (v: unknown) => isObject(v) && typeof v.h === "string" && isOrigin(v.o) && isValue(v);
+
+function parseSyncFile(payload: string): SyncFile | null {
+  let file: unknown;
+  try {
+    file = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (!isObject(file) || file.v !== 1 || typeof file.device !== "string" || !isTime(file.at)) return null;
+  if (file.kind === "log") return isCount(file.seq) && Array.isArray(file.ops) && file.ops.every(isOp) ? (file as LogFile) : null;
+  if (file.kind === "snapshot") {
+    return isMapOf(file.vv, isCount) && isMapOf(file.seen, isTime) && isMapOf(file.records, isRecord) ? (file as SnapshotFile) : null;
+  }
+  return null;
+}
+
 export const covered = (vv: Record<string, number>, [device, seq]: Origin) => (vv[device] ?? 0) >= seq;
 
 function markApplied(state: ScopeState, device: string, seq: number) {
@@ -193,13 +217,9 @@ export async function pull(state: ScopeState, transport: Transport, scope: strin
     }
   };
   for (const { id, payload } of listing.files) {
-    try {
-      const file = JSON.parse(payload) as SyncFile;
-      if (file.v !== 1 || (file.kind !== "log" && file.kind !== "snapshot")) throw new Error("unknown file");
-      parsed.push({ id, file });
-    } catch {
-      bad(id);
-    }
+    const file = parseSyncFile(payload);
+    if (file) parsed.push({ id, file });
+    else bad(id);
   }
   for (const { id } of listing.damaged) bad(id);
   parsed.sort((a, b) => (a.file.kind === b.file.kind ? 0 : a.file.kind === "snapshot" ? -1 : 1));

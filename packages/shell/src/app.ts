@@ -225,8 +225,7 @@ export const stopIntroMusic = (fade = 0.4) => void App.stopIntroMusic(fade);
 export const devRenderIntroMusic = (cues: IntroMusicCues, path: string) => App.devRenderIntroMusic(cues, path);
 export const launchConfig = () => App.launchConfig();
 export const devRunAppleScript = (source: string) => App.devRunAppleScript(source);
-export const devSnapshotWindow = (windowId: string, path: string, transparent = false) =>
-  transparent ? App.devSnapshotWindow(windowId, path, true) : App.devSnapshotWindow(windowId, path);
+export const devSnapshotWindow = (windowId: string, path: string, transparent = false) => App.devSnapshotWindow(windowId, path, transparent);
 export const devSetPointer = (windowId: string, point: { x: number; y: number } | null) => App.devSetPointer(windowId, point?.x ?? 0, point?.y ?? 0, !!point);
 export const devSetMouseButtons = (pressed: boolean | null) => App.devSetMouseButtons(pressed === null ? -1 : pressed ? 1 : 0);
 export const devHoverStats = (reset = true) => App.devHoverStats(reset);

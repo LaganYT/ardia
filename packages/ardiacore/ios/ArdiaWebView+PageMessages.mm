@@ -82,8 +82,7 @@ static NSString *DisplayMediaAudioFor(NSDictionary *offer, NSString *sourceId) {
 namespace ardia_web_view {
 
 void AnswerHello(ArdiaCoreTab *tab, NSString *profile, NSString *frameId, BOOL main, NSString *verifiedOrigin) {
-  const BOOL verified = verifiedOrigin.length && ![verifiedOrigin isEqualToString:@"null"];
-  NSString *origin = main && verified ? verifiedOrigin : OriginOf(tab.url);
+  NSString *origin = (main ? VerifiedOrigin(verifiedOrigin) : nil) ?: OriginOf(tab.url);
   __weak ArdiaCoreTab *weakTab = tab;
   void (^answer)(BOOL) = ^(BOOL blockAutoplay) {
     ArdiaCoreTab *to = weakTab;
@@ -138,7 +137,7 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
                     frame:(NSString *)frameId
                      main:(BOOL)main
                    origin:(NSString *)verifiedOrigin {
-  NSString *sender = verifiedOrigin.length && ![verifiedOrigin isEqualToString:@"null"] ? verifiedOrigin : main ? OriginOf(tab.url) : nil;
+  NSString *sender = VerifiedOrigin(verifiedOrigin) ?: (main ? OriginOf(tab.url) : nil);
   id data = JSONValue(json);
   NSDictionary *dict = [data isKindOfClass:NSDictionary.class] ? data : nil;
   frameId = frameId ?: @"";
@@ -165,7 +164,7 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
   } else if ([kind isEqualToString:@"peekTrace"] && dict) {
     PeekTrace(@{@"event" : @"page", @"main" : @(main), @"page" : dict});
   } else if ([kind isEqualToString:@"selection"] && main) {
-    [self emit:@"pageMessage" payload:@{@"kind" : @"selection", @"data" : SelectionState(dict) ?: NSNull.null}];
+    [self emit:@"selection" payload:@{@"selection" : SelectionState(dict) ?: NSNull.null}];
   } else if ([kind isEqualToString:@"linkDrop"] && main) {
     NSString *url = Text(dict, @"url", 8192);
     NSString *scheme = (url.length ? [NSURL URLWithString:url].scheme.lowercaseString : nil) ?: @"";
@@ -190,9 +189,9 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
   } else if ([kind isEqualToString:@"scroll"] && main) {
     NSString *state = Text(dict, @"state", 8);
     if ([@[ @"down", @"up", @"top" ] containsObject:state ?: @""])
-      [self emit:@"pageMessage" payload:@{@"kind" : @"scroll", @"data" : @{@"state" : state}}];
+      [self emit:@"scroll" payload:@{@"state" : state}];
   } else if ([kind isEqualToString:@"drm"] && dict) {
-    [self emit:@"pageMessage" payload:@{@"kind" : @"drm", @"data" : @{@"keySystem" : Text(dict, @"keySystem", 64) ?: @"", @"main" : @(main)}}];
+    [self emit:@"protectedMedia" payload:@{@"keySystem" : Text(dict, @"keySystem", 64) ?: @"", @"main" : @(main)}];
   } else if ([kind isEqualToString:@"nowPlaying"]) {
     if (!_nowPlaying) _nowPlaying = [NSMutableDictionary dictionary];
     if (dict) _nowPlaying[frameId] = NowPlayingState(dict, main);

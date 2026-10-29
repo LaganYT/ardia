@@ -4,7 +4,7 @@ import { currentSettings } from "../../state/browser/current";
 import { createDragMarks, dragMarksOf, markDrag } from "../../state/sidebar/dragMarks";
 import { overPins, pinGrid, pinSlot, TILE_GAP } from "./pinZone";
 import { SCROLL_EDGE } from "./ScrollEdge";
-import { apart, PIN_SLOT, ROW_GAP, type Drop, type Frame, type Ghost, type Item, type Pointed } from "./dragModel";
+import { apart, type Drop, type Frame, type Ghost, type Item, PIN_SLOT, type Pointed, ROW_GAP, tailKey } from "./dragModel";
 
 export class DragGeometry {
   items = new Map<string, Item>();
@@ -117,7 +117,7 @@ export class DragGeometry {
     if (!total) return null;
     const balanced = currentSettings().balancedTopApps;
     const slot = pinSlot(tiles, total, layout.pinnedHeight, x, y, balanced);
-    const found = !marks.pins ? (home ?? cells.length) : marks.pinBefore === "tail:tiles" ? cells.length : cells.findIndex((c) => c.key === marks.pinBefore);
+    const found = !marks.pins ? (home ?? cells.length) : marks.pinBefore === tailKey("tiles") ? cells.length : cells.findIndex((c) => c.key === marks.pinBefore);
     const gap = found < 0 ? cells.length : found;
     const index = slot < gap ? slot : slot >= gap + count ? slot - count : -1;
     const cell = index >= 0 ? cells[index] : undefined;

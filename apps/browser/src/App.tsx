@@ -5,6 +5,7 @@ import { CommandPanel } from "./components/omnibox/CommandPanel";
 import { ContentCard } from "./components/window/ContentCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
 import { EditBookmarkDialog } from "./components/bookmarks/EditBookmarkDialog";
+import { FolderMenus } from "./components/bookmarks/FolderMenus";
 import { ExtensionOverlays } from "./components/extensions/ExtensionOverlays";
 import { ExtensionSidePanel } from "./components/extensions/SidePanel";
 import { DownloadMagnet, DownloadsPopover } from "./components/downloads/Downloads";
@@ -81,6 +82,7 @@ function BrowserWindow() {
         {card}
       </DockedLayout>
       <CommandPanel windowWidth={width} />
+      <FolderMenus />
       <DownloadsPopover />
       <ExtensionOverlays />
       <DownloadMagnet />

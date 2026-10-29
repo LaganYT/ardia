@@ -1,10 +1,12 @@
 #import "ArdiaWebViewInternal.h"
 #import "ArdiaEarlyWindow.h"
+#import "ArdiaRuntime.h"
 
 #import <QuartzCore/QuartzCore.h>
 #import <React/UIView+React.h>
 
 using namespace ardia_web_view;
+using namespace ardia_runtime;
 
 namespace {
 
@@ -73,12 +75,6 @@ NSRect InWindow(NSView *view) {
   return [view convertRect:view.bounds toView:nil];
 }
 
-void WithoutActions(void (^block)(void)) {
-  [CATransaction begin];
-  [CATransaction setDisableActions:YES];
-  block();
-  [CATransaction commit];
-}
 
 NSView *LingeringPaneOver(NSView *view) {
   for (NSView *ancestor = view.superview; ancestor; ancestor = ancestor.superview)

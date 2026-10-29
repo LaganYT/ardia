@@ -8,7 +8,6 @@ export {
   saveCard,
   deleteCard,
   revealCardNumber,
-  cardNetworkName,
   showAutofillSuggestions,
   type SavedAddress,
   type SavedCard,

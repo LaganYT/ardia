@@ -5,6 +5,7 @@ import { afterFirstWindow } from "../../lib/afterFirstWindow";
 import { MAX_HISTORY, MAX_VISIT_TIMES } from "./history";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import type { HistoryEntry } from "../browser/types";
+import { isWebPageUrl } from "../../lib/url";
 
 const LEGACY_FILE = "history.json";
 const LEGACY_TOLERANCE_MS = 60_000;
@@ -14,7 +15,6 @@ const LEGACY_KEPT_MS = 15_000;
 
 const store = () => useBrowser.getState();
 
-const shownInHistory = (url: string) => /^(https?|file):/i.test(url);
 
 const toEntry = (e: EngineHistoryEntry): HistoryEntry => ({
   url: e.url,
@@ -26,10 +26,10 @@ const toEntry = (e: EngineHistoryEntry): HistoryEntry => ({
 });
 
 const engineProfiles = (s: Pick<BrowserState, "profiles">) =>
-  [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map(engineProfile))];
+  [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map((id) => engineProfile(s, id)))];
 
 const profilesUsing = (s: Pick<BrowserState, "profiles">, engine: string) =>
-  Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfile(id) === engine);
+  Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfile(s, id) === engine);
 
 function viewOf(engine: string): HistoryEntry[] {
   const s = store();
@@ -63,7 +63,7 @@ const byLastVisit = (a: HistoryEntry, b: HistoryEntry) => b.lastVisit - a.lastVi
 export function applyHistoryChange(list: HistoryEntry[], change: Exclude<HistoryChange, { kind: "deleted"; all: true }>): HistoryEntry[] {
   switch (change.kind) {
     case "visit": {
-      if (!shownInHistory(change.url)) return list;
+      if (!isWebPageUrl(change.url)) return list;
       const oldAt = list.findIndex((h) => h.url === change.url);
       const old = oldAt < 0 ? undefined : list[oldAt];
       if (old?.visitTimes?.includes(change.at)) return list;
@@ -124,7 +124,7 @@ function load(engine: string): Promise<void> {
         await watchHistory(engine);
         const read = await queryHistory(engine, MAX_HISTORY, MAX_VISIT_TIMES);
         const floor = read.length >= MAX_HISTORY ? Math.min(...read.map((e) => e.visitTimes.at(-1) ?? 0)) : -Infinity;
-        let list = read.filter((e) => shownInHistory(e.url)).map(toEntry).sort(byLastVisit);
+        let list = read.filter((e) => isWebPageUrl(e.url)).map(toEntry).sort(byLastVisit);
         for (const change of state.queued) if (!(change.kind === "deleted" && change.all)) list = applyHistoryChange(list, change);
         if (state.queued.some((c) => c.kind === "deleted" && c.all)) state.again = true;
         setView(engine, list, floor);
@@ -189,7 +189,7 @@ export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_KEP
   const perEngine = new Map<string, HistoryEntry[]>();
   for (const [profileId, list] of Object.entries(file.history ?? {})) {
     if (!s.profiles[profileId] || isIncognitoProfile(profileId) || !Array.isArray(list)) continue;
-    const engine = engineProfile(profileId);
+    const engine = engineProfile(s, profileId);
     if (!perEngine.has(engine)) perEngine.set(engine, list);
   }
   for (const engine of perEngine.keys()) migrating.add(engine);
@@ -242,8 +242,8 @@ export function startHistory() {
     if (!moving) loadAll(s);
     for (const id of Object.keys(s.profiles)) {
       if (prev.profiles[id] || isIncognitoProfile(id) || s.history[id]) continue;
-      const list = viewOf(engineProfile(id));
-      if (list.length) setView(engineProfile(id), list);
+      const list = viewOf(engineProfile(s, id));
+      if (list.length) setView(engineProfile(s, id), list);
     }
   });
   return () => {

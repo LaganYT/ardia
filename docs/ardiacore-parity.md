@@ -23,13 +23,13 @@ The switch shipped in 0.2.22; this was the list it shipped against, kept for the
    extension; the ArdiaCore build found and read every one (21/21) without `ARDIA_DATA_DIR`. Left for the owner:
    the real login keychain's item, which no hidden run reads (both binaries name it "Ardia Safe Storage", and
    smoke.sh checks the build satisfies 0.2.21's designated requirement, which the item's access trusts).
-   Going back works too (`rollback.sh`): 0.2.21 → the RC → 0.2.21 on the same folder keeps everything from both
+   Going back works too (`carryover.sh --back`): 0.2.21 → the RC → 0.2.21 on the same folder keeps everything from both
    sessions (tabs, passwords, bookmarks, history, zoom, the extension's setting, persistent cookies, localStorage),
    with no crash and no profile reset (the same Chrome version, so no newer-profile handling; Local State,
    Preferences and Sessions intact). Only session cookies don't come back, because 0.2.21 drops them at every launch.
 3. ~~**Session cookies**~~ done: ArdiaCore keeps them across launches (09fe90cc), and keeps 0.2.21's at the switch
    (`carryover.sh`). 0.2.21 itself drops session cookies at every launch (its own restart loses them; measured with
-   `rollback.sh`), so this is a gain over CEF, not parity.
+   `carryover.sh --back`), so this is a gain over CEF, not parity.
 4. ~~**The content blocker blocks nothing** in a production build~~: not a bug. uBlock Origin Lite runs in its
    optimal mode on ArdiaCore and answers ad scripts with its stand-ins (`adsbygoogle.js` → its no-op copy, a 307 to the
    extension's web-accessible resource), so a fetch or a `<script>` "loads" without the request leaving the browser;
@@ -387,7 +387,7 @@ Plain Chromium code over Chrome's services (`engine/chromium/src/chrome/browser/
 | `ac_extensions_*`, `ac_search_engines_list` | `ArdiaExtensions` |
 | `ac_zoom_list`, `ac_zoom_set` | `getZoomLevels`, `setZoom` |
 | `ac_browsing_data_clear` | `clearBrowsingData`, the default profile's `deleteProfileData` |
-| `ac_downloads_*` (list, cancel, pause, resume, keep, remove; events `downloads.changed`/`removed`) | `onDownload` and the download functions |
+| `ac_downloads_list`, `ac_downloads_command` (`cancel`, `pause`, `resume`, `keep`, `remove`; events `downloads.changed`/`removed`) | `onDownload` and the download functions |
 | `ac_site_settings_*`, `ac_site_data_clear` | the site-settings functions, both `clearSiteData`s |
 | `ac_external_apps_allowances`, `_remove` | `getExternalAppAllowances`, `removeExternalAppAllowance` |
 | `ac_tasks_list`, `ac_components_list` | `listTasks` (memory telemetry, the dev harness), `components` |

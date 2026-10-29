@@ -1,7 +1,9 @@
-import { showMenu, type MenuItem } from "../../platform/menus";
-import { closeTab, moveTabsToProfile, moveTabToWindow, openWindow, toggleMute } from "../browser/actions";
+import type { MenuItem } from "../../platform/menus";
+import { chooseFromMenu, type ChoiceItem } from "../app/menuChoice";
+import { closeTab, moveTabsToProfile, moveTabToWindow, openWindow, toggleMute, toggleSiteMute } from "../browser/actions";
+import { muteState, muteSymbol, muteTitle, siteMuteTitle } from "../tabs/mute";
 import { useBrowser, type BrowserState } from "../browser/store";
-import { activeTabId, inPinnedContainer, isIncognitoProfile, pinnedSectionTitle, pinSection, togglePinTitle, viewTabIds } from "../browser/model";
+import { activeTabId, inPinnedContainer, isIncognitoProfile, pinnedSectionTitle, pinSection, togglePinTitle, viewTabIds, tabLayoutOf } from "../browser/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../pins/organize";
 import { splitOf, splitRowPanes } from "../splits/splits";
 import { openSplitPane } from "../splits/actions";
@@ -13,7 +15,7 @@ import { calendarMenuItem, dismissNowMenuItems, runCalendarMenu } from "./liveMe
 import { newFolderWithTab, removeFromFolder } from "./tileFolderUi";
 import { togglePageEngine } from "../engines/actions";
 import { canSwitchEngine, ENGINE_NAMES, otherEngine, tabEngine } from "../engines/engines";
-import { bookmarkFolderItems, groupItems, hintWhen, profileItems, sections, windowItems, withAlternate } from "./menuParts";
+import { bookmarkFolderItems, groupItems, hintWhen, profileItems, sections, windowItems, withAlternate, type Destination } from "./menuParts";
 import { openMultiMenu } from "./multiTabMenu";
 
 const store = () => useBrowser.getState();
@@ -34,7 +36,7 @@ export function tabMenuFacts(s: BrowserState, windowId: string, tab: Tab) {
     split,
     splitRow: splitRowPanes(s, split).includes(tab.id),
     incognito: isIncognitoProfile(tab.profileId),
-    across: (s.windows[windowId]?.tabLayout ?? s.settings.tabLayout) === "top",
+    across: tabLayoutOf(s, windowId) === "top",
     active: activeTabId(s, windowId) === tab.id,
   };
 }
@@ -89,9 +91,11 @@ function calendarItems(tab: Tab): MenuItem[] {
   return [...(pinSection(tab) === "tile" ? dismissNowMenuItems() : []), calendarMenuItem()];
 }
 
-function organiseItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): MenuItem[] {
+type TabMenuItem = ChoiceItem<Destination>;
+
+function organiseItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): TabMenuItem[] {
   const groups = f.section === "tile" ? [] : groupItems(s, windowId, f.group?.id);
-  const grouping: MenuItem[] =
+  const grouping: TabMenuItem[] =
     f.section === "tile"
       ? [tab.tileFolder ? { id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" } : { id: "newFolder", title: "New Folder…", symbol: "folder.badge.plus" }]
       : [
@@ -109,6 +113,14 @@ function organiseItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): M
   ];
 }
 
+function muteItems(s: BrowserState, tab: Tab): MenuItem[] {
+  if (!tab.url) return [];
+  const state = muteState(s, tab);
+  const mute: MenuItem = { id: "mute", title: muteTitle(state), symbol: muteSymbol(state) };
+  if (state === "site") return [mute];
+  return withAlternate(mute, { id: "muteSite", title: siteMuteTitle(state), symbol: muteSymbol(null) }, null);
+}
+
 function closeItems(f: Facts): MenuItem[] {
   if (f.housed) return [];
   return [
@@ -122,8 +134,8 @@ function closeItems(f: Facts): MenuItem[] {
   ];
 }
 
-export function tabMenuItems(s: BrowserState, windowId: string, tab: Tab, f: Facts = tabMenuFacts(s, windowId, tab)): MenuItem[] {
-  return sections(
+export function tabMenuItems(s: BrowserState, windowId: string, tab: Tab, f: Facts = tabMenuFacts(s, windowId, tab)): TabMenuItem[] {
+  return sections<TabMenuItem>(
     pinItems(s, tab, f),
     openItems(s, tab, f),
     calendarItems(tab),
@@ -143,7 +155,7 @@ export function tabMenuItems(s: BrowserState, windowId: string, tab: Tab, f: Fac
       ...(tab.customTitle ? [{ id: "resetName", title: "Reset Name" }] : []),
       { id: "icon", title: "Change Icon…", symbol: "photo" },
       ...(tab.customIcon ? [{ id: "resetIcon", title: "Reset Icon" }] : []),
-      ...(tab.url ? [{ id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash" }] : []),
+      ...muteItems(s, tab),
     ],
     closeItems(f),
   );
@@ -155,7 +167,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   if (selected.length > 1 && selected.includes(tab.id)) return openMultiMenu(windowId, selected);
   if (s.selection[windowId]?.length) s.setSelection(windowId, []);
   const f = tabMenuFacts(store(), windowId, tab);
-  const choice = await showMenu(tabMenuItems(store(), windowId, tab, f));
+  const choice = await chooseFromMenu(tabMenuItems(store(), windowId, tab, f));
   const now = store().tabs[tab.id];
   if (!choice || now?.windowId !== windowId) return;
   const here = (ids: string[]) => ids.filter((id) => store().tabs[id]?.windowId === windowId);
@@ -168,7 +180,15 @@ function openAsSplit(windowId: string, tabId: string, wasActive: boolean) {
   else if (front) openSplitPane(windowId, { tabId, anchorTabId: front, side: "right" });
 }
 
-function runTabChoice(windowId: string, tab: Tab, f: Facts, choice: string) {
+function sendTab(windowId: string, tabId: string, to: Destination) {
+  if (to.kind === "group") store().placeTabs([tabId], { pinned: false, groupId: to.groupId });
+  else if (to.kind === "profile") void moveTabsToProfile([tabId], to.profileId);
+  else if (to.kind === "window") moveTabToWindow(tabId, to.windowId);
+  else void bookmarkTabs(windowId, [tabId], to);
+}
+
+function runTabChoice(windowId: string, tab: Tab, f: Facts, choice: string | Destination) {
+  if (typeof choice !== "string") return sendTab(windowId, tab.id, choice);
   const s = store();
   const t = { kind: "tab" as const, id: tab.id };
   if (runCalendarMenu(choice)) return;
@@ -190,16 +210,13 @@ function runTabChoice(windowId: string, tab: Tab, f: Facts, choice: string) {
   else if (choice === "duplicate") s.duplicateTab(tab.id);
   else if (choice === "ungroupTab") s.removeTabsFromGroup([tab.id]);
   else if (choice === "newGroup") newGroupWithSelection(windowId, [tab.id]);
-  else if (choice.startsWith("group:")) s.placeTabs([tab.id], { pinned: false, groupId: choice.slice(6) });
   else if (choice === "unsplit") s.removeTabFromSplit(tab.id);
   else if (choice === "mute") toggleMute(tab.id);
+  else if (choice === "muteSite") toggleSiteMute(tab.id);
   else if (choice === "engine") void togglePageEngine(tab.id);
   else if (choice === "copy") copyUrls([tab.id], false);
   else if (choice === "copyMd") copyUrls([tab.id], true);
   else if (choice === "bookmark") bookmarkTab(windowId, tab.id);
-  else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, [tab.id], choice.slice(7));
-  else if (choice.startsWith("profile:")) void moveTabsToProfile([tab.id], choice.slice(8));
-  else if (choice.startsWith("window:")) moveTabToWindow(tab.id, choice.slice(7));
   else if (choice === "close") void closeTab(tab.id);
   else if (choice === "closeOthers") s.closeTabs(f.others);
   else if (choice === "closeAbove") s.closeTabs(f.above);

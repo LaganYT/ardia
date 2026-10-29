@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ScrollState } from "../../platform/tabs";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { DEFAULT_WINDOW_UI } from "./ui";
 
@@ -20,9 +21,7 @@ const without = (map: Record<string, true>, tabId: string) => {
   return next;
 };
 
-export function noteScroll(tabId: string, data: unknown) {
-  const state = (data as { state?: unknown } | null)?.state;
-  if (state !== "down" && state !== "up" && state !== "top") return;
+export function noteScroll(tabId: string, state: ScrollState) {
   useToolbarAutoHide.setState((s) => {
     const peek = without(s.peek, tabId);
     const scrolledDown =

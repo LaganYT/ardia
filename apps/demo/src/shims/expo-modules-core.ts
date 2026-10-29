@@ -82,3 +82,5 @@ export function requireNativeViewManager<P = object>(name: string): ComponentTyp
 export class EventEmitter {}
 export class NativeModule {}
 export const Platform = { OS: "web" };
+
+export const uuid = { v4: () => crypto.randomUUID() };

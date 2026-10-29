@@ -7,7 +7,8 @@ import { engineProfile } from "../browser/model";
 import { hasPage } from "./pageSession";
 import { tabEngine } from "../engines/engines";
 import type { Tab } from "../browser/types";
-import { issuedSeq, webviews } from "../../platform/webviews";
+import { webviews } from "../../platform/webviews";
+import { issuedSeq } from "./earlyNavigate";
 
 export const wantsPage = (t: Tab | undefined): t is Tab => !!t && hasPage(t) && !isInternalTab(t);
 
@@ -41,8 +42,8 @@ export function startTabPages() {
     for (const id of changedIds(s.tabs, prev.tabs)) {
       const tab = s.tabs[id];
       const before = prev.tabs[id];
-      const profile = tab && engineProfile(tab.profileId);
-      if (tab && before && tab.windowId !== before.windowId && webviews.has(id) && profile === engineProfile(before.profileId)) handOff(id, profile!, tabEngine(s, id));
+      const profile = tab && engineProfile(s, tab.profileId);
+      if (tab && before && tab.windowId !== before.windowId && webviews.has(id) && profile === engineProfile(s, before.profileId)) handOff(id, profile!, tabEngine(s, id));
       const kept = handedOff.get(id);
       if (kept !== undefined && !(wantsPage(tab) && profile === kept)) {
         handedOff.delete(id);

@@ -19,8 +19,8 @@ function twoProfiles() {
   S().setFocusedWindow(b);
   return { work, a, b };
 }
-const engine = (w) => model.engineProfile(S().windows[w].profileId);
-const session = (w) => model.privateSession(S().windows[w].profileId);
+const engine = (w) => model.engineProfile(S(), S().windows[w].profileId);
+const session = (w) => model.privateSession(S(), S().windows[w].profileId);
 const download = (id, profile, offTheRecord) => ({
   id, url: `https://dl.example/${id}`, filename: id, path: `/tmp/${id}`, state: "downloading", paused: false, received: 0, total: 1,
   speed: 0, mimeType: "", profile, offTheRecord,
@@ -49,14 +49,10 @@ test("⇧⌘N from a profile-2 window opens profile 2's private session; Persona
 
 test("a profile sharing another's data is in that profile's private session", () => {
   const { work } = twoProfiles();
-  model.setSharedDataIds({ [work]: "" });
-  try {
-    const p = S().createWindow({ incognito: true, profileId: work });
-    assert.equal(session(p), "");
-    assert.equal(engine(p), `incognito:${p}@`);
-  } finally {
-    model.setSharedDataIds({});
-  }
+  useBrowser.setState((s) => ({ profiles: { ...s.profiles, [work]: { ...s.profiles[work], dataId: "default" } } }));
+  const p = S().createWindow({ incognito: true, profileId: work });
+  assert.equal(session(p), "");
+  assert.equal(engine(p), `incognito:${p}@`);
 });
 
 test("private windows don't page to another profile", () => {
@@ -119,7 +115,7 @@ test("a private session's downloads show in its windows only, never on disk, and
   S().upsertDownload({ ...download("private2", work, true), state: "cancelled" });
   S().upsertDownload(download("unseen", work, true));
   assert.deepEqual(ids(next), []);
-  assert.ok(!downloadVisibleIn(download("x", work, true), S().windows[a]));
+  assert.ok(!downloadVisibleIn(S(), download("x", work, true), S().windows[a]));
   stop();
 });
 

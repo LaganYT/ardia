@@ -29,24 +29,24 @@ export type UiSlice = {
   forgetDownloads(profile: string): void;
 };
 
-export function downloadSession(d: Pick<Download, "profile" | "offTheRecord">): string | null {
+export function downloadSession(s: Pick<BrowserState, "profiles">, d: Pick<Download, "profile" | "offTheRecord">): string | null {
   if (d.offTheRecord) return d.profile ?? "";
-  return d.profile && isIncognitoProfile(d.profile) ? privateSession(d.profile) : null;
+  return d.profile && isIncognitoProfile(d.profile) ? privateSession(s, d.profile) : null;
 }
 
-export function downloadVisibleIn(d: Pick<Download, "profile" | "offTheRecord">, window: { incognito: boolean; profileId: string } | undefined): boolean {
+export function downloadVisibleIn(s: Pick<BrowserState, "profiles">, d: Pick<Download, "profile" | "offTheRecord">, window: { incognito: boolean; profileId: string } | undefined): boolean {
   if (!window) return false;
-  const session = downloadSession(d);
-  if (window.incognito) return session !== null && session === privateSession(window.profileId);
-  return session === null && (d.profile ?? "") === engineProfile(window.profileId);
+  const session = downloadSession(s, d);
+  if (window.incognito) return session !== null && session === privateSession(s, window.profileId);
+  return session === null && (d.profile ?? "") === engineProfile(s, window.profileId);
 }
 
-const sessionOpen = (s: Pick<BrowserState, "windows">, session: string) =>
-  Object.values(s.windows).some((w) => w.incognito && privateSession(w.profileId) === session);
+const sessionOpen = (s: Pick<BrowserState, "windows" | "profiles">, session: string) =>
+  Object.values(s.windows).some((w) => w.incognito && privateSession(s, w.profileId) === session);
 const endedPrivateDownloads = new Set<string>();
 
-export const downloadsIn = (s: Pick<BrowserState, "downloads" | "windows">, windowId: string) =>
-  s.downloads.filter((d) => downloadVisibleIn(d, s.windows[windowId]));
+export const downloadsIn = (s: Pick<BrowserState, "downloads" | "windows" | "profiles">, windowId: string) =>
+  s.downloads.filter((d) => downloadVisibleIn(s, d, s.windows[windowId]));
 
 export const DEFAULT_WINDOW_UI: WindowUi = { panel: { open: false, initialText: "" }, downloadsOpen: false };
 export const CLOSED_FIND: FindState = { open: false, query: "", count: null, active: 0 };
@@ -99,14 +99,14 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
       if (!d.path && (d.state === "downloading" || d.state === "cancelled")) {
         return exists && d.state === "cancelled" ? { downloads: s.downloads.filter((x) => x.id !== d.id) } : {};
       }
-      const session = downloadSession(d);
+      const session = downloadSession(s, d);
       if (!exists && session !== null && (!sessionOpen(s, session) || endedPrivateDownloads.has(d.id))) {
         endedPrivateDownloads.add(d.id);
         return {};
       }
       const downloads = exists ? s.downloads.map((x) => (x.id === d.id ? d : x)) : [d, ...s.downloads].slice(0, MAX_DOWNLOADS);
       const focused = s.ui.focusedWindowId;
-      const open = !exists && focused && downloadVisibleIn(d, s.windows[focused]);
+      const open = !exists && focused && downloadVisibleIn(s, d, s.windows[focused]);
       return { downloads, ...(open ? patchWindowUi(s, focused, { downloadsOpen: true }) : {}) };
     });
   },
@@ -117,13 +117,13 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
 
   clearDownloads(windowId) {
     set((s) => ({
-      downloads: s.downloads.filter((d) => d.state === "downloading" || (windowId !== undefined && !downloadVisibleIn(d, s.windows[windowId]))),
+      downloads: s.downloads.filter((d) => d.state === "downloading" || (windowId !== undefined && !downloadVisibleIn(s, d, s.windows[windowId]))),
     }));
   },
 
   forgetDownloads(profile) {
-    const session = privateSession(profile);
-    const gone = (d: Download) => (session !== null ? downloadSession(d) === session : d.profile === profile);
+    const session = privateSession(get(), profile);
+    const gone = (d: Download) => (session !== null ? downloadSession(get(), d) === session : d.profile === profile);
     if (session !== null) for (const d of get().downloads) if (gone(d)) endedPrivateDownloads.add(d.id);
     set((s) => (s.downloads.some(gone) ? { downloads: s.downloads.filter((d) => !gone(d)) } : {}));
   },

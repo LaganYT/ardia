@@ -1,6 +1,7 @@
 import { displayUrl, asksForBackspace, keywordBySpace, resolveInput, searchUrl, scopedSearchUrl, type Suggestion } from "@ardia/core";
 import { Symbol, useTheme } from "../ui";
-import { copyText, pickFiles, showMenu } from "../../state/app/system";
+import { copyText, pickFiles } from "../../state/app/system";
+import { chooseFromMenu } from "../../state/app/menuChoice";
 import { startDictation } from "../../state/omnibox/textInput";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { findNodeHandle, type TextInput, type View } from "react-native";
@@ -383,12 +384,12 @@ export function Omnibox({
 
 async function openTabOrFile(windowId: string, tabId: string, onGo: (url: string) => void) {
   const others = otherOpenTabs(windowId, ADD_CHIP.otherTabs);
-  const choice = await showMenu([
-    ...others.map((t) => ({ id: `tab:${t.id}`, title: t.title || displayUrl(t.url) })),
+  const choice = await chooseFromMenu<{ tab: string }, "files">([
+    ...others.map((t) => ({ value: { tab: t.id }, title: t.title || displayUrl(t.url) })),
     ...(others.length ? [{ separator: true as const }] : []),
     { id: "files", title: "Open File…", symbol: "doc" },
   ]);
-  if (choice?.startsWith("tab:")) switchFromBar(choice.slice(4), "", tabId, "current");
+  if (choice && typeof choice === "object") switchFromBar(choice.tab, "", tabId, "current");
   if (choice === "files") {
     const [file] = await pickFiles();
     if (file) onGo(file);

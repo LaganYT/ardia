@@ -170,14 +170,14 @@ enum UpdatePrewarm {
     waiting.forEach { $0() }
   }
 
-  static func stagedApp(version: String, bundleId: String? = Bundle.main.bundleIdentifier, root: URL? = nil) -> Bundle? {
-    stagedApps(bundleId: bundleId, root: root)
+  static func stagedApp(version: String, bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = StagedUpdateCopies.userCaches) -> Bundle? {
+    stagedApps(bundleId: bundleId, caches: caches)
       .filter { $0.bundle.infoDictionary?["CFBundleVersion"] as? String == version }
       .max { $0.modified < $1.modified }?.bundle
   }
 
-  static func stagedApps(bundleId: String? = Bundle.main.bundleIdentifier, root: URL? = nil) -> [(bundle: Bundle, modified: Date)] {
-    StagedUpdateCopies.copies(bundleId: bundleId, root: root).filter { staged in
+  static func stagedApps(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = StagedUpdateCopies.userCaches) -> [(bundle: Bundle, modified: Date)] {
+    StagedUpdateCopies.copies(bundleId: bundleId, caches: caches).filter { staged in
       staged.bundle.executableURL.map { FileManager.default.isExecutableFile(atPath: $0.path) } ?? false
     }
   }

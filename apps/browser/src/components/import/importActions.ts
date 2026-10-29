@@ -5,7 +5,7 @@ import { plural } from "../../state/browser/model";
 import type { ProfileColor } from "../../state/browser/types";
 import { IMPORT_WINDOW_ID } from "../../state/settings/settingsWindows";
 import { applyResult, emptyCounts, importArcSpace, profileColorFor, profileNamed, type ImportCounts } from "../../state/import/apply";
-import { addProfile } from "../../state/profiles/actions";
+import { createProfile } from "../../state/profiles/actions";
 import type { importModule } from "../../state/import/importApi";
 import { KINDS, type BrowserProfile, type BrowserSource, type ImportedExtension, type ImportKind, type ImportResult, type SpaceSummary } from "./model";
 import { APP_TAB_KINDS, importAppTabs, readAppTabs } from "./diaActions";
@@ -14,7 +14,7 @@ import { NO_EXTENSIONS, type ImportState } from "./useImportState";
 
 export type ImportApi = NonNullable<ReturnType<typeof importModule>>;
 
-export function importActions(s: ImportState, api: ImportApi | null) {
+export function importActions(s: ImportState, api: ImportApi) {
   const { source, sourceProfiles, spaces, step, kinds, target } = s;
   const allSpaces: (SpaceSummary & { profileId: string })[] = (source?.profiles ?? []).flatMap((p) => (p.spaces ?? []).map((sp) => ({ ...sp, profileId: p.id })));
   const bySpaces = !!source?.sidebar;
@@ -35,7 +35,6 @@ export function importActions(s: ImportState, api: ImportApi | null) {
   };
 
   const recheckAccess = async () => {
-    if (!api) return;
     if (step === "safari") return s.setFullDiskAccess(api.safariHasFullDiskAccess());
     const list = await api.listBrowsers().catch(() => null);
     if (!list) return;
@@ -60,13 +59,13 @@ export function importActions(s: ImportState, api: ImportApi | null) {
       });
       if (!confirmed) return clash;
     }
-    return addProfile({ name, color: profileColorFor(color) as ProfileColor | undefined, icon: emoji ?? null, shareWith });
+    return createProfile({ name, color: profileColorFor(color) as ProfileColor | undefined, icon: emoji ?? null, shareWith });
   };
 
   const finish = () => setTimeout(() => s.setStep("done"), importMotion.doneDelay);
 
   const run = async (wanted: Set<ImportKind>, withoutKey = false) => {
-    if (!api || !source) return;
+    if (!source) return;
     const selected = source.profiles.filter((p) => sourceProfiles.includes(p.id) || (bySpaces && p.spaces?.some((sp) => spaces.includes(sp.id))));
     const tabsLocked = (p: BrowserProfile) => withoutKey && !!p.tabsNeedKey;
     const requested: ImportKind[] = [...wanted].filter((k) => k !== "tabs" || !selected.every(tabsLocked));
@@ -115,7 +114,7 @@ export function importActions(s: ImportState, api: ImportApi | null) {
       }
       for (const k of result.failed) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
       for (const w of result.warnings) {
-        if (["undecryptable", "skipped", "locked"].includes(w.code) && !result.failed.includes(w.kind!)) left.push(`${w.message}.`);
+        if ((w.code === "undecryptable" || w.code === "skipped" || w.code === "locked") && !result.failed.includes(w.kind)) left.push(`${w.message}.`);
       }
       const refused = (k: ImportKind) => {
         const names = failed.get(k) ?? [];
@@ -166,7 +165,7 @@ export function importActions(s: ImportState, api: ImportApi | null) {
   };
 
   const unlock = async () => {
-    if (!api || !source) return;
+    if (!source) return;
     s.setUnlocking(true);
     try {
       await api.unlockBrowser(source.id);

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
+import { REPO } from "./lib/repo.mjs";
 import { clickhouse, hasTelemetryEnv } from "./telemetry-env.mjs";
 
-const REPO = "mantrakp04/ardia";
 const days = Math.max(1, Number(process.argv[2] ?? 14) || 14);
 const key = hasTelemetryEnv();
 

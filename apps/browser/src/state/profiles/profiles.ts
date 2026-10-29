@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import { bookmarkRoots, ensureRoots, removeBookmarkTree } from "../bookmarks/bookmarks";
-import { newId, setSharedDataIds, viewTabIds, without } from "../browser/model";
+import { engineProfile, newId, viewTabIds, without } from "../browser/model";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
 import { activated, apply, removeTabs, withNewTab } from "../tabs/tabs";
 import type { Profile, ProfileColor } from "../browser/types";
@@ -12,7 +12,8 @@ export type ProfilesSlice = {
   orphanedProfileData: string[];
 
   createProfile(options: { name: string; color?: ProfileColor; icon?: string | null; shareWith?: string | null }): string;
-  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme" | "pinnedCollapsed">>): void;
+  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "icon" | "pinnedCollapsed">>): void;
+  setProfileLook(id: string, look: Partial<Pick<Profile, "color" | "theme">>): void;
   deleteProfile(id: string): void;
   reorderProfiles(ids: string[]): void;
   setDefaultProfile(id: string): void;
@@ -27,7 +28,6 @@ export const unusedProfileColor = (profiles: Record<string, Profile>): ProfileCo
   COLORS.find((c) => !Object.values(profiles).some((p) => p.color === c)) ?? "blue";
 
 const dataIdOf = (profile: Profile) => profile.dataId ?? profile.id;
-export const engineIdOf = (profile: Profile) => (dataIdOf(profile) === DEFAULT_PROFILE_ID ? "" : dataIdOf(profile));
 
 export function dataGroups(s: Pick<BrowserState, "profiles" | "profileOrder">): { dataId: string; profileIds: string[] }[] {
   const groups = new Map<string, string[]>();
@@ -47,9 +47,6 @@ export function sharingProfiles(s: Pick<BrowserState, "profiles" | "profileOrder
 }
 
 function syncSharedData(s: BrowserState, prev: BrowserState): Partial<BrowserState> | null {
-  if (s.profiles !== prev.profiles) {
-    setSharedDataIds(Object.fromEntries(Object.values(s.profiles).filter((p) => p.dataId).map((p) => [p.id, p.dataId!])));
-  }
   if (s.profiles === prev.profiles && s.history === prev.history && s.bookmarks.roots === prev.bookmarks.roots) return null;
   let history = s.history;
   let roots = s.bookmarks.roots;
@@ -90,11 +87,11 @@ export const createProfilesSlice: StateCreator<BrowserState, [], [], ProfilesSli
       let bookmarks = s.bookmarks;
       let history = s.history;
       if (source) {
-        const [withRoots, roots] = ensureRoots(bookmarks, source.id);
+        const [withRoots, roots] = ensureRoots({ profiles: s.profiles, bookmarks }, source.id);
         bookmarks = { ...withRoots, roots: { ...withRoots.roots, [profile.id]: roots } };
         if (s.history[source.id]) history = { ...history, [profile.id]: s.history[source.id]! };
       } else {
-        bookmarks = ensureRoots(bookmarks, profile.id)[0];
+        bookmarks = ensureRoots({ profiles: s.profiles, bookmarks }, profile.id)[0];
       }
       set({ profiles: { ...s.profiles, [profile.id]: profile }, profileOrder: [...s.profileOrder, profile.id], bookmarks, history });
       return profile.id;
@@ -102,6 +99,10 @@ export const createProfilesSlice: StateCreator<BrowserState, [], [], ProfilesSli
 
     updateProfile(id, patch) {
       set((s) => (s.profiles[id] ? { profiles: { ...s.profiles, [id]: { ...s.profiles[id]!, ...patch } } } : {}));
+    },
+
+    setProfileLook(id, look) {
+      set((s) => (s.profiles[id] ? { profiles: { ...s.profiles, [id]: { ...s.profiles[id]!, ...look } } } : {}));
     },
 
     deleteProfile(id) {
@@ -113,11 +114,11 @@ export const createProfilesSlice: StateCreator<BrowserState, [], [], ProfilesSli
       const settings = {
         ...s.settings,
         defaultProfileId: s.settings.defaultProfileId === id ? fallback : s.settings.defaultProfileId,
-        neverTranslateSites: without(s.settings.neverTranslateSites ?? {}, [id]),
+        neverTranslateSites: without(s.settings.neverTranslateSites, [id]),
       };
       const shared = sharingProfiles(s, id).length > 0;
-      const engine = engineIdOf(s.profiles[id]!);
-      const orphaned = profileOrder.some((p) => engineIdOf(s.profiles[p]!) === engine) || s.orphanedProfileData.includes(engine)
+      const engine = engineProfile(s, id);
+      const orphaned = profileOrder.some((p) => engineProfile(s, p) === engine) || s.orphanedProfileData.includes(engine)
         ? s.orphanedProfileData
         : [...s.orphanedProfileData, engine];
 

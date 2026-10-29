@@ -1,5 +1,11 @@
 import type { AreaLightPalette } from "@ardia/shaders";
 import type { ProfileColor } from "../../lib/profileLook";
+import { parseColor } from "../../lib/color";
+
+export function withAlpha(color: string, alpha: number): string {
+  const [r, g, b] = parseColor(color);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 export const ink = { white: "#FFFFFF", black: "#000000", clear: "#00000000", neutralGrey: "#808080A6" } as const;
 

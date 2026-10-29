@@ -1,9 +1,8 @@
 import { assignPositions, type Adapter, type Extraction } from "@ardia/sync";
 import { useBrowser, type BrowserState } from "../../browser/store";
 import { orderSections, syncGroupOrder } from "../../groups/groups";
-import { makeTab, pinnedFirst, without } from "../../browser/model";
+import { makeTab, pinKeyOf, without } from "../../browser/model";
 import { adoptParkedPins, parkWindowPins } from "../../pins/parkedPins";
-import { pinKeyOf } from "../../pins/pinMirror";
 import { removeTabs } from "../../tabs/tabs";
 import type { Tab, TabGroup } from "../../browser/types";
 
@@ -163,7 +162,7 @@ export function pinnedAdapter(profileId: string): Adapter {
         const slots = ids.map((id, i) => (rank.has(id) ? i : -1)).filter((i) => i >= 0);
         const sorted = slots.map((i) => ids[i]!).sort((a, z) => rank.get(a)! - rank.get(z)!);
         slots.forEach((slot, i) => (ids[slot] = sorted[i]!));
-        const window = { ...w, tabIds: orderSections(pinnedFirst(ids, tabs), tabs, groups) };
+        const window = { ...w, tabIds: orderSections(orderSections(ids, tabs, {}), tabs, groups) };
         windows[w.id] = window;
         groups = syncGroupOrder(groups, window);
       }

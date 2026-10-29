@@ -2,7 +2,15 @@ import AppKit
 
 final class MenuTarget: NSObject, NSMenuItemValidation {
   static let shared = MenuTarget()
-  var handler: ((String, String?, String?) -> Void)?
+  var swallowsCommands = false
+
+  func dispatch(_ command: String, _ arg: String?, windowId: String?) {
+    guard !swallowsCommands else { return }
+    if command == "closeTab", WindowManager.shared.closeForeignKeyWindow() { return }
+    ShellEvents.send(.command, [
+      "command": command, "arg": arg as Any, "windowId": windowId as Any, "focusGeneration": FocusHandoff.shared.takeBegun() as Any,
+    ])
+  }
 
   private static let focusMovingCommands: Set<String> = ["newTab", "focusCommandBar", "findInPage"]
 
@@ -12,7 +20,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
     if Self.focusMovingCommands.contains(item.command) || FocusHandoff.shared.gatesKeyWindow, let window = NSApp.keyWindow {
       FocusHandoff.shared.begin(in: window)
     }
-    handler?(item.command, item.arg, item.windowless ? nil : WindowManager.shared.keyWindowId)
+    dispatch(item.command, item.arg, windowId: item.windowless ? nil : WindowManager.shared.keyWindowId)
     if item.command == "tabSwitcher" { SwitcherHold.opened(by: item) }
   }
 
@@ -25,7 +33,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
 
   @objc(undo:) func undoOrReopenClosedTab(_ sender: Any?) {
     if Self.undoReopensClosedTab {
-      handler?("reopenClosedTab", nil, WindowManager.shared.keyWindowId)
+      dispatch("reopenClosedTab", nil, windowId: WindowManager.shared.keyWindowId)
     } else {
       NSApp.sendAction(Self.undoAction, to: nil, from: sender)
     }

@@ -17,34 +17,27 @@ import {
   usePopoverPresence,
   useTheme,
 } from "../ui";
-import { fileExists, fileIcon, openFile, revealFile } from "../../state/app/system";
+import { fileIcon, openFile, revealFile } from "../../state/app/system";
 import { downloadMenu } from "../../state/downloads/downloadMenu";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useDownloads, useSidebarOpen, useWindowId, useWindowUi } from "../../state/browser/hooks";
 import { clearDownloads, setDownloadsOpen } from "../../state/windows/actions";
-import { onDownloadsChanged, watchNewDownloads, watchOpenWhenDone } from "../../state/windows/downloadWatch";
+import { watchNewDownloads } from "../../state/windows/downloadWatch";
 import { useDownload } from "../../state/windows/hooks";
 import { useAddressBarInSidebar, useTabLayout, useToolbarLightsCenter } from "../../state/windows/layout";
 import { SIDEBAR_FOOTER_DOWNLOADS } from "../sidebar/geometry";
 import { PROFILE_DOTS_HEIGHT } from "../profiles/ProfileDots";
 import { openInternalPage } from "../../state/pages/urls";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarWidth } from "../../state/sidebar/hooks";
 import { hairline, shadow } from "../ui/tokens";
 import { DOWNLOADS_PANEL, type DownloadsPlacement } from "./downloadsPlacement";
-import { awaitsKeep, dangerWarning, downloadStatus } from "./downloadStatus";
+import { dangerWarning, downloadStatus } from "../../state/downloads/status";
+import { useDownloadView } from "./useDownloadView";
 import { FooterButton } from "./FooterButton";
 import { useDownloadsPlacement } from "./useDownloadsPlacement";
 import { DOWNLOADS_LIST as L, downloadsRowFill, FILE_ICON_GLYPH_SHARE, MAGNET, useDownloadsColors } from "./tokens";
-
-export { awaitsKeep, downloadStatus } from "./downloadStatus";
-export { downloadMenu } from "../../state/downloads/downloadMenu";
-export { DownloadsButton } from "./DownloadsButton";
-
-const g = globalThis as { __acDownloadsWatch?: () => void };
-g.__acDownloadsWatch?.();
-g.__acDownloadsWatch = watchOpenWhenDone((path) => void openFile(path));
 
 const iconCache = new Map<string, string | null>();
 export const FileIcon = memo(function FileIcon({ path, size = 28 }: { path: string; size?: number }) {
@@ -195,22 +188,7 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
   const theme = useTheme();
   const colors = useDownloadsColors();
   const { hovered, hoverProps } = useHover();
-  const exists = d.state !== "finished" || fileExists(d.path);
-  const shown = useRef(exists);
-  shown.current = exists;
-  const [, recheck] = useState(0);
-  const finishedPath = d.state === "finished" ? d.path : null;
-  useEffect(() => {
-    if (finishedPath === null) return;
-    const check = () => {
-      if (fileExists(finishedPath) !== shown.current) recheck((n) => n + 1);
-    };
-    check();
-    return onDownloadsChanged(check);
-  }, [finishedPath]);
-  const progress = d.total > 0 ? d.received / d.total : 0;
-  const done = d.state === "finished" && exists;
-  const blocked = awaitsKeep(d);
+  const { exists, done, progress, blocked } = useDownloadView(d);
   return (
     <View {...hoverProps}>
       <MouseArea path={done ? d.path : null}>

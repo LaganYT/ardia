@@ -29,4 +29,7 @@ export {
   type PasswordPromptAnswer,
   type OpenWindowRequest,
   type WebNotification,
+  type PageSelection,
+  type ScrollState,
+  type ProtectedMediaRequest,
 } from "@ardia/ardiacore";

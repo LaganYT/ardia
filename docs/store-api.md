@@ -82,8 +82,8 @@ store but through `storeAction` wrappers in each domain's `actions.ts` (`newTab`
   `tab.pinnedAsRow`; windows order tiles, then pinned rows and pinned groups in one interleaved order, then the rest; `row` omitted keeps a pinned
   tab's kind and pins a new one as a tile). A live folder sits in that pinned order by `LiveFolder.after`, the anchor key
   (`t:` or `g:` plus the pin key) of the row or group just above it, or `null` for the top (components/sidebar/pinnedOrder.ts);
-  when its anchor goes it moves under the item that was above the anchor. Also pinned base URLs (`tab.pinnedUrl`, `returnToPinnedUrl` ⌘↩, `setPinnedUrl`; set on tiles, pinned rows and tabs in pinned groups alike, and cleared when a tab leaves every pinned place, by the `settlePinHomes` listener in state/pins/pinHomes.ts), `setSiteMuted` (Mute Site,
-  `settings.mutedSites`; a private window's mutes stay in `privateSiteMutes[windowId]`, in memory), `groupTabs` (pinned by default, like Dia), `moveGroup`, `duplicateGroup`, `newTabInGroup`,
+  when its anchor goes it moves under the item that was above the anchor. Also pinned base URLs (`tab.pinnedUrl`, `returnToPinnedUrl` ⌘↩, `setPinnedUrl`; set on tiles, pinned rows and tabs in pinned groups alike, and cleared when a tab leaves every pinned place, by the `settlePinHomes` listener in state/pins/pinHomes.ts), `setMuted` (a tab's own mute, `tab.muted`, saved with the tab) and `setSiteMuted` (Mute Site,
+  `settings.mutedSites`; a private window's mutes stay in `privateSiteMutes[windowId]`, in memory; a tab is silent if either is on, `isSilenced` in state/tabs/mute.ts), `groupTabs` (pinned by default, like Dia), `moveGroup`, `duplicateGroup`, `newTabInGroup`,
   `closeGroup` → `closedGroups` (History › Recently Closed Groups; `restoreClosed` takes their ids), `moveGroupToBookmarksBar`,
   `cleanUpTabs` → `cleanedTabs` / `restoreCleaned(entryId?, windowId?)` (a private window's go to `privateCleanedTabs[windowId]`,
   in memory, and only back into that window; read either with `cleanedTabsFor(s, windowId)`), `closeAbandonedNewTabs`. `newTab` with `openerId` + `background` (⌘-click)

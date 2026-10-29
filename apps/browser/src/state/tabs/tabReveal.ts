@@ -7,13 +7,13 @@ import { activeTabId } from "../browser/model";
 import { hasPage } from "./pageSession";
 import { splitOf } from "../splits/splits";
 import type { Tab } from "../browser/types";
+import { isWebPageUrl } from "../../lib/url";
 
-const WEB_PAGE = /^(https?|file):/i;
 const OFFERED = /^(tab|ardiacore):/;
 
 export type Switch = { tabId: string; offered?: string; over: string } | { tabId: null; over: string };
 
-const hasWebPage = (t: Tab | undefined): t is Tab => !!t && hasPage(t) && WEB_PAGE.test(t.url);
+const hasWebPage = (t: Tab | undefined): t is Tab => !!t && hasPage(t) && isWebPageUrl(t.url);
 
 function plainPage(tabId: string): boolean {
   const page = pageOf(tabId);

@@ -31,6 +31,7 @@ using namespace ardia_web_view;
 }
 
 - (void)tabDidChangeAudio:(ArdiaCoreTab *)tab {
+  if (_muted && !tab.muted) tab.muted = YES;
   [self emitMedia];
 }
 

@@ -1,5 +1,6 @@
 import type { BrowserState } from "../browser/store";
-import { spaceLookSource, type ThemeBackdropProps } from "../../lib/profileLook";
+import type { ThemeBackdropProps } from "@ardia/core";
+import { spaceLookSource } from "../../lib/profileLook";
 import { profileColorsOf } from "../profiles/looks";
 
 export type LaunchBackdrop = ThemeBackdropProps & {

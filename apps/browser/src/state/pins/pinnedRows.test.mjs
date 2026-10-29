@@ -141,7 +141,7 @@ test("remove, undo, then reopening the row's earlier close wakes it with its own
   const back = model.viewTabIds(S(), w).find((id) => S().tabs[id].pinnedUrl === "https://a.com/");
   const lastPage = S().closedTabs.find((x) => x.tabId === back);
   S().restoreClosed(lastPage.id, w);
-  assert.equal(S().tabs[back].adoptId, model.restoreId(a));
+  assert.equal(S().tabs[back].adoptId, `restore:${a}`);
 });
 
 test("undoing a pinned group tab's removal puts it back in its place in the group, in every window", () => {

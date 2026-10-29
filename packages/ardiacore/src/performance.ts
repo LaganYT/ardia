@@ -17,7 +17,7 @@ export const setBatterySaver = (mode: BatterySaverMode) => call("engine.batteryS
 
 export const setMemorySaver = (request: MemorySaverRequest) => call("engine.memorySaver", request);
 
-export const isKeepActiveSiteValid = (site: string) => call("engine.memorySaver", { validate: site }).then((reply) => !!reply.valid);
+export const isKeepActiveSiteValid = (site: string) => call("engine.validateKeepActiveSite", { site }).then((reply) => reply.valid);
 
 export const trimEngineMemory = () => call("engine.trimMemory");
 

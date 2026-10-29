@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
 const model = await import("../browser/model.ts");
-const { setPinHandoff } = await import("../tabs/tabsSlice.ts");
+const { startPinHandoff } = await import("./pinHandoff.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("../session/persist.ts");
 const stub = await import("../../test-native/index.ts");
 
@@ -95,7 +95,7 @@ test("the frozen copy follows the page's title, URL, favicon and audio", () => {
   reset();
   const { a, b, mail } = twoWindows();
   S().activate(tileOf(b, "https://mail.com"));
-  S().navigated(mail, { url: "https://mail.com/inbox/42", title: "Inbox (42)" }, { playingAudio: true, isLoading: false });
+  S().updateTab(mail, { url: "https://mail.com/inbox/42", title: "Inbox (42)" }, { playingAudio: true, isLoading: false });
   const frozen = S().tabs[shown(a)];
   assert.equal(frozen.title, "Inbox (42)");
   assert.equal(frozen.url, "https://mail.com/inbox/42");
@@ -106,7 +106,7 @@ test("navigating from a frozen copy (address bar, Back to Pinned URL) pulls the 
   reset();
   const { a, b, mail } = twoWindows();
   S().activate(tileOf(b, "https://mail.com"));
-  S().navigated(mail, { url: "https://mail.com/inbox", title: "Inbox" }, {});
+  S().updateTab(mail, { url: "https://mail.com/inbox", title: "Inbox" }, {});
   S().returnToPinnedUrl(shown(a));
   assert.equal(S().tabs[mail].windowId, a, "the page came back to A");
   assert.equal(S().tabs[mail].navigation.url, "https://mail.com", "and navigates home");
@@ -203,20 +203,19 @@ test("persisted sessions never carry a frozen link; the copy relaunches unloaded
   assert.equal(pages("https://mail.com").length, 1, "one page after relaunch too");
 });
 
-test("a slow handoff hook: the swap runs once, against the state at commit time", () => {
+test("a slow handoff: the swap runs once, against the state at commit time", async () => {
   reset();
   const { a, b, mail } = twoWindows();
-  const queued = [];
-  setPinHandoff((id, commit) => queued.push(commit));
+  const stop = startPinHandoff();
   try {
     const copy = tileOf(b, "https://mail.com");
     S().activate(copy);
     assert.equal(S().tabs[mail].windowId, a, "nothing moves before the frame is captured");
-    queued.shift()();
+    await new Promise((r) => setTimeout(r, 0));
     assert.equal(S().tabs[mail].windowId, b);
     assert.equal(pages("https://mail.com").length, 1);
   } finally {
-    setPinHandoff((id, commit) => commit());
+    stop();
   }
 });
 

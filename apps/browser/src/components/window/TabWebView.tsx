@@ -14,21 +14,22 @@ import { opaqueCard } from "../ui/opaqueCard";
 import { handOff, takeHandOff, wantsPage } from "../../state/tabs/tabPages";
 import { noteDiscarded, noteGone, noteReady } from "../../state/tabs/tabLifecycle";
 import { clearEngineOffer, followSiteChoice, noteWebKitPage, offerWebKit, persistEngine } from "../../state/engines/actions";
-import { noteIssued, takeStartedNavigation, webviewRef, webviews } from "../../state/tabs/webviewHandles";
-import { currentTab } from "../../state/browser/current";
-import { closeTabNow, faviconChanged, navigated, updateLive, updateTab } from "../../state/tabs/actions";
+import { webviewRef, webviews } from "../../state/tabs/webviewHandles";
+import { noteIssued, takeStartedNavigation } from "../../state/tabs/earlyNavigate";
+import { currentEngineProfile, currentTab, isTabSilenced } from "../../state/browser/current";
+import { closeTabNow, updateLive, updateTab } from "../../state/tabs/actions";
 import { setFind } from "../../state/windows/actions";
 import { activateFocusedPane, currentTabEngine, downloadNavigated, useTabEngine } from "../../state/windows/card";
 import { setPageProgress } from "../../state/tabs/pageProgress";
 import { shallowEqual, useBrowserWhile, useProfilesValue, useTabValue } from "../../state/tabs/tabWatch";
-import { engineProfile, isIncognitoProfile, navigationTo } from "../../state/browser/model";
+import { isIncognitoProfile, navigationTo } from "../../state/browser/model";
 import type { Tab } from "../../state/browser/types";
 import { dismissPermissions } from "../../state/site/permissions";
 import { zoomChangedByUser } from "../../state/site/zoomBubble";
 import { markTabReady, patchPage, pageOf, popoverOf, setPopover } from "../../state/tabs/pageState";
 import { closeFolderPanelIn } from "../../state/sidebar/tileFolderUi";
 import { answerExternalApp, shouldPromptForPopups, showAutofillPrompt, showPasswordPrompt } from "../site/Prompts";
-import { copyLinkToSelection, searchSelection, setPageSelection, type PageSelection } from "../../state/site/selection";
+import { copyLinkToSelection, searchSelection, setPageSelection } from "../../state/site/selection";
 import { useAutoPictureInPicture } from "../../state/media/pip";
 import { requestDisplayMedia } from "../../state/media/screenShare";
 import { setNowPlaying, setPictureInPictureState } from "../../state/media/media";
@@ -36,12 +37,12 @@ import { noteScroll, revealToolbar } from "../../state/windows/toolbarAutoHide";
 import { closeWebNotification, showWebNotification } from "../../state/site/webNotifications";
 import { closeLittleArdiaOnEscape } from "../../state/littleArdia/actions";
 import { closePeekOnEscape } from "../../state/peek/actions";
+import { withoutFragment } from "../../lib/url";
+import { hostOf } from "@ardia/core";
 
 const webViewTab = (t: Tab | undefined) => ({ navigation: t?.navigation, adoptId: t?.adoptId, profileId: t?.profileId ?? "", shownUrl: t?.url ?? "" });
 
 const isBlank = (url: string) => !url || url === "about:blank";
-export const pageKey = (url: string) => url.replace(/#.*$/, "");
-const hostOf = (url: string) => url.match(/^[a-z][\w+.-]*:\/\/([^/?#]*)/i)?.[1]?.toLowerCase() ?? "";
 
 type TabWebViewProps = { tabId: string; visible: boolean; warm: boolean; peekOf?: string };
 
@@ -98,7 +99,7 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
     () => () => {
       const t = tab();
       const sameEngine = currentTabEngine(tabId) === engine;
-      if (wantsPage(t) && sameEngine && engineProfile(t.profileId) === engineProfile(mountedProfile.current) && !isQuitting()) handOff(tabId, engineProfile(t.profileId), engine);
+      if (wantsPage(t) && sameEngine && currentEngineProfile(t.profileId) === currentEngineProfile(mountedProfile.current) && !isQuitting()) handOff(tabId, currentEngineProfile(t.profileId), engine);
       else setPageProgress(tabId, 0);
     },
     [],
@@ -117,7 +118,7 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
       engine={engine}
       style={StyleSheet.absoluteFill}
       url={navigation?.url ?? (adoptId ? tab()?.url : undefined)}
-      profile={engineProfile(profileId)}
+      profile={currentEngineProfile(profileId)}
       adoptId={adoptId}
       tabId={tabId}
       temporary={peekOf !== undefined}
@@ -133,7 +134,7 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
         markTabReady(tabId);
         noteTabReady(tabId);
         noteReady(tabId);
-        if (tab()?.muted) void webviews.get(tabId)?.setMuted(true);
+        void webviews.get(tabId)?.setMuted(isTabSilenced(tabId));
       }}
       onNavigationChange={({ url: reported, title, canGoBack, canGoForward, isLoading, themeColor, themeColorSource, initialDocumentAccessed, committedInitial, committedUrl }) => {
         adoptIconPage(tabId);
@@ -161,10 +162,10 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
           patchPage(tabId, { newTabShown: null });
         }
         if (fromNewTab.current && url && !isBlank(url)) patchPage(tabId, { backToNewTab: true });
-        navigated(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor: shownTheme });
+        updateTab(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor: shownTheme });
         dropOutlivedFavicon(tabId, url, isLoading);
         if (engine === "webkit") noteWebKitPage(tabId, { url, title, isLoading, committedUrl: committedUrl ?? "" });
-        if (lastPage.current !== null && pageKey(url) !== lastPage.current) {
+        if (lastPage.current !== null && withoutFragment(url) !== lastPage.current) {
           if (pageOf(tabId).externalApp && hostOf(url) !== hostOf(lastPage.current)) answerExternalApp(tabId, false);
           dismissPermissions(tabId);
           setPopover(tabId, null);
@@ -174,7 +175,7 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
           revealToolbar(tabId);
           if (peekOf === undefined) followSiteChoice(tabId, engine, url, lastPage.current);
         }
-        lastPage.current = pageKey(url);
+        lastPage.current = withoutFragment(url);
         patchPage(tabId, { themeColorSource: themeColorSource ?? null });
       }}
       onLoadError={() => {
@@ -193,12 +194,12 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
       onFavicon={(favicon) => {
         if (!favicon || !tab()) return;
         noteIconPage(tabId);
-        faviconChanged(tabId, favicon);
+        updateTab(tabId, { favicon });
         noteFavicon(tabId, favicon);
       }}
       onMedia={({ playing, muted }) => {
         updateLive(tabId, { playingAudio: playing });
-        if (tab()?.muted && !muted) void webviews.get(tabId)?.setMuted(true);
+        if (!muted && isTabSilenced(tabId)) void webviews.get(tabId)?.setMuted(true);
       }}
       onNowPlaying={(state) => setNowPlaying(tabId, state)}
       onPictureInPicture={(state) => setPictureInPictureState(tabId, state)}
@@ -217,7 +218,7 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
       onPopupBlocked={(popup) => {
         const first = !pageOf(tabId).popups.length;
         patchPage(tabId, { popups: [...pageOf(tabId).popups, popup] });
-        if (first) void shouldPromptForPopups(engineProfile(profileId), popup.origin).then((ask) => ask && setPopover(tabId, "popups"));
+        if (first) void shouldPromptForPopups(currentEngineProfile(profileId), popup.origin).then((ask) => ask && setPopover(tabId, "popups"));
       }}
       onPasswordPrompt={(prompt) => showPasswordPrompt(tabId, prompt)}
       onAutofillPrompt={(prompt, id) => showAutofillPrompt(tabId, prompt, id)}
@@ -232,11 +233,9 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
         else if (command === "escape" && popoverOf(tabId)) setPopover(tabId, null);
         else if (command === "escape" && !closeFolderPanelIn(tab()?.windowId) && !closePeekOnEscape(tabId)) closeLittleArdiaOnEscape(tabId);
       }}
-      onPageMessage={(kind, data) => {
-        if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);
-        else if (kind === "scroll") noteScroll(tabId, data);
-        else if (kind === "drm") offerWebKit(tabId, data);
-      }}
+      onSelection={(selection) => setPageSelection(tabId, selection)}
+      onScroll={(state) => noteScroll(tabId, state)}
+      onProtectedMedia={(request) => offerWebKit(tabId, request)}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {
         pending.current = url;

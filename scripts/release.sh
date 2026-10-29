@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="usage: scripts/release.sh <version> [--channel stable|nightly] [--rc] [--phased <seconds>] [--phase build|sign|check]"
+usage="usage: scripts/release.sh <version> [--rc] [--phased <seconds>] [--phase build|sign|check]  (a -nightly.<n> version is a nightly)"
 version="${1:?$usage}"
 shift
 rc=0
 phased=""
-channel=stable
 phase=all
 while [ $# -gt 0 ]; do
   case "$1" in
     --rc) rc=1 ;;
-    --channel)
-      channel="${2:-}"
-      shift
-      case "$channel" in stable | nightly) ;; *) echo "error: --channel is stable or nightly, got '$channel'" >&2; exit 1 ;; esac
-      ;;
     --phase)
       phase="${2:-}"
       shift
@@ -31,18 +25,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ "$rc" = 1 ] && [ -n "$phased" ] && { echo "error: a candidate is never published, so --phased doesn't apply to --rc" >&2; exit 1; }
-if [ "$channel" = nightly ]; then
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]+$ ]] \
-    || { echo "error: a nightly's version is <next stable>-nightly.<n>, like 0.2.37-nightly.1 (got $version)" >&2; exit 1; }
-else
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-    || { echo "error: a stable version is <major>.<minor>.<patch> (got $version; nightlies take --channel nightly)" >&2; exit 1; }
-fi
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
+. "$root/scripts/lib/releases.sh"
+channel="$(channel_of "$version")"
 app_dir="$root/apps/browser"
 macos="$app_dir/macos"
 ardiacore="$root/packages/ardiacore"
-repo="mantrakp04/ardia"
 notes_page="https://ardia.dev/release-notes"
 notary_profile="${NOTARY_PROFILE:-ardia}"
 [ -f "$root/scripts/.notary.env" ] && . "$root/scripts/.notary.env"
@@ -60,7 +48,7 @@ elif [ -n "$sparkle_key_file" ]; then
 elif [ -n "${SPARKLE_ACCOUNT:-}" ]; then
   sparkle_account="$SPARKLE_ACCOUNT"
 else
-  legacy_account="$(sed -n 's/^ *public static let appName = "\(.*\)"$/\1/p' "$root/packages/sync/ios/Core/LegacyMigration.swift" | tr '[:upper:]' '[:lower:]')"
+  legacy_account="$("$root/scripts/lib/legacy-name.sh" appName | tr '[:upper:]' '[:lower:]')"
   sparkle_account=ardia
   for account in ardia $legacy_account; do
     if "$sparkle/generate_keys" --account "$account" -p >/dev/null 2>&1; then sparkle_account="$account"; break; fi
@@ -79,8 +67,8 @@ archive="$dist/Ardia.xcarchive"
 app="$dist/export/Ardia.app"
 zip="$dist/Ardia-$version.zip"
 dmg="$dist/Ardia-$version.dmg"
-chromium_src="${CHROMIUM_SRC:-$HOME/chromium-build/chromium_git/chromium/src}"
-framework_src="${ARDIACORE_FRAMEWORK:-$chromium_src/out/Release_GN_arm64/Chromium Framework.framework}"
+. "$root/scripts/lib/paths.sh"
+framework_src="$chromium_framework"
 framework_engine="${ARDIACORE_FRAMEWORK_ENGINE:-}"
 provisioning_profile="${RELEASE_PROVISIONING_PROFILE:-}"
 read -r -a extra_build_settings <<<"${RELEASE_BUILD_SETTINGS:-}"
@@ -96,21 +84,12 @@ fi
 launch_check() {
   echo "==> Launch check"
   check_data="$(mktemp -d "${TMPDIR:-/tmp}/ac-release.XXXXXX")"
-  before="$(pgrep -f "^$app/Contents/MacOS/Ardia" | sort || true)"
-  check_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
-  open -g -n --env ARDIA_BACKGROUND=1 --env ARDIA_DATA_DIR="$check_data" --env ARDIA_REMOTE_DEBUGGING_PORT="$check_port" "$app"
+  launched="$("$root/scripts/agent/ac" launch "$app" --data "$check_data" --js none --no-wait)" || die "the app didn't start"
+  check_port="$(sed -n 's/^pid [0-9]* port \([0-9]*\) .*/\1/p' <<<"$launched")"
   ubo_ok=0
   node "$root/scripts/lib/ubo-ready.mjs" "$check_port" 90 && ubo_ok=1
   sleep 5
-  pid=""
-  for p in $(pgrep -f "^$app/Contents/MacOS/Ardia\$" || true); do
-    ps -E -ww -o command= -p "$p" 2>/dev/null | grep -qF "ARDIA_DATA_DIR=$check_data" && { pid="$p"; break; }
-  done
-  [ -n "$pid" ] || pid="$(comm -13 <(echo "$before") <(pgrep -f "^$app/Contents/MacOS/Ardia" | sort || true) | head -1)"
-  [ -n "$pid" ] || die "the app didn't start (or quit)"
-  kill -TERM "$pid"
-  for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-  kill -KILL "$pid" 2>/dev/null || true
+  "$root/scripts/agent/ac" quit "$check_data" >/dev/null || die "the app quit before the check ended"
   codesign --verify --deep --strict "$app" || die "running the app changed its bundle"
   [ "$ubo_ok" = 1 ] || die "uBlock Origin wasn't ready and blocking in the exported app (90 s)"
   rm -rf "$check_data"
@@ -124,6 +103,8 @@ fi
 
 pbx="$macos/Ardia.xcodeproj/project.pbxproj"
 project_version="$(sed -n 's/.*MARKETING_VERSION = "\{0,1\}\([^";]*\)"\{0,1\};/\1/p' "$pbx" | sort -u)"
+min_macos="$(sed -n 's/.*MACOSX_DEPLOYMENT_TARGET = \([0-9]*\)\.0;/\1/p' "$pbx" | sort -u)"
+[[ "$min_macos" =~ ^[0-9]+$ ]] || die "the project's MACOSX_DEPLOYMENT_TARGET isn't one whole macOS version: '$min_macos'"
 project_build="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \(.*\);/\1/p' "$pbx" | sort -u)"
 version_settings=()
 release_build="$project_build"
@@ -135,19 +116,13 @@ fi
 
 notes="$root/docs/release-notes/$version.md"
 if [ -f "$notes" ]; then
-  frontmatter() { awk 'NR == 1 && $0 == "---" { inside = 1; next } inside && $0 == "---" { exit } inside' "$notes"; }
-  notes_body() { awk 'NR == 1 && $0 == "---" { inside = 1; next } inside && $0 == "---" { inside = 0; next } !inside' "$notes" | sed '/./,$!d'; }
-  meta="$(frontmatter)"
-  headline="$(sed -n 's/^headline: *//p' <<< "$meta")"
-  grep -Eq '^date: *[0-9]{4}-[0-9]{2}-[0-9]{2} *$' <<< "$meta" && [ -n "$headline" ] \
-    || die "$notes needs 'date: YYYY-MM-DD' and 'headline:' frontmatter"
-  notes_channel="$(sed -n 's/^channel: *//p' <<< "$meta" | tr -d ' ')"
-  notes_video="$(sed -n 's/^video: *//p' <<< "$meta" | tr -d ' ')"
-  [ "${notes_channel:-stable}" = "$channel" ] \
-    || die "$notes says 'channel: ${notes_channel:-stable}' but this is a $channel release (nightly notes carry 'channel: nightly')"
+  note() { node "$root/scripts/lib/release-note.mjs" "$notes" "$1"; }
+  headline="$(note headline)" || die "$notes: its frontmatter doesn't read (above)"
+  notes_video="$(note video)"
+  notes_body() { note body; }
 elif [ "$rc" = 1 ]; then
   headline="Release candidate $version"
-  notes_channel="$channel"
+  notes_video=""
   notes_body() { echo "A release candidate of Ardia $version. Not published."; }
 else
   die "no release notes: write docs/release-notes/$version.md first"
@@ -190,7 +165,7 @@ if [ "$phase" != build ]; then
   fi
 fi
 
-feed_base="${APPCAST_BASE:-https://github.com/$repo/releases/latest/download/appcast.xml}"
+feed_base="${APPCAST_BASE:-$LATEST_DOWNLOAD_URL/appcast.xml}"
 base_feed="$(mktemp "${TMPDIR:-/tmp}/ac-appcast.XXXXXX")"
 trap 'rm -f "$base_feed"' EXIT
 case "$feed_base" in
@@ -201,7 +176,8 @@ esac
 if [ ! -s "$base_feed" ] && [ "$rc" = 0 ] && [ "$feed_base" != none ]; then
   die "couldn't read the published appcast ($feed_base): every release builds on it, or earlier versions and the other channel drop out of the feed"
 fi
-newest_listed="$(grep -o '<sparkle:version>[0-9]*<' "$base_feed" | tr -dc '0-9\n' | sort -n | tail -1 || true)"
+newest_listed=""
+[ -s "$base_feed" ] && newest_listed="$(appcast newest-build "$base_feed")"
 [ -z "$newest_listed" ] || [ "$release_build" -gt "$newest_listed" ] \
   || die "the build number ($release_build) must be above every build in the feed, nightly or stable (newest: $newest_listed): bump CURRENT_PROJECT_VERSION"
 
@@ -427,8 +403,7 @@ if [ "$notarize" = 1 ]; then
 fi
 
 echo "==> Package"
-legacy_app="$(sed -n 's/^ *public static let appFileName = "\(.*\)"$/\1/p' "$root/packages/sync/ios/Core/LegacyMigration.swift")"
-[[ "$legacy_app" == *.app ]] || die "can't read the legacy app name from LegacyMigration.swift"
+legacy_app="$("$root/scripts/lib/legacy-name.sh" appFileName)"
 update_dir="$dist/update"
 rm -rf "$update_dir" && mkdir -p "$update_dir"
 ditto "$app" "$update_dir/$legacy_app"
@@ -470,13 +445,13 @@ else
   updates_line="Earlier versions update automatically (Ardia › Check for Updates…). Every release's notes: $notes_page"
 fi
 if [ "$notarize" = 1 ]; then
-  install_line="Apple Silicon, macOS 14 or later. Signed with Developer ID and notarized by Apple: download, drag it to Applications, open it."
+  install_line="Apple Silicon, macOS $min_macos or later. Signed with Developer ID and notarized by Apple: download, drag it to Applications, open it."
 else
-  install_line="Apple Silicon, macOS 14 or later. Signed with Developer ID but not notarized: on first launch macOS refuses to open it. Click Done, then System Settings › Privacy & Security › Open Anyway. Or run \`xattr -dr com.apple.quarantine /Applications/Ardia.app\`."
+  install_line="Apple Silicon, macOS $min_macos or later. Signed with Developer ID but not notarized: on first launch macOS refuses to open it. Click Done, then System Settings › Privacy & Security › Open Anyway. Or run \`xattr -dr com.apple.quarantine /Applications/Ardia.app\`."
 fi
 case "$engine_release" in engine-*) engine_tag="$engine_release" ;; *) engine_tag="v$engine_release" ;; esac
-source_line="This build's source, with the engine's patches and build scripts: https://github.com/$repo/tree/v$version (LICENSE and NOTICE there cover the licenses)."
-[ -n "$helium_engine" ] && [ -n "$engine_release" ] && source_line="$source_line The engine's Helium and uBlock sources as built, and where Chromium's is: https://github.com/$repo/releases/download/$engine_tag/$(basename "$engine_source")"
+source_line="This build's source, with the engine's patches and build scripts: $REPO_URL/tree/v$version (LICENSE and NOTICE there cover the licenses)."
+[ -n "$helium_engine" ] && [ -n "$engine_release" ] && source_line="$source_line The engine's Helium and uBlock sources as built, and where Chromium's is: $REPO_URL/releases/download/$engine_tag/$(basename "$engine_source")"
 {
   notes_body
   [ -n "${notes_video:-}" ] && printf '\n## Before and after\n\nThe fixes, filmed on the previous release and on this one: %s\n' "${notes_page%/release-notes}/release-videos/$notes_video.mp4"
@@ -511,11 +486,11 @@ phased_args=()
 [ -n "$phased" ] && phased_args=(--phased-rollout-interval "$phased")
 [ "$channel" = nightly ] && phased_args+=(--channel nightly)
 "$sparkle/generate_appcast" --ed-key-file "$key" ${phased_args[@]+"${phased_args[@]}"} \
-  --download-url-prefix "https://github.com/$repo/releases/download/v$version/" \
+  --download-url-prefix "$REPO_URL/releases/download/v$version/" \
   --embed-release-notes --full-release-notes-url "$notes_page" \
-  --link "https://github.com/$repo" -o "$updates/appcast.xml" "$updates"
+  --link "$REPO_URL" -o "$updates/appcast.xml" "$updates"
 mv "$updates/appcast.xml" "$dist/appcast.xml"
-grep -q "<sparkle:shortVersionString>$version<" "$dist/appcast.xml" || die "appcast.xml has no item for $version"
+appcast item "$dist/appcast.xml" "$version" >/dev/null || die "appcast.xml has no single item for $version"
 rm -rf "$updates"
 
 engine_files=()

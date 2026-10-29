@@ -1,6 +1,6 @@
 import { Shell } from "./shellNative";
 
-export const setSwitcherCapture = (active: boolean) => void Shell.setSwitcherCapture(active);
+export const setSwitcherCapture = (active: boolean) => Shell.setSwitcherCapture(active);
 export const setDragEscapeCapture = (active: boolean) => void Shell.setDragEscapeCapture(active);
 export const cancelFocusMove = (generation: number, restoringSource: boolean) =>
   void Shell.cancelFocusMove(generation, restoringSource);
@@ -10,5 +10,4 @@ export const restoreKeyResponder = (token: number): Promise<boolean> => (token ?
 export const discardKeyResponder = (token: number): void => {
   if (token) void Shell.discardKeyResponder(token);
 };
-export const restartSwitcherPointer = () => Shell.setSwitcherCapture(true);
 export const switcherPointerMoved = () => Shell.switcherPointerMoved();

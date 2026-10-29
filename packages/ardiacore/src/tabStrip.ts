@@ -1,3 +1,4 @@
+import type { TabGroupColor } from "@ardia/core";
 import { call, on } from "./engine/call";
 
 export type StripTab = {
@@ -12,7 +13,7 @@ export type StripTab = {
 export type StripGroup = {
   id: string;
   title: string;
-  color: "grey" | "blue" | "red" | "yellow" | "green" | "pink" | "purple" | "cyan" | "orange";
+  color: TabGroupColor;
   collapsed: boolean;
 };
 
@@ -60,4 +61,4 @@ export const onTabStripTransaction = (listener: (tx: TabStripTransaction) => voi
 export const tabStrips = (): Promise<TabStripTransaction> => call("tabs.strips");
 
 export const lastTabClosesWindow = (): Promise<boolean> =>
-  call("tabs.lastTabPolicy").then((r) => r.closesWindow !== false);
+  call("tabs.lastTabPolicy").then((r) => r.closesWindow);

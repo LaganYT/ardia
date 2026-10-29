@@ -1,6 +1,6 @@
 import { onSystemState, setBatterySaver, systemState, type SystemState } from "../../platform/performance";
 import { releaseProfile } from "../../platform/profiles";
-import { showToast } from "../splits/actions";
+import { showToast } from "../app/toasts";
 import { openSettings } from "../settings/settingsWindows";
 import { useBrowser, type BrowserState } from "../browser/store";
 import type { BatterySaverWhen } from "../settings/settings";
@@ -25,7 +25,7 @@ const currentSystem = () => (system ? { ...system, ...systemOverride } : null);
 
 export function noteReady(tabId: string) {
   const tab = store().tabs[tabId];
-  if (tab) loadedProfiles.add(engineProfile(tab.profileId));
+  if (tab) loadedProfiles.add(engineProfile(useBrowser.getState(), tab.profileId));
   forget(tabId);
 }
 
@@ -47,10 +47,10 @@ function forget(tabId: string) {
 
 function releaseUnusedProfiles() {
   const s = store();
-  const inUse = new Set(Object.values(s.windows).map((w) => engineProfile(w.profileId)));
+  const inUse = new Set(Object.values(s.windows).map((w) => engineProfile(s, w.profileId)));
   for (const id of webviews.keys()) {
     const tab = s.tabs[id];
-    if (tab) inUse.add(engineProfile(tab.profileId));
+    if (tab) inUse.add(engineProfile(s, tab.profileId));
   }
   for (const profile of [...loadedProfiles]) {
     if (!profile || isIncognitoProfile(profile) || inUse.has(profile)) continue;

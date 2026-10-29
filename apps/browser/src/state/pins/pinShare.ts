@@ -1,14 +1,12 @@
 import type { BrowserState } from "../browser/store";
 import { changedIds } from "../browser/changes";
-import { inPinnedContainer, isIncognitoProfile, wake } from "../browser/model";
+import { familyKeyOf, inPinnedContainer, isIncognitoProfile, pinKeyOf, wake } from "../browser/model";
 import { hasPage, needsPage } from "../tabs/pageSession";
-import { mirrored, pinKeyOf } from "./pinMirror";
+import { mirrored } from "./pinMirror";
 import { splitOf } from "../splits/splits";
 import { sharedListTab } from "../tabs/tabShare";
 import type { BrowserWindow, Tab, TabGroup, TabLive } from "../browser/types";
 
-
-export const shareKeyOf = (t: Pick<Tab, "profileId" | "id" | "pinKey">) => `${t.profileId}\u0001${pinKeyOf(t)}`;
 
 function shares(s: BrowserState, t: Tab | undefined): t is Tab {
   return !!t && !isIncognitoProfile(t.profileId) && mirrored(s.windows[t.windowId]) && (inPinnedContainer(s, t.id) || sharedListTab(s, t)) && !splitOf(s, t.id);
@@ -47,7 +45,7 @@ const livePageKeys = new WeakMap<BrowserState["tabs"], Set<string>>();
 function livePageKeysOf(tabs: BrowserState["tabs"]): Set<string> {
   let keys = livePageKeys.get(tabs);
   if (!keys) {
-    keys = new Set(Object.values(tabs).filter((t) => hasPage(t) && !t.pageIn).map(shareKeyOf));
+    keys = new Set(Object.values(tabs).filter((t) => hasPage(t) && !t.pageIn).map(familyKeyOf));
     livePageKeys.set(tabs, keys);
   }
   return keys;
@@ -56,7 +54,7 @@ function livePageKeysOf(tabs: BrowserState["tabs"]): Set<string> {
 export function isPageUnloaded(s: BrowserState, id: string): boolean {
   const t = s.tabs[id];
   if (!t || !needsPage(t)) return false;
-  return !livePageKeysOf(s.tabs).has(shareKeyOf(t)) || !holderOf(s, id);
+  return !livePageKeysOf(s.tabs).has(familyKeyOf(t)) || !holderOf(s, id);
 }
 
 const swapIds = (ids: string[], a: string, b: string) => {

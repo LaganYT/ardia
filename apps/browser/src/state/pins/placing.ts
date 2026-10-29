@@ -1,10 +1,11 @@
 import type { BrowserState } from "../browser/store";
 import { ancestorIds, innermostGroupOf, insertAll, leaveGroups, nestGroups, orderSections, placeGroups, reparent, syncGroupOrder } from "../groups/groups";
-import { isIncognitoProfile, isPinnedRow } from "../browser/model";
+import { isIncognitoProfile, isPinnedRow, pinKeyOf } from "../browser/model";
 import { splitOf, splitRowHead, splitRowPanes, withSplitRows } from "../splits/splits";
-import { nextPinChoice, placeChoiceKey } from "./pinChoices";
+import { markPinned } from "./pinChoices";
 import { groupOf, withRowsGrouped } from "./tabGrouping";
 import type { BrowserWindow, TileFolder } from "../browser/types";
+import { pinnedGroupMembers } from "../browser/structure";
 
 export type TabPlacement = {
   pinned: boolean;
@@ -30,7 +31,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
   const movingSet = new Set(moving);
 
   const tabs = { ...s.tabs };
-  let chosen: Record<string, number> | null = null;
+  let pinChoices = s.pinChoices;
   let pinSync = s.pinSync;
   const pinnedGroupOf = (id: string) => {
     const g = innermostGroupOf(s.groups, id);
@@ -45,15 +46,13 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     if (placed || !!t.pinnedAsRow !== row) {
       const { pinnedAsRow: _, ...rest } = tabs[id]!;
       tabs[id] = row ? { ...rest, pinnedAsRow: true } : rest;
-      const entry = placed ? pinSync[t.profileId]?.[t.pinKey ?? t.id] : undefined;
+      const entry = placed ? pinSync[t.profileId]?.[pinKeyOf(t)] : undefined;
       if (entry?.g) {
         const { g: __, w: ___, ...kept } = entry;
-        pinSync = { ...pinSync, [t.profileId]: { ...pinSync[t.profileId], [t.pinKey ?? t.id]: kept } };
+        pinSync = { ...pinSync, [t.profileId]: { ...pinSync[t.profileId], [pinKeyOf(t)]: kept } };
       }
       if ((p.pinned || intoPinnedGroup) && !isIncognitoProfile(t.profileId)) {
-        chosen ??= { ...s.pinChoices[t.profileId] };
-        if (p.pinned) chosen[t.pinKey ?? t.id] = nextPinChoice();
-        if (placed) chosen[placeChoiceKey(t.pinKey ?? t.id)] = nextPinChoice();
+        pinChoices = markPinned(pinChoices, t.profileId, { tabs: p.pinned ? [pinKeyOf(t)] : [], placed: placed ? [pinKeyOf(t)] : [] });
       }
     }
     const folder = p.pinned && !row ? (p.tileFolder === undefined ? tabs[id]!.tileFolder : (p.tileFolder ?? undefined)) : undefined;
@@ -70,7 +69,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     at = kept.length ? rest.indexOf(kept.at(-1)!) + 1 : Math.min(order.get(target.tabIds[0]!)!, rest.length);
   } else if (p.pinned) {
     const toRow = !!tabs[moving[0]!]!.pinnedAsRow;
-    const pinnedGroup = toRow && p.last ? new Set(Object.values(s.groups).filter((g) => g.pinned).flatMap((g) => g.tabIds)) : null;
+    const pinnedGroup = toRow && p.last ? pinnedGroupMembers(s.groups) : null;
     at = rest.reduce((last, id, i) => ((tabs[id]?.pinned && (toRow || !tabs[id]!.pinnedAsRow)) || pinnedGroup?.has(id) ? i + 1 : last), 0);
   } else at = rest.length;
   insertAll(rest, at, moving);
@@ -87,7 +86,6 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
   let tabIds = placeGroups(rest, groups, w.id);
   tabIds = orderSections(tabIds, tabs, groups);
   const window: BrowserWindow = { ...w, tabIds };
-  const pinChoices = chosen ? { ...s.pinChoices, [first.profileId]: chosen } : s.pinChoices;
   return { ...s, tabs, pinChoices, pinSync, groups: syncGroupOrder(groups, window), windows: { ...s.windows, [w.id]: window } };
 }
 

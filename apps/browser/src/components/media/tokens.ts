@@ -1,7 +1,8 @@
 import { useTheme } from "../ui/theme";
 import { colorRoles } from "../ui/tokens";
+import { parseColor } from "../../lib/color";
 
-const rgbOf = (hex: string): [number, number, number] => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
+const rgbOf = (color: string) => parseColor(color).slice(0, 3) as [number, number, number];
 
 const light = {
   background: colorRoles.light.panel,

@@ -5,12 +5,11 @@ final class WindowManager: NSObject, NSWindowDelegate {
   static let shared = WindowManager()
 
   private(set) var windows: [String: NSWindow] = [:]
-  var emit: ((String, [String: Any]) -> Void)?
   private var closingFromJS = Set<String>()
   private weak var lastPlaced: NSWindow?
   private static let lastFrameKey = "ArdiaLastWindowFrame"
   private var lastFrame = UserDefaults.standard.string(forKey: WindowManager.lastFrameKey) ?? UserDefaults.standard.string(forKey: "NSWindow Frame BrowserWindow")
-  private(set) var auxKinds: [String: String] = [:]
+  private(set) var auxKinds: [String: WindowKind] = [:]
   private(set) var smallIds = Set<String>()
 
   private func isBrowserWindow(_ window: NSWindow?) -> Bool {
@@ -48,60 +47,51 @@ final class WindowManager: NSObject, NSWindowDelegate {
     window.level = window.level == .floating ? .normal : .floating
   }
 
-  struct PendingOpen {
-    var frame: [Double]?, incognito: Bool, title: String, kind: String, profile: String?, size: [Double]?, behind: String
-    var chromeWindow: String?
-    var claim: String?
-    var pointer: NSPoint?
-    var animated: Bool
-  }
-  var pendingOpens: [String: PendingOpen] = [:]
+  var pendingOpens: [String: OpenWindowOptions] = [:]
   var pendingOrder: [String] = []
   private var contentShown = Set<String>()
   private var firstContentObservers: [String: NSObjectProtocol] = [:]
   private static let behindTimeout = 1.5
 
-  func open(
-    id: String, frame: [Double]?, incognito: Bool, title: String, focus: Bool, kind: String = "browser", profile: String? = nil,
-    size: [Double]? = nil, behind: String? = nil, chromeWindow: String? = nil, claim: String? = nil, pointer: NSPoint? = nil,
-    animated: Bool = false
-  ) {
+  func open(id: String, _ options: OpenWindowOptions, focus: Bool) {
     if let existing = windows[id] {
       if focus { existing.makeKeyAndOrderFront(nil) }
       return
     }
+    let behind = options.behind
     if let behind, !focus, windows[behind] != nil, !contentShown.contains(behind) {
       if pendingOpens[id] == nil { pendingOrder.append(id) }
-      pendingOpens[id] = PendingOpen(
-        frame: frame, incognito: incognito, title: title, kind: kind, profile: profile, size: size, behind: behind, chromeWindow: chromeWindow,
-        claim: claim, pointer: pointer, animated: animated)
+      pendingOpens[id] = options
       DispatchQueue.main.asyncAfter(deadline: .now() + Self.behindTimeout) { [weak self] in self?.openPending(behind: behind) }
       return
     }
-    let small = kind == "small"
-    if kind != "browser" && !small { return openAux(id: id, kind: kind, title: title) }
+    let kind = options.kind, title = options.title, frame = options.frame, claim = options.claim
+    let small = kind == .small
+    if kind != .browser && !small { return openAux(id: id, kind: kind, title: title) }
     guard let makeWindow = WindowHost.makeWindow, let makeContentView = WindowHost.makeContentView else { return }
     if !small, ChromeWindows.takeDismissed(appWindow: id) {
-      emit?("onWindowEvent", ["type": "close", "id": id])
+      ShellEvents.send(.window, ["type": "close", "id": id])
       return
     }
     if small, let claim, ChromeWindows.takeDismissed(appWindow: claim) {
-      emit?("onWindowEvent", ["type": "close", "id": id])
+      ShellEvents.send(.window, ["type": "close", "id": id])
       return
     }
     if small { smallIds.insert(id) }
-    if let chromeWindow = ChromeWindows.makeWindow(profile: profile, chromeWindow: small ? nil : chromeWindow, appWindow: small ? claim : id) {
-      if incognito { chromeWindow.appearance = NSAppearance(named: .darkAqua) }
+    if let chromeWindow = ChromeWindows.makeWindow(profile: options.profile, chromeWindow: small ? nil : options.chromeWindow, appWindow: small ? claim : id) {
+      if options.incognito { chromeWindow.appearance = NSAppearance(named: .darkAqua) }
       let root = makeContentView(id)
       ChromeWindows.embed(root, in: chromeWindow)
-      if small || animated, !chromeWindow.isVisible { entrances[id] = !small || frame == nil }
+      if small || options.animated, !chromeWindow.isVisible { entrances[id] = !small || frame == nil }
       holdUntilContent(chromeWindow, id: id, root: root)
       noteFirstContent(id: id, root: root)
       keepContentSizedAcrossReloads(id: id, root: root)
       ChromeWindows.onSwap { [weak self] from, to in self?.adopt(from: from, to: to) }
       observeDelegateNotifications(chromeWindow)
       if small { configureSmall(chromeWindow) }
-      return show(chromeWindow, id: id, frame: frame, title: title, focus: focus, smallSize: small ? size ?? [] : nil, smallPointer: pointer, behind: behind)
+      return show(
+        chromeWindow, id: id, frame: frame, title: title, focus: focus, small: small, smallSize: options.size, smallPointer: options.pointer,
+        behind: behind)
     }
     let window = makeWindow()
     let controller = NSViewController()
@@ -109,21 +99,21 @@ final class WindowManager: NSObject, NSWindowDelegate {
     controller.view.frame = NSRect(origin: .zero, size: window.contentRect(forFrameRect: window.frame).size)
     window.contentViewController = controller
     window.delegate = self
-    if incognito { window.appearance = NSAppearance(named: .darkAqua) }
+    if options.incognito { window.appearance = NSAppearance(named: .darkAqua) }
     if small { configureSmall(window) }
-    show(window, id: id, frame: frame, title: title, focus: focus, smallSize: small ? size ?? [] : nil, smallPointer: pointer)
+    show(window, id: id, frame: frame, title: title, focus: focus, small: small, smallSize: options.size, smallPointer: options.pointer)
   }
 
   private func show(
-    _ window: NSWindow, id: String, frame: [Double]?, title: String, focus: Bool, smallSize: [Double]? = nil, smallPointer: NSPoint? = nil,
+    _ window: NSWindow, id: String, frame: CGRect?, title: String, focus: Bool, small: Bool, smallSize: CGSize?, smallPointer: NSPoint?,
     behind: String? = nil
   ) {
     window.title = title
-    if let smallSize, frame == nil { placeSmall(window, size: smallSize, pointer: smallPointer) } else if frame != nil || !window.isVisible { place(window, frame: frame) }
+    if small, frame == nil { placeSmall(window, size: smallSize, pointer: smallPointer) } else if frame != nil || !window.isVisible { place(window, frame: frame) }
     relayoutRoot(window)
     windows[id] = window
     if let center = lightsCenters[id] { ChromeWindows.setTrafficLightsCenter(center, in: window) }
-    if smallSize == nil { lastPlaced = window }
+    if !small { lastPlaced = window }
     if window.isMiniaturized {
       observeFrame(window)
       return reportFrame(window)
@@ -207,12 +197,10 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private func openPending(behind: String) {
     let ids = pendingOrder.filter { pendingOpens[$0]?.behind == behind }
     for id in ids {
-      guard let o = pendingOpens.removeValue(forKey: id) else { continue }
+      guard let options = pendingOpens.removeValue(forKey: id) else { continue }
       pendingOrder.removeAll { $0 == id }
       contentShown.insert(behind)
-      open(
-        id: id, frame: o.frame, incognito: o.incognito, title: o.title, focus: false, kind: o.kind, profile: o.profile, size: o.size,
-        behind: behind, chromeWindow: o.chromeWindow, claim: o.claim, pointer: o.pointer, animated: o.animated)
+      open(id: id, options, focus: false)
     }
   }
 
@@ -261,9 +249,9 @@ final class WindowManager: NSObject, NSWindowDelegate {
     reportFrame(to)
   }
 
-  private func openAux(id: String, kind: String, title: String) {
+  private func openAux(id: String, kind: WindowKind, title: String) {
     guard let makeContentView = WindowHost.makeContentView else { return }
-    let settings = kind == "settings"
+    let settings = kind == .settings
     let size = settings ? NSSize(width: 820, height: 640) : NSSize(width: 640, height: 600)
     var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
     if settings { style.insert(.resizable) }
@@ -294,7 +282,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   private static let auxFrameSaveDelay: TimeInterval = 0.3
 
-  private static func auxFrameName(_ kind: String) -> String { "Ardia\(kind.capitalized)" }
+  private static func auxFrameName(_ kind: WindowKind) -> String { "Ardia\(kind.rawValue.capitalized)" }
 
   @objc private func auxFrameChanged(_ notification: Notification) {
     guard let window = notification.object as? NSWindow else { return }
@@ -314,21 +302,21 @@ final class WindowManager: NSObject, NSWindowDelegate {
     window.collectionBehavior.insert(.moveToActiveSpace)
   }
 
-  private func placeSmall(_ window: NSWindow, size: [Double], pointer: NSPoint?) {
+  private func placeSmall(_ window: NSWindow, size: CGSize?, pointer: NSPoint?) {
     let mouse = pointer ?? NSEvent.mouseLocation
     let screen = (pointer == nil && NSApp.isActive ? NSApp.keyWindow?.screen : nil)
       ?? NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
     guard let visible = screen?.visibleFrame else { return window.center() }
-    let width = min(max(size.count == 2 ? size[0] : 900, window.minSize.width), visible.width)
-    let height = min(max(size.count == 2 ? size[1] : 640, window.minSize.height), visible.height)
+    let width = min(max(size?.width ?? 900, window.minSize.width), visible.width)
+    let height = min(max(size?.height ?? 640, window.minSize.height), visible.height)
     let lift = min(visible.height * 0.05, (visible.height - height) / 2)
     let origin = NSPoint(x: (visible.midX - width / 2).rounded(), y: (visible.midY - height / 2 + lift).rounded())
     window.setFrame(NSRect(origin: origin, size: NSSize(width: width.rounded(), height: height.rounded())), display: false)
   }
 
-  private func place(_ window: NSWindow, frame: [Double]?) {
-    if let frame, frame.count == 4 {
-      window.setFrame(NSRect(x: frame[0], y: frame[1], width: frame[2], height: frame[3]), display: false)
+  private func place(_ window: NSWindow, frame: CGRect?) {
+    if let frame {
+      window.setFrame(frame, display: false)
       if let screen = window.screen ?? NSScreen.main {
         window.setFrame(window.constrainFrameRect(window.frame, to: screen), display: false)
       }
@@ -404,11 +392,9 @@ final class WindowManager: NSObject, NSWindowDelegate {
   }
 
   func focus(id: String) {
-    if let o = pendingOpens.removeValue(forKey: id) {
+    if let options = pendingOpens.removeValue(forKey: id) {
       pendingOrder.removeAll { $0 == id }
-      return open(
-        id: id, frame: o.frame, incognito: o.incognito, title: o.title, focus: true, kind: o.kind, profile: o.profile, size: o.size,
-        pointer: o.pointer)
+      return open(id: id, options, focus: true)
     }
     windows[id]?.makeKeyAndOrderFront(nil)
   }
@@ -420,15 +406,14 @@ final class WindowManager: NSObject, NSWindowDelegate {
   }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    guard let id = id(of: sender), auxKinds[id] == nil, appEventsObserved, let emit else { return true }
-    emit("onWindowEvent", ["type": "closeRequest", "id": id])
-    return false
+    guard let id = id(of: sender), auxKinds[id] == nil, ShellEvents.isAttached(.app) else { return true }
+    return !ShellEvents.send(.window, ["type": "closeRequest", "id": id])
   }
 
   func windowDidBecomeKey(_ notification: Notification) {
     guard let window = notification.object as? NSWindow, let id = id(of: window) else { return }
     if isMainWindow(window) { lastPlaced = window }
-    emit?("onWindowEvent", ["type": "focus", "id": id])
+    ShellEvents.send(.window, ["type": "focus", "id": id])
   }
 
   func windowWillClose(_ notification: Notification) {
@@ -446,7 +431,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     auxKinds[id] = nil
     smallIds.remove(id)
     if closingFromJS.remove(id) == nil {
-      emit?("onWindowEvent", ["type": "close", "id": id])
+      ShellEvents.send(.window, ["type": "close", "id": id])
     }
     DispatchQueue.main.async {
       if ChromeWindows.root(of: window) != nil { return ChromeWindows.removeRoot(of: window) }
@@ -524,11 +509,9 @@ final class WindowManager: NSObject, NSWindowDelegate {
       UserDefaults.standard.set(lastFrame, forKey: Self.lastFrameKey)
     }
     let f = window.frame
-    emit?("onWindowEvent", ["type": "frame", "id": id, "frame": [f.minX, f.minY, f.width, f.height]])
+    ShellEvents.send(.window, ["type": "frame", "id": id, "frame": [f.minX, f.minY, f.width, f.height]])
   }
 
-  var appEventsObserved = false
-  var runtime: ObjectIdentifier?
 
   enum QuitStep { case none, saving, waitingForUpdater }
   var quitStep = QuitStep.none
@@ -536,5 +519,4 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   var saveWait: Timer?
   var lateSaveAlert: NSAlert?
-  let background = LaunchConfig.shared.background
 }

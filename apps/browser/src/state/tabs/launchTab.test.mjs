@@ -102,7 +102,7 @@ const savedHint = () => (flushPersistence(), JSON.parse(stub.docs.get("session.j
 test("staleness: a navigation, a switch, a close and a window change all move the hint", () => {
   hydrate([win("w1", ["a", "b"], "a"), win("w2", ["c"], "c")], [tab("a", "w1", "https://a.com/"), tab("b", "w1", "https://b.com/"), tab("c", "w2", "https://c.com/")], { focusedWindowId: "w1" });
   assert.deepEqual(savedHint(), { id: "a", url: "https://a.com/", profile: "" });
-  S().navigated("a", { url: "https://a.com/next", title: "Next" }, { isLoading: false, canGoBack: true, canGoForward: false });
+  S().updateTab("a", { url: "https://a.com/next", title: "Next" }, { isLoading: false, canGoBack: true, canGoForward: false });
   assert.equal(savedHint().url, "https://a.com/next", "navigated");
   S().activate("b");
   assert.equal(savedHint().id, "b", "switched");
@@ -117,7 +117,7 @@ test("staleness: a navigation, a switch, a close and a window change all move th
 test("staleness: after a crash the file read at launch has the hint of its own session", () => {
   hydrate([win("w1", ["a"], "a")], [tab("a", "w1", "https://a.com/")], { focusedWindowId: "w1" });
   flushPersistence();
-  S().navigated("a", { url: "https://a.com/lost", title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
+  S().updateTab("a", { url: "https://a.com/lost", title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
   const onDisk = JSON.parse(stub.docs.get("session.json"));
   S().hydrate(loadSession());
   assert.deepEqual(launchTab(S(), S().ui.focusedWindowId), onDisk.launchTab);
@@ -130,13 +130,13 @@ test("switched off (launchTab): no hint is saved, so the engine starts nothing",
   stub.docs.set("switches-cache.json", JSON.stringify({ version: 1, switches: { launchTab: false } }));
   ks.reloadSwitches();
   try {
-    S().navigated("a", { url: "https://a.com/off", title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
+    S().updateTab("a", { url: "https://a.com/off", title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
     assert.equal(savedHint(), null);
   } finally {
     stub.docs.delete("switches-cache.json");
     ks.reloadSwitches();
   }
-  S().navigated("a", { url: "https://a.com/on", title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
+  S().updateTab("a", { url: "https://a.com/on", title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
   assert.equal(savedHint().url, "https://a.com/on");
 });
 

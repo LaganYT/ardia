@@ -1,12 +1,11 @@
+import { THEME_TEXTURES, type ThemeBackdropProps, type ThemeMode, type ThemeTexture } from "@ardia/core";
+import { hslToRgb, parseColor, rgbToHsl, toHex } from "./color";
+
 export type ProfileColor = "plum" | "blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "neutral";
 
 export type ThemeColor = { r: number; g: number; b: number; a: number };
 
 export type ThemeStop = { color: ThemeColor; x: number; y: number };
-
-export type ThemeMode = "auto" | "light" | "dark";
-
-export type ThemeTexture = "grain" | "sand" | "denim" | "tweed";
 
 export type ThemeLook = {
   stops: ThemeStop[];
@@ -26,21 +25,10 @@ export type ProfileLookFields = { color: ProfileColor; theme?: ProfileTheme | nu
 
 export const MAX_THEME_STOPS = 3;
 export const PAD_LIGHTNESS = 0.6;
-export const THEME_TEXTURES: ThemeTexture[] = ["grain", "sand", "denim", "tweed"];
 
 const TEXTURE_STRENGTH: Record<ThemeTexture, number> = { grain: 0.8, sand: 0.15, denim: 0.6, tweed: 0.4 };
 const BASE_REACH = 0.75;
 export const DEFAULT_THEME_ANGLE = 135;
-
-export type ThemeBackdropProps = {
-  themeColors: number[];
-  themeOpacity: number;
-  themeBaseAlpha: number;
-  themeGrain: number;
-  themeTexture: ThemeTexture;
-  themeAppearance: ThemeMode;
-  themeAngle: number;
-};
 
 export const PRESET_BACKDROP: ThemeBackdropProps = {
   themeColors: [],
@@ -53,25 +41,6 @@ export const PRESET_BACKDROP: ThemeBackdropProps = {
 };
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-
-export function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  if (s === 0) return [l, l, l];
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-  const p = 2 * l - q;
-  const channel = (t: number) => {
-    t = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
-    return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p;
-  };
-  return [channel(h + 1 / 3), channel(h), channel(h - 1 / 3)];
-}
-
-export function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
-  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
-  if (d === 0) return [0, 0, l];
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return [h / 6, s, l];
-}
 
 export function padColor(x: number, y: number, lightness = PAD_LIGHTNESS): ThemeColor {
   const dx = clamp01(x) - 0.5, dy = clamp01(y) - 0.5;
@@ -116,15 +85,15 @@ export function fromOklab([L, A, B]: Lab): [number, number, number] {
   ].map(encode) as [number, number, number];
 }
 
-const toHex = (c: number[]) => `#${c.map((v) => Math.round(clamp01(v) * 255).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+const unitHex = (c: number[]) => toHex(c.map((v) => clamp01(v) * 255));
 
 export function colorHex(color: ThemeColor): string {
-  return toHex([color.r, color.g, color.b]);
+  return unitHex([color.r, color.g, color.b]);
 }
 
 export function hexColor(hex: string): ThemeColor {
-  const ch = (i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16) / 255;
-  return { r: ch(0), g: ch(1), b: ch(2), a: 1 };
+  const [r, g, b] = parseColor(hex);
+  return { r: r / 255, g: g / 255, b: b / 255, a: 1 };
 }
 
 export function mixOklab(a: ThemeColor, b: ThemeColor, t: number): [number, number, number] {
@@ -233,7 +202,7 @@ export function themeBackdrop(theme: ProfileTheme, dark: boolean): ThemeBackdrop
 }
 
 export function themeAccent(theme: ProfileTheme): string {
-  return toHex(themeArea(theme, 0.5, 0.5, 1, 1));
+  return unitHex(themeArea(theme, 0.5, 0.5, 1, 1));
 }
 
 export function themePalette(theme: ProfileTheme): string[] {
@@ -248,7 +217,7 @@ function underGrey(theme: ProfileTheme, dark: boolean): number {
 
 export function themeUnderColor(theme: ProfileTheme, dark: boolean): string {
   const grey = underGrey(theme, dark);
-  return toHex([grey, grey, grey]);
+  return unitHex([grey, grey, grey]);
 }
 
 function composite(theme: ProfileTheme, dark: boolean, x: number, y: number): number[] {
@@ -258,7 +227,7 @@ function composite(theme: ProfileTheme, dark: boolean, x: number, y: number): nu
 }
 
 export function opaqueThemeTint(theme: ProfileTheme, dark: boolean): [string, string] {
-  return [toHex(composite(theme, dark, 0, 0)), toHex(composite(theme, dark, 1, 1))];
+  return [unitHex(composite(theme, dark, 0, 0)), unitHex(composite(theme, dark, 1, 1))];
 }
 
 const SAMPLE_POINTS = [0, 0.5, 1];

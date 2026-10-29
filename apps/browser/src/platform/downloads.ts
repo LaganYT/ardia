@@ -6,8 +6,7 @@ export {
   keepDownload,
   getDownloadSettings,
   setDownloadSettings,
-  leftDownloadStaging,
-  removeLeftDownloadStaging,
+  removeDownloadStaging,
   type Download,
   type DownloadSettings,
 } from "@ardia/ardiacore";

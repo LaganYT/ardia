@@ -1,6 +1,7 @@
 import { installExtensionCrx, onExtensionInstallFailed } from "../../platform/extensions";
 import { useBrowser } from "../browser/store";
 import { extensionProfile } from "./store";
+import { showToast } from "../app/toasts";
 
 export function crxPath(url: string): string | null {
   const encoded = /^file:\/\/(\/[^/?#][^?#]*)$/i.exec(url)?.[1];
@@ -14,7 +15,7 @@ export function crxPath(url: string): string | null {
 }
 
 const toast = (windowId: string, message: string) =>
-  (require("../splits/actions") as typeof import("../splits/actions")).showToast(windowId, "Couldn't add the extension", message, { icon: "puzzlepiece.extension" });
+  showToast(windowId, "Couldn't add the extension", message, { icon: "puzzlepiece.extension" });
 
 export function installDroppedCrx(windowId: string, urls: string[]): string[] {
   const paths = urls.map(crxPath);

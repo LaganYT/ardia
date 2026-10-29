@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { shell } from "../../platform/devShell";
 import { readDocument, writeDocument } from "../../platform/documents";
+import { DEV_EVAL_RESULT, watchDevEval } from "../../lib/devEval";
 import { omniboxDrivers } from "../omnibox/devDriver";
 import { pagesDrivers } from "../pages/devDrivers";
 import { usePages } from "../../state/tabs/pageState";
@@ -51,8 +52,8 @@ export function startDevHarness() {
     get peek(): typeof import("../../state/peek/actions") {
       return require("../../state/peek/actions");
     },
-    get toasts(): typeof import("../../state/splits/actions").useToasts {
-      return require("../../state/splits/actions").useToasts;
+    get toasts(): typeof import("../../state/app/toasts").useToasts {
+      return require("../../state/app/toasts").useToasts;
     },
     get webApps(): typeof import("../../state/webApps/webApps") {
       return require("../../state/webApps/webApps");
@@ -81,14 +82,14 @@ export function startDevHarness() {
     get hoverShift(): typeof import("../ui/hoverShift") {
       return require("../ui/hoverShift");
     },
-    get settingsSearch(): typeof import("../../state/settings/searchState") & typeof import("../settings/SettingsSearch") {
-      return { ...require("../../state/settings/searchState"), ...require("../settings/SettingsSearch") };
+    get settingsSearch(): typeof import("../../state/settings/searchState") & typeof import("../settings/SettingsSearch") & typeof import("../settings/anchors") {
+      return { ...require("../../state/settings/searchState"), ...require("../settings/SettingsSearch"), ...require("../settings/anchors") };
     },
     get settingsNav(): typeof import("../../state/settings/settingsWindows").useSettingsNav {
       return require("../../state/settings/settingsWindows").useSettingsNav;
     },
-    get preload(): typeof import("../../platform/preload") {
-      return require("../../platform/preload");
+    get preload(): typeof import("../../state/tabs/prewarm") {
+      return require("../../state/tabs/prewarm");
     },
     get syncSheets(): typeof import("../settings/panes/SyncSheets") {
       return require("../settings/panes/SyncSheets");
@@ -123,20 +124,14 @@ export function startDevHarness() {
     },
   };
   (globalThis as { ac?: typeof ac }).ac = ac;
-  const scriptId = (source: string | null) => source?.match(/^\/\/ *(\S+)/)?.[1];
-  let lastId = scriptId(readDocument("dev-eval.js")) ?? "";
-  setInterval(function pollDevEval() {
-    const source = readDocument("dev-eval.js");
-    const id = scriptId(source);
-    if (!source || !id || id === lastId) return;
-    lastId = id;
+  watchDevEval(readDocument, __DEV__ ? 50 : 250, (id, source) => {
     const evalLog = ((globalThis as { __devEvalLog?: string[] }).__devEvalLog ??= []);
     const took = Date.now();
     evalLog.push(`${id} taken ${took}`);
     if (evalLog.length > 12) evalLog.shift();
     const done = (body: object) => {
       evalLog.push(`${id} settled +${Date.now() - took} ms`);
-      writeDocument("dev-eval-result.json", JSON.stringify({ id, ...body }));
+      writeDocument(DEV_EVAL_RESULT, JSON.stringify({ id, ...body }));
     };
     try {
       const fn = new Function("ac", source) as (n: typeof ac) => unknown;
@@ -147,5 +142,5 @@ export function startDevHarness() {
     } catch (error) {
       done({ error: String(error) });
     }
-  }, __DEV__ ? 50 : 250);
+  });
 }

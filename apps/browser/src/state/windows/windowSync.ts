@@ -1,3 +1,4 @@
+import { useBrowser } from "../browser/store";
 import type { OpenWindowOptions, WindowEvent } from "../../platform/windows";
 import type { BrowserState } from "../browser/store";
 import { engineProfile, windowTitle } from "../browser/model";
@@ -6,7 +7,7 @@ import { windowOpens } from "./windowOpenOrder";
 export type LightsCenter = [number, number] | null;
 
 export type WindowPort = {
-  open(id: string, options: OpenWindowOptions & { claim?: string }, lightsCenter: LightsCenter): void;
+  open(id: string, options: OpenWindowOptions, lightsCenter: LightsCenter): void;
   close(id: string): void;
   setTitle(id: string, title: string): void;
   windowIds(): Promise<string[]>;
@@ -28,7 +29,7 @@ export function createWindowSync({ port, getState, isQuitting, lightsCenter, isU
   const titles = new Map<string, string>();
 
   const releaseIfIncognito = (w: BrowserState["windows"][string] | undefined) => {
-    if (w?.incognito) port.releaseProfile(engineProfile(w.profileId));
+    if (w?.incognito) port.releaseProfile(engineProfile(useBrowser.getState(), w.profileId));
   };
 
   const listen = () =>
@@ -51,7 +52,7 @@ export function createWindowSync({ port, getState, isQuitting, lightsCenter, isU
       const w = s.windows[id]!;
       open.add(id);
       titles.set(id, windowTitle(s, id));
-      const profile = engineProfile(w.profileId);
+      const profile = engineProfile(s, w.profileId);
       const claim = w.kind === "small" ? s.tabs[w.tabIds[0] ?? ""]?.adoptId : undefined;
       const small = w.kind === "small"
         ? { kind: "small" as const, size: s.settings.littleArdiaSize, ...(claim?.startsWith("link:") ? { claim } : {}), ...(w.linkPointer ? { pointer: w.linkPointer } : {}) }

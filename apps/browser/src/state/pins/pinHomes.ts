@@ -1,18 +1,13 @@
 import type { BrowserState } from "../browser/store";
 import { changedIds } from "../browser/changes";
+import { pinnedGroupMembers } from "../browser/structure";
 import type { Tab } from "../browser/types";
 
 type HomeSource = Pick<BrowserState, "tabs" | "groups" | "windows">;
 
-export function pinnedGroupMembers(s: Pick<BrowserState, "groups">): Set<string> {
-  const ids = new Set<string>();
-  for (const g of Object.values(s.groups)) if (g.pinned) for (const id of g.tabIds) ids.add(id);
-  return ids;
-}
-
 export function settlePinHomes(s: HomeSource, prev: HomeSource): Pick<BrowserState, "tabs"> | null {
   if (s.tabs === prev.tabs && s.groups === prev.groups) return null;
-  const members = pinnedGroupMembers(s);
+  const members = pinnedGroupMembers(s.groups);
   const ids = s.groups !== prev.groups || s.windows !== prev.windows ? Object.keys(s.tabs) : changedIds(s.tabs, prev.tabs);
   let tabs: Record<string, Tab> | null = null;
   for (const id of ids) {

@@ -61,6 +61,7 @@ const usesPageA = [
   "extension-prompts", "traffic-lights-after-profile-switch", "extension-configure",
   "private-windows-create", "extension-installed-bubble", "popup-window", "autofill-save-prompts",
   "settings-services", "download-navigation", "page-events", "page-background", "external-app-answer",
+  "external-app-from-extension",
   "notifications", "now-playing", "media-state", "auto-picture-in-picture", "pip-window", "page-focus",
   "fullscreen-tab-switch", "fullscreen-native", "fullscreen-menu-bar-reveal", "fullscreen-transition-picture", "fullscreen-hidden-page", "fullscreen-split-sibling",
   "fullscreen-pip", "autofill-suggestions", "images", "extension-surfaces", "frozen", "discard",
@@ -1098,7 +1099,7 @@ try {
       const vis = (await cdp(t, "Runtime.evaluate", { expression: "document.visibilityState + '/' + document.hasFocus()", returnByValue: true })).result.value;
       throw new Error(`no context menu reported (page ${vis}); events: ${JSON.stringify((await eventsOf(first.id)).slice(-6).map((x) => x.name))}`);
     }
-    const selection = !!(await eventsOf(first.id)).findLast((x) => x.name === "pageMessage" && x.payload?.kind === "selection");
+    const selection = !!(await eventsOf(first.id)).findLast((x) => x.name === "selection");
     const labels = e.payload.items.filter((i) => !i.separator).map((i) => i.label);
     const search = labels.filter((l) => /^Search .* for /.test(l));
     if (!search.some((l) => l.startsWith("Search Acceptance for “to B”"))) throw new Error(`no app search item: ${JSON.stringify(labels)}`);
@@ -1335,9 +1336,9 @@ try {
       for (let k = 1; k <= 8; k++)
         await cdp(t, "Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x + 2 + ((box.width - 10) * k) / 8, y, button: "left", buttons: 1 });
       await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x + box.width - 8, y, button: "left", buttons: 0, clickCount: 1 });
-      const e = await until("onPageMessage selection", async () =>
-        (await eventsOf(first.id)).findLast((x) => x.name === "pageMessage" && x.payload?.kind === "selection" && x.payload?.data), 6000);
-      return { text: String(JSON.stringify(e.payload.data)).slice(0, 80) };
+      const e = await until("onSelection", async () =>
+        (await eventsOf(first.id)).findLast((x) => x.name === "selection" && x.payload?.selection), 6000);
+      return { text: String(JSON.stringify(e.payload.selection)).slice(0, 80) };
     } finally {
       await backToA();
     }
@@ -1700,12 +1701,13 @@ try {
       const out = { launch: await read() };
       await set({ memorySaver: false });
       out.off = await until("Memory Saver off", async () => { const r = await read(); return r.state === "off" && !r.active ? r : null; }, 5000);
-      await set({ memorySaver: true, memorySaverMode: "maximum", keepActiveSites: ["127.0.0.1", "[*.]example.com"] });
+      await set({ memorySaver: true, memorySaverMode: "maximum", keepActiveSites: ["127.0.0.1/Editor?Doc=AbC", "[*.]example.com"] });
       out.on = await until("Memory Saver on", async () => { const r = await read(); return r.state === "on" && r.active && r.aggressiveness === "maximum" && r.sites.length === 2 ? r : null; }, 5000);
-      out.valid = await engine("engine.memorySaver", { validate: "music.youtube.com" });
-      out.invalid = await engine("engine.memorySaver", { validate: "" });
+      out.valid = await engine("engine.validateKeepActiveSite", { site: "music.youtube.com" });
+      out.invalid = await engine("engine.validateKeepActiveSite", { site: "" });
       const problems = [];
       if (out.launch.state !== (saved.memorySaver === false ? "off" : "on")) problems.push(`launch: ${JSON.stringify(out.launch)}`);
+      if (!out.on.sites.includes("127.0.0.1/Editor?Doc=AbC")) problems.push(`sites: ${JSON.stringify(out.on.sites)}`);
       if (!out.valid.valid || out.invalid.valid) problems.push(`validate: ${JSON.stringify([out.valid, out.invalid])}`);
       if (problems.length) throw new Error(problems.join("; "));
       return out;
@@ -3158,6 +3160,28 @@ try {
       removed: true, launched: false };
   });
 
+  await check("external-app-from-extension", async () => {
+    await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
+    await until("A shown", async () => (await state()).active === first.id);
+    return withPopupExtension({}, async (id) => {
+      const worker = await until("the extension's worker", async () =>
+        (await targets()).find((t) => t.type === "service_worker" && t.url.includes(`${id}/worker.js`)) ?? null, 10000);
+      await evalApp(`ac.pageState.setState((s) => ({ pages: { ...s.pages, "${first.id}": { ...s.pages["${first.id}"], externalApp: null } } })); return true`);
+      const url = "shortcuts://ardiacore-acceptance-extension?file=Clipped%20page&clipboard";
+      const expression = `chrome.tabs.query({ url: "${base}/a*" }).then(([tab]) => { chrome.tabs.update(tab.id, { url: ${JSON.stringify(url)} }); return "sent"; }, (e) => e.message)`;
+      const sent = (await cdp(worker, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+      if (sent !== "sent") throw new Error(`chrome.tabs.update(): ${sent}`);
+      const request = await until("the prompt", async () => evalApp(`return ac.pageState.getState().pages["${first.id}"]?.externalApp ?? null`), 10000);
+      if (request.origin !== `chrome-extension://${id}`) throw new Error(`the prompt names ${request.origin}`);
+      await evalApp(`ac.pageState.setState((s) => ({ pages: { ...s.pages, "${first.id}": { ...s.pages["${first.id}"], externalApp: null } } }));
+        return ac.engine.call("permissions.resolveExternalApp", ${JSON.stringify({ id: request.id, open: true, remember: false })}).then(() => true)`);
+      const launch = await until("the recorded launch", async () =>
+        (await engine("permissions.devExternalLaunches")).find((l) => l.url === url) ?? null, 8000)
+        .catch(() => { throw new Error("Open on an extension's link launched nothing"); });
+      return { origin: request.origin, app: request.app, launched: launch.url };
+    });
+  });
+
   await check("notifications", async () => {
     await engine("sites.setSetting", { profile: "", origin: base, type: "notifications", value: "allow" });
     await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
@@ -4441,19 +4465,10 @@ try {
   });
 
   await check("startup-accept-language", async () => {
-    const system = JSON.parse(execFileSync("osascript", ["-l", "JavaScript", "-e",
-      `ObjC.import("Foundation"); const out = []; const all = $.NSLocale.preferredLanguages;
-       for (let i = 0; i < all.count; i++) { const l = $.NSLocale.localeWithLocaleIdentifier(all.objectAtIndex(i));
-         out.push([ObjC.unwrap(l.languageCode), ObjC.unwrap(l.regionCode) ?? null, ObjC.unwrap(l.scriptCode) ?? null]); }
-       JSON.stringify(out)`]).toString());
-    const expected = [];
-    for (let [language, region, script] of system) {
-      if (!language) continue;
-      if (language === "zh" && !region) region = script === "Hant" ? "TW" : "CN";
-      for (const tag of region ? [`${language}-${region}`, language] : [language]) if (!expected.includes(tag)) expected.push(tag);
-    }
-    const reduced = expected.slice(0, 1);
-    const reducedHeader = reduced[0].includes("-") ? [reduced[0], reduced[0].split("-")[0]] : reduced;
+    const uiLocale = JSON.parse(execFileSync("osascript", ["-l", "JavaScript", "-e",
+      `ObjC.import("Foundation"); const bundle = $.NSBundle.bundleWithPath(${JSON.stringify(app)});
+       JSON.stringify(ObjC.unwrap($.NSBundle.preferredLocalizationsFromArrayForPreferences(bundle.localizations, $.NSLocale.preferredLanguages).objectAtIndex(0)))`]).toString())
+      .replace("_", "-").replace(/^en$/, "en-US");
     let header = null;
     const echo = createServer((req, res) => {
       header = req.headers["accept-language"] ?? "";
@@ -4466,9 +4481,12 @@ try {
       const t = await pageFor(tab.id, "/languages");
       const languages = (await cdp(t, "Runtime.evaluate", { expression: "navigator.languages", returnByValue: true })).result.value;
       const sent = (header ?? "").split(",").map((s) => s.split(";")[0].trim()).filter(Boolean);
-      if (JSON.stringify(languages) !== JSON.stringify(reduced)) throw new Error(`navigator.languages ${JSON.stringify(languages)}, expected ${JSON.stringify(reduced)} (Helium's reduced Accept-Language: the first of ${JSON.stringify(expected)})`);
-      if (JSON.stringify(sent) !== JSON.stringify(reducedHeader)) throw new Error(`Accept-Language "${header}", expected ${JSON.stringify(reducedHeader)} (Helium's reduced Accept-Language: the first of ${JSON.stringify(expected)})`);
-      return { system: expected, languages, header };
+      const primary = (tag) => tag.split("-")[0];
+      const seeded = ["af", "ur"].includes(primary(uiLocale)) ? "en" : primary(uiLocale);
+      if (languages.length !== 1 || primary(languages[0]) !== seeded) throw new Error(`navigator.languages ${JSON.stringify(languages)}, expected one ${seeded} tag (a new profile's languages come from the UI locale ${uiLocale}'s IDS_ACCEPT_LANGUAGES, reduced as Helium does)`);
+      const reducedHeader = languages[0].includes("-") ? [languages[0], primary(languages[0])] : languages;
+      if (JSON.stringify(sent) !== JSON.stringify(reducedHeader)) throw new Error(`Accept-Language "${header}", expected ${JSON.stringify(reducedHeader)} (Helium's reduced Accept-Language)`);
+      return { uiLocale, languages, header };
     } finally {
       await closeTab(tab.id);
       echo.close();

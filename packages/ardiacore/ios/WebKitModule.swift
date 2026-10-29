@@ -89,20 +89,16 @@ public class WebKitModule: Module {
   }
   static let calls = CallTable(domain: "webKit", handlers: [
     "removeDownloadStaging": { args, reply in
-      reply.ok(WebKitDownloads.removeStaging(args.text("path"), uuid: args.text("uuid"), folder: args.text("folder")))
+      reply.ok(WebKitDownloads.removeStaging(try args.text("path")))
     },
     "endPrivateSession": { args, reply in
-      WebKitHub.shared.endPrivateSession(args.text("session"))
+      WebKitHub.shared.endPrivateSession(try args.text("session"))
       reply.ok()
     },
     "cookieStoreKey": { args, reply in reply.ok(WebKitHub.shared.storeKey(args.profile)) },
     "importCookies": { args, reply in
-      let cookies = args.list("cookies").compactMap { $0 as? [String: Any] }
-      WebKitHub.shared.importCookies(cookies, profile: args.profile, storeKey: args.text("storeKey")) { reply.ok($0) }
-    },
-    "clearSiteData": { args, reply in
-      guard let host = URL(string: args.text("origin"))?.host, !host.isEmpty else { return reply.ok(["cookies": false, "storage": false]) }
-      WebKitHub.shared.clearSiteData(profile: args.profile, host: host) { reply.ok($0) }
+      let cookies = try args.dicts("cookies")
+      WebKitHub.shared.importCookies(cookies, profile: args.profile, storeKey: try args.text("storeKey")) { reply.ok($0) }
     },
     "passkeyAccess": { _, reply in reply.ok(WebKitPasskeys.access()) },
     "requestPasskeyAccess": { _, reply in WebKitPasskeys.requestAccess { reply.ok($0) } },

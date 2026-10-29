@@ -7,7 +7,7 @@ const { settlePinHomes } = await import("./pinHomes.ts");
 
 const S = () => useBrowser.getState();
 const reset = () => S().hydrate({});
-const go = (id, url) => S().navigated(id, { url, title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
+const go = (id, url) => S().updateTab(id, { url, title: "" }, { isLoading: false, canGoBack: true, canGoForward: false });
 
 function windowWith(...hosts) {
   const w = S().createWindow({ url: `https://${hosts[0]}.com/` });

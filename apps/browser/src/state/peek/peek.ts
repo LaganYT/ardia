@@ -1,11 +1,13 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
-import { activeTabId, IDLE_LIVE, makeTab, navigationTo, pinnedFirst, without } from "../browser/model";
+import { activeTabId, IDLE_LIVE, makeTab, navigationTo, without } from "../browser/model";
 import { forgetOpeners, insertionIndex } from "../tabs/openers";
 import { groupWithOpener } from "../pins/organize";
 import { hasNavigatedPage } from "../tabs/pageSession";
 import { isSmall } from "../windows/small";
 import { activated, apply, removeTabs } from "../tabs/tabs";
+import { pinnedGroupMembers } from "../browser/structure";
+import { orderSections } from "../groups/groups";
 
 export type PeekPoint = { x: number; y: number };
 export type Peek = { tabId: string; sourceId: string; sourcePage: string; from: PeekPoint | null };
@@ -25,7 +27,7 @@ const peekable = (url: string) => /^https?:\/\//i.test(url);
 
 export function otherSitePeekTabIds(s: Pick<BrowserState, "tabs" | "groups" | "settings">): string[] {
   if (!s.settings.peekLinksToOtherSites) return [];
-  const inPinnedGroup = new Set(Object.values(s.groups).flatMap((g) => (g.pinned ? g.tabIds : [])));
+  const inPinnedGroup = pinnedGroupMembers(s.groups);
   return Object.keys(s.tabs)
     .filter((id) => s.tabs[id]!.pinned || inPinnedGroup.has(id))
     .sort();
@@ -107,7 +109,7 @@ export const createPeekSlice: StateCreator<BrowserState, [], [], PeekSlice> = (s
     const w = s.windows[windowId]!;
     const tabIds = [...w.tabIds];
     tabIds.splice(Math.min(insertionIndex({ ...s, tabs }, w, moved, false), tabIds.length), 0, tab.id);
-    s = { ...s, tabs, windows: { ...s.windows, [windowId]: { ...w, tabIds: pinnedFirst(tabIds, tabs) } } };
+    s = { ...s, tabs, windows: { ...s.windows, [windowId]: { ...w, tabIds: orderSections(tabIds, tabs, {}) } } };
     if (moved.openerId) s = groupWithOpener(s, tab.id, moved.openerId, false);
     if (activate) s = apply(s, activated(s, tab.id));
     set(s);

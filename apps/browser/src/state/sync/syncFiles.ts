@@ -1,15 +1,45 @@
 import { readDocument, removeDocument, saveDocument, writeDocument } from "../../platform/documents";
 import { Clock, emptyScope, restoreJournal, SyncNative, writtenSeq, type LogFile, type ScopeState, type SyncRecord } from "../../platform/sync";
-import { parseSaved, versionedJson } from "../../lib/savedDocument";
+import { parseSaved, unchanged, versionedJson, type Migrations, type SavedObject } from "../../lib/savedDocument";
+import { profileScope } from "./records";
 import { APP_SCOPE, DOC, DOC_MIGRATIONS, DOC_VERSION, JOURNAL, STATE, defaultTypes, emptyDoc, type SyncDoc } from "./syncDoc";
 
 type Journal = Record<string, LogFile[]>;
 type ScopeChange = { records: Record<string, SyncRecord | null>; base: Record<string, string | null>; rest: Partial<ScopeState> };
-type JournalPart = { id?: number; journal?: Journal; device?: string | null; clock?: string; changes?: Record<string, ScopeChange> };
+type JournalPart = { id: number; journal?: Journal; device?: string | null; clock?: string; changes?: Record<string, ScopeChange> };
 type Checkpoint = { covers: number; clock?: string; scopes: SyncDoc["scopes"] };
 
-const isCheckpoint = (saved: unknown): saved is Checkpoint =>
-  !!saved && typeof (saved as Checkpoint).covers === "number" && typeof (saved as Checkpoint).scopes === "object";
+const CHECKPOINT_VERSION = 1;
+const CHECKPOINT_MIGRATIONS: Migrations = { 0: (doc) => (typeof doc.covers === "number" ? doc : { covers: -1, scopes: doc }) };
+const PART_VERSION = 1;
+const PART_MIGRATIONS: Migrations = { 0: unchanged };
+
+const isObject = (v: unknown): v is SavedObject => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function readScopes(v: unknown): SyncDoc["scopes"] {
+  const scopes: SyncDoc["scopes"] = {};
+  if (!isObject(v)) return scopes;
+  for (const [name, scope] of Object.entries(v)) {
+    if (isObject(scope) && isObject(scope.records) && isObject(scope.base)) scopes[name] = { ...emptyScope(), ...(scope as Partial<ScopeState>) };
+  }
+  return scopes;
+}
+
+function readCheckpoint(doc: SavedObject | null): Checkpoint {
+  if (!doc || typeof doc.covers !== "number") return { covers: -1, scopes: {} };
+  return { covers: doc.covers, clock: typeof doc.clock === "string" ? doc.clock : undefined, scopes: readScopes(doc.scopes) };
+}
+
+function readPart(doc: SavedObject | null): JournalPart {
+  if (!doc) return { id: 0 };
+  return {
+    id: typeof doc.id === "number" ? doc.id : 0,
+    journal: isObject(doc.journal) ? (doc.journal as Journal) : undefined,
+    device: typeof doc.device === "string" ? doc.device : null,
+    clock: typeof doc.clock === "string" ? doc.clock : undefined,
+    changes: isObject(doc.changes) ? (doc.changes as Record<string, ScopeChange>) : undefined,
+  };
+}
 
 const STATE_EVERY_MS = 60 * 60_000;
 const JOURNAL_BYTES_LIMIT = 1_000_000;
@@ -18,13 +48,7 @@ const DOC_IDLE_MS = 5 * 60_000;
 
 const journalPart = (n: number) => `sync-journal-${n}.nns`;
 
-async function openSealed<T>(sealed: string | null | undefined, fallback: T): Promise<T> {
-  const json = sealed ? await SyncNative?.openLocal(sealed) : null;
-  try {
-    if (json) return JSON.parse(json) as T;
-  } catch {}
-  return fallback;
-}
+const openSealed = async (sealed: string | null | undefined) => (sealed ? ((await SyncNative?.openLocal(sealed)) ?? null) : null);
 
 function addBatches(into: Journal, part: Journal | undefined) {
   for (const [scope, files] of Object.entries(part ?? {})) {
@@ -98,7 +122,7 @@ export function syncFiles(current: () => SyncDoc) {
 
   async function readJournal() {
     const parts: JournalPart[] = [];
-    const take = async (sealed: string | null) => void parts.push(await openSealed<JournalPart>(sealed, {}));
+    const take = async (sealed: string | null) => void parts.push(readPart(parseSaved(await openSealed(sealed), PART_VERSION, PART_MIGRATIONS)));
     const legacy = readDocument(JOURNAL);
     legacyJournal = !!legacy;
     journalBytes = legacy?.length ?? 0;
@@ -117,18 +141,17 @@ export function syncFiles(current: () => SyncDoc) {
 
   async function loadState() {
     const sealedState = readDocument(STATE);
-    const opened = await openSealed<unknown>(sealedState, {});
-    const { scopes, covers, clock: savedClock } = isCheckpoint(opened) ? opened : { scopes: opened as SyncDoc["scopes"], covers: -1, clock: undefined };
+    const { scopes, covers, clock: savedClock } = readCheckpoint(parseSaved(await openSealed(sealedState), CHECKPOINT_VERSION, CHECKPOINT_MIGRATIONS));
     const parts = await readJournal();
     const doc = current();
-    const live = new Set([APP_SCOPE, ...Object.values(doc.profiles).map((link) => `p:${link.syncId}`)]);
+    const live = new Set([APP_SCOPE, ...Object.values(doc.profiles).map((link) => profileScope(link.syncId))]);
     const clock = new Clock(doc.deviceId ?? "", doc.clock);
     if (savedClock) clock.observe(savedClock);
     const batches: Journal = {};
     lastPartId = Math.max(covers, 0);
     for (const part of parts) {
-      lastPartId = Math.max(lastPartId, part.id ?? 0);
-      if ((part.id ?? 0) <= covers) continue;
+      lastPartId = Math.max(lastPartId, part.id);
+      if (part.id <= covers) continue;
       addBatches(batches, part.journal);
       if (!part.changes || part.device !== doc.deviceId) continue;
       if (part.clock) clock.observe(part.clock);
@@ -159,11 +182,11 @@ export function syncFiles(current: () => SyncDoc) {
     journalPartsCounted = true;
   }
 
-  async function writePart(part: JournalPart) {
+  async function writePart(part: Omit<JournalPart, "id">) {
     const id = (lastPartId = Math.max(lastPartId + 1, Date.now()));
     partsInFlight++;
     try {
-      const sealed = await SyncNative!.sealLocal(JSON.stringify({ ...part, id }));
+      const sealed = await SyncNative!.sealLocal(versionedJson({ ...part, id }, PART_VERSION));
       countJournalParts();
       const n = journalParts + 1;
       await saveDocument(journalPart(n), sealed);
@@ -273,7 +296,7 @@ export function syncFiles(current: () => SyncDoc) {
     }
     sealing = (async () => {
       try {
-        const sealed = await SyncNative?.sealLocal(`{"covers":${mark},"clock":${JSON.stringify(seen.last)},"scopes":${state}}`);
+        const sealed = await SyncNative?.sealLocal(`{"covers":${mark},"clock":${JSON.stringify(seen.last)},"scopes":${state},"version":${CHECKPOINT_VERSION}}`);
         if (sealed) {
           await saveDocument(STATE, sealed);
           savedState = state;

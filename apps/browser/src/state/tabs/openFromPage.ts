@@ -5,6 +5,7 @@ import { engineProfile } from "../browser/model";
 import { peekSourceOf } from "../peek/peek";
 import { isSmall, originalProfile, privateWindowProfile } from "../windows/small";
 import { openLinkInSplit, openSplitPane } from "../splits/actions";
+import { isAdoptKind } from "./adoptIds";
 
 export type { OpenWindowRequest } from "../../platform/tabs";
 
@@ -32,7 +33,7 @@ export function openFromPage({ url, adoptId, disposition, profile, point }: Open
   }
   if (disposition === "incognito") {
     const profileId = privateWindowProfile(s, w, profile);
-    if (adoptId?.startsWith("tab:")) return void openWindow({ incognito: true, url, adoptId, profileId });
+    if (isAdoptKind(adoptId, "tab")) return void openWindow({ incognito: true, url, adoptId, profileId });
     return void openWindow({ incognito: true, url, profileId });
   }
   if (disposition === "window") {
@@ -45,6 +46,6 @@ export function openFromPage({ url, adoptId, disposition, profile, point }: Open
 export function pageProfileId(windowId: string, pageProfile: string): string {
   const s = useBrowser.getState();
   const w = s.windows[windowId];
-  if (w && engineProfile(w.profileId) === pageProfile) return w.profileId;
-  return s.profileOrder.find((p) => engineProfile(p) === pageProfile) ?? w?.profileId ?? s.settings.defaultProfileId;
+  if (w && engineProfile(s, w.profileId) === pageProfile) return w.profileId;
+  return s.profileOrder.find((p) => engineProfile(s, p) === pageProfile) ?? w?.profileId ?? s.settings.defaultProfileId;
 }

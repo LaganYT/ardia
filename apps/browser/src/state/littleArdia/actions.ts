@@ -9,6 +9,7 @@ import { profileAccentOf } from "../profiles/looks";
 import { useBrowser } from "../browser/store";
 import { activeTabId } from "../browser/model";
 import { isSmall, lastActiveProfile, mainWindowFor } from "../windows/small";
+import { isWebPageUrl } from "../../lib/url";
 
 const store = () => useBrowser.getState();
 
@@ -18,7 +19,6 @@ export function openLittleArdia(url?: string, profileId?: string, adoptId?: stri
   return id;
 }
 
-const opensInLittleArdia = (url: string) => /^(https?|file):/i.test(url);
 
 export function openExternalUrls(given: string[], pointer?: [number, number]) {
   const settings = store().settings;
@@ -45,7 +45,7 @@ function openRoutedUrls(urls: string[], route: LinkRoute, pointer?: [number, num
 function openUrlsFromApps(urls: string[], routed: RoutedLinks, pointer?: [number, number]) {
   const [url] = urls;
   const profileId = routed.profileId ?? lastActiveProfile(store());
-  if (store().settings.openLinksInLittleArdia && urls.length === 1 && url && opensInLittleArdia(url)) return void openLittleArdia(url, profileId, routed.adoptIds[0], pointer);
+  if (store().settings.openLinksInLittleArdia && urls.length === 1 && url && isWebPageUrl(url)) return void openLittleArdia(url, profileId, routed.adoptIds[0], pointer);
   openLinksInMainWindow(urls, profileId, routed.adoptIds);
 }
 

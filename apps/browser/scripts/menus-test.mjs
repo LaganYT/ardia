@@ -171,12 +171,16 @@ try {
     await run(`st().closeTabs(${JSON.stringify(back)}); return settle(300);`);
   });
 
-  await check("tab: Mute Site, then Unmute Site", async () => {
-    await choose("t:b", "mute");
-    assert.equal(await run(`return st().tabs.b.muted;`), true);
+  await check("tab: Mute Tab mutes only that tab, ⌥ Mute Site the site, and Unmute Site undoes both", async () => {
     const menu = await choose("t:b", "mute");
-    assert.equal(itemsOf(menu, "mute").title, "Unmute Site");
-    assert.equal(await run(`return st().tabs.b.muted;`), false);
+    assert.equal(itemsOf(menu, "muteSite").alternate, true);
+    assert.deepEqual(await run(`return [st().tabs.b.muted, st().settings.mutedSites];`), [true, []]);
+    assert.equal(itemsOf(await choose("t:b", "muteSite"), "mute").title, "Unmute Tab");
+    assert.equal((await run(`return st().settings.mutedSites;`)).length, 1);
+    const site = await choose("t:b", "mute");
+    assert.equal(itemsOf(site, "mute").title, "Unmute Site");
+    assert.equal(itemsOf(site, "muteSite"), null);
+    assert.deepEqual(await run(`return [st().tabs.b.muted, st().settings.mutedSites];`), [false, []]);
   });
 
   await check("tab: Rename… starts the inline rename, Change Icon… opens the icon picker", async () => {

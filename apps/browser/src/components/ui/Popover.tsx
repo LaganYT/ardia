@@ -7,7 +7,6 @@ import { useTheme } from "./theme";
 import { radius, shadow, space, font as typeScale, weight } from "./tokens";
 import { useHover } from "./useHover";
 import { Panel, type PanelProps } from "./Panel";
-import { liquidGlass } from "./Glass";
 
 export const POPOVER_MARGIN = 8;
 
@@ -122,13 +121,9 @@ export function Popover({
 export function PopoverSurface({ children, ...props }: Omit<PanelProps, "fill" | "radius" | "border" | "borderWidth" | "shadow">) {
   const theme = useTheme();
   return (
-    <Panel {...props} glass="panel" fill={theme.popoverFill} radius={PANEL.radius} border={theme.popoverBorder} shadow={shadow.popover}>
-      {liquidGlass ? null : (
-        <>
-          <VisualEffect material="menu" cornerRadius={PANEL.radius} style={StyleSheet.absoluteFill} />
-          <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: PANEL.radius, backgroundColor: theme.popoverTint }} />
-        </>
-      )}
+    <Panel {...props} fill={theme.popoverFill} radius={PANEL.radius} border={theme.popoverBorder} shadow={shadow.popover}>
+      <VisualEffect material="menu" cornerRadius={PANEL.radius} style={StyleSheet.absoluteFill} />
+      <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: PANEL.radius, backgroundColor: theme.popoverTint }} />
       {children}
     </Panel>
   );

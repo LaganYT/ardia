@@ -4,7 +4,6 @@ import { useWindowHistory } from "../../state/history/hooks";
 import { confirmAnswer, setOnboardingExtras, skipStep, useOnboarding } from "../../state/onboarding/onboarding";
 import { PINNABLE_SITES, pinnedHosts, pinSites, preselectedSites } from "../../state/onboarding/sites";
 import { SiteLogo } from "./SiteLogo";
-import { GlassBacking, solidFill, useSiteRing } from "./GlassBacking";
 import { SelectTile, useOnboardingColors } from "./Parts";
 import { StepActions, StepLayout } from "./StepLayout";
 import { trafficLights } from "./tokens";
@@ -48,9 +47,8 @@ export function PinnedTabsStep() {
 }
 
 function SiteTile({ title, url, selected, onPress }: { title: string; url: string; selected: boolean; onPress: () => void }) {
-  const ring = useSiteRing(url, selected);
   return (
-    <SelectTile title={title} width={80} height={70} gap={7} checkSize={14} selected={selected} role="checkbox" ring={ring} onPress={onPress}>
+    <SelectTile title={title} width={80} height={70} gap={7} checkSize={14} selected={selected} role="checkbox" onPress={onPress}>
       {(hovered) => (
         <View style={{ opacity: selected || hovered ? 1 : 0.7 }}>
           <SiteLogo url={url} size={22} />
@@ -83,13 +81,12 @@ function PinnedPreview({ selected }: { selected: string[] }) {
                 borderRadius: 9,
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: site ? solidFill(colors.button) : "transparent",
+                backgroundColor: site ? colors.button : "transparent",
                 borderWidth: site ? 0 : 1,
                 borderStyle: "dashed",
                 borderColor: colors.rowBorder,
               }}
             >
-              {site ? <GlassBacking fill={colors.button} radius={9} /> : null}
               {site ? <SiteLogo url={site.url} size={18} /> : null}
             </View>
           );

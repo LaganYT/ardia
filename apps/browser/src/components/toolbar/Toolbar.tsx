@@ -8,7 +8,7 @@ import { activate } from "../../state/tabs/actions";
 import { openPanel as openWindowPanel, toggleSidebar } from "../../state/windows/actions";
 import { useIsBookmarked, useSettings, useTab, useTabLive } from "../../state/browser/hooks";
 import type { Tab } from "../../state/browser/types";
-import { Button, ContextMenuArea, FadeLabel, font, ink, Symbol, useHover, weight, WindowDragRegion } from "../ui";
+import { Button, ContextMenuArea, FadeLabel, font, Symbol, useHover, weight, WindowDragRegion } from "../ui";
 import { type ToolbarGeometry } from "../window/geometry";
 import { popoverOf, setPopover, usePage, usePages, type PageState } from "../../state/tabs/pageState";
 import { useHistoryAvailability } from "../../state/tabs/navigation";
@@ -21,7 +21,6 @@ import { SIDEBAR_FIELD } from "../sidebar/geometry";
 import { FieldSiteButton, SidebarFieldFill } from "../sidebar/SidebarField";
 import { showUrlBarMenu } from "../../state/omnibox/paste";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
-import { GlassFill, liquidGlass } from "../ui/Glass";
 import { TranslateButton } from "../site/TranslateControls";
 import { ZoomIndicator } from "../site/ZoomControls";
 import { useShortcutHint, withShortcut } from "../../state/commands/commandShortcuts";
@@ -167,10 +166,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
   const { insecure, hovered, popover, toggleSiteControls } = field;
 
   return (
-    <View {...field.hoverProps} style={[style, { flexDirection: "row", alignItems: "center", height: row.field, borderRadius: row.fieldRadius, backgroundColor: hovered && !liquidGlass ? palette.pill : undefined }]}>
-      {liquidGlass ? (
-        <GlassFill state={hovered ? "lit" : "rest"} radius={row.fieldRadius} fill={palette.pill} dark={palette.background ? palette.text.startsWith(ink.white) : undefined} />
-      ) : null}
+    <View {...field.hoverProps} style={[style, { flexDirection: "row", alignItems: "center", height: row.field, borderRadius: row.fieldRadius, backgroundColor: hovered ? palette.pill : undefined }]}>
       {insecure && (
         <Pressable onPress={toggleSiteControls} style={{ paddingLeft: LOCK.left }} tooltip="Connection is not secure">
           <Symbol

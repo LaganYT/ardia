@@ -126,13 +126,6 @@ export const generalRows = {
           keywords: ["pinned tiles", "favorites", "grid", "columns", "rows", "arc"],
           shown: inSidebar,
         },
-        pinnedTabIconRing: {
-          advanced: true,
-          title: "Highlight pinned tabs in their icon's colors",
-          description: "As in Dia: the Top App you're on gets a ring and tint from its icon instead of the raised glass.",
-          keywords: ["dia", "liquid glass", "top apps", "favicon", "colour", "ring", "tint", "selected tile"],
-          shown: (_, env) => env.liquidGlass,
-        },
         fadeUnloadedTabs: {
           advanced: true,
           title: "Fade icons of unloaded tabs",

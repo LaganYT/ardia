@@ -5,11 +5,9 @@ import {
   PopoverBubble,
   Symbol,
   Button,
-  GlassFill,
   hex,
   HoverSlot,
   layout,
-  liquidGlass,
   MenuSeparator,
   PANEL,
   Text,
@@ -34,7 +32,6 @@ import { PROFILE_DOTS_HEIGHT } from "../profiles/ProfileDots";
 import { openInternalPage } from "../../state/pages/urls";
 import { useSidebarWidth } from "../../state/sidebar/hooks";
 import { hairline, shadow } from "../ui/tokens";
-import { glassTint } from "../ui/Glass";
 import { DOWNLOADS_PANEL, type DownloadsPlacement } from "./downloadsPlacement";
 import { dangerWarning, downloadStatus } from "../../state/downloads/status";
 import { useDownloadView } from "./useDownloadView";
@@ -165,10 +162,9 @@ function PanelBackground({ placement }: { placement: DownloadsPlacement }) {
       arrowX={placement.arrowX}
       arrowWidth={DOWNLOADS_PANEL.arrowWidth}
       arrowHeight={DOWNLOADS_PANEL.arrowHeight}
-      glass={liquidGlass}
-      tint={liquidGlass ? glassTint(theme, theme.panel, "panel", "rest") : hex(colors.bubbleTint)}
+      tint={hex(colors.bubbleTint)}
       edgeColor={hex(theme.popoverBorder)}
-      edgeWidth={liquidGlass ? 0 : hairline.panel}
+      edgeWidth={hairline.panel}
       shadowOpacity={theme.dark ? level.opacity.dark : level.opacity.light}
       shadowRadius={level.radius}
       shadowOffsetY={level.offset[1]}
@@ -207,10 +203,9 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
                   paddingHorizontal: PANEL.rowPadding,
                   height: L.row,
                   borderRadius: PANEL.rowRadius,
-                  backgroundColor: liquidGlass ? undefined : downloadsRowFill(theme, hovered, pressed && done),
+                  backgroundColor: downloadsRowFill(theme, hovered, pressed && done),
                 }}
               >
-                <DownloadsRowGlass fill={downloadsRowFill(theme, hovered, pressed && done)} pressed={pressed && done} />
                 <View style={{ opacity: exists ? 1 : L.missingOpacity }}>
                   <FileIcon path={d.path || d.filename} size={L.fileIcon} />
                 </View>
@@ -317,9 +312,4 @@ export function DownloadMagnet() {
       )}
     </View>
   );
-}
-
-function DownloadsRowGlass({ fill, pressed }: { fill: string | undefined; pressed: boolean }) {
-  if (!liquidGlass || !fill) return null;
-  return <GlassFill fill={fill} radius={PANEL.rowRadius} state={pressed ? "rest" : "lit"} />;
 }

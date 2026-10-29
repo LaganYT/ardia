@@ -1,5 +1,4 @@
 import {
-  Clock,
   emptyScope,
   EXTENSION_PREFIX,
   folderTransport,
@@ -20,6 +19,7 @@ import { APP_SCOPE, defaultTypes, emptyDoc, type DataType, type SyncDoc, type Sy
 import { syncFiles } from "./syncFiles";
 import { settleThemeAdoption, themeChosenHere } from "./syncThemes";
 import { noteThemePick } from "./themePicks";
+import { editClock, startEditClock } from "./editClock";
 import { addLinkedProfile, appScopeOf, linkedProfileId, linkProfiles, readyToPair, remoteProfileRecord, sharedDataChain } from "./profileLinks";
 import { summarize } from "./syncSummary";
 import { profileScope } from "./records";
@@ -117,7 +117,8 @@ async function cycleOnce(native: NonNullable<typeof SyncNative>, folder: string,
     if (status === "unavailable") return publishUi({ status: "offline", error: null });
     if (status === "missing") return await resetFromElsewhere();
     const transport = folderTransport(native, folder);
-    const clock = new Clock(device, doc.clock);
+    if (editClock().device !== device) startEditClock(device, doc.clock);
+    const clock = editClock();
     const app = appScopeOf(doc);
     const appSettled = watchScope(APP_SCOPE, app, clock);
     try {
@@ -200,6 +201,7 @@ export function adoptProfileTheme(profileId: string) {
 
 async function loadSavedState() {
   await loadState();
+  startEditClock(doc.deviceId ?? "", doc.clock);
   const app = doc.scopes[APP_SCOPE];
   if (app) app.unapplied = [...new Set([...app.unapplied, ...settingsToReapply(app.records)])];
   settleThemeAdoption(doc.profiles, app, false);

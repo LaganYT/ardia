@@ -415,7 +415,7 @@ const PIN_ROW = "pinrow:";
 const ROW = 1;
 const TILE = 0;
 
-function settleChoices(profileId: string, published: Record<string, number>) {
+function settleChoices(profileId: string, published: Record<string, string>) {
   const now = store().pinChoices;
   const mine = now[profileId];
   if (!mine) return;

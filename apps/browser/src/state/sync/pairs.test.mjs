@@ -11,6 +11,7 @@ const shipped = await import("../../../../../packages/sync/src/fixtures/scope-v0
 const { pinnedAdapter: shippedPinnedAdapter } = await import("./fixtures/pinned-v0.2.38.ts");
 const { splitTabIdsOf } = await import("../splits/splits.ts");
 
+const { useEditClock } = await import("./editClock.ts");
 const S = () => useBrowser.getState();
 const PROFILES = ["default", "work"];
 let wall = 1_900_000_000_000;
@@ -56,6 +57,7 @@ class Mac {
     this.clock = new Clock(id, null, now);
   }
   with(fn) {
+    useEditClock(this.clock);
     stub.current.device = this.id;
     useBrowser.setState(this.browser, true);
     try {
@@ -65,6 +67,7 @@ class Mac {
     }
   }
   async sync(profiles = PROFILES) {
+    useEditClock(this.clock);
     stub.current.device = this.id;
     useBrowser.setState(this.browser, true);
     let published = 0;

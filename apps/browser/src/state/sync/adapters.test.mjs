@@ -6,6 +6,7 @@ const { historyOf } = await import("../history/history.ts");
 const model = await import("../browser/model.ts");
 const { Clock, emptyScope, syncScope } = await import("@ardia/sync");
 const adapters = await import("./adapters.ts");
+const { useEditClock } = await import("./editClock.ts");
 const { settingsAdapter, settingsToReapply } = await import("./settingsAdapter.ts");
 const pinnedArea = await import("./pinned.ts");
 const { pinnedOrderAdapter } = await import("./pinnedOrderAdapter.ts");
@@ -72,6 +73,7 @@ class Device {
     this.with(() => (this.scopes.app.unapplied = [...new Set([...this.scopes.app.unapplied, ...settingsToReapply(this.scopes.app.records)])]));
   }
   with(fn) {
+    useEditClock(this.clock);
     stub.current.device = this.id;
     useBrowser.setState(this.browser, true);
     try {
@@ -81,6 +83,7 @@ class Device {
     }
   }
   async sync(profileId = "default", options = {}) {
+    useEditClock(this.clock);
     stub.current.device = this.id;
     useBrowser.setState(this.browser, true);
     const run = (scope, list, options) =>
@@ -792,6 +795,34 @@ test("a row choice that went out while quitting isn't sent again after the relau
   a.browser = frozenSession;
   await syncAll([a, b, a, b]);
   assert.deepEqual(rowsOf(a), { tiles: ["https://docs.example/"], rows: [] }, "B's later tile stands");
+  assert.deepEqual(rowsOf(b), { tiles: ["https://docs.example/"], rows: [] });
+});
+
+test("a tile picked again after a cancelled quit goes out over a row from a Mac whose clock runs a minute ahead", async () => {
+  const folder = new Folder();
+  const a = new Device("devA", folder);
+  const b = new Device("devB", folder);
+  a.with(() => {
+    const w = S().createWindow({ url: "https://home.example/" });
+    const docs = S().newTab(w, { url: "https://docs.example/" });
+    S().pinTabs([docs], true, true);
+    S().placeTabs([docs], { pinned: true, row: false });
+  });
+  b.with(() => S().createWindow({ url: "https://b-home.example/" }));
+  await syncAll([a, b]);
+  b.clock = new Clock("devB", b.clock.last, () => Date.now() + 60_000);
+  b.with(() => S().placeTabs([tabAt("https://docs.example/")], { pinned: true, row: true }));
+  await b.sync();
+  await a.sync("default", { holdApply: () => true });
+  assert.deepEqual(rowsOf(a), { tiles: ["https://docs.example/"], rows: [] }, "the row waits, unapplied, while quitting");
+  await later();
+  a.with(() => {
+    S().placeTabs([tabAt("https://docs.example/")], { pinned: true, row: true });
+    S().placeTabs([tabAt("https://docs.example/")], { pinned: true, row: false });
+  });
+  assert.ok(Object.keys(a.with(() => S().pinChoices.default ?? {})).length > 0, "the tile is chosen again, as the base already says");
+  await syncAll([a, b, a, b]);
+  assert.deepEqual(rowsOf(a), { tiles: ["https://docs.example/"], rows: [] }, "the newer tile choice stands");
   assert.deepEqual(rowsOf(b), { tiles: ["https://docs.example/"], rows: [] });
 });
 

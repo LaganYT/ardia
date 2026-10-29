@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = execFileSync("git", ["-C", here, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const { launch, launchVariables, isAlive, sleep } = await import(join(root, "scripts/lib/instance.mjs"));
+const { launch, launchVariables, isAlive, processInfo, sleep } = await import(join(root, "scripts/lib/instance.mjs"));
 
 const argv = process.argv.slice(2);
 if (!argv.length || argv.includes("-h") || argv.includes("--help")) {
@@ -761,6 +761,8 @@ class Scenario {
   async teardown() {
     if (this.stopped?.length) this.resume(this.stopped);
     if (this.app && isAlive(this.app.pid)) await this.app.quit({ timeout: 15000 });
+    const proxy = this.app?.js?.mode === "pinned" ? this.app.js.pid : null;
+    if (proxy && (processInfo(proxy)?.command ?? "").includes(`--metro-proxy ${this.data} `)) process.kill(proxy);
     for (const label of this.labels) sh("launchctl", ["bootout", `gui/${uid}/${label}`]);
     const ours = this.processes().filter((p) => [`${this.dir}/`, `${this.caches}/`].some((prefix) => p.command.startsWith(prefix)));
     for (const p of ours) try { process.kill(p.pid, "SIGKILL"); } catch {}

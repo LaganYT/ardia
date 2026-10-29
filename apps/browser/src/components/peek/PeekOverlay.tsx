@@ -1,5 +1,5 @@
 import { breadcrumb } from "@ardia/core";
-import { WindowBackdrop, ink, MagnifyArea, reduceMotion, reduceMotionKnown, Surface, type MagnifyUpdate } from "../ui";
+import { GlassFill, liquidGlass, WindowBackdrop, ink, MagnifyArea, reduceMotion, reduceMotionKnown, Surface, type MagnifyUpdate } from "../ui";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { hex, layout, useTheme } from "../ui/theme";
@@ -163,7 +163,8 @@ function PeekCard({
             : { position: "absolute", ...frame, opacity: cardOpacity, transform: [{ translateX }, { translateY }, { scaleX }, { scaleY }] }
         }
       >
-        {!fullscreen && (
+        {!fullscreen && liquidGlass && <GlassFill kind="panel" fill={theme.panel} radius={SMALL_WINDOW_RADIUS} />}
+        {!fullscreen && !liquidGlass && (
           <Surface
             fill={hex(theme.panel)}
             cornerRadius={SMALL_WINDOW_RADIUS}
@@ -176,7 +177,7 @@ function PeekCard({
         )}
         <MagnifyArea enabled={!fullscreen && !!motion} onMagnify={(update) => pinch.current(update)} style={{ flex: 1 }}>
           <View style={{ flex: 1, borderRadius: fullscreen ? 0 : SMALL_WINDOW_RADIUS, overflow: "hidden" }}>
-            {!fullscreen && <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />}
+            {!fullscreen && !liquidGlass && <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />}
             {!fullscreen && <PeekBar windowId={windowId} tabId={peek.tabId} />}
             <View
               style={

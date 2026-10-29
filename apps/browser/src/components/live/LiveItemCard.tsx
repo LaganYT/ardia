@@ -28,6 +28,7 @@ export function HoverSurface({ anchor, width, children }: { anchor: Anchor; widt
       <Panel
         onMouseEnter={cardHoverProps.onMouseEnter}
         onMouseLeave={cardHoverProps.onMouseLeave}
+        glass="panel"
         fill={theme.panel}
         radius={radius.panel}
         border={theme.panelBorder}

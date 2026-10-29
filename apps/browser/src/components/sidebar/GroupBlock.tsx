@@ -9,7 +9,7 @@ import { newCapture } from "../../state/sidebar/listCapture";
 import { useCapturedGroupEntries, useGroupFirstTabIcon, useGroupTabIds, useKeptEntry } from "../../state/sidebar/hooks";
 import { MeetingTimeLabel, useMeetingCountdown } from "../live/MeetingCountdown";
 import { HoverSlot } from "../ui/HoverSlot";
-import { Button, ContextMenuArea, FadeLabel, font, ink, radius, Surface, Symbol, weight, withAlpha } from "../ui";
+import { Button, ContextMenuArea, FadeLabel, font, GlassFill, ink, liquidGlass, radius, Surface, Symbol, weight, withAlpha } from "../ui";
 import { commitRename, endRename, startRename } from "../../state/sidebar/actions";
 import { useDragFolded, useDragItem, useDropInto } from "./DragProvider";
 import { useShift, type EntryMotion } from "./EntryMotion";
@@ -108,10 +108,16 @@ export const GroupBlock = memo(function GroupBlock({
   return (
     <Animated.View ref={wrapper.ref} style={wrapper.style}>
       <View {...moved} {...box.hoverProps} ref={movedRef} style={[{ paddingVertical: GROUP_BORDER }, moved.style as object]}>
-        <Animated.View
-          pointerEvents="none"
-          style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: GROUP_RADIUS, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, opacity: boxOpacity }}
-        />
+        {liquidGlass ? (
+          <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: boxOpacity }}>
+            <GlassFill fill={fill} radius={GROUP_RADIUS} state="active" />
+          </Animated.View>
+        ) : (
+          <Animated.View
+            pointerEvents="none"
+            style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: GROUP_RADIUS, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, opacity: boxOpacity }}
+          />
+        )}
         <View ref={headerRef} {...handle}>
           <GroupHeader groupId={groupId} windowId={windowId} collapsed={collapsed} open={fold.open} />
         </View>

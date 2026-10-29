@@ -68,6 +68,7 @@ function SearchPanel({ windowId, windowWidth }: { windowId: string; windowWidth:
     <>
       <Pressable onPress={close} style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: 0 }} />
       <Panel
+        glass="panel"
         fill={theme.panel}
         radius={SEARCH_RADIUS}
         border={theme.panelBorder}

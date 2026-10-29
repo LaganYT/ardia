@@ -41,7 +41,6 @@ public class TabsModule: Module {
     "devWindowNumber": { args, reply in reply.ok(ArdiaWebView.devWindowNumber(browserId: try browserId(args))) },
     "devFocusPage": { args, reply in reply.ok(ArdiaWebView.devFocusPage(browserId: try browserId(args))) },
     "devPictureInPicture": { _, reply in reply.ok(ArdiaWebView.devPictureInPicture()) },
-    "devPictureInPictureAction": { args, reply in reply.ok(ArdiaWebView.devPictureInPictureAction(try args.text("action"))) },
     "devPostPeekMouseUp": { args, reply in reply.ok(ArdiaWebView.devPostPeekMouseUp(try args.text("keys"), over: try args.text("tabId"))) },
     "devScrollZoom": { args, reply in
       let steps = try args.dicts("steps")
@@ -50,6 +49,7 @@ public class TabsModule: Module {
   ].merging(LaunchConfig.shared.testInstance ? testInstanceCalls : [:]) { call, _ in call })
 
   private static let testInstanceCalls: [String: CallHandler] = [
+    "devPictureInPictureAction": { args, reply in reply.ok(ArdiaWebView.devPictureInPictureAction(try args.text("action"))) },
     "devPagePhase": { args, reply in reply.ok(ArdiaWebView.devPagePhase(of: try args.text("tabId"))) },
     "devClosePage": { args, reply in reply.ok(ArdiaWebView.devClosePage(of: try args.text("tabId"))) },
   ]

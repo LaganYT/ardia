@@ -1,12 +1,8 @@
-import { Clock, type HLC } from "../../platform/sync";
+import type { HLC } from "../../platform/sync";
+import { editStamp } from "./editClock";
 
 export const themePicks = new Map<string, HLC>();
-let lastPick: HLC | null = null;
 
-export function noteThemePick(profileId: string, device: string, seen: HLC | null) {
-  const clock = new Clock(device, seen);
-  if (lastPick) clock.observe(lastPick);
-  themePicks.set(profileId, (lastPick = clock.tick()));
-}
+export const noteThemePick = (profileId: string) => void themePicks.set(profileId, editStamp());
 
 export const pickBeats = (pick: HLC | undefined, record: { h: HLC } | undefined): pick is HLC => pick !== undefined && (!record || pick > record.h);

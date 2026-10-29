@@ -207,3 +207,22 @@ test("a theme picked while the first pull of a joining Mac reads isn't replaced 
   assert.deepEqual(S().profiles.default.theme, THEME_C, "the pick made during the pull stands");
   assert.deepEqual(opsFor("pth:S").filter((op) => op.device === "devC").at(-1)?.v, { t: THEME_C }, "and goes out");
 });
+
+test("a theme picked during a pull loses to the look another Mac picks again afterwards, even when that look is the synced one", async () => {
+  const { engine, key } = await synced("rePickedElsewhere");
+  heldScope = "app";
+  releaseRead = null;
+  const cycle = engine.syncNow();
+  await until(() => releaseRead);
+  clockOffset += 1_000;
+  setProfileTheme("default", THEME_C, engine.adoptProfileTheme);
+  const later = stampAt(Date.now() + 1_000);
+  remoteTheme(key, later, THEME_A);
+  clockOffset += 2_000;
+  releaseRead();
+  await cycle;
+  await engine.syncNow();
+  await engine.syncNow();
+  assert.deepEqual(S().profiles.default.theme, THEME_A, "the other Mac's later pick wins");
+  assert.deepEqual(mineAfter(key, later), [], "and nothing from here is stamped over it");
+});

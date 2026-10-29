@@ -89,7 +89,7 @@ export function profileThemesAdapter(
   return {
     prefix: PROFILE_THEME,
     adoptRemoteOnJoin: true,
-    extract: (base, _queued, _now, known) => {
+    extract: (base, _queued, _now, known, _remote, _stamp, awaiting) => {
       const values = new Map<string, unknown>();
       const picked = new Map<string, HLC>();
       for (const [id, { syncId, themeAdopting }] of linked()) {
@@ -100,7 +100,7 @@ export function profileThemesAdapter(
         const pick = picks.get(id);
         const wins = pickBeats(pick, records()?.[key]);
         if (pick !== undefined && !wins) picks.delete(id);
-        if (!wins && (unapplied(key, base) || unapplied(angleKey, base))) continue;
+        if (!wins && [key, angleKey].some((k) => unapplied(k, base) || awaiting(k))) continue;
         values.set(key, (theme ? { t: withoutAngles(theme) } : { preset: true }) satisfies ProfileThemeRecord);
         const angles = theme ? anglesOf(theme) : {};
         if (Object.keys(angles).length || known(angleKey)) values.set(angleKey, angles satisfies ThemeAngleRecord);

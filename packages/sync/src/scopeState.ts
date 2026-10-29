@@ -93,6 +93,7 @@ export interface Adapter {
     known: (key: string) => boolean,
     remote: (key: string) => unknown,
     stamp: (key: string) => HLC | undefined,
+    awaiting: (key: string) => boolean,
   ): Extraction | null | Promise<Extraction | null>;
   apply(visible: Map<string, unknown>, changed: Set<string>, base: (key: string) => unknown, records: ApplyRecords): boolean | void | Promise<boolean | void>;
   editedAt?(value: unknown): number | undefined;

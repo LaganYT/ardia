@@ -193,7 +193,7 @@ async function cycleOnce(native: NonNullable<typeof SyncNative>, folder: string,
 }
 
 export function adoptProfileTheme(profileId: string) {
-  noteThemePick(profileId, doc.deviceId ?? "", doc.clock);
+  noteThemePick(profileId);
   if (!themeChosenHere(doc.profiles[profileId])) return;
   save();
   if (doc.enabled) scheduleSync(AFTER_EDIT_MS);

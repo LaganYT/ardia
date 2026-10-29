@@ -94,6 +94,7 @@ final class QuitFlow {
   }
 
   func replyToTerminate(_ ok: Bool) {
+    if case .idle = phase { return }
     if case .waitingForUpdater = phase, ok { return }
     if case .saving(let wait, let lateAlert) = phase {
       wait?.invalidate()

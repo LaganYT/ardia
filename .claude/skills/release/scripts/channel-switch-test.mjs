@@ -412,7 +412,7 @@ const scenarios = [
   },
   {
     key: "cancelled-quit-then-drop",
-    what: "A quit cancelled while it waits for the drop stays cancelled when the drop then completes",
+    what: "A quit cancelled while it waits for the drop (twice, as a runtime teardown after an explicit cancel would) stays cancelled when the drop completes, and the next quit works",
     async run(s) {
       await s.launch();
       await s.untilStaged();
@@ -423,13 +423,14 @@ const scenarios = [
         s.sendQuit();
         await sleep(1500);
         check(isAlive(s.app.pid), "quit didn't wait for the drop");
-        await s.eval(`return Q.replyToTerminate(false);`);
+        await s.eval(`return Q.replyToTerminate(false).then(() => Q.replyToTerminate(false));`);
       } finally {
         s.resume(stopped);
       }
       await s.untilGone(30000);
       await sleep(3000);
       check(isAlive(s.app.pid), "the cancelled quit went through when the drop completed");
+      await s.eval(`return Q.replyToTerminate(false);`);
       const q = await s.quit();
       s.expectInstalled(false);
       return `still running after the drop; a new quit took ${q} ms`;

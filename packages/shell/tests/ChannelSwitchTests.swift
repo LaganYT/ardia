@@ -89,6 +89,25 @@ final class ChannelSwitchTests: XCTestCase {
     XCTAssertTrue(ChannelSwitch.holdsQuit(unreadable()))
   }
 
+  func testAFailedReadWhileCancellingKeepsWaitingForTheSameCopy() {
+    var machine = ChannelSwitch()
+    cancelling(&machine)
+    XCTAssertEqual(machine.changed(unreadable()), [])
+    XCTAssertEqual(machine.phase, .cancelling(ChannelSwitch.Round(cancelled: [staged], switched: true)))
+    XCTAssertEqual(machine.changed(facts([staged])), [])
+    XCTAssertEqual(machine.changed(facts()), [.unwatch, .resetCycle])
+  }
+
+  func testAFailedReadAfterACancellationKeepsItsEvidence() {
+    var machine = ChannelSwitch()
+    _ = machine.switched()
+    _ = machine.changed(facts([staged]))
+    _ = machine.installerCancelled(build: "91", facts(busy: true, [staged]))
+    XCTAssertEqual(machine.changed(unreadable()), [.watch])
+    XCTAssertEqual(machine.phase, .cancelling(ChannelSwitch.Round(cancelled: [staged], switched: true)))
+    XCTAssertTrue(ChannelSwitch.holdsQuit(unreadable()))
+  }
+
   func testQuitWithNothingStagedGoesAtOnce() {
     var machine = ChannelSwitch()
     XCTAssertEqual(machine.quit(1, facts()), [.release([1])])

@@ -37,15 +37,10 @@ public final class AppUpdater: NSObject {
 
   private var offChannelStaged: ChannelSwitch.Staged {
     guard !allowedChannels.contains(UpdateChannel.nightly.rawValue) else { return .none }
-    guard let staged = StagedUpdateCopies.survey() else { return .unreadable }
-    let copies = staged.compactMap { copy -> ChannelSwitch.Copy? in
-      var info = stat()
-      guard copy.bundle.object(forInfoDictionaryKey: "ACUpdateChannel") as? String == UpdateChannel.nightly.rawValue,
-        stat(copy.folder.path, &info) == 0
-      else { return nil }
-      let build = copy.bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-      return ChannelSwitch.Copy(folder: copy.folder.path, device: UInt64(info.st_dev), inode: UInt64(info.st_ino), build: build)
-    }
+    guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier,
+      let found = StagedSurvey.survey(caches: caches, bundleId: bundleId)
+    else { return .unreadable }
+    let copies = found.filter { $0.channel == UpdateChannel.nightly.rawValue }.map(\.copy)
     return copies.isEmpty ? .none : .present(Set(copies))
   }
 
@@ -62,7 +57,8 @@ public final class AppUpdater: NSObject {
       case .resetCycle:
         updater.resetUpdateCycle()
       case .watch:
-        guard installationWatch == nil, let folder = StagedUpdateCopies.installationPath() else { continue }
+        guard installationWatch == nil, let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { continue }
+        let folder = StagedSurvey.root(caches: caches, bundleId: bundleId)
         let watch = FolderWatch(path: folder.path) { [weak self] in self?.advanceChannelSwitch() }
         installationWatch = watch
         watch.start()

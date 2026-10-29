@@ -4,7 +4,6 @@ enum StagedUpdateCopies {
   static let launchServicesTool = URL(
     fileURLWithPath: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
   static let unregisterDeadline: TimeInterval = 10
-  static let sparkleInstallationPath = ["org.sparkle-project.Sparkle", "Installation"]
 
   static var userCaches: URL? {
     FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
@@ -13,57 +12,18 @@ enum StagedUpdateCopies {
   static func installationRoot(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches) -> URL? {
     guard let bundleId, let caches else { return nil }
     var folder = caches.resolvingSymlinksInPath().standardizedFileURL
-    for name in [bundleId] + sparkleInstallationPath {
+    for name in [bundleId] + StagedSurvey.sparkleInstallationPath {
       folder.appendPathComponent(name, isDirectory: true)
       guard isPlainDirectory(folder) else { return nil }
     }
     return folder
   }
 
-  static func installationPath(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches) -> URL? {
-    guard let bundleId, let caches else { return nil }
-    return ([bundleId] + sparkleInstallationPath).reduce(caches.resolvingSymlinksInPath().standardizedFileURL) {
-      $0.appendingPathComponent($1, isDirectory: true)
-    }
-  }
-
-  static func survey(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches) -> [(bundle: Bundle, folder: URL)]? {
-    guard let bundleId, let caches else { return nil }
-    var root = caches.resolvingSymlinksInPath().standardizedFileURL
-    for name in [bundleId] + sparkleInstallationPath {
-      root.appendPathComponent(name, isDirectory: true)
-      var info = stat()
-      guard lstat(root.path, &info) == 0 else { return errno == ENOENT ? [] : nil }
-      guard (info.st_mode & S_IFMT) == S_IFDIR else { return nil }
-    }
-    var unreadable = false
-    let found = copies(in: root, bundleId: bundleId) { error in
-      let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
-      if (error as NSError).code != NSFileReadNoSuchFileError, underlying?.code != Int(ENOENT) { unreadable = true }
-    }
-    guard !unreadable else { return nil }
-    return found.compactMap { copy in
-      guard let executable = copy.bundle.executableURL, FileManager.default.isExecutableFile(atPath: executable.path),
-        let folder = updateFolder(of: copy.bundle.bundleURL, in: root)
-      else { return nil }
-      return (copy.bundle, folder)
-    }
-  }
-
   static func copies(bundleId: String? = Bundle.main.bundleIdentifier, caches: URL? = userCaches) -> [(bundle: Bundle, modified: Date)] {
     guard let bundleId, let root = installationRoot(bundleId: bundleId, caches: caches) else { return [] }
-    return copies(in: root, bundleId: bundleId) { _ in }
-  }
-
-  private static func copies(in root: URL, bundleId: String, failed: @escaping (Error) -> Void) -> [(bundle: Bundle, modified: Date)] {
     let keys: [URLResourceKey] = [.contentModificationDateKey, .isSymbolicLinkKey]
     guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys,
-                                                     options: [.skipsHiddenFiles, .skipsPackageDescendants],
-                                                     errorHandler: { _, error in failed(error); return true })
-    else {
-      failed(CocoaError(.fileReadUnknown))
-      return []
-    }
+                                                     options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
     var found: [(bundle: Bundle, modified: Date)] = []
     for case let url as URL in walk {
       if walk.level > 4 { walk.skipDescendants(); continue }
@@ -105,7 +65,7 @@ enum StagedUpdateCopies {
     }
     for copy in copies(bundleId: bundleId, caches: caches) {
       let bundle = copy.bundle.bundleURL
-      guard let folder = updateFolder(of: bundle, in: root), !sameFile(bundle, running), !holds(folder, running) else { continue }
+      guard let folder = StagedSurvey.updateFolder(of: bundle, in: root), !sameFile(bundle, running), !holds(folder, running) else { continue }
       unregister(bundle, tool: tool)
       let build = copy.bundle.infoDictionary?["CFBundleVersion"] as? String ?? ""
       guard build.compare(installedBuild, options: .numeric) != .orderedDescending, isPlainDirectory(folder) else { continue }
@@ -116,13 +76,6 @@ enum StagedUpdateCopies {
         NSLog("Ardia: couldn't remove a leftover update copy at \(folder.path): \(error.localizedDescription)")
       }
     }
-  }
-
-  static func updateFolder(of bundle: URL, in root: URL) -> URL? {
-    let base = root.standardizedFileURL.pathComponents
-    let parts = bundle.standardizedFileURL.pathComponents
-    guard parts.count > base.count + 1, Array(parts.prefix(base.count)) == base else { return nil }
-    return URL(fileURLWithPath: NSString.path(withComponents: Array(parts.prefix(base.count + 1))), isDirectory: true)
   }
 
   static func holds(_ folder: URL, _ item: URL) -> Bool {

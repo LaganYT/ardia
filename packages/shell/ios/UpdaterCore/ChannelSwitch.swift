@@ -120,6 +120,9 @@ struct ChannelSwitch {
       case .present(let copies) where copies.isSubset(of: round.cancelled):
         phase = .cancelling(round)
         return [.watch]
+      case .unreadable where !round.cancelled.isEmpty:
+        phase = .cancelling(round)
+        return [.watch]
       case .present, .unreadable:
         phase = .unconfirmed
         return [.watch, .log("Sparkle's installer didn't confirm dropping the staged nightly; quitting waits for its deadline")]
@@ -130,7 +133,9 @@ struct ChannelSwitch {
         return [.unwatch] + settle(facts, reset: round.switched)
       case .present(let copies) where copies.isSubset(of: round.cancelled):
         return []
-      case .present, .unreadable:
+      case .unreadable:
+        return []
+      case .present:
         guard !facts.busy else { return [] }
         phase = .resuming(round)
         return [.unwatch, .resume]

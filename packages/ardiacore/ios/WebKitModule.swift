@@ -83,6 +83,7 @@ public class WebKitModule: Module {
       AsyncFunction("resolveUnresponsive") { (view: WebKitTabView, terminate: Bool) in }.runOnQueue(.main)
       AsyncFunction("discard") { (view: WebKitTabView, unload: Bool?) in "unsupported" }.runOnQueue(.main)
       AsyncFunction("setFrozen") { (view: WebKitTabView, frozen: Bool) in }.runOnQueue(.main)
+      AsyncFunction("zap") { (view: WebKitTabView, action: String, level: Int) in }.runOnQueue(.main)
 
       OnViewDidUpdateProps { (view: WebKitTabView) in view.propsDidUpdate() }
     }

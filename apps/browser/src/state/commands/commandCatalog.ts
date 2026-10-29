@@ -114,6 +114,9 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   searchTabs: { title: "Search Tabs…", symbol: "magnifyingglass", keys: ["⇧⌘A"], ...windowOffInLittleArdia },
   renameTab: { title: "Rename…", barTitle: "Rename Tab", symbol: "pencil", ...windowOffInLittleArdia },
   changeTabIcon: { title: "Change Icon…", ...windowOffInLittleArdia },
+  newBoost: { title: "New Boost", symbol: "paintbrush", ...windowOffInLittleArdia },
+  editBoost: { title: "Edit Boost", symbol: "paintbrush", ...windowOffInLittleArdia },
+  turnOffBoosts: { title: "Turn Off Boosts for This Site", symbol: "paintbrush", ...windowOffInLittleArdia },
   returnToPinnedUrl: { title: "Back to Pinned URL", keys: ["⌘↩"], ...windowOffInLittleArdia },
   tabSwitcher: {
     ...windowOffInLittleArdia,

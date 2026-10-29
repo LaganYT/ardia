@@ -70,14 +70,6 @@ bool MayRequestDisplayMedia(content::RenderFrameHost& frame) {
          frame.HasTransientUserActivation();
 }
 
-mojo::AssociatedRemote<mojom::ACPage> PageOf(content::RenderFrameHost* frame) {
-  mojo::AssociatedRemote<mojom::ACPage> page;
-  if (frame && frame->IsRenderFrameLive()) {
-    frame->GetRemoteAssociatedInterfaces()->GetInterface(&page);
-  }
-  return page;
-}
-
 class AppSchemeThrottle : public content::NavigationThrottle {
  public:
   explicit AppSchemeThrottle(content::NavigationThrottleRegistry& registry)
@@ -118,6 +110,14 @@ class AppSchemeThrottle : public content::NavigationThrottle {
   }
 };
 
+}
+
+mojo::AssociatedRemote<mojom::ACPage> PageOf(content::RenderFrameHost* frame) {
+  mojo::AssociatedRemote<mojom::ACPage> page;
+  if (frame && frame->IsRenderFrameLive()) {
+    frame->GetRemoteAssociatedInterfaces()->GetInterface(&page);
+  }
+  return page;
 }
 
 bool IsAppURL(const GURL& url) {

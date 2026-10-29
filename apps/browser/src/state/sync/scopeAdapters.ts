@@ -5,6 +5,7 @@ import { profilesAdapter, profileThemesAdapter } from "./profileAdapters";
 import { settingsAdapter } from "./settingsAdapter";
 import { pinnedAreaAdapters } from "./pinned";
 import { extensionsAdapterFor } from "./extensions";
+import { boostsAdapter } from "./boostsAdapter";
 import { APP_SCOPE, type SyncDoc } from "./syncDoc";
 
 export const deviceName = () => SyncNative?.deviceName() ?? "This Mac";
@@ -54,5 +55,6 @@ export function profileAdapters(doc: SyncDoc, profileId: string, retiring: boole
     inTodaysNames(deviceTabsAdapter(profileId, id, deviceName, !t.tabs)),
     ...(t.passwords && ownsData ? [passwords] : []),
     ...(extensionsSynced(doc, profileId) ? [extensionsOf(profileId)] : []),
+    ...(t.boosts && ownsData ? [boostsAdapter(profileId)] : []),
   ];
 }

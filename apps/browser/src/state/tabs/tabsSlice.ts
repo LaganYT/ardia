@@ -9,6 +9,7 @@ import { groupWithOpener, onUrlChange } from "../pins/organize";
 import { stepDrop } from "../drag/drops";
 import { resolveTyped } from "../settings/settings";
 import { openSettings } from "../settings/settingsWindows";
+import { showImportBoost } from "../boosts/importSheet";
 import { appUrlAction } from "../pages/appUrls";
 import { handOffPinPage } from "../pins/pinHandoff";
 import { mainWindowFor } from "../windows/small";
@@ -52,6 +53,7 @@ function openOutsideTab(s: BrowserState, url: string, windowId: string): boolean
   const action = appUrlAction(url);
   if (!action) return false;
   if (action.kind === "newTab") s.newTab(windowId);
+  else if (action.kind === "boost") showImportBoost(action.code);
   else openSettings(action.pane);
   return true;
 }

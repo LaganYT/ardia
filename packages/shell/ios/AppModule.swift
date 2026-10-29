@@ -6,7 +6,7 @@ import ExpoModulesCore
 public class AppModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ArdiaApp")
-    Constant("apiVersion") { () -> Int in 29 }
+    Constant("apiVersion") { () -> Int in 30 }
     Events(ShellEvents.Channel.notificationResponse.rawValue, ShellEvents.Channel.scriptCommand.rawValue)
 
     OnCreate {

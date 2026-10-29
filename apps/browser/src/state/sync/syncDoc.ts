@@ -2,7 +2,7 @@ import type { ScopeState } from "../../platform/sync";
 import type { Profile } from "../browser/types";
 import { unchanged, type Migrations } from "../../lib/savedDocument";
 
-export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "extensions" | "settings";
+export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "extensions" | "boosts" | "settings";
 
 export const DATA_TYPES: { id: DataType; title: string; description: string }[] = [
   { id: "bookmarks", title: "Bookmarks", description: "Each synced profile’s bookmarks bar and other bookmarks." },
@@ -11,6 +11,7 @@ export const DATA_TYPES: { id: DataType; title: string; description: string }[] 
   { id: "pinned", title: "Pinned Tabs and Groups", description: "Pinned tabs and pinned tab groups." },
   { id: "passwords", title: "Passwords", description: "Saved passwords. Turning sync off never removes them from this Mac." },
   { id: "extensions", title: "Extensions", description: "Extensions from the Chrome Web Store, whether they’re on, and whether they’re pinned." },
+  { id: "boosts", title: "Boosts", description: "Each synced profile’s Boosts: site colours, fonts, hidden elements, CSS and JS." },
   { id: "settings", title: "Settings", description: "Search engine, appearance, tab and keyboard settings." },
 ];
 
@@ -43,7 +44,7 @@ export const STATE = "sync-state.nns";
 export const JOURNAL = "sync-journal.nns";
 export const APP_SCOPE = "app";
 
-export const defaultTypes = (): Record<DataType, boolean> => ({ bookmarks: true, history: true, tabs: true, pinned: true, passwords: true, extensions: true, settings: true });
+export const defaultTypes = (): Record<DataType, boolean> => ({ bookmarks: true, history: true, tabs: true, pinned: true, passwords: true, extensions: true, boosts: true, settings: true });
 
 export const emptyDoc = (): SyncDoc => ({
   v: 1,

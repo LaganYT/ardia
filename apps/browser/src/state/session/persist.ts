@@ -16,6 +16,7 @@ import { downloadSession } from "../windows/ui";
 import { startFavicons } from "../favicons/favicons";
 import { startBookmarks } from "../bookmarks/engineSync";
 import { startHistory } from "../history/engineSync";
+import { startBoosts } from "../boosts/persist";
 import { startProfileDataCleanup } from "../profiles/profileData";
 import { parseSaved, versionedJson, unchanged, type Migrations, type SavedObject } from "../../lib/savedDocument";
 import { sessionWithCleanUpMinutes } from "../settings/cleanUpAfter";
@@ -294,6 +295,7 @@ export function startPersistence() {
   const stopFavicons = startFavicons();
   const stopHistory = startHistory();
   const stopBookmarks = startBookmarks();
+  const stopBoosts = startBoosts();
   const stopProfileData = startProfileDataCleanup();
   const stopSession = useBrowser.subscribe((s, prev) => {
     check(s);
@@ -303,6 +305,7 @@ export function startPersistence() {
     stopFavicons();
     stopHistory();
     stopBookmarks();
+    stopBoosts();
     stopProfileData();
     stopSession();
   };

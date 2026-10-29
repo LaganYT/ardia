@@ -6,6 +6,7 @@ export * from "./contentBlocker";
 export * from "./siteSettings";
 export * from "./externalApps";
 export * from "./zoom";
+export * from "./boosts";
 export * from "./passwords";
 export * from "./autofill";
 export * from "./extensions";

@@ -28,6 +28,7 @@ import { dismissPermissions } from "../../state/site/permissions";
 import { zoomChangedByUser } from "../../state/site/zoomBubble";
 import { markTabReady, patchPage, pageOf, popoverOf, setPopover } from "../../state/tabs/pageState";
 import { closeFolderPanelIn } from "../../state/sidebar/tileFolderUi";
+import { deliverZapPicked } from "../../state/boostUi/zap";
 import { answerExternalApp, shouldPromptForPopups, showAutofillPrompt, showPasswordPrompt } from "../site/Prompts";
 import { copyLinkToSelection, searchSelection, setPageSelection } from "../../state/site/selection";
 import { useAutoPictureInPicture } from "../../state/media/pip";
@@ -130,6 +131,7 @@ function EngineWebView({ tabId, visible, warm, peekOf, engine }: TabWebViewProps
       pageColor={pageColor}
       contentsBackgroundColor={backdrop}
       shownUrl={shownUrl}
+      onZapPicked={(pick) => deliverZapPicked(tabId, pick)}
       onReady={() => {
         markTabReady(tabId);
         noteTabReady(tabId);

@@ -123,6 +123,8 @@ public class WebViewModule: Module {
       AsyncFunction("discard") { (view: ChromiumTabView, unload: Bool?) in view.browser.discard(unload: unload ?? false) }
         .runOnQueue(.main)
       AsyncFunction("setFrozen") { (view: ChromiumTabView, frozen: Bool) in view.browser.frozen = frozen }.runOnQueue(.main)
+      AsyncFunction("zap") { (view: ChromiumTabView, action: String, level: Int) in view.browser.zap(action, level: level) }
+        .runOnQueue(.main)
 
       OnViewDidUpdateProps { (view: ChromiumTabView) in view.propsDidUpdate() }
     }

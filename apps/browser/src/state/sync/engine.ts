@@ -22,6 +22,7 @@ import { confirmThemes, settleAppliedThemes } from "./syncThemes";
 import { addLinkedProfile, appScopeOf, linkedProfileId, linkProfiles, readyToPair, remoteProfileRecord, sharedDataChain } from "./profileLinks";
 import { summarize } from "./syncSummary";
 import { profileScope } from "./records";
+import { useBoostStore } from "../boosts/store";
 import { onAppEvent } from "../../platform/app";
 import { errorText } from "../../lib/errors";
 
@@ -340,6 +341,9 @@ export function startSync() {
   useBrowser.subscribe((s, prev) => {
     if (!doc.enabled || cycle) return;
     if (s.bookmarks !== prev.bookmarks || s.settings !== prev.settings || s.profiles !== prev.profiles || s.groups !== prev.groups) scheduleSync();
+  });
+  useBoostStore.subscribe(() => {
+    if (doc.enabled && !cycle) scheduleSync();
   });
   if (__DEV__) {
     (globalThis as { acSync?: object }).acSync = {

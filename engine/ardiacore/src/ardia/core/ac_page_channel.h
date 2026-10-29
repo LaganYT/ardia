@@ -36,6 +36,8 @@ void SetPageScript(const std::string& script);
 const std::string& GetPageScript();
 void SendPageScript(content::RenderProcessHost* host);
 
+mojo::AssociatedRemote<mojom::ACPage> PageOf(content::RenderFrameHost* frame);
+
 void RegisterPageChannelBinders(content::RenderFrameHost& render_frame_host,
                                 blink::AssociatedInterfaceRegistry& registry);
 void AddAppSchemeThrottle(content::NavigationThrottleRegistry& registry);

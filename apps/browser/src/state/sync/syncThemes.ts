@@ -4,6 +4,7 @@ import type { Profile } from "../browser/types";
 import { legacyThemeOf, themeAngleKey, themeFromRecord, type ProfileRecord } from "./profileAdapters";
 import { PROFILE, PROFILE_THEME, profileRecord } from "./records";
 import type { ProfileLink } from "./syncDoc";
+import { pickBeats, themePicks } from "./themePicks";
 
 function pairedTheme(app: ScopeState, syncId: string): Pick<Profile, "theme"> | null {
   const record = app.records[`${PROFILE_THEME}${syncId}`]?.v;
@@ -18,16 +19,12 @@ function settledTheme(app: ScopeState, syncId: string): boolean {
 }
 
 export function pairTheme(app: ScopeState | undefined, profileId: string, link: ProfileLink, record?: ProfileRecord) {
+  if (pickBeats(themePicks.get(profileId), app?.records[`${PROFILE_THEME}${link.syncId}`])) return;
   const theme = app ? pairedTheme(app, link.syncId) : record ? legacyThemeOf(record) : null;
   if (theme) useBrowser.getState().setProfileLook(profileId, theme);
   if (app && settledTheme(app, link.syncId)) delete link.themeAdopting;
   else link.themeAdopting = true;
 }
-
-export const themePicks = new Map<string, number>();
-let picksMade = 0;
-
-export const noteThemePick = (profileId: string) => void themePicks.set(profileId, ++picksMade);
 
 export function themeChosenHere(link: ProfileLink | undefined): boolean {
   if (!link?.themeAdopting) return false;

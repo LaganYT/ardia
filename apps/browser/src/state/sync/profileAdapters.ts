@@ -1,9 +1,10 @@
-import { canonical, type Adapter } from "../../platform/sync";
+import { canonical, type Adapter, type HLC } from "../../platform/sync";
 import { useBrowser } from "../browser/store";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
 import { sanitizeTheme } from "../../lib/profileLook";
 import type { Profile, ProfileTheme } from "../browser/types";
 import { PROFILE, PROFILE_THEME, SHARE, profileRecord } from "./records";
+import { pickBeats, themePicks } from "./themePicks";
 
 const store = () => useBrowser.getState();
 
@@ -77,45 +78,36 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
 
 export function profileThemesAdapter(
   links: () => Record<string, { syncId: string; themeAdopting?: true }>,
-  records: () => Record<string, { v: unknown }> | undefined,
-  picks: Map<string, number> = new Map(),
+  records: () => Record<string, { v: unknown; h: HLC }> | undefined,
+  picks: Map<string, HLC> = themePicks,
 ): Adapter {
   const linked = () => Object.entries(links()).filter(([id]) => store().profiles[id]);
-  const differs = (value: unknown, key: string, base: (key: string) => unknown) => canonical(value) !== canonical(base(key) ?? null);
   const unapplied = (key: string, base: (key: string) => unknown) => {
     const record = records()?.[key];
-    return !!record && record.v !== null && differs(record.v, key, base);
+    return !!record && record.v !== null && canonical(record.v) !== canonical(base(key) ?? null);
   };
-  const dropPick = (id: string, pick: number | undefined) => pick !== undefined && picks.get(id) === pick && picks.delete(id);
   return {
     prefix: PROFILE_THEME,
     adoptRemoteOnJoin: true,
     extract: (base, _queued, _now, known) => {
       const values = new Map<string, unknown>();
-      const pickOf = new Map<string, [string, number]>();
+      const picked = new Map<string, HLC>();
       for (const [id, { syncId, themeAdopting }] of linked()) {
         const theme = store().profiles[id]!.theme;
         const key = `${PROFILE_THEME}${syncId}`;
         const angleKey = themeAngleKey(syncId);
         if (theme === undefined || themeAdopting) continue;
-        const record: ProfileThemeRecord = theme ? { t: withoutAngles(theme) } : { preset: true };
-        const angles: ThemeAngleRecord = theme ? anglesOf(theme) : {};
-        const sendAngles = Object.keys(angles).length > 0 || known(angleKey);
         const pick = picks.get(id);
-        if (!differs(record, key, base) && (!sendAngles || !differs(angles, angleKey, base))) dropPick(id, pick);
-        if (!picks.has(id) && (unapplied(key, base) || unapplied(angleKey, base))) continue;
-        values.set(key, record);
-        if (sendAngles) values.set(angleKey, angles);
-        if (pick !== undefined) for (const k of [key, angleKey]) pickOf.set(k, [id, pick]);
+        const wins = pickBeats(pick, records()?.[key]);
+        if (pick !== undefined && !wins) picks.delete(id);
+        if (!wins && (unapplied(key, base) || unapplied(angleKey, base))) continue;
+        values.set(key, (theme ? { t: withoutAngles(theme) } : { preset: true }) satisfies ProfileThemeRecord);
+        const angles = theme ? anglesOf(theme) : {};
+        if (Object.keys(angles).length || known(angleKey)) values.set(angleKey, angles satisfies ThemeAngleRecord);
+        if (wins) for (const k of [key, angleKey]) picked.set(k, pick);
       }
       const mine = new Set(values.keys());
-      const published = (keys: Set<string>) => {
-        for (const key of keys) {
-          const made = pickOf.get(key);
-          if (made) dropPick(...made);
-        }
-      };
-      return { values, ignore: (key) => !mine.has(key), published };
+      return { values, ignore: (key) => !mine.has(key), republish: (key) => picked.has(key), stamp: (key) => picked.get(key) };
     },
     apply: (visible, changed) => {
       for (const [id, { syncId }] of linked()) {

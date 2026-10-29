@@ -3,7 +3,6 @@ import { useBrowser } from "../browser/store";
 import { bookmarksAdapter, deviceAdapter, deviceTabsAdapter, historyAdapter, inTodaysNames, passwordsAdapter, sharedDataAdapter } from "./adapters";
 import { profilesAdapter, profileThemesAdapter } from "./profileAdapters";
 import { settingsAdapter } from "./settingsAdapter";
-import { themePicks } from "./syncThemes";
 import { pinnedAreaAdapters } from "./pinned";
 import { extensionsAdapterFor } from "./extensions";
 import { APP_SCOPE, typeSyncedFor, type DataType, type SyncDoc } from "./syncDoc";
@@ -35,7 +34,7 @@ export function appAdapters(doc: SyncDoc, retiring: boolean): Adapter[] {
     ...(doc.types.settings ? [inTodaysNames(settingsAdapter)] : []),
     sharedDataAdapter(() => doc.profiles),
     profilesAdapter(enabledLinks),
-    profileThemesAdapter(enabledLinks, () => doc.scopes[APP_SCOPE]?.records, themePicks),
+    profileThemesAdapter(enabledLinks, () => doc.scopes[APP_SCOPE]?.records),
     deviceAdapter(id, deviceName),
   ];
 }

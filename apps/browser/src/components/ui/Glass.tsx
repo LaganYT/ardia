@@ -1,8 +1,6 @@
 import { GlassEffect, isLiquidGlass } from "@ardia/shell";
 import { memo } from "react";
-import { StyleSheet, View } from "react-native";
 import { useTheme, type Theme } from "./theme";
-import { glassRim } from "./tokens";
 import { parseColor, toHex } from "../../lib/color";
 
 export const liquidGlass = isLiquidGlass();
@@ -41,19 +39,13 @@ export const GlassFill = memo(function GlassFill({
   const theme = useTheme();
   const frame = { position: "absolute", top: -border, left: -border, right: -border, bottom: -border } as const;
   return (
-    <>
-      <GlassEffect
-        pointerEvents="none"
-        glassStyle={GLASS_STYLE[kind]}
-        cornerRadius={radius}
-        tint={glassTint(theme, fill, kind, state)}
-        dark={dark ?? theme.dark}
-        style={frame}
-      />
-      <View
-        pointerEvents="none"
-        style={[frame, { borderRadius: radius, borderCurve: "continuous", borderWidth: StyleSheet.hairlineWidth, borderColor: state === "rest" ? glassRim.rest : glassRim.lit }]}
-      />
-    </>
+    <GlassEffect
+      pointerEvents="none"
+      glassStyle={GLASS_STYLE[kind]}
+      cornerRadius={radius}
+      tint={glassTint(theme, fill, kind, state)}
+      dark={dark ?? theme.dark}
+      style={frame}
+    />
   );
 });

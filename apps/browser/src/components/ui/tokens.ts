@@ -205,8 +205,6 @@ export const colorRoles = { dark: darkRoles, light: lightRoles } as const;
 
 export type ColorRole = { [K in keyof ColorRoles]: ColorRoles[K] extends string ? K : never }[keyof ColorRoles];
 
-export const glassRim = { rest: "rgba(255,255,255,0.2)", lit: "rgba(255,255,255,0.3)" } as const;
-
 export const closeOnArt = { rest: "rgba(255,255,255,0.1)", hover: "rgba(255,255,255,0.2)", pressed: "rgba(255,255,255,0.3)", glyph: "#FFFFFF8C" } as const;
 
 export type SiteToolbarRoles = {

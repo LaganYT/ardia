@@ -33,7 +33,7 @@ import { SIDEBAR_FOOTER_DOWNLOADS } from "../sidebar/geometry";
 import { PROFILE_DOTS_HEIGHT } from "../profiles/ProfileDots";
 import { openInternalPage } from "../../state/pages/urls";
 import { useSidebarWidth } from "../../state/sidebar/hooks";
-import { glassRim, hairline, shadow } from "../ui/tokens";
+import { hairline, shadow } from "../ui/tokens";
 import { glassTint } from "../ui/Glass";
 import { DOWNLOADS_PANEL, type DownloadsPlacement } from "./downloadsPlacement";
 import { dangerWarning, downloadStatus } from "../../state/downloads/status";
@@ -167,8 +167,8 @@ function PanelBackground({ placement }: { placement: DownloadsPlacement }) {
       arrowHeight={DOWNLOADS_PANEL.arrowHeight}
       glass={liquidGlass}
       tint={liquidGlass ? glassTint(theme, theme.panel, "panel", "rest") : hex(colors.bubbleTint)}
-      edgeColor={hex(liquidGlass ? glassRim.rest : theme.popoverBorder)}
-      edgeWidth={liquidGlass ? StyleSheet.hairlineWidth : hairline.panel}
+      edgeColor={hex(theme.popoverBorder)}
+      edgeWidth={liquidGlass ? 0 : hairline.panel}
       shadowOpacity={theme.dark ? level.opacity.dark : level.opacity.light}
       shadowRadius={level.radius}
       shadowOffsetY={level.offset[1]}

@@ -341,6 +341,24 @@ const scenarios = [
     },
   },
   {
+    key: "stale-copy-beside-residue",
+    what: "A leftover nightly beside an abandoned copy with no Info.plist: the unreadable one doesn't hide the nightly, which is moved out; the abandoned one is left alone, and quit is fast",
+    alone: true,
+    start: { channel: "stable", stale: true, abandoned: true },
+    control: { feed: "empty" },
+    async run(s) {
+      await s.launch();
+      const q = await s.quit(QUIT_HOLD_LIMIT);
+      check(!s.offChannelCopies().length, "the app quit with the leftover nightly still in Sparkle's folder");
+      check(existsSync(join(s.installation, "abandoned/Ardia.app/Contents")), "the abandoned copy was touched");
+      s.expectInstalled(false);
+      await s.launch();
+      await sleep(3000);
+      const again = await s.quit(2000);
+      return `quit in ${q} ms with the nightly gone and the abandoned copy kept; the next quit took ${again} ms`;
+    },
+  },
+  {
     key: "stale-copy-slow-feed",
     what: "A leftover nightly copy with no installer and a feed that answers after 20 s: quit is held to the deadline, the copy is moved out before exit, and the next quit is fast",
     alone: true,
@@ -631,6 +649,7 @@ class Scenario {
     const imported = sh("defaults", ["import", this.prefs, defaultsFile]);
     check(imported.status === 0, `couldn't import the scratch defaults: ${imported.stderr}`);
     writeFileSync(join(this.data, "perf-probe"), "");
+    if (start.abandoned) mkdirSync(join(this.installation, "abandoned/Ardia.app/Contents"), { recursive: true });
     if (start.stale) {
       const folder = join(this.installation, "stale-copy");
       mkdirSync(folder, { recursive: true });

@@ -28,25 +28,42 @@ public final class AppUpdater: NSObject {
     guard started else { return }
     apply(channelSwitch.switched())
     userDriver.leaveOffChannelUpdate()
-    advanceChannelSwitch()
+    refreshChannelSwitch()
   }
 
-  private var switchFacts: ChannelSwitch.Facts {
-    ChannelSwitch.Facts(busy: updater.sessionInProgress, staged: offChannelStaged, automaticChecks: updater.automaticallyChecksForUpdates)
+  private var offChannelNightly: Bool { !allowedChannels.contains(UpdateChannel.nightly.rawValue) }
+
+  private func refreshChannelSwitch() {
+    guard channelSwitch.wantsFacts else { return }
+    guard !surveying else { return surveyAgain = true }
+    guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { return }
+    surveying = true
+    let offChannel = offChannelNightly
+    Self.files.async { [weak self] in
+      let survey = offChannel ? StagedSurvey.survey(caches: caches, bundleId: bundleId) : StagedSurvey.Survey()
+      DispatchQueue.main.async { self?.surveyed(survey, offChannel: offChannel) }
+    }
   }
 
-  private var offChannelStaged: ChannelSwitch.Staged {
-    guard !allowedChannels.contains(UpdateChannel.nightly.rawValue) else { return .none }
-    guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier,
-      let found = StagedSurvey.survey(caches: caches, bundleId: bundleId)
-    else { return .unreadable }
-    let copies = found.filter { $0.channel == UpdateChannel.nightly.rawValue }.map(\.copy)
-    return copies.isEmpty ? .none : .present(Set(copies))
-  }
-
-  private func advanceChannelSwitch() {
-    guard channelSwitch.phase != .idle else { return }
-    apply(channelSwitch.changed(switchFacts))
+  private func surveyed(_ survey: StagedSurvey.Survey, offChannel: Bool) {
+    surveying = false
+    guard offChannel == offChannelNightly else {
+      surveyAgain = false
+      return refreshChannelSwitch()
+    }
+    let nightly = survey.found.filter { $0.channel == UpdateChannel.nightly.rawValue }.map(\.copy)
+    let sighting = ChannelSwitch.Sighting(copies: Set(nightly), residue: survey.residue, blind: survey.blind)
+    let busy = updater.sessionInProgress
+    let facts = channelSwitch.observe(sighting, busy: busy, automaticChecks: updater.automaticallyChecksForUpdates)
+    for orphan in channelSwitch.orphans(sighting, busy: busy).subtracting(notedOrphans) {
+      NSLog("Ardia: \(orphan.folder) in Sparkle's Installation folder can't be read and nothing is installing it; leaving it alone")
+    }
+    notedOrphans.formUnion(channelSwitch.orphans(sighting, busy: busy))
+    apply(channelSwitch.changed(facts))
+    if surveyAgain {
+      surveyAgain = false
+      refreshChannelSwitch()
+    }
   }
 
   private func apply(_ effects: [ChannelSwitch.Effect]) {
@@ -59,12 +76,15 @@ public final class AppUpdater: NSObject {
       case .watch:
         guard installationWatch == nil, let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { continue }
         let folder = StagedSurvey.root(caches: caches, bundleId: bundleId)
-        let watch = FolderWatch(path: folder.path) { [weak self] in self?.advanceChannelSwitch() }
+        let watch = FolderWatch(path: folder.path, queue: Self.files) {
+          DispatchQueue.main.async { [weak self] in self?.refreshChannelSwitch() }
+        }
         installationWatch = watch
-        watch.start()
+        Self.files.async { watch.start() }
       case .unwatch:
-        installationWatch?.stop()
+        let watch = installationWatch
         installationWatch = nil
+        Self.files.async { watch?.stop() }
       case .discard(let copies):
         discard(copies)
       case .release(let waits):
@@ -75,23 +95,28 @@ public final class AppUpdater: NSObject {
     }
   }
 
+  private static let files = DispatchQueue(label: "com.ardia.updater.staged-copies", qos: .userInitiated)
+
   private func discard(_ copies: Set<ChannelSwitch.Copy>) {
     guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { return }
-    let protected = StagedSurvey.ancestors(of: Bundle.main.bundleURL)
-    for copy in copies {
-      switch StagedSurvey.discard(copy, caches: caches, bundleId: bundleId, protected: protected) {
-      case .gone:
-        NSLog("Ardia: moved the staged nightly (build \(copy.build)) out of Sparkle's Installation folder")
-      case .refused(let reason):
-        NSLog("Ardia: left the staged nightly at \(copy.folder) alone: \(reason); it may install")
-      case .failed(let error):
-        NSLog("Ardia: couldn't move the staged nightly at \(copy.folder): \(String(cString: strerror(error))); it may install")
-      case .stranded(let path):
-        NSLog("Ardia: moved something other than the staged nightly to \(path) and couldn't put it back; it is kept, never deleted")
+    let running = Bundle.main.bundleURL
+    Self.files.async { [weak self] in
+      let protected = StagedSurvey.ancestors(of: running)
+      for copy in copies {
+        switch StagedSurvey.discard(copy, caches: caches, bundleId: bundleId, protected: protected) {
+        case .gone:
+          NSLog("Ardia: moved the staged nightly (build \(copy.build)) out of Sparkle's Installation folder")
+        case .refused(let reason):
+          NSLog("Ardia: left the staged nightly at \(copy.folder) alone: \(reason); it may install")
+        case .failed(let error):
+          NSLog("Ardia: couldn't move the staged nightly at \(copy.folder): \(String(cString: strerror(error))); it may install")
+        case .stranded(let path):
+          NSLog("Ardia: moved something other than the staged nightly to \(path) and couldn't put it back; it is kept, never deleted")
+        }
       }
+      DispatchQueue.main.async { self?.refreshChannelSwitch() }
+      self?.emptyDiscarded()
     }
-    emptyDiscarded()
-    DispatchQueue.main.async { [weak self] in self?.advanceChannelSwitch() }
   }
 
   private func emptyDiscarded() {
@@ -106,22 +131,25 @@ public final class AppUpdater: NSObject {
   }
 
   static let quitWaitLimit: TimeInterval = 8
+  static let quitDiscardLead: TimeInterval = 1.5
 
-  public var holdsQuitForStagedUpdate: Bool {
-    started && channelSwitch.holdsQuit(switchFacts)
-  }
+  public var holdsQuitForStagedUpdate: Bool { started }
 
   public func dropOffChannelStagedUpdateBeforeQuit(then quit: @escaping () -> Void) {
     guard started else { return quit() }
     lastQuitWait += 1
     let wait = lastQuitWait
     quitWaits[wait] = quit
-    apply(channelSwitch.quit(wait, switchFacts))
-    guard quitWaits[wait] != nil else { return }
+    channelSwitch.quit(wait)
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.quitWaitLimit - Self.quitDiscardLead) { [weak self] in
+      guard let self else { return }
+      self.apply(self.channelSwitch.nearDeadline(wait))
+    }
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.quitWaitLimit) { [weak self] in
       guard let self else { return }
-      self.apply(self.channelSwitch.deadline(wait, self.switchFacts))
+      self.apply(self.channelSwitch.deadline(wait))
     }
+    refreshChannelSwitch()
   }
 
   var allowedChannels: Set<String> {
@@ -179,7 +207,8 @@ public final class AppUpdater: NSObject {
     standard: SPUStandardUserDriver(hostBundle: .main, delegate: self),
     isOnChannel: { [unowned self] item in item.channel.map { self.allowedChannels.contains($0) } ?? true },
     cancelledInstaller: { [unowned self] item in
-      self.apply(self.channelSwitch.installerCancelled(build: item.versionString, self.switchFacts))
+      self.apply(self.channelSwitch.installerCancelled(build: item.versionString))
+      self.refreshChannelSwitch()
     })
   private lazy var updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: userDriver, delegate: self)
   private var deferredUpdate = false
@@ -187,6 +216,9 @@ public final class AppUpdater: NSObject {
   private var installationWatch: FolderWatch?
   private var quitWaits: [Int: () -> Void] = [:]
   private var lastQuitWait = 0
+  private var surveying = false
+  private var surveyAgain = false
+  private var notedOrphans: Set<ChannelSwitch.Residue> = []
   private var sessionObservation: NSKeyValueObservation?
   private var firstCheckPending = false
   private var started = false
@@ -212,12 +244,12 @@ public final class AppUpdater: NSObject {
     }
     sessionObservation = updater.observe(\.sessionInProgress, options: [.new]) { [weak self] _, change in
       guard change.newValue == false else { return }
-      DispatchQueue.main.async { self?.advanceChannelSwitch() }
+      DispatchQueue.main.async { self?.refreshChannelSwitch() }
     }
     emptyDiscarded()
     DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      self.apply(self.channelSwitch.noticed(self.switchFacts))
+      self?.channelSwitch.noticed()
+      self?.refreshChannelSwitch()
     }
     NotificationCenter.default.addObserver(self, selector: #selector(fullScreenChanged), name: NSWindow.didExitFullScreenNotification, object: nil)
     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.leftoverSweepDelay) { StagedUpdateCopies.sweep() }

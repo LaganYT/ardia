@@ -164,6 +164,20 @@ final class FolderWatchTests: XCTestCase {
     wait(for: [counter.expect(self, atLeast: seen + 1)], timeout: 5)
   }
 
+  func testAFIFOWhereTheFolderShouldBeDoesntBlockTheWatch() throws {
+    let installation = scratch.appendingPathComponent("Installation")
+    XCTAssertEqual(mkfifo(installation.path, 0o644), 0)
+    let counter = Counter()
+    let watch = FolderWatch(path: installation.path, queue: queue) { counter.bump() }
+    let started = expectation(description: "start returned")
+    DispatchQueue.global().async {
+      self.queue.sync { watch.start() }
+      started.fulfill()
+    }
+    wait(for: [started, counter.expect(self, atLeast: 1)], timeout: 3)
+    XCTAssertNotEqual(binding(watch), .watching)
+  }
+
   func testAMissingFolderReportsAbsent() throws {
     let counter = Counter()
     let watch = watch(scratch.appendingPathComponent("Installation"), counter)

@@ -39,17 +39,24 @@ final class StagedSurveyTests: XCTestCase {
     try data.write(to: app.appendingPathComponent("Contents/Info.plist"))
   }
 
-  func survey() -> [StagedSurvey.Found]? { StagedSurvey.survey(caches: caches, bundleId: bundleId) }
+  func survey() -> StagedSurvey.Survey { StagedSurvey.survey(caches: caches, bundleId: bundleId) }
+
+  func residue(_ folder: String = "abc123") -> ChannelSwitch.Residue {
+    let url = root.appendingPathComponent(folder)
+    var info = stat()
+    lstat(url.path, &info)
+    return ChannelSwitch.Residue(folder: url.path, device: UInt64(info.st_dev), inode: UInt64(info.st_ino))
+  }
 
   func testNoSparkleCacheMeansNoCopies() {
-    XCTAssertEqual(survey(), [])
+    XCTAssertEqual(survey(), StagedSurvey.Survey())
   }
 
   func testAStagedNightlyIsFoundWithTheIdentityOfItsUpdateFolder() throws {
     let app = try stage()
     var info = stat()
     XCTAssertEqual(lstat(root.appendingPathComponent("abc123").path, &info), 0)
-    let found = try XCTUnwrap(survey())
+    let found = survey().found
     XCTAssertEqual(found.count, 1)
     XCTAssertEqual(found.first?.channel, "nightly")
     XCTAssertEqual(found.first?.bundle.standardizedFileURL, app.standardizedFileURL)
@@ -59,43 +66,44 @@ final class StagedSurveyTests: XCTestCase {
 
   func testAStableCopyIsFoundWithNoChannel() throws {
     try stage(channel: nil)
-    XCTAssertEqual(survey()?.first?.channel, nil)
-    XCTAssertEqual(survey()?.count, 1)
+    XCTAssertEqual(survey().found.first?.channel, nil)
+    XCTAssertEqual(survey().found.count, 1)
   }
 
   func testAnotherAppsCopyIsNotOurs() throws {
     try stage(bundleId: "com.example.other")
-    XCTAssertEqual(survey(), [])
+    XCTAssertEqual(survey(), StagedSurvey.Survey())
   }
 
   func testACopyWithoutAnExecutableStillCounts() throws {
     try stage(executable: false)
-    XCTAssertEqual(survey()?.count, 1)
+    XCTAssertEqual(survey().found.count, 1)
   }
 
   func testACopyStillBeingExtractedIsUnreadableNotAbsent() throws {
     let app = try stage(plist: false)
-    XCTAssertNil(survey())
+    XCTAssertEqual(survey(), StagedSurvey.Survey(residue: [residue()]))
     try writeInfo(app)
-    XCTAssertEqual(survey()?.count, 1)
+    XCTAssertEqual(survey().found.count, 1)
+    XCTAssertEqual(survey().residue, [])
   }
 
   func testAnInfoPlistThatCantBeReadIsUnreadable() throws {
     let app = try stage()
     chmod(app.appendingPathComponent("Contents/Info.plist").path, 0o000)
-    XCTAssertNil(survey())
+    XCTAssertEqual(survey(), StagedSurvey.Survey(residue: [residue()]))
   }
 
   func testACorruptInfoPlistIsUnreadable() throws {
     let app = try stage()
     try Data("<plist".utf8).write(to: app.appendingPathComponent("Contents/Info.plist"))
-    XCTAssertNil(survey())
+    XCTAssertEqual(survey(), StagedSurvey.Survey(residue: [residue()]))
   }
 
   func testAnUpdateFolderThatCantBeListedIsUnreadable() throws {
     try stage()
     chmod(root.appendingPathComponent("abc123").path, 0o000)
-    XCTAssertNil(survey())
+    XCTAssertEqual(survey(), StagedSurvey.Survey(residue: [residue()]))
   }
 
   func testASymlinkInSparklesCachePathIsUnreadable() throws {
@@ -104,7 +112,7 @@ final class StagedSurveyTests: XCTestCase {
     try FileManager.default.createDirectory(at: caches.appendingPathComponent(bundleId), withIntermediateDirectories: true)
     try FileManager.default.createSymbolicLink(at: caches.appendingPathComponent(bundleId).appendingPathComponent("org.sparkle-project.Sparkle"),
                                                withDestinationURL: elsewhere.deletingLastPathComponent())
-    XCTAssertNil(survey())
+    XCTAssertEqual(survey(), StagedSurvey.Survey(blind: true))
   }
 
   func discard(_ copy: ChannelSwitch.Copy, running: URL? = nil, rename: StagedSurvey.Rename? = nil) -> StagedSurvey.Discard {
@@ -229,7 +237,7 @@ final class StagedSurveyTests: XCTestCase {
   }
 
   func checkedCopy() throws -> ChannelSwitch.Copy {
-    try XCTUnwrap(survey()?.first?.copy)
+    try XCTUnwrap(survey().found.first?.copy)
   }
 
   func testAVerifiedCopyIsMovedOutOfSparklesFolderAtOnce() throws {
@@ -237,7 +245,7 @@ final class StagedSurveyTests: XCTestCase {
     let copy = try checkedCopy()
     XCTAssertEqual(discard(copy), .gone)
     XCTAssertFalse(FileManager.default.fileExists(atPath: copy.folder))
-    XCTAssertEqual(survey(), [])
+    XCTAssertEqual(survey(), StagedSurvey.Survey())
     XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path).count, 1)
   }
 
@@ -291,18 +299,56 @@ final class StagedSurveyTests: XCTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: copy.folder))
   }
 
-  func testNothingIsRemovedWhenTheCacheCantBeRead() throws {
+  func testAVerifiedCopyWhoseInfoPlistCantBeReadAnyMoreIsMovedByItsIdentity() throws {
     let app = try stage()
     let copy = try checkedCopy()
     chmod(app.appendingPathComponent("Contents/Info.plist").path, 0o000)
-    XCTAssertEqual(discard(copy), .refused("Sparkle's cache can't be read"))
-    chmod(app.appendingPathComponent("Contents/Info.plist").path, 0o644)
+    XCTAssertEqual(discard(copy), .gone)
+  }
+
+  func testNothingIsMovedWhenSparklesFolderCantBeRead() throws {
+    try stage()
+    let copy = try checkedCopy()
+    chmod(root.path, 0o000)
+    XCTAssertEqual(discard(copy), .refused("Sparkle's Installation folder can't be opened without following links"))
+    chmod(root.path, 0o755)
     XCTAssertTrue(FileManager.default.fileExists(atPath: copy.folder))
+  }
+
+  func testAnAbandonedCopyDoesntHideAStagedNightlyBesideIt() throws {
+    try stage("live")
+    try stage("abandoned", plist: false)
+    let found = survey()
+    XCTAssertEqual(found.found.map(\.copy.folder), [root.appendingPathComponent("live").path])
+    XCTAssertEqual(found.residue, [residue("abandoned")])
+    XCTAssertFalse(found.blind)
+  }
+
+  func testAnInfoPlistThatIsntARegularFileIsResidueAndDoesntBlock() throws {
+    let app = try stage(plist: false)
+    XCTAssertEqual(mkfifo(app.appendingPathComponent("Contents/Info.plist").path, 0o644), 0)
+    let finished = expectation(description: "survey finished")
+    var result: StagedSurvey.Survey?
+    DispatchQueue.global().async {
+      result = self.survey()
+      finished.fulfill()
+    }
+    wait(for: [finished], timeout: 3)
+    XCTAssertEqual(result, StagedSurvey.Survey(residue: [residue()]))
+  }
+
+  func testASymlinkedInfoPlistIsResidue() throws {
+    let app = try stage(plist: false)
+    let elsewhere = caches.appendingPathComponent("Info.plist")
+    try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": bundleId, "CFBundleVersion": "91"], format: .xml, options: 0)
+      .write(to: elsewhere)
+    try FileManager.default.createSymbolicLink(at: app.appendingPathComponent("Contents/Info.plist"), withDestinationURL: elsewhere)
+    XCTAssertEqual(survey(), StagedSurvey.Survey(residue: [residue()]))
   }
 
   func testCopiesInTwoFoldersAreBothFound() throws {
     try stage("first")
     try stage("second", build: "92")
-    XCTAssertEqual(Set(try XCTUnwrap(survey()).map(\.copy.build)), ["91", "92"])
+    XCTAssertEqual(Set(survey().found.map(\.copy.build)), ["91", "92"])
   }
 }

@@ -15,14 +15,22 @@ enum StagedSurvey {
     }
   }
 
-  static func survey(caches: URL, bundleId: String) -> [Found]? {
+  struct Survey: Equatable {
+    var found: [Found] = []
+    var residue: Set<ChannelSwitch.Residue> = []
+    var blind = false
+  }
+
+  static let plistLimit = 4 << 20
+
+  static func survey(caches: URL, bundleId: String) -> Survey {
     var folder = caches.resolvingSymlinksInPath().standardizedFileURL
     for name in [bundleId] + sparkleInstallationPath {
       folder.appendPathComponent(name, isDirectory: true)
       switch kind(folder.path) {
       case .directory: continue
-      case .missing: return []
-      case .other, .unreadable: return nil
+      case .missing: return Survey()
+      case .other, .unreadable: return Survey(blind: true)
       }
     }
     return copies(in: folder, bundleId: bundleId)
@@ -34,6 +42,10 @@ enum StagedSurvey {
 
   private enum Inspection {
     case copy(Found), notOurs, gone, unreadable
+  }
+
+  private enum Read {
+    case data(Data), missing, unreadable
   }
 
   private static func kind(_ path: String) -> Kind {
@@ -49,15 +61,24 @@ enum StagedSurvey {
     return (error.userInfo[NSUnderlyingErrorKey] as? Error).map(isMissing) ?? false
   }
 
-  private static func copies(in root: URL, bundleId: String) -> [Found]? {
-    var failed = false
+  private static func copies(in root: URL, bundleId: String) -> Survey {
+    final class Box { var survey = Survey() }
+    let box = Box()
+    let mark = { (url: URL) in
+      guard let folder = updateFolder(of: url, in: root) else { return box.survey.blind = true }
+      var info = stat()
+      if lstat(folder.path, &info) == 0 {
+        box.survey.residue.insert(ChannelSwitch.Residue(folder: folder.path, device: UInt64(info.st_dev), inode: UInt64(info.st_ino)))
+      } else if errno != ENOENT {
+        box.survey.blind = true
+      }
+    }
     guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil, options: [.skipsPackageDescendants],
-                                                     errorHandler: { _, error in
-                                                       if !isMissing(error) { failed = true }
+                                                     errorHandler: { url, error in
+                                                       if !isMissing(error) { mark(url) }
                                                        return true
                                                      })
-    else { return nil }
-    var found: [Found] = []
+    else { return Survey(blind: true) }
     for case let url as URL in walk {
       if walk.level > 4 {
         walk.skipDescendants()
@@ -67,23 +88,41 @@ enum StagedSurvey {
       switch kind(url.path) {
       case .directory: break
       case .missing, .other: continue
-      case .unreadable: return nil
+      case .unreadable:
+        mark(url)
+        continue
       }
       switch inspect(url, in: root, bundleId: bundleId) {
-      case .copy(let copy): found.append(copy)
+      case .copy(let copy): box.survey.found.append(copy)
       case .notOurs, .gone: continue
-      case .unreadable: return nil
+      case .unreadable: mark(url)
       }
     }
-    return failed ? nil : found
+    return box.survey
+  }
+
+  private static func read(_ url: URL) -> Read {
+    let descriptor = open(url.path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+    guard descriptor >= 0 else { return errno == ENOENT || errno == ENOTDIR ? .missing : .unreadable }
+    defer { close(descriptor) }
+    var info = stat()
+    guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size <= plistLimit else { return .unreadable }
+    var data = Data()
+    var buffer = [UInt8](repeating: 0, count: 64 << 10)
+    while true {
+      let count = Darwin.read(descriptor, &buffer, buffer.count)
+      if count == 0 { return .data(data) }
+      guard count > 0, data.count + count <= plistLimit else { return .unreadable }
+      data.append(contentsOf: buffer[0..<count])
+    }
   }
 
   private static func inspect(_ app: URL, in root: URL, bundleId: String) -> Inspection {
     let data: Data
-    do {
-      data = try Data(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
-    } catch {
-      return isMissing(error) && kind(app.path) == .missing ? .gone : .unreadable
+    switch read(app.appendingPathComponent("Contents/Info.plist")) {
+    case .data(let contents): data = contents
+    case .missing: return kind(app.path) == .missing ? .gone : .unreadable
+    case .unreadable: return .unreadable
     }
     guard let info = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] else { return .unreadable }
     guard info["CFBundleIdentifier"] as? String == bundleId else { return .notOurs }
@@ -201,9 +240,12 @@ enum StagedSurvey {
     guard let seen = installation.entry(name) else { return errno == ENOENT ? .gone : .failed(errno) }
     guard seen.directory, seen.id == wanted else { return .refused("it isn't the copy that was checked") }
     guard !protected.contains(wanted) else { return .refused("it holds the running app") }
-    guard let found = survey(caches: caches, bundleId: bundleId) else { return .refused("Sparkle's cache can't be read") }
-    let inFolder = found.filter { $0.copy.folder == copy.folder }
-    guard !inFolder.isEmpty, inFolder.allSatisfy({ $0.copy == copy }) else { return .refused("it isn't the copy that was checked") }
+    let looked = survey(caches: caches, bundleId: bundleId)
+    let inFolder = looked.found.filter { $0.copy.folder == copy.folder }
+    guard inFolder.allSatisfy({ $0.copy == copy }) else { return .refused("it isn't the copy that was checked") }
+    guard !inFolder.isEmpty || looked.residue.contains(copy.residue) else {
+      return .refused(looked.blind ? "Sparkle's cache can't be read" : "it no longer holds the checked copy")
+    }
     if mkdirat(ours.descriptor, discardedFolder, 0o700) != 0, errno != EEXIST { return .failed(errno) }
     guard let trash = ours.child(discardedFolder), trash.id.device == copy.device else {
       return .refused("there's nowhere on its volume to move it")
@@ -286,7 +328,7 @@ enum StagedSurvey {
   static func updateFolder(of bundle: URL, in root: URL) -> URL? {
     let base = root.standardizedFileURL.pathComponents
     let parts = bundle.standardizedFileURL.pathComponents
-    guard parts.count > base.count + 1, Array(parts.prefix(base.count)) == base else { return nil }
+    guard parts.count > base.count, Array(parts.prefix(base.count)) == base else { return nil }
     return URL(fileURLWithPath: NSString.path(withComponents: Array(parts.prefix(base.count + 1))), isDirectory: true)
   }
 }

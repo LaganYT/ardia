@@ -6,6 +6,20 @@ struct ChannelSwitch {
     let device: UInt64
     let inode: UInt64
     let build: String
+
+    var residue: Residue { Residue(folder: folder, device: device, inode: inode) }
+  }
+
+  struct Residue: Hashable {
+    let folder: String
+    let device: UInt64
+    let inode: UInt64
+  }
+
+  struct Sighting: Equatable {
+    var copies: Set<Copy> = []
+    var residue: Set<Residue> = []
+    var blind = false
   }
 
   enum Staged: Equatable {
@@ -14,7 +28,7 @@ struct ChannelSwitch {
     case unreadable
   }
 
-  struct Facts {
+  struct Facts: Equatable {
     var busy: Bool
     var staged: Staged
     var automaticChecks: Bool
@@ -22,6 +36,7 @@ struct ChannelSwitch {
 
   struct Round: Equatable {
     var cancelled: Set<Copy> = []
+    var cancelledBuilds: Set<String> = []
     var switched = false
   }
 
@@ -31,6 +46,22 @@ struct ChannelSwitch {
     case resuming(Round)
     case cancelling(Round)
     case unconfirmed
+
+    var round: Round? {
+      switch self {
+      case .waitingForIdle(let round), .resuming(let round), .cancelling(let round): return round
+      case .idle, .unconfirmed: return nil
+      }
+    }
+
+    func with(_ round: Round) -> Phase {
+      switch self {
+      case .waitingForIdle: return .waitingForIdle(round)
+      case .resuming: return .resuming(round)
+      case .cancelling: return .cancelling(round)
+      case .idle, .unconfirmed: return self
+      }
+    }
   }
 
   enum Effect: Equatable {
@@ -45,9 +76,28 @@ struct ChannelSwitch {
 
   private(set) var phase = Phase.idle
   private(set) var waiting: [Int] = []
+  private(set) var known: Set<Copy> = []
+  private(set) var last: Facts?
+  private var roundWanted = false
+
+  var wantsFacts: Bool { phase != .idle || !waiting.isEmpty || roundWanted }
 
   func holdsQuit(_ facts: Facts) -> Bool {
     facts.staged != .none || (phase != .idle && facts.busy)
+  }
+
+  mutating func observe(_ sighting: Sighting, busy: Bool, automaticChecks: Bool) -> Facts {
+    let kept = sighting.blind ? known : known.filter { sighting.residue.contains($0.residue) }
+    known = sighting.copies.union(kept)
+    let unknown = sighting.residue.subtracting(known.map(\.residue))
+    let blind = sighting.blind || (!unknown.isEmpty && busy)
+    let facts = Facts(busy: busy, staged: known.isEmpty ? (blind ? .unreadable : .none) : .present(known), automaticChecks: automaticChecks)
+    last = facts
+    return facts
+  }
+
+  func orphans(_ sighting: Sighting, busy: Bool) -> Set<Residue> {
+    busy || sighting.blind ? [] : sighting.residue.subtracting(known.map(\.residue))
   }
 
   mutating func switched() -> [Effect] {
@@ -73,33 +123,68 @@ struct ChannelSwitch {
     }
   }
 
-  mutating func installerCancelled(build: String, _ facts: Facts) -> [Effect] {
-    guard case .present(let copies) = facts.staged else { return [] }
-    let dropped = copies.filter { $0.build == build }
-    guard !dropped.isEmpty else { return [] }
+  mutating func installerCancelled(build: String) -> [Effect] {
     switch phase {
     case .idle:
-      phase = .waitingForIdle(Round(cancelled: dropped))
+      phase = .waitingForIdle(Round(cancelledBuilds: [build]))
       return []
     case .unconfirmed:
-      phase = .waitingForIdle(Round(cancelled: dropped))
+      phase = .waitingForIdle(Round(cancelledBuilds: [build]))
       return [.unwatch]
-    case .waitingForIdle(var round):
-      round.cancelled.formUnion(dropped)
-      phase = .waitingForIdle(round)
-      return []
-    case .resuming(var round):
-      round.cancelled.formUnion(dropped)
-      phase = .resuming(round)
-      return []
-    case .cancelling(var round):
-      round.cancelled.formUnion(dropped)
-      phase = .cancelling(round)
+    case .waitingForIdle(var round), .resuming(var round), .cancelling(var round):
+      round.cancelledBuilds.insert(build)
+      phase = phase.with(round)
       return []
     }
   }
 
+  mutating func noticed() {
+    roundWanted = true
+  }
+
+  mutating func quit(_ id: Int) {
+    waiting.append(id)
+    roundWanted = true
+  }
+
   mutating func changed(_ facts: Facts) -> [Effect] {
+    last = facts
+    var effects: [Effect] = []
+    if var round = phase.round, !round.cancelledBuilds.isEmpty {
+      switch facts.staged {
+      case .present(let copies):
+        round.cancelled.formUnion(copies.filter { round.cancelledBuilds.contains($0.build) })
+        round.cancelledBuilds = []
+      case .none:
+        round.cancelledBuilds = []
+      case .unreadable:
+        break
+      }
+      phase = phase.with(round)
+    }
+    if roundWanted {
+      roundWanted = false
+      if facts.staged != .none {
+        switch phase {
+        case .idle:
+          phase = .waitingForIdle(Round())
+        case .unconfirmed:
+          phase = .waitingForIdle(Round())
+          effects.append(.unwatch)
+        case .waitingForIdle, .resuming, .cancelling:
+          break
+        }
+      }
+    }
+    effects += advance(facts)
+    if !waiting.isEmpty, !holdsQuit(facts) {
+      effects.append(.release(waiting))
+      waiting = []
+    }
+    return effects
+  }
+
+  private mutating func advance(_ facts: Facts) -> [Effect] {
     switch phase {
     case .idle:
       return []
@@ -123,7 +208,7 @@ struct ChannelSwitch {
       case .present(let copies) where copies.isSubset(of: round.cancelled):
         phase = .cancelling(round)
         return [.watch]
-      case .unreadable where !round.cancelled.isEmpty:
+      case .unreadable where !round.cancelled.isEmpty || !round.cancelledBuilds.isEmpty:
         phase = .cancelling(round)
         return [.watch]
       case .present(let copies):
@@ -153,36 +238,20 @@ struct ChannelSwitch {
     }
   }
 
-  mutating func noticed(_ facts: Facts) -> [Effect] {
-    guard phase == .idle, facts.staged != .none else { return [] }
-    phase = .waitingForIdle(Round())
-    return changed(facts)
+  mutating func nearDeadline(_ id: Int) -> [Effect] {
+    guard waiting.contains(id), case .present(let copies) = last?.staged else { return [] }
+    return [.log("Sparkle hasn't dropped the staged nightly as the quit deadline nears; removing its copy"), .discard(copies)]
   }
 
-  mutating func quit(_ id: Int, _ facts: Facts) -> [Effect] {
-    guard holdsQuit(facts) else { return [.release([id])] }
-    waiting.append(id)
-    switch phase {
-    case .idle:
-      phase = .waitingForIdle(Round())
-      return changed(facts)
-    case .unconfirmed:
-      phase = .waitingForIdle(Round())
-      return [.unwatch] + changed(facts)
-    case .waitingForIdle, .resuming, .cancelling:
-      return []
-    }
-  }
-
-  mutating func deadline(_ id: Int, _ facts: Facts) -> [Effect] {
+  mutating func deadline(_ id: Int) -> [Effect] {
     guard let index = waiting.firstIndex(of: id) else { return [] }
     waiting.remove(at: index)
-    switch facts.staged {
-    case .none:
+    switch last?.staged {
+    case .none?, nil:
       return [.release([id])]
-    case .present(let copies):
-      return [.log("Sparkle didn't drop the staged nightly before the quit deadline; removing its copy"), .discard(copies), .release([id])]
-    case .unreadable:
+    case .present?:
+      return [.log("Sparkle didn't drop the staged nightly before the quit deadline; quitting, and it may install"), .release([id])]
+    case .unreadable?:
       return [.log("Sparkle's cache can't be read at the quit deadline; quitting, and a staged nightly may install"), .release([id])]
     }
   }

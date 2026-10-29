@@ -15,7 +15,7 @@ final class FolderWatch {
   private var watched: (device: UInt64, inode: UInt64)?
   private(set) var binding = Binding.absent
 
-  init(path: String, queue: DispatchQueue = .main, open openFolder: @escaping (String) -> Int32 = { open($0, O_EVTONLY) },
+  init(path: String, queue: DispatchQueue = .main, open openFolder: @escaping (String) -> Int32 = { open($0, O_EVTONLY | O_NONBLOCK | O_DIRECTORY | O_CLOEXEC) },
        changed: @escaping () -> Void) {
     self.path = path
     self.queue = queue

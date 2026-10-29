@@ -71,9 +71,12 @@ every copy on Stable sees only stable items. A copy on Nightly allows `nightly` 
   its window) by answering Skip, and quit waits until the staged copy's folder is gone, at most 8 s
   (`ChannelSwitch` in `packages/shell/ios/UpdaterCore`, tested by `swift test` in `packages/shell`). When no
   installer confirms the Skip (it doesn't answer, or none is left behind a leftover copy), the app moves that exact,
-  re-checked folder out of Sparkle's Installation folder while it is still running, at the latest at the quit
-  deadline; a leftover is also looked for at launch, so it doesn't hold every quit. Only a cache the app can't read
-  is left alone, and then the nightly can still install.
+  re-checked folder out of Sparkle's Installation folder while it is still running, at the latest 1.5 s before the
+  quit deadline; a leftover is also looked for at launch, so it doesn't hold every quit. The move goes through
+  directory descriptors that never follow links, and a moved folder is deleted only once its identity is verified
+  and only if the running app isn't in it. An entry that can't be read is left alone: it holds quit while Sparkle is
+  busy and is treated as an orphan otherwise; a cache that can't be read at all holds quit to the deadline, and then
+  the nightly can still install. The file checks run off the main thread, so the deadline is a hard 8 s.
   `.claude/skills/release/scripts/channel-switch-test.mjs <build>` runs the app's own switch on hidden copies against
   a local feed. Going back to Nightly inside Sparkle's own Nightly session (its window open) waits for the next
   scheduled check, while going back after a drop checks at once.

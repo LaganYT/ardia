@@ -45,7 +45,9 @@ struct ChannelSwitch {
   private(set) var phase = Phase.idle
   private(set) var waiting: [Int] = []
 
-  static func holdsQuit(_ facts: Facts) -> Bool { facts.staged != .none }
+  func holdsQuit(_ facts: Facts) -> Bool {
+    facts.staged != .none || (phase != .idle && facts.busy)
+  }
 
   mutating func switched() -> [Effect] {
     switch phase {
@@ -147,7 +149,7 @@ struct ChannelSwitch {
   }
 
   mutating func quit(_ id: Int, _ facts: Facts) -> [Effect] {
-    guard Self.holdsQuit(facts) else { return [.release([id])] }
+    guard holdsQuit(facts) else { return [.release([id])] }
     waiting.append(id)
     switch phase {
     case .idle:
@@ -164,7 +166,7 @@ struct ChannelSwitch {
   mutating func deadline(_ id: Int, _ facts: Facts) -> [Effect] {
     guard let index = waiting.firstIndex(of: id) else { return [] }
     waiting.remove(at: index)
-    guard Self.holdsQuit(facts) else { return [.release([id])] }
+    guard facts.staged != .none else { return [.release([id])] }
     return [.log("Sparkle didn't drop the staged nightly before the quit deadline; quitting, and it may install"), .release([id])]
   }
 

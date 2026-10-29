@@ -86,7 +86,7 @@ final class ChannelSwitchTests: XCTestCase {
     XCTAssertEqual(machine.changed(unreadable()), [.resume])
     XCTAssertEqual(machine.installerCancelled(build: "91", unreadable(busy: true)), [])
     XCTAssertEqual(machine.changed(unreadable()), [.watch, unconfirmedLine])
-    XCTAssertTrue(ChannelSwitch.holdsQuit(unreadable()))
+    XCTAssertTrue(machine.holdsQuit(unreadable()))
   }
 
   func testAFailedReadWhileCancellingKeepsWaitingForTheSameCopy() {
@@ -105,14 +105,40 @@ final class ChannelSwitchTests: XCTestCase {
     _ = machine.installerCancelled(build: "91", facts(busy: true, [staged]))
     XCTAssertEqual(machine.changed(unreadable()), [.watch])
     XCTAssertEqual(machine.phase, .cancelling(ChannelSwitch.Round(cancelled: [staged], switched: true)))
-    XCTAssertTrue(ChannelSwitch.holdsQuit(unreadable()))
+    XCTAssertTrue(machine.holdsQuit(unreadable()))
   }
 
-  func testQuitWithNothingStagedGoesAtOnce() {
+  func testQuitWithNothingStagedAndNothingPendingGoesAtOnce() {
     var machine = ChannelSwitch()
     XCTAssertEqual(machine.quit(1, facts()), [.release([1])])
-    _ = machine.switched()
     XCTAssertEqual(machine.quit(2, facts(busy: true)), [.release([2])])
+  }
+
+  func testAPendingSwitchHoldsQuitWhileSparkleIsBusyEvenWithNothingStagedYet() {
+    var machine = ChannelSwitch()
+    _ = machine.switched()
+    XCTAssertTrue(machine.holdsQuit(facts(busy: true)))
+    XCTAssertEqual(machine.quit(1, facts(busy: true)), [])
+    XCTAssertEqual(machine.changed(facts(busy: true)), [])
+    XCTAssertEqual(machine.changed(facts([staged])), [.resume])
+    XCTAssertEqual(machine.installerCancelled(build: "91", facts(busy: true, [staged])), [])
+    XCTAssertEqual(machine.changed(facts([staged])), [.watch])
+    XCTAssertEqual(machine.changed(facts()), [.unwatch, .resetCycle, .release([1])])
+  }
+
+  func testAPendingSwitchReleasesQuitOnceSparkleIsIdleWithNothingStaged() {
+    var machine = ChannelSwitch()
+    _ = machine.switched()
+    XCTAssertEqual(machine.quit(1, facts(busy: true)), [])
+    XCTAssertEqual(machine.changed(facts()), [.resetCycle, .release([1])])
+  }
+
+  func testAPendingSwitchHoldIsBoundByTheDeadline() {
+    var machine = ChannelSwitch()
+    _ = machine.switched()
+    XCTAssertEqual(machine.quit(1, facts(busy: true)), [])
+    XCTAssertEqual(machine.deadline(1, facts(busy: true)), [.release([1])])
+    XCTAssertFalse(machine.holdsQuit(facts()))
   }
 
   func testQuitWithALiveStagedNightlyAndNoSwitchStartsADrop() {

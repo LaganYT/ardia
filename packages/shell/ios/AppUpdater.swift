@@ -76,7 +76,7 @@ public final class AppUpdater: NSObject {
   static let quitWaitLimit: TimeInterval = 8
 
   public var holdsQuitForStagedUpdate: Bool {
-    started && ChannelSwitch.holdsQuit(switchFacts)
+    started && channelSwitch.holdsQuit(switchFacts)
   }
 
   public func dropOffChannelStagedUpdateBeforeQuit(then quit: @escaping () -> Void) {

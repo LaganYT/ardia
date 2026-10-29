@@ -113,6 +113,42 @@ const scenarios = [
     },
   },
   {
+    key: "quit-during-download",
+    what: "Nightly → Stable during an automatic download and quit at once (Sparkle busy, nothing in its folder): quit holds the unresolved switch until the deadline",
+    alone: true,
+    control: { throttled: true },
+    async run(s) {
+      await s.launch();
+      await s.untilServed(1 << 20);
+      await s.switchTo("stable");
+      check(!s.staged().length, "Sparkle had already put a copy in its Installation folder; this ordering wasn't reached");
+      const q = await s.quit(QUIT_HOLD_LIMIT, { settle: false });
+      check(q >= 6000, `quit went at ${q} ms with the switch unresolved and Sparkle still downloading`);
+      await s.untilInstallerGone();
+      s.expectInstalled(false);
+      return `quit held ${q} ms`;
+    },
+  },
+  {
+    key: "quit-during-extraction",
+    what: "Nightly → Stable during an automatic download, then quit as it ends (before Sparkle's installer has put anything in its folder): quit waits, nothing installs",
+    alone: true,
+    control: { throttled: 10 },
+    async run(s) {
+      await s.launch();
+      await s.untilServed(1 << 20);
+      await s.switchTo("stable");
+      await until(() => s.zipEnded(), 40000, "the download never ended", 5);
+      check(!s.staged().length, "Sparkle had already put a copy in its Installation folder; this ordering wasn't reached");
+      const q = await s.quit(QUIT_HOLD_LIMIT, { settle: false });
+      check(q >= 1500, `quit went at ${q} ms while Sparkle was still extracting the nightly the switch left`);
+      await s.untilInstallerGone();
+      s.expectInstalled(false);
+      check(!s.offChannelCopies().length, "the nightly stayed staged after quit");
+      return `quit waited ${q} ms for Sparkle to finish, then for the drop`;
+    },
+  },
+  {
     key: "switch-then-quit",
     what: "Nightly → Stable and quit at once: quit waits for the drop (under 9.5 s), ends on its own, installs nothing",
     alone: true,
@@ -579,7 +615,7 @@ class Scenario {
     writeFileSync(join(this.feedDir, "full.xml"), appcast(`http://127.0.0.1:${port}/${basename(this.feedDir)}/Ardia.zip`, size, signature));
     writeFileSync(join(this.feedDir, "empty.xml"), emptyAppcast);
     const control = { feed: "full", ...this.def.control };
-    if (control.throttled) control.rate = Math.round(size / THROTTLED_SECONDS);
+    if (control.throttled) control.rate = Math.round(size / (control.throttled === true ? THROTTLED_SECONDS : control.throttled));
     delete control.throttled;
     writeFileSync(join(this.feedDir, "control.json"), JSON.stringify(control));
     const defaultsFile = join(this.dir, "defaults.plist");

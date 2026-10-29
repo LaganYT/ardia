@@ -3,6 +3,7 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { modifiersOf, type ClickModifiers } from "../../lib/keys";
 import { useHover } from "./useHover";
+import { GlassFill, liquidGlass } from "./Glass";
 import { hex, useTheme, type Theme } from "./theme";
 import { closeOnArt, opacity, radius as radii, space, font as typeScale, weight as weights, type ColorRole, type Space, type TypeSize, type Weight } from "./tokens";
 
@@ -91,7 +92,9 @@ function IconButtonView(props: IconProps) {
   const hover = palette ? palette.hover : theme.toolbarHover;
   const pressedFill = palette ? palette.pressed : theme.toolbarPressed;
   const plateBox = hit?.box ?? box;
-  const plate = (pressed: boolean) => (
+  const plateRadius = hit?.radius ?? radius;
+  const plateFill = (pressed: boolean) => (disabled ? undefined : pressed || active ? pressedFill : hovered ? hover : undefined);
+  const plate = (pressed: boolean, fill = plateFill(pressed)) => (
     <View
       style={{
         position: hit ? "absolute" : "relative",
@@ -99,12 +102,13 @@ function IconButtonView(props: IconProps) {
         top: hit?.plateY,
         width: plateBox,
         height: plateBox,
-        borderRadius: hit?.radius ?? radius,
+        borderRadius: plateRadius,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: disabled ? undefined : pressed || active ? pressedFill : hovered ? hover : undefined,
+        backgroundColor: liquidGlass ? undefined : fill,
       }}
     >
+      {liquidGlass && fill ? <GlassFill fill={fill} radius={plateRadius} state={pressed ? "rest" : "lit"} /> : null}
       <Symbol
         name={icon}
         size={size}

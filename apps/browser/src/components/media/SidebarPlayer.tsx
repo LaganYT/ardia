@@ -57,6 +57,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
   return (
     <View {...hoverProps} style={{ height: ROW_HEIGHT }}>
       <Panel
+        glass="control"
         fill={tokens.groupFill}
         radius={radius.panel}
         border={tokens.groupStroke}

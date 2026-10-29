@@ -21,7 +21,7 @@ import { SIDEBAR_FIELD } from "../sidebar/geometry";
 import { FieldSiteButton, SidebarFieldFill } from "../sidebar/SidebarField";
 import { showUrlBarMenu } from "../../state/omnibox/paste";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
-import { FIELD_GLASS_HOVER_OPACITY, FIELD_GLASS_OPACITY, GlassFill, liquidGlass } from "../ui/Glass";
+import { GlassFill, liquidGlass } from "../ui/Glass";
 import { TranslateButton } from "../site/TranslateControls";
 import { ZoomIndicator } from "../site/ZoomControls";
 import { useShortcutHint, withShortcut } from "../../state/commands/commandShortcuts";
@@ -169,7 +169,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
   return (
     <View {...field.hoverProps} style={[style, { flexDirection: "row", alignItems: "center", height: row.field, borderRadius: row.fieldRadius, backgroundColor: hovered && !liquidGlass ? palette.pill : undefined }]}>
       {liquidGlass ? (
-        <GlassFill tint={null} opacity={hovered ? FIELD_GLASS_HOVER_OPACITY : FIELD_GLASS_OPACITY} radius={row.fieldRadius} fill={palette.pill} dark={palette.background ? palette.text.startsWith(ink.white) : undefined} />
+        <GlassFill state={hovered ? "lit" : "rest"} radius={row.fieldRadius} fill={palette.pill} dark={palette.background ? palette.text.startsWith(ink.white) : undefined} />
       ) : null}
       {insecure && (
         <Pressable onPress={toggleSiteControls} style={{ paddingLeft: LOCK.left }} tooltip="Connection is not secure">

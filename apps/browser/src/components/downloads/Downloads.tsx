@@ -5,9 +5,11 @@ import {
   PopoverBubble,
   Symbol,
   Button,
+  GlassFill,
   hex,
   HoverSlot,
   layout,
+  liquidGlass,
   MenuSeparator,
   PANEL,
   Text,
@@ -203,9 +205,10 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
                   paddingHorizontal: PANEL.rowPadding,
                   height: L.row,
                   borderRadius: PANEL.rowRadius,
-                  backgroundColor: downloadsRowFill(theme, hovered, pressed && done),
+                  backgroundColor: liquidGlass ? undefined : downloadsRowFill(theme, hovered, pressed && done),
                 }}
               >
+                <DownloadsRowGlass fill={downloadsRowFill(theme, hovered, pressed && done)} pressed={pressed && done} />
                 <View style={{ opacity: exists ? 1 : L.missingOpacity }}>
                   <FileIcon path={d.path || d.filename} size={L.fileIcon} />
                 </View>
@@ -312,4 +315,9 @@ export function DownloadMagnet() {
       )}
     </View>
   );
+}
+
+function DownloadsRowGlass({ fill, pressed }: { fill: string | undefined; pressed: boolean }) {
+  if (!liquidGlass || !fill) return null;
+  return <GlassFill fill={fill} radius={PANEL.rowRadius} state={pressed ? "rest" : "lit"} />;
 }

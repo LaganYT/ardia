@@ -2,7 +2,7 @@ export { Box, type BoxProps } from "./Box";
 export { Button, type ButtonHit, type ButtonProps, type IconPalette } from "./Button";
 export { Dialog, Sheet } from "./Dialog";
 export { Checkbox, PopUp, SearchField, TextField, type Option } from "./Field";
-export { FIELD_GLASS_HOVER_OPACITY, FIELD_GLASS_OPACITY, GlassFill, liquidGlass } from "./Glass";
+export { GlassFill, liquidGlass } from "./Glass";
 export { HoverSlot } from "./HoverSlot";
 export { MenuRow, menuRowFill, MenuSeparator } from "./Menu";
 export { Panel, type PanelProps } from "./Panel";

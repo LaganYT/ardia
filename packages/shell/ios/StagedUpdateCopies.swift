@@ -78,20 +78,6 @@ enum StagedUpdateCopies {
     }
   }
 
-  static func empty(_ trash: URL, tool: URL = launchServicesTool) {
-    guard isPlainDirectory(trash), let walk = FileManager.default.enumerator(at: trash, includingPropertiesForKeys: [.isSymbolicLinkKey],
-                                                                              options: [.skipsPackageDescendants]) else { return }
-    for case let url as URL in walk where url.pathExtension == "app" {
-      if (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true { continue }
-      unregister(url, tool: tool)
-    }
-    do {
-      try FileManager.default.removeItem(at: trash)
-    } catch {
-      NSLog("Ardia: couldn't empty \(trash.path): \(error.localizedDescription)")
-    }
-  }
-
   static func sameFile(_ one: URL, _ other: URL) -> Bool {
     var first = stat()
     var second = stat()

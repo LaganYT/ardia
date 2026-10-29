@@ -77,14 +77,17 @@ public final class AppUpdater: NSObject {
 
   private func discard(_ copies: Set<ChannelSwitch.Copy>) {
     guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { return }
+    let protected = StagedSurvey.ancestors(of: Bundle.main.bundleURL)
     for copy in copies {
-      switch StagedSurvey.discard(copy, caches: caches, bundleId: bundleId, running: Bundle.main.bundleURL) {
+      switch StagedSurvey.discard(copy, caches: caches, bundleId: bundleId, protected: protected) {
       case .gone:
         NSLog("Ardia: moved the staged nightly (build \(copy.build)) out of Sparkle's Installation folder")
       case .refused(let reason):
         NSLog("Ardia: left the staged nightly at \(copy.folder) alone: \(reason); it may install")
       case .failed(let error):
         NSLog("Ardia: couldn't move the staged nightly at \(copy.folder): \(String(cString: strerror(error))); it may install")
+      case .stranded(let path):
+        NSLog("Ardia: moved something other than the staged nightly to \(path) and couldn't put it back; it is kept, never deleted")
       }
     }
     emptyDiscarded()
@@ -93,8 +96,13 @@ public final class AppUpdater: NSObject {
 
   private func emptyDiscarded() {
     guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { return }
-    let trash = StagedSurvey.discarded(caches: caches, bundleId: bundleId)
-    DispatchQueue.global(qos: .utility).async { StagedUpdateCopies.empty(trash) }
+    let running = Bundle.main.bundleURL
+    DispatchQueue.global(qos: .utility).async {
+      let cleanup = StagedSurvey.emptyDiscarded(caches: caches, bundleId: bundleId, protected: StagedSurvey.ancestors(of: running)) {
+        StagedUpdateCopies.unregister($0)
+      }
+      for name in cleanup.kept { NSLog("Ardia: kept \(name) in the discarded updates folder: it isn't a verified copy that's safe to delete") }
+    }
   }
 
   static let quitWaitLimit: TimeInterval = 8

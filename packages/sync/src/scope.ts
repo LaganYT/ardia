@@ -125,11 +125,11 @@ function settleDurable(state: ScopeState) {
 type Change = { key: string; value: unknown; json: string };
 type Stamps = Map<string, { json: string; h: HLC }>;
 
-async function changesOf(state: ScopeState, adapter: Adapter, now: number, awaiting: Set<string>) {
+async function changesOf(state: ScopeState, adapter: Adapter, now: number) {
   if (adapter.adoptRemoteOnJoin && !state.joined) return null;
   let pending: Set<string> | null = null;
   const queued = (key: string) => (pending ??= new Set([...state.outbox, ...(state.journal ?? []).flatMap((f) => f.ops)].map((op) => op.k))).has(key);
-  const extraction = await adapter.extract((key) => parseBase(state.base[key]), queued, now, (key) => key in state.records, (key) => state.records[key]?.v, (key) => state.records[key]?.h, (key) => awaiting.has(key));
+  const extraction = await adapter.extract((key) => parseBase(state.base[key]), queued, now, (key) => key in state.records, (key) => state.records[key]?.v, (key) => state.records[key]?.h);
   if (!extraction) return null;
   const changes: Change[] = [];
   for (const [key, value] of extraction.values) {
@@ -142,34 +142,29 @@ async function changesOf(state: ScopeState, adapter: Adapter, now: number, await
     if (!key.startsWith(adapter.prefix) || extraction.values.has(key) || extraction.ignore?.(key)) continue;
     changes.push({ key, value: null, json: "null" });
   }
-  return { changes, settle: extraction.published, given: extraction.stamp };
+  return { changes, settle: extraction.published };
 }
 
-function stampOf(state: ScopeState, adapter: Adapter, clock: Clock, { key, value }: Change, given?: (key: string) => HLC | undefined): HLC {
-  const chosen = given?.(key);
-  if (chosen !== undefined) {
-    clock.observe(chosen);
-    return chosen;
-  }
+function stampOf(state: ScopeState, adapter: Adapter, clock: Clock, { key, value }: Change): HLC {
   const editedAt = !state.records[key] && value !== null ? adapter.editedAt?.(value) : undefined;
   return editedAt !== undefined ? clock.at(editedAt) : clock.tick();
 }
 
-async function candidateStamps(state: ScopeState, adapter: Adapter, clock: Clock, now: number, awaiting: Set<string>): Promise<Stamps> {
-  const found = await changesOf(state, adapter, now, awaiting);
-  return new Map((found?.changes ?? []).map((change) => [change.key, { json: change.json, h: stampOf(state, adapter, clock, change, found?.given) }]));
+async function candidateStamps(state: ScopeState, adapter: Adapter, clock: Clock, now: number): Promise<Stamps> {
+  const found = await changesOf(state, adapter, now);
+  return new Map((found?.changes ?? []).map((change) => [change.key, { json: change.json, h: stampOf(state, adapter, clock, change) }]));
 }
 
-async function publishAdapter(state: ScopeState, adapter: Adapter, clock: Clock, device: string, now: number, awaiting: Set<string>, stamps?: Stamps): Promise<Set<string>> {
+async function publishAdapter(state: ScopeState, adapter: Adapter, clock: Clock, device: string, now: number, stamps?: Stamps): Promise<Set<string>> {
   const published = new Set<string>();
-  const found = await changesOf(state, adapter, now, awaiting);
+  const found = await changesOf(state, adapter, now);
   if (!found) return published;
   for (const change of found.changes) {
     const { key, value, json } = change;
     if (value === null) delete state.base[key];
     else state.base[key] = json;
     const candidate = stamps?.get(key);
-    const h = candidate?.json === json ? candidate.h : stampOf(state, adapter, clock, change, found.given);
+    const h = candidate?.json === json ? candidate.h : stampOf(state, adapter, clock, change);
     const known = state.records[key];
     if (known && known.h >= h) continue;
     state.records[key] = { h, v: value, o: [device, state.seq + 1] };
@@ -331,10 +326,9 @@ export async function syncScope(args: {
   const now = args.now ?? Date.now;
   let published = 0;
   const stamps = new Map<Adapter, Stamps>();
-  const waiting = new Set(state.unapplied);
   for (const adapter of adapters) {
-    if (adapter.publishAfterPull) stamps.set(adapter, await candidateStamps(state, adapter, clock, now(), waiting));
-    else published += (await publishAdapter(state, adapter, clock, device, now(), waiting)).size;
+    if (adapter.publishAfterPull) stamps.set(adapter, await candidateStamps(state, adapter, clock, now()));
+    else published += (await publishAdapter(state, adapter, clock, device, now())).size;
   }
   await flush(state, transport, scope, device, now(), options);
   const changed = await pull(state, transport, scope, clock, now(), options);
@@ -344,7 +338,7 @@ export async function syncScope(args: {
   let heldApply = false;
   const applyHeld = () => !!options?.holdApply?.();
   for (const adapter of adapters) {
-    const late = adapter.publishAfterPull && held ? new Set<string>() : await publishAdapter(state, adapter, clock, device, now(), keys, stamps.get(adapter));
+    const late = adapter.publishAfterPull && held ? new Set<string>() : await publishAdapter(state, adapter, clock, device, now(), stamps.get(adapter));
     published += late.size;
     for (const key of late) keys.delete(key);
     heldApply ||= applyHeld();

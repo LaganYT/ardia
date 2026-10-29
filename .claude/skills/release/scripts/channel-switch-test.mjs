@@ -379,7 +379,6 @@ const scenarios = [
   {
     key: "cancelled-quit-then-drop",
     what: "A quit cancelled while it waits for the drop stays cancelled when the drop then completes",
-    broken: "QuitFlow ignores a cancel while waiting for the updater, so the app quits once the drop completes",
     async run(s) {
       await s.launch();
       await s.untilStaged();
@@ -405,7 +404,7 @@ const scenarios = [
   {
     key: "cancelled-quit-then-deadline",
     what: "A quit cancelled while it waits for the drop stays cancelled when the wait's deadline passes",
-    broken: "QuitFlow ignores a cancel while waiting for the updater, so the deadline quits the app",
+    broken: "the cancel holds, but the next quit only waits 1 s after a drop nobody confirmed, then the nightly installs",
     async run(s) {
       await s.launch();
       await s.untilStaged();

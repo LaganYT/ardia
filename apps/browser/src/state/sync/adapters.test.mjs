@@ -1108,6 +1108,30 @@ test("passwords: a login whose read is still out when quitting begins isn't save
   assert.equal(stub.passwordStores.get("devB").size, 1, "after a cancelled quit it's saved");
 });
 
+test("passwords: a remote change saved in Chrome as quitting begins isn't sent back as this Mac's edit after the relaunch", async () => {
+  const folder = new Folder();
+  const a = new Device("devA", folder);
+  const b = new Device("devB", folder);
+  const save = (d, password) => d.with(() => passwords.savePassword("", "https://bank.example", "alice", password));
+  const list = (d) => [...stub.passwordStores.get(d.id).values()].map((l) => `${l.username}=${l.password}`);
+  await save(a, "one");
+  await syncAll([a, b]);
+  await save(a, "two");
+  await a.sync();
+  let quitting = false;
+  const logins = sealedLogins();
+  b.passwords = adapters.passwordsAdapter("default", { ...logins, save: async (...args) => ((quitting = true), logins.save(...args)) })(true);
+  await b.sync("default", { holdApply: () => quitting });
+  assert.deepEqual(list(b), ["alice=two"], "Chrome has the change");
+  await later();
+  await save(a, "three");
+  await a.sync();
+  b.passwords = adapters.passwordsAdapter("default", sealedLogins())(true);
+  await syncAll([b, a, b, a]);
+  assert.deepEqual(list(a), ["alice=three"], "the newer edit from A stands");
+  assert.deepEqual(list(b), ["alice=three"]);
+});
+
 test("history: two Macs settle on the union of their visits in Chrome, publish nothing more, and deletions reach Chrome", async () => {
   const folder = new Folder();
   const a = new Device("devA", folder);

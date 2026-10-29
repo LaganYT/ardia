@@ -256,18 +256,28 @@ async function applyAdapter(state: ScopeState, adapter: Adapter, keys: Set<strin
   const view = visible(state, adapter.prefix);
   const applyAs = (state.applyAs ??= {});
   applyAs[adapter.prefix] ??= state.joined ? "joined" : "joining";
+  const settle = (key: string) => {
+    if (view.has(key)) state.base[key] = canonical(view.get(key));
+    else delete state.base[key];
+  };
+  const landed = new Set<string>();
   let ok: boolean | void = false;
   try {
-    ok = await adapter.apply(view, mine, (key) => parseBase(state.base[key]), { known: (key) => key in state.records, now, horizon, joined: applyAs[adapter.prefix] === "joined", held });
+    const records = { known: (key: string) => key in state.records, now, horizon, joined: applyAs[adapter.prefix] === "joined", held, landed: (key: string) => void landed.add(key) };
+    ok = await adapter.apply(view, mine, (key) => parseBase(state.base[key]), records);
   } catch (error) {
     console.warn(`[sync] applying ${adapter.prefix} failed`, error);
   }
-  if (ok === false || held()) return false;
-  applyAs[adapter.prefix] = "joined";
-  for (const key of mine) {
-    if (view.has(key)) state.base[key] = canonical(view.get(key));
-    else delete state.base[key];
+  if (ok === false || held()) {
+    for (const key of landed) {
+      if (!mine.has(key)) continue;
+      settle(key);
+      keys.delete(key);
+    }
+    return false;
   }
+  applyAs[adapter.prefix] = "joined";
+  for (const key of mine) settle(key);
   return true;
 }
 

@@ -329,9 +329,13 @@ export function passwordsAdapter(profileId: string, logins: SealedPasswords = na
         if (have && known?.s !== have.s) continue;
         if (v) {
           if (have?.s === v.s) continue;
-          ok = (await logins.save(profile(), v.o, v.u, v.s, !!have).catch(orWarn(false))) && ok;
+          const saved = await logins.save(profile(), v.o, v.u, v.s, !!have).catch(orWarn(false));
+          if (saved) records.landed(key);
+          ok = saved && ok;
         } else if (have) {
-          ok = (await deletePassword(profile(), have.o, have.u).catch(orWarn(false))) && ok;
+          const deleted = await deletePassword(profile(), have.o, have.u).catch(orWarn(false));
+          if (deleted) records.landed(key);
+          ok = deleted && ok;
         }
       }
       const landed = (now: Map<string, { s: string }>, key: string) => {

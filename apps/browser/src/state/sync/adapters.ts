@@ -316,11 +316,12 @@ export function passwordsAdapter(profileId: string, logins: SealedPasswords = na
       const value = passwordValue(v);
       return (value && created.get(keyOf(value.o, value.u))) || undefined;
     },
-    apply: async (visible, changed, base) => {
+    apply: async (visible, changed, base, records) => {
       const local = await read();
       if (!local) return false;
       let ok = true;
       for (const key of changed) {
+        if (records.held()) return false;
         const v = passwordValue(visible.get(key));
         if (visible.has(key) && !v) return false;
         const have = local.get(key);
@@ -340,6 +341,7 @@ export function passwordsAdapter(profileId: string, logins: SealedPasswords = na
       };
       let settled = false;
       for (let i = 0; i < 20 && !settled; i++) {
+        if (records.held()) return false;
         const now = await read();
         settled = !!now && [...changed].every((k) => landed(now, k));
         if (!settled) await new Promise((r) => setTimeout(r, 250));

@@ -143,7 +143,8 @@ Writing:
   state save takes its snapshot, the last part it covers and the clock when its turn comes, and
   removes the parts only after it has landed. Quitting waits for that queue, with the state saved
   last, for up to 3 s before the app answers the quit (`saveBeforeQuit`). From the moment the app starts quitting,
-  sync applies nothing (`holdApply`; no pairing or extension installs either): what a pull brings during the wait
+  sync applies nothing (`holdApply`; no pairing or extension installs either, and an apply already waiting on Chrome, an
+  extension install or a password save, checks again after each wait and stops, leaving its records unapplied): what a pull brings during the wait
   stays unapplied and the scope doesn't switch to joined, so the saved state never holds a base ahead of the session
   saved when quitting began (tested).
 

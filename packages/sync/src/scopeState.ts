@@ -79,6 +79,7 @@ export type ApplyRecords = {
   now: number;
   horizon: number;
   joined: boolean;
+  held(): boolean;
 };
 
 export interface Adapter {

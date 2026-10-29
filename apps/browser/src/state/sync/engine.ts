@@ -157,7 +157,7 @@ async function cycleOnce(native: NonNullable<typeof SyncNative>, folder: string,
         await settled();
       }
       pending += state.pending;
-      if (!retire && !isQuitting() && typeSynced(doc, "extensions", profileId)) await extensionsOf(profileId).reconcile(visible(state, EXTENSION_PREFIX), Date.now());
+      if (!retire && !isQuitting() && typeSynced(doc, "extensions", profileId)) await extensionsOf(profileId).reconcile(visible(state, EXTENSION_PREFIX), Date.now(), isQuitting);
       if (retire) {
         delete link.retire;
         if (!exists) {

@@ -1083,6 +1083,31 @@ test("passwords: saved on one Mac, changed or deleted on another; the newer edit
   for (const d of [a, b]) assert.ok(!JSON.stringify(d.scopes.p).includes("correct horse"), "the sync state holds only sealed passwords");
 });
 
+test("passwords: a login whose read is still out when quitting begins isn't saved, and waits to be applied", async () => {
+  const folder = new Folder();
+  const a = new Device("devA", folder);
+  const b = new Device("devB", folder);
+  await a.with(() => passwords.savePassword("", "https://bank.example", "alice", "hunter2"));
+  await a.sync();
+  let quitting = false;
+  let armed = false;
+  const inner = adapters.passwordsAdapter(
+    "default",
+    sealedLogins(async () => {
+      if (armed) quitting = true;
+      return stub.readLogins();
+    }),
+  )(true);
+  b.passwords = { ...inner, apply: (...args) => ((armed = true), inner.apply(...args)) };
+  await b.sync("default", { holdApply: () => quitting });
+  assert.deepEqual([...stub.passwordStores.get("devB").values()], [], "nothing is saved once quitting has begun");
+  assert.ok(b.scopes.p.unapplied.some((k) => k.startsWith("pws:")), "and the login waits");
+  armed = false;
+  quitting = false;
+  await b.sync();
+  assert.equal(stub.passwordStores.get("devB").size, 1, "after a cancelled quit it's saved");
+});
+
 test("history: two Macs settle on the union of their visits in Chrome, publish nothing more, and deletions reach Chrome", async () => {
   const folder = new Folder();
   const a = new Device("devA", folder);

@@ -245,7 +245,7 @@ export async function pull(state: ScopeState, transport: Transport, scope: strin
   return changed;
 }
 
-async function applyAdapter(state: ScopeState, adapter: Adapter, keys: Set<string>, now: number, horizon: number): Promise<boolean> {
+async function applyAdapter(state: ScopeState, adapter: Adapter, keys: Set<string>, now: number, horizon: number, held: () => boolean): Promise<boolean> {
   const mine = new Set([...keys].filter((k) => k.startsWith(adapter.prefix)));
   if (!mine.size) return true;
   const view = visible(state, adapter.prefix);
@@ -253,11 +253,11 @@ async function applyAdapter(state: ScopeState, adapter: Adapter, keys: Set<strin
   applyAs[adapter.prefix] ??= state.joined ? "joined" : "joining";
   let ok: boolean | void = false;
   try {
-    ok = await adapter.apply(view, mine, (key) => parseBase(state.base[key]), { known: (key) => key in state.records, now, horizon, joined: applyAs[adapter.prefix] === "joined" });
+    ok = await adapter.apply(view, mine, (key) => parseBase(state.base[key]), { known: (key) => key in state.records, now, horizon, joined: applyAs[adapter.prefix] === "joined", held });
   } catch (error) {
     console.warn(`[sync] applying ${adapter.prefix} failed`, error);
   }
-  if (ok === false) return false;
+  if (ok === false || held()) return false;
   applyAs[adapter.prefix] = "joined";
   for (const key of mine) {
     if (view.has(key)) state.base[key] = canonical(view.get(key));
@@ -326,12 +326,14 @@ export async function syncScope(args: {
   const keys = new Set([...state.unapplied, ...changed]);
   const unapplied: string[] = [];
   let heldApply = false;
+  const applyHeld = () => !!options?.holdApply?.();
   for (const adapter of adapters) {
     const late = adapter.publishAfterPull && held ? new Set<string>() : await publishAdapter(state, adapter, clock, device, now(), stamps.get(adapter));
     published += late.size;
     for (const key of late) keys.delete(key);
-    heldApply ||= !!options?.holdApply?.();
-    const applied = !heldApply && (await applyAdapter(state, adapter, keys, now(), 2 * (options?.tombstoneTTL ?? DEFAULTS.tombstoneTTL)));
+    heldApply ||= applyHeld();
+    const applied = !heldApply && (await applyAdapter(state, adapter, keys, now(), 2 * (options?.tombstoneTTL ?? DEFAULTS.tombstoneTTL), applyHeld));
+    heldApply ||= applyHeld();
     if (!applied) unapplied.push(...[...keys].filter((k) => k.startsWith(adapter.prefix)));
   }
   state.unapplied = [...unapplied, ...[...keys].filter((k) => !adapters.some((a) => k.startsWith(a.prefix)))];

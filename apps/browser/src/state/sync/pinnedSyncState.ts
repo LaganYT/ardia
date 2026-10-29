@@ -1,3 +1,4 @@
+import { hlcWall, type HLC } from "../../platform/sync";
 import { useBrowser, type BrowserState } from "../browser/store";
 import type { MainWindow, Tab } from "../browser/types";
 import { fromSync } from "../pins/pinOrderChoices";
@@ -28,6 +29,9 @@ export function homeWindow(s: BrowserState, profileId: string): Window | undefin
   const shows = (w: Window) => w.tabIds.some((id) => s.tabs[id]?.profileId === profileId);
   return order.find((w) => w.profileId === profileId && shows(w)) ?? order.find(shows) ?? order.find((w) => w.profileId === profileId) ?? order[0];
 }
+
+export const choiceStillOut = (chosen: Record<string, number>, choice: string, stamp: HLC | undefined) =>
+  choice in chosen && (stamp === undefined || hlcWall(stamp) < chosen[choice]!);
 
 export function settleChoices(profileId: string, published: Record<string, number>) {
   const now = store().pinChoices;

@@ -15,6 +15,7 @@ const S = () => useBrowser.getState();
 const PROFILES = ["default", "work"];
 let wall = 1_900_000_000_000;
 const now = () => ++wall;
+Date.now = () => wall;
 const DAY = 86_400_000;
 
 class Folder {

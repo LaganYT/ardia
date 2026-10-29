@@ -768,6 +768,33 @@ test("a tile choice whose batch never reached the disk survives a crash and stil
   assert.deepEqual(rowsOf(a), { tiles: ["https://docs.example/"], rows: [] });
 });
 
+test("a row choice that went out while quitting isn't sent again after the relaunch over a later tile choice elsewhere", async () => {
+  const folder = new Folder();
+  const a = new Device("devA", folder);
+  const b = new Device("devB", folder);
+  a.with(() => {
+    const w = S().createWindow({ url: "https://home.example/" });
+    S().pinTabs([S().newTab(w, { url: "https://docs.example/" })], true);
+  });
+  b.with(() => S().createWindow({ url: "https://b-home.example/" }));
+  await syncAll([a, b]);
+  await later();
+  a.with(() => S().placeTabs([tabAt("https://docs.example/")], { pinned: true, row: true }));
+  const frozenSession = a.browser;
+  await a.sync();
+  assert.deepEqual(a.with(() => S().pinChoices), {}, "the choice settles once it's out");
+  await later();
+  await b.sync();
+  assert.deepEqual(rowsOf(b), { tiles: [], rows: ["https://docs.example/"] });
+  b.with(() => S().placeTabs([tabAt("https://docs.example/")], { pinned: true, row: false }));
+  await b.sync();
+  await later();
+  a.browser = frozenSession;
+  await syncAll([a, b, a, b]);
+  assert.deepEqual(rowsOf(a), { tiles: ["https://docs.example/"], rows: [] }, "B's later tile stands");
+  assert.deepEqual(rowsOf(b), { tiles: ["https://docs.example/"], rows: [] });
+});
+
 test("a tile choice whose journal write failed is sent once when the write is retried", async () => {
   const { folder, a, b } = await tileWithMarkOnBoth();
   await assert.rejects(b.sync("default", { persist: async () => { throw new Error("disk full"); } }));

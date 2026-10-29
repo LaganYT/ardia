@@ -119,6 +119,7 @@ export type PopoverBubbleProps = ViewProps & {
   shadowOpacity?: number;
   shadowRadius?: number;
   shadowOffsetY?: number;
+  glass?: boolean;
 };
 
 type NativePopoverBubbleProps = Omit<PopoverBubbleProps, "shadowOpacity" | "shadowRadius" | "shadowOffsetY"> & {

@@ -15,7 +15,7 @@ const TINT_GAIN = { rest: 1, lit: 2, active: 6 } as const;
 export type GlassKind = keyof typeof TINT_SHARE;
 export type GlassState = keyof typeof TINT_GAIN;
 
-function glassTint(theme: Theme, fill: string, kind: GlassKind, state: GlassState): string {
+export function glassTint(theme: Theme, fill: string, kind: GlassKind, state: GlassState): string {
   const [r, g, b, a] = parseColor(fill);
   const [pr, pg, pb] = parseColor(theme.backdrop.tintColor);
   const alpha = Math.min(1, a * TINT_SHARE[kind] * TINT_GAIN[state]);

@@ -3,6 +3,7 @@ import { isIncognitoProfile } from "../browser/model";
 import { boostDomain } from "./match";
 import { currentBoostsKey, loadBoosts, setBoostList } from "./store";
 import type { Boost } from "./types";
+import { withinSourceLimit } from "./valid";
 
 type Patch = Partial<Omit<Boost, "id" | "modified">>;
 
@@ -41,7 +42,11 @@ const add = (profileId: string, boost: Boost): Boost => {
 
 export const createBoost = (profileId: string, host: string): Boost => add(profileId, blank(boostDomain(host)));
 
-export const updateBoost = (profileId: string, id: string, patch: Patch) => editOne(profileId, id, (boost) => ({ ...boost, ...patch, modified: Date.now() }));
+export const updateBoost = (profileId: string, id: string, patch: Patch) =>
+  editOne(profileId, id, (boost) => {
+    const next = { ...boost, ...patch, modified: Date.now() };
+    return withinSourceLimit(next) ? next : boost;
+  });
 
 export const deleteBoost = (profileId: string, id: string) => edit(profileId, (boosts) => (boosts.some((b) => b.id === id) ? boosts.filter((b) => b.id !== id) : boosts));
 

@@ -35,7 +35,7 @@ export function validBoost(id: string, raw: unknown): Boost | null {
   if (!Array.isArray(zaps) || !zaps.every(isString)) return null;
   const checked = colors === null ? null : validColors(colors);
   if (colors !== null && !checked) return null;
-  if (id.length > MAX_ID || (css as string).length > MAX_SOURCE || (js as string).length > MAX_SOURCE || (domain as string).length > 253) return null;
+  if (id.length > MAX_ID || (domain as string).length > 253 || !withinSourceLimit({ css: css as string, js: js as string })) return null;
   return {
     id,
     name: name as string,
@@ -65,3 +65,4 @@ export const importableCss = (css: string) => !FETCHING_CSS.test(css) && !WEB_UR
 
 const MAX_ID = 128;
 const MAX_SOURCE = 1024 * 1024;
+export const withinSourceLimit = (code: Pick<Boost, "css" | "js">) => code.css.length <= MAX_SOURCE && code.js.length <= MAX_SOURCE;

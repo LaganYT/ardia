@@ -60,8 +60,10 @@ function Panel({ windowId, tabId, profileId, stored }: { windowId: string; tabId
   const [zapping, setZapping] = useState(false);
   const [chips, setChips] = useState<ZapChip[]>([]);
   const [copied, setCopied] = useState(false);
+  const typed = useRef<Partial<Boost>>({});
   const zaps = useRef(stored.zaps);
   zaps.current = stored.zaps;
+  useEffect(() => setName(stored.name), [stored.name]);
   const nameRef = useRef({ name, stored: stored.name });
   nameRef.current = { name, stored: stored.name };
   const commitName = () => {
@@ -89,7 +91,7 @@ function Panel({ windowId, tabId, profileId, stored }: { windowId: string; tabId
     updateBoost(profileId, stored.id, { zaps: zaps.current.filter((s) => s !== chip.selector) });
     setChips((list) => list.filter((c) => c.selector !== chip.selector));
   };
-  const share = () => setCopied(copyShareCode(stored, true));
+  const share = () => setCopied(copyShareCode({ ...stored, ...typed.current }, true));
   return (
     <View style={{ flex: 1, borderRadius: layout.cardRadius, overflow: "hidden", backgroundColor: theme.card }}>
       <Box row center gap="m" style={{ height: BOOST_PANEL.headerHeight, paddingLeft: BOOST_PANEL.pad, paddingRight: 8 }}>
@@ -120,7 +122,18 @@ function Panel({ windowId, tabId, profileId, stored }: { windowId: string; tabId
           </Section>
         ) : null}
         <Section title="Code">
-          <BoostCode css={stored.css} js={stored.js} onPreview={(patch) => previewDraft(tabId, { ...boost, ...patch })} onCommit={(patch) => edit(patch)} />
+          <BoostCode
+            css={stored.css}
+            js={stored.js}
+            onPreview={(patch) => {
+              typed.current = { ...typed.current, ...patch };
+              previewDraft(tabId, { ...boost, ...patch });
+            }}
+            onCommit={(patch) => {
+              typed.current = {};
+              edit(patch);
+            }}
+          />
         </Section>
       </ScrollView>
       <Divider />

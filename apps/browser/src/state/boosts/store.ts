@@ -29,9 +29,11 @@ export function loadBoosts(key: string): Boost[] {
   try {
     const list = parseSaved(readDocument(boostsDocument(key)), BOOSTS_VERSION, BOOSTS_MIGRATIONS)?.boosts;
     if (Array.isArray(list)) {
+      const seen = new Set<string>();
       boosts = list.flatMap((raw) => {
         const id = (raw as { id?: unknown } | null)?.id;
-        const boost = typeof id === "string" && id ? validBoost(id, raw) : null;
+        const boost = typeof id === "string" && id && !seen.has(id) ? validBoost(id, raw) : null;
+        if (boost) seen.add(id as string);
         return boost ? [boost] : [];
       });
     }

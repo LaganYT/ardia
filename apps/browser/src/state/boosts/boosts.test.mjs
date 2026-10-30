@@ -88,3 +88,11 @@ test("a boost past the engine's limits is dropped", () => {
   assert.equal(validBoost("x", { ...ok, css: "a".repeat(1024 * 1024 + 1) }), null);
   assert.equal(validBoost("x", { ...ok, js: "a".repeat(1024 * 1024 + 1) }), null);
 });
+
+test("code past the engine's limit isn't stored", () => {
+  reset();
+  const boost = actions.createBoost("default", "example.com");
+  actions.updateBoost("default", boost.id, { css: "a{}" });
+  actions.updateBoost("default", boost.id, { css: "a".repeat(1024 * 1024 + 1) });
+  assert.equal(useBoostStore.getState().boostsByProfile.default[0].css, "a{}");
+});

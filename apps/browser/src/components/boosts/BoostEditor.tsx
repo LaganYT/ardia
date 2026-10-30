@@ -28,7 +28,7 @@ export function BoostEditorDock() {
   return (
     <Animated.View style={{ width: appear.interpolate({ inputRange: [0, 1], outputRange: [0, room] }), overflow: "hidden" }}>
       <Animated.View style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: BOOST_PANEL.width, opacity: appear }}>
-        <BoostPanel key={shown.boostId} windowId={windowId} editor={shown} />
+        <BoostPanel key={`${shown.tabId}:${shown.boostId}`} windowId={windowId} editor={shown} />
       </Animated.View>
     </Animated.View>
   );

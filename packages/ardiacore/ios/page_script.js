@@ -1420,7 +1420,7 @@
     const perBucket = Math.ceil(limit / buckets);
     const groups = [];
     live.forEach((c, i) => {
-      const group = (groups[width ? Math.floor((logs[i] - low) / width) : 0] ??= []);
+      const group = (groups[width ? Math.min(buckets - 1, Math.floor((logs[i] - low) / width)) : 0] ??= []);
       if (group.length < perBucket) group.push(c);
     });
     return groups.flat();

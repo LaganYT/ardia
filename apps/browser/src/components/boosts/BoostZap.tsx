@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, Button, Text } from "../ui";
+import { useTab } from "../../state/browser/hooks";
 import { setZapRelated, startZap, stopZap, watchZapPicks, type ZapPick } from "../../state/boostUi/zap";
 import { BOOST_PANEL } from "./tokens";
 
@@ -11,7 +12,9 @@ export function ZapPicker({ tabId, onZap }: { tabId: string; onZap: (chip: ZapCh
   const [pick, setPick] = useState<ZapPick | null>(null);
   const [level, setLevel] = useState(0);
   const asked = useRef(false);
+  const url = useTab(tabId, (t) => t?.url);
   useEffect(() => {
+    setPick(null);
     void startZap(tabId);
     const stop = watchZapPicks(tabId, (next) => {
       if (!asked.current) setLevel(0);
@@ -22,7 +25,7 @@ export function ZapPicker({ tabId, onZap }: { tabId: string; onZap: (chip: ZapCh
       stop();
       void stopZap(tabId);
     };
-  }, [tabId]);
+  }, [tabId, url]);
   const relate = (to: number) => {
     asked.current = true;
     setLevel(to);
@@ -48,7 +51,13 @@ export function ZapPicker({ tabId, onZap }: { tabId: string; onZap: (chip: ZapCh
                 setPick(null);
               }}
             />
-            <Button title="Cancel" onPress={() => setPick(null)} />
+            <Button
+              title="Cancel"
+              onPress={() => {
+                setPick(null);
+                void Promise.resolve(stopZap(tabId)).then(() => startZap(tabId));
+              }}
+            />
           </Box>
         </>
       ) : (

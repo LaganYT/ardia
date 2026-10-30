@@ -10,13 +10,14 @@ export type PanelProps = Omit<SurfaceProps, "fill" | "cornerRadius" | "borderCol
   shadow?: ShadowLevel;
 };
 
-export function Panel({ fill, radius, border, borderWidth = hairline.panel, shadow, children, ...rest }: PanelProps) {
+export function Panel({ fill, radius, border, borderWidth = hairline.panel, borderColors, shadow, children, ...rest }: PanelProps) {
   const dark = useTheme().dark;
   return (
     <Surface
       {...rest}
       fill={hex(fill)}
       cornerRadius={radius}
+      borderColors={borderColors}
       borderColor={border === undefined ? undefined : hex(border)}
       borderWidth={border === undefined ? undefined : borderWidth}
       shadowColor={shadow?.color}

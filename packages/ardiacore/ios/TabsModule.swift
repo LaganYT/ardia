@@ -2,11 +2,11 @@ import ExpoModulesCore
 
 public class TabsModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaTabs")
-    Events("tabs")
+    Name(Self.calls.moduleName)
+    Events(Self.calls.domain)
+    Self.calls.forwardEvents(to: self)
 
     OnCreate {
-      EngineCall.listen("tabs", self)
       ArdiaTabStrip.watchStrips()
     }
 
@@ -23,9 +23,7 @@ public class TabsModule: Module {
     Function("dropTabReveals") { (key: String) in ArdiaWebView.dropTabReveals(key) }
     Function("revealOffered") { (adoptId: String, key: String) in ArdiaWebView.revealOffered(adoptId, over: key) }
 
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      TabsModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
   }
 
   static func browserId(_ args: CallArgs) throws -> Int32 { ArdiaWebView.browserId(ofTab: try args.text("tabId")) }
@@ -43,11 +41,16 @@ public class TabsModule: Module {
     "devWindowNumber": { args, reply in reply.ok(ArdiaWebView.devWindowNumber(browserId: try browserId(args))) },
     "devFocusPage": { args, reply in reply.ok(ArdiaWebView.devFocusPage(browserId: try browserId(args))) },
     "devPictureInPicture": { _, reply in reply.ok(ArdiaWebView.devPictureInPicture()) },
-    "devPictureInPictureAction": { args, reply in reply.ok(ArdiaWebView.devPictureInPictureAction(try args.text("action"))) },
     "devPostPeekMouseUp": { args, reply in reply.ok(ArdiaWebView.devPostPeekMouseUp(try args.text("keys"), over: try args.text("tabId"))) },
     "devScrollZoom": { args, reply in
       let steps = try args.dicts("steps")
       reply.ok(ArdiaWebView.devScrollZoom(steps, browserId: ArdiaWebView.browserId(ofTab: try args.optionalText("tabId"))))
     },
-  ])
+  ].merging(LaunchConfig.shared.testInstance ? testInstanceCalls : [:]) { call, _ in call })
+
+  private static let testInstanceCalls: [String: CallHandler] = [
+    "devPictureInPictureAction": { args, reply in reply.ok(ArdiaWebView.devPictureInPictureAction(try args.text("action"))) },
+    "devPagePhase": { args, reply in reply.ok(ArdiaWebView.devPagePhase(of: try args.text("tabId"))) },
+    "devClosePage": { args, reply in reply.ok(ArdiaWebView.devClosePage(of: try args.text("tabId"))) },
+  ]
 }

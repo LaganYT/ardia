@@ -1,6 +1,6 @@
 import { setSwitcherCapture, switcherPointerMoved } from "../../platform/focus";
 import { useBrowser } from "../browser/store";
-import { recentTabIds } from "../pins/organize";
+import { recentTabIds } from "../pins/tabCleanup";
 import { setSidebarUi, sidebarUi } from "./sidebarUi";
 
 const SHOW_AFTER_MS = 140;

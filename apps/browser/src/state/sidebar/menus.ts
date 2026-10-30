@@ -3,7 +3,7 @@ import { switchToTab } from "../browser/actions";
 import { menuShortcut } from "../commands/commandShortcuts";
 import { useBrowser } from "../browser/store";
 import { plural, tabTitle, viewTabIds } from "../browser/model";
-import { cleanedTabsFor, keptDeletedGroups } from "../pins/organize";
+import { cleanedTabsFor, keptDeletedGroups } from "../pins/closedTabs";
 import { allMuted, muteAll } from "./actions";
 import { openSyncedTab, syncedDevicesMenuItem } from "../sync/menu";
 import { setSidebarUi } from "./sidebarUi";

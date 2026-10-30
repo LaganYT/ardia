@@ -2,11 +2,9 @@ import ExpoModulesCore
 
 public class ProfilesModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaProfiles")
+    Name(Self.calls.moduleName)
 
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      ProfilesModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
   }
 
   static let calls = CallTable(domain: "profiles", handlers: [

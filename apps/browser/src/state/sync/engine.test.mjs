@@ -42,7 +42,7 @@ globalThis.acTestNativeModules = {
 const shell = await import("../../test-native/index.ts");
 const { useBrowser } = await import("../browser/store.ts");
 const S = () => useBrowser.getState();
-const reset = () => (S().hydrate({}), useBrowser.setState({ bookmarksReady: { default: true } }));
+const reset = () => (S().hydrate({}), useBrowser.setState({ bookmarksReady: { "": true } }));
 
 test("a crash after a batch lands: after the restart it's sent again as it was, and the next batch gets a new seq", async () => {
   reset();

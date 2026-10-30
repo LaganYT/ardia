@@ -4,7 +4,7 @@ import { toggleMute } from "../../state/browser/actions";
 import { hex, layout, useTheme } from "../ui/theme";
 import { useIsActiveTab, usePageProfileId, useTab, useWindow, useWindowId } from "../../state/browser/hooks";
 import { returnToPinnedUrl } from "../../state/pins/actions";
-import { useSplitRowKey } from "../../state/sidebar/hooks";
+import { useSplitRowPanes } from "../../state/sidebar/hooks";
 import { useMuteState } from "../../state/tabs/hooks";
 import { muteTitle } from "../../state/tabs/mute";
 import { HoverSlot } from "../ui/HoverSlot";
@@ -14,7 +14,7 @@ import { awayFromPin } from "../../state/pins/organize";
 import { commitRename, endRename, startRename } from "../../state/sidebar/actions";
 import { useDragItem, useDropOnto } from "./DragProvider";
 import { useShift, type EntryMotion } from "./EntryMotion";
-import { useRowHover } from "../../state/sidebar/hover";
+import { useRowHover } from "./hoverController";
 import { pressTabClose, useTabCloseControlWhile } from "../../state/sidebar/closeControl";
 import { ACTIVE, ICON_MARKS, LOADING, PLAYING, SELECTED, useRowState } from "../../state/sidebar/rowState";
 import { registerRow, useSidebarUi } from "../../state/sidebar/sidebarUi";
@@ -25,6 +25,7 @@ import { useSelectedTabGlow, useSidebarRowLook } from "./rowLook";
 import { withShortcut } from "../../state/commands/commandShortcuts";
 import { TabPressArea } from "./TabPressArea";
 import { entryKey } from "../../state/sidebar/entryKey";
+import type { RowSection } from "./dragModel";
 
 export const TabRowItem = memo(function TabRowItem({
   tabId,
@@ -33,7 +34,7 @@ export const TabRowItem = memo(function TabRowItem({
   motion = null,
 }: {
   tabId: string;
-  section: "list" | "pinnedRows" | "pinnedGroups";
+  section: RowSection;
   parentGroup?: string;
   motion?: EntryMotion | null;
 }) {
@@ -64,7 +65,7 @@ export const TabRow = memo(function TabRow({ tabId, onto = false, shift = null }
   const closeControl = useTabCloseControlWhile(tabId, hovered && !renaming);
   const { backToPinHint } = useSidebarRowLook();
   if (!tab) return null;
-  const resettable = (isPinnedRow(tab) || !tab.pinned) && awayFromPin(tab);
+  const resettable = (isPinnedRow(tab) || !tab.pin) && awayFromPin(tab);
   const resetting = resettable && backToPin.hovered && !renaming;
   const title = resetting ? "Back to Pinned URL" : tabTitle(tab);
   const fill = active ? theme.tabSelected : selected ? tokens.multiSelected : hovered ? theme.tabHover : ink.clear;
@@ -199,12 +200,12 @@ export const SplitRowItem = memo(function SplitRowItem({
   motion = null,
 }: {
   splitId: string;
-  section: "list" | "pinnedRows" | "pinnedGroups";
+  section: RowSection;
   parentGroup?: string;
   motion?: EntryMotion | null;
 }) {
   const windowId = useWindowId();
-  const tabIds = useSplitRowKey(splitId).split(",").filter(Boolean);
+  const tabIds = useSplitRowPanes(splitId);
   const { wrapper, handle } = useDragItem(entryKey("split", splitId), { kind: "split", tabIds, section, parentGroup }, motion?.clip);
   const theme = useTheme();
   const glow = useSelectedTabGlow();

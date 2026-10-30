@@ -38,11 +38,11 @@ const DOC_MIGRATIONS: Migrations = { 0: unchanged };
 type Saved = { lastVersion: string; pending: { version: string; since: number } | null };
 
 function readSaved(): Saved | null {
-  try {
-    return parseSaved(readDocument(DOC), DOC_VERSION, DOC_MIGRATIONS) as Saved | null;
-  } catch {
-    return null;
-  }
+  const doc = parseSaved(readDocument(DOC), DOC_VERSION, DOC_MIGRATIONS);
+  if (!doc || typeof doc.lastVersion !== "string") return null;
+  const p = doc.pending as { version?: unknown; since?: unknown } | null | undefined;
+  const pending = p && typeof p.version === "string" && typeof p.since === "number" ? { version: p.version, since: p.since } : null;
+  return { lastVersion: doc.lastVersion, pending };
 }
 
 function save(saved: Saved) {

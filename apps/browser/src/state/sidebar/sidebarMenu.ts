@@ -1,6 +1,7 @@
 import { showMenu, type MenuItem } from "../../platform/menus";
 import { tabLayoutOf } from "../browser/model";
-import { createProfile, switchProfile } from "../browser/actions";
+import { switchProfile } from "../browser/actions";
+import { requestCreateProfile } from "../profiles/createProfileRequest";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { menuShortcut } from "../commands/commandShortcuts";
 import { bookmarkAllTabs } from "../bookmarks/actions";
@@ -43,7 +44,7 @@ export async function openSidebarMenu(windowId: string) {
   else if (choice === "newGroup") {
     const id = s.newTab(windowId);
     if (id) newGroupWithSelection(windowId, [id]);
-  } else if (choice === "newProfile") void createProfile(windowId).then((id) => id && switchProfile(windowId, id));
+  } else if (choice === "newProfile") void requestCreateProfile(windowId).then((id) => id && switchProfile(windowId, id));
   else if (choice === "bookmarkAll") bookmarkAllTabs(windowId);
   else if (choice === "tabLayout") s.toggleTabLayout(windowId);
   else if (choice === "autoHide") s.toggleSidebar(windowId);

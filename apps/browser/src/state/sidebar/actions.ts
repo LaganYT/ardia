@@ -8,7 +8,8 @@ import { focusHeroBar } from "../omnibox/barState";
 import { ancestorIds } from "../groups/groups";
 import { activeTabId, bookmarkProfileId, inPinnedContainer, pinSection, tabLayoutOf, tabTitle, viewTabIds } from "../browser/model";
 import type { ClickMods } from "../drag/drops";
-import { groupLabel, groupOf, selectedTabIds } from "../pins/organize";
+import { selectedTabIds } from "../pins/organize";
+import { groupLabel, groupOf } from "../pins/tabGrouping";
 import type { Tab } from "../browser/types";
 import type { BookmarkFolderChoice } from "./menuParts";
 import { DEFAULT_SIDEBAR_WIDTH } from "../../lib/windowLayout";
@@ -45,7 +46,7 @@ export async function startRename(windowId: string, target: Target) {
   if (target.kind === "tab") {
     const tab = s.tabs[target.id];
     if (!tab) return;
-    if (tab.pinned && !tab.pinnedAsRow) {
+    if (pinSection(tab) === "tile") {
       const name = await prompt({
         title: "Rename Tab",
         value: tab.customTitle ?? tab.title,

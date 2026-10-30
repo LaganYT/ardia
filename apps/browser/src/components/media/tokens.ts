@@ -1,6 +1,11 @@
 import { useTheme } from "../ui/theme";
-import { colorRoles } from "../ui/tokens";
+import { colorRoles, ink, type ShadowLevel } from "../ui/tokens";
 import { parseColor } from "../../lib/color";
+
+export const HOVER_CARD = {
+  radius: 12,
+  shadow: { color: ink.black, opacity: { dark: colorRoles.dark.panelShadowOpacity * 0.8, light: colorRoles.light.panelShadowOpacity * 0.8 }, radius: 16, offset: [0, 6] } satisfies ShadowLevel,
+};
 
 const rgbOf = (color: string) => parseColor(color).slice(0, 3) as [number, number, number];
 

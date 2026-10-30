@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { ScrollState } from "../../platform/tabs";
-import { useBrowser, type BrowserState } from "../browser/store";
-import { DEFAULT_WINDOW_UI } from "./ui";
+import { useBrowser } from "../browser/store";
 
 export const STRIP_HEIGHT = 20;
 
@@ -56,10 +55,6 @@ type ToolbarModeInput = {
 export function toolbarMode(i: ToolbarModeInput): ToolbarMode {
   if (!i.enabled || !i.hasPage || !i.scrolledDown || i.needsBar) return "shown";
   return i.peek ? "peek" : "collapsed";
-}
-
-export function needsBar(s: BrowserState, tabId: string, windowId: string): boolean {
-  return !!(s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel.open || !!s.find[tabId]?.open;
 }
 
 useBrowser.subscribe((s, prev) => {

@@ -1,11 +1,13 @@
 import { addHistoryVisits, onHistoryChanged, queryHistory, watchHistory, type EngineHistoryEntry, type HistoryChange } from "../../platform/history";
-import { readDocument, removeDocument } from "../../platform/documents";
+import { readDocument } from "../../platform/documents";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { afterFirstWindow } from "../../lib/afterFirstWindow";
 import { MAX_HISTORY, MAX_VISIT_TIMES } from "./history";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import type { HistoryEntry } from "../browser/types";
 import { isWebPageUrl } from "../../lib/url";
+import { engineProfiles } from "../profiles/engineProfiles";
+import { migrateLegacyFile } from "../app/legacyFiles";
 
 const LEGACY_FILE = "history.json";
 const LEGACY_TOLERANCE_MS = 60_000;
@@ -25,36 +27,18 @@ const toEntry = (e: EngineHistoryEntry): HistoryEntry => ({
   visitTimes: e.visitTimes,
 });
 
-const engineProfiles = (s: Pick<BrowserState, "profiles">) =>
-  [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map((id) => engineProfile(s, id)))];
-
-const profilesUsing = (s: Pick<BrowserState, "profiles">, engine: string) =>
-  Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfile(s, id) === engine);
-
-function viewOf(engine: string): HistoryEntry[] {
-  const s = store();
-  for (const id of profilesUsing(s, engine)) if (s.history[id]) return s.history[id]!;
-  return [];
-}
+const viewOf = (engine: string): HistoryEntry[] => store().history[engine]?.list ?? [];
 
 let legacyMoved = false;
 
 function setView(engine: string, list: HistoryEntry[], floor?: number) {
   useBrowser.setState((s) => {
-    const ids = profilesUsing(s, engine);
-    const was = ids.map((id) => s.historyFloor[id] ?? -Infinity).reduce((a, b) => Math.max(a, b), -Infinity);
+    if (!engineProfiles(s).includes(engine)) return {};
+    const was = s.history[engine];
     const full = list.length >= MAX_HISTORY ? list[list.length - 1]!.lastVisit : -Infinity;
-    const next = Math.max(floor ?? was, full);
-    const ready = legacyMoved;
-    const sameList = ids.every((id) => s.history[id] === list);
-    const sameFloor = ids.every((id) => (s.historyFloor[id] ?? -Infinity) === next);
-    const sameReady = !ready || ids.every((id) => s.historyReady[id]);
-    if (sameList && sameFloor && sameReady) return {};
-    return {
-      ...(sameList ? {} : { history: { ...s.history, ...Object.fromEntries(ids.map((id) => [id, list])) } }),
-      ...(sameFloor ? {} : { historyFloor: { ...s.historyFloor, ...Object.fromEntries(ids.map((id) => [id, next])) } }),
-      ...(sameReady ? {} : { historyReady: { ...s.historyReady, ...Object.fromEntries(ids.map((id) => [id, true as const])) } }),
-    };
+    const next = { list, floor: Math.max(floor ?? was?.floor ?? -Infinity, full), ready: legacyMoved || !!was?.ready };
+    if (was && was.list === next.list && was.floor === next.floor && was.ready === next.ready) return {};
+    return { history: { ...s.history, [engine]: next } };
   });
 }
 
@@ -175,16 +159,10 @@ function applyPending() {
 
 type LegacyFile = { history?: Record<string, HistoryEntry[]> };
 
-export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_KEPT_MS } = {}): Promise<"none" | "moved" | "kept"> {
-  let file: LegacyFile | null = null;
-  try {
-    const json = readDocument(LEGACY_FILE);
-    file = json ? (JSON.parse(json) as LegacyFile) : null;
-  } catch (error) {
-    console.warn(`[history] ${LEGACY_FILE} is unreadable; leaving it`, error);
-    return "kept";
-  }
-  if (!file) return "none";
+export const migrateHistoryFile = (now = Date.now(), { keepMs = LEGACY_KEPT_MS } = {}) =>
+  migrateLegacyFile<LegacyFile>(LEGACY_FILE, "history", (file) => moveHistory(file, now), keepMs);
+
+async function moveHistory(file: LegacyFile, now: number) {
   const s = store();
   const perEngine = new Map<string, HistoryEntry[]>();
   for (const [profileId, list] of Object.entries(file.history ?? {})) {
@@ -205,15 +183,9 @@ export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_KEP
         .filter((p) => p.visitTimes.length);
       for (let i = 0; i < pages.length; i += CHUNK) await addHistoryVisits(engine, pages.slice(i, i + CHUNK), LEGACY_TOLERANCE_MS);
     }
-  } catch (error) {
-    console.warn(`[history] moving ${LEGACY_FILE} into Chrome failed; trying again next launch`, error);
-    return "kept";
   } finally {
     migrating.clear();
   }
-  if (keepMs) setTimeout(() => removeDocument(LEGACY_FILE), keepMs);
-  else removeDocument(LEGACY_FILE);
-  return "moved";
 }
 
 export function startHistory() {
@@ -238,13 +210,7 @@ export function startHistory() {
   if (moving) afterFirstWindow(migrate);
   else migrate();
   const stop = useBrowser.subscribe((s, prev) => {
-    if (s.profiles === prev.profiles) return;
-    if (!moving) loadAll(s);
-    for (const id of Object.keys(s.profiles)) {
-      if (prev.profiles[id] || isIncognitoProfile(id) || s.history[id]) continue;
-      const list = viewOf(engineProfile(s, id));
-      if (list.length) setView(engineProfile(s, id), list);
-    }
+    if (s.profiles !== prev.profiles && !moving) loadAll(s);
   });
   return () => {
     stopped = true;

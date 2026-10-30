@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, View } from "react-native";
 import { curve } from "../ui/motion";
-import { FoldedAway } from "../../state/sidebar/hover";
+import { FoldedAway } from "./hoverController";
 import { SIDEBAR_MOTION } from "./tokens";
 
 const FOLD_MS = SIDEBAR_MOTION.fold;

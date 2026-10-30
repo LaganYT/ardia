@@ -44,7 +44,7 @@ export function SettingsSearchField() {
 
 let cached: { query: string; unshown: ReadonlySet<string>; results: SettingEntry[] } = { query: "", unshown: new Set(), results: [] };
 
-function settingsResults(query: string, unshown: ReadonlySet<string>): SettingEntry[] {
+export function settingsResults(query: string, unshown: ReadonlySet<string>): SettingEntry[] {
   if (cached.query !== query || cached.unshown !== unshown) {
     const hits = search(SETTINGS_INDEX.filter((p) => !unshown.has(p.entry.id)), query);
     cached = { query, unshown, results: groupByPane(hits).flatMap((g) => g.hits.map((h) => h.entry)) };

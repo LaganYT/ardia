@@ -3,17 +3,15 @@ import ExpoModulesCore
 
 public class ExtensionsModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaExtensions")
-    Events("extensions")
+    Name(Self.calls.moduleName)
+    Events(Self.calls.domain)
+    Self.calls.forwardEvents(to: self)
 
     OnCreate {
-      EngineCall.listen("extensions", self)
       ArdiaHost.replayInstallPrompts()
     }
 
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      ExtensionsModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
   }
 
   static func chooseFolder(_ args: CallArgs, _ reply: CallReply) {

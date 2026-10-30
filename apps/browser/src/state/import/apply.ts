@@ -14,10 +14,10 @@ import {
 } from "../../platform/importModule";
 import { addGroupsFromDrafts } from "../bookmarks/bookmarkGroups";
 import { adoptFavicons } from "../favicons/favicons";
-import type { BookmarkDraft } from "../bookmarks/bookmarks";
+import { bookmarkRoots, type BookmarkDraft } from "../bookmarks/bookmarks";
 import type { GroupDraft } from "../groups/draftGroups";
 import { useBrowser } from "../browser/store";
-import { engineProfile, isIncognitoProfile } from "../browser/model";
+import { engineProfile, isIncognitoProfile, ROW_PIN } from "../browser/model";
 import { openPages, pageKey, pinnedPages, tilePages } from "../tabs/pageKeys";
 import { withNewTab } from "../tabs/tabs";
 import type { ProfileColor } from "../browser/types";
@@ -27,6 +27,8 @@ import { newProfileLiveFolder } from "../live/engine";
 import { live } from "../live/store";
 import type { LiveSourceId } from "../live/types";
 import { isWebPageUrl, withoutFragment } from "../../lib/url";
+import { focusedWindowOf } from "../windows/ui";
+import { IDLE } from "../tabs/pageSession";
 
 export type { BrowserProfile, BrowserSource, DiaTabsResult, ImportedExtension, ImportKind, ImportResult, SpaceSummary } from "../../platform/importModule";
 
@@ -73,8 +75,8 @@ const linkCount = (nodes: ImportedNode[]): number => nodes.reduce((n, c) => n + 
 
 export function importBookmarks(profileId: string, root: ImportedNode | undefined, browserName: string): number {
   if (!root?.children?.length) return 0;
-  if (!useBrowser.getState().bookmarks.roots[profileId]) useBrowser.getState().addBookmarkTree(profileId, []);
-  const roots = useBrowser.getState().bookmarks.roots[profileId]!;
+  if (!bookmarkRoots(useBrowser.getState(), profileId)) useBrowser.getState().addBookmarkTree(profileId, []);
+  const roots = bookmarkRoots(useBrowser.getState(), profileId)!;
   const toolbar = root.children.filter((c) => c.role === "toolbar").flatMap((c) => c.children ?? []);
   const rest = root.children.filter((c) => c.role !== "toolbar");
   const other = rest.flatMap((c) => (c.role === "other" || !c.role ? (c.type === "folder" ? (c.children ?? []) : [c]) : [c]));
@@ -131,7 +133,7 @@ export async function importNative(
 
 function windowFor(profileId: string): string {
   const s = useBrowser.getState();
-  const regular = s.ui.focusOrder.find((id) => s.windows[id] && !s.windows[id]!.incognito) ?? s.windowOrder.find((id) => !s.windows[id]!.incognito);
+  const regular = s.ui.focusOrder.find((id) => s.windows[id] && s.windows[id]!.kind !== "private") ?? s.windowOrder.find((id) => s.windows[id]!.kind !== "private");
   return regular ?? s.createWindow({ profileId });
 }
 
@@ -169,11 +171,11 @@ export function importTabs(
       profileId,
       background: true,
       pinned: t.pinned,
-      snapshot: { title: t.title, customTitle: t.customTitle ?? null, ...(t.pinned && t.row ? { pinnedAsRow: true as const } : {}) },
+      snapshot: { title: t.title, customTitle: t.customTitle ?? null, ...(t.pinned && t.row ? { pin: ROW_PIN } : {}) },
       index: after ? next.windows[windowId]!.tabIds.indexOf(after) + 1 : undefined,
     });
     if (!id) continue;
-    next = { ...made, tabs: { ...made.tabs, [id]: { ...made.tabs[id]!, navigation: null } } };
+    next = { ...made, tabs: { ...made.tabs, [id]: { ...made.tabs[id]!, page: IDLE } } };
     if (!t.pinned) unpinned.push(id);
   }
   useBrowser.setState(next);
@@ -269,8 +271,8 @@ export function profileColorFor(hex: string | undefined): ProfileColor | undefin
 
 export function defaultTarget(): string {
   const s = useBrowser.getState();
-  const w = s.windows[s.ui.focusedWindowId ?? ""];
-  return w && !w.incognito ? w.profileId : s.settings.defaultProfileId;
+  const w = s.windows[focusedWindowOf(s) ?? ""];
+  return w && w.kind !== "private" ? w.profileId : s.settings.defaultProfileId;
 }
 
 export function profileNamed(name: string): string | undefined {

@@ -2,16 +2,10 @@ import { memo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, type IconPalette } from "../ui";
 import { useTheme } from "../ui/theme";
-import {
-  FIELD_GLASS_HOVER_OPACITY,
-  FIELD_GLASS_OPACITY,
-  GlassFill,
-  liquidGlass,
-} from "../ui/Glass";
 import { SIDEBAR_FIELD } from "./geometry";
 import { useSidebarTokens } from "./tokens";
 
-const FIELD_BORDER = StyleSheet.hairlineWidth * 2;
+const FIELD_BORDER = StyleSheet.hairlineWidth;
 export const FIELD_BUTTON = {
   box: 24,
   inset: (SIDEBAR_FIELD.height - 24) / 2,
@@ -24,17 +18,6 @@ export const SidebarFieldFill = memo(function SidebarFieldFill({
   hovered: boolean;
 }) {
   const theme = useTheme();
-  if (liquidGlass) {
-    return (
-      <GlassFill
-        tint={null}
-        opacity={hovered ? FIELD_GLASS_HOVER_OPACITY : FIELD_GLASS_OPACITY}
-        radius={SIDEBAR_FIELD.radius}
-        border={FIELD_BORDER}
-        fill={theme.pinnedResting}
-      />
-    );
-  }
   return (
     <View
       pointerEvents="none"

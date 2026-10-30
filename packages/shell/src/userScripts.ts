@@ -1,5 +1,4 @@
 import type { EventSubscription } from "expo-modules-core";
-import { nativeModule } from "./nativeModules";
 
 export type UserScriptsFolder = { token?: string } & (
   | { state: "empty" | "busy" | "pending"; generation?: number }
@@ -15,15 +14,3 @@ export type UserScriptsNative = {
   writeStatus(json: string): Promise<void>;
   addListener(name: "onChange", listener: () => void): EventSubscription;
 };
-
-const UserScripts = nativeModule("ArdiaUserScripts");
-
-export const watchUserScripts = (on: boolean) => UserScripts.watch(on);
-
-export const readUserScripts = () => UserScripts.read();
-
-export const readUserScriptsStatus = () => UserScripts.readStatus();
-
-export const writeUserScriptsStatus = (json: string) => UserScripts.writeStatus(json);
-
-export const onUserScriptsChange = (listener: () => void) => UserScripts.addListener("onChange", listener);

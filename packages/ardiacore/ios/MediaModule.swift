@@ -2,14 +2,11 @@ import ExpoModulesCore
 
 public class MediaModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaMedia")
-    Events("media")
+    Name(Self.calls.moduleName)
+    Events(Self.calls.domain)
+    Self.calls.forwardEvents(to: self)
 
-    OnCreate { EngineCall.listen("media", self) }
-
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      MediaModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
   }
 
   static func chooser(_ action: String) -> CallHandler {

@@ -49,7 +49,7 @@ export function ShortcutsPane() {
     const combo = await recordShortcut();
     setRecording(null);
     if (!combo) return;
-    const isDefault = sameShortcut(combo, { key: item.defaultKey, modifiers: item.defaultModifiers });
+    const isDefault = sameShortcut(combo, resolved.defaultsOf(item.id)[0] ?? NO_SHORTCUT);
     setShortcutOverride(item.id, isDefault ? null : combo);
   };
 
@@ -119,7 +119,7 @@ export function ShortcutsPane() {
                       remappable={item.remappable}
                       recording={recording === item.id}
                       onRecord={() => void record(item)}
-                      onClear={() => setShortcutOverride(item.id, item.defaultKey ? { key: "", modifiers: [] } : null)}
+                      onClear={() => setShortcutOverride(item.id, resolved.defaultsOf(item.id).length ? NO_SHORTCUT : null)}
                     />
                   </Row>
                 );

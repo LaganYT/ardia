@@ -13,7 +13,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
-#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac_cocoa.h"
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_menu_helper.h"
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_delegate.h"
@@ -33,6 +32,7 @@
 #include "ardia/core/ac_browser.h"
 #include "ardia/core/ac_extension_drop.h"
 #include "ardia/core/ac_launch_switches.h"
+#import "ardia/core/ac_page_view.h"
 #import "ardia/core/ardiacore_internal.h"
 #include "ui/events/event_constants.h"
 #include "ui/base/page_transition_types.h"
@@ -47,12 +47,7 @@ constexpr int kHostLast = IDC_CONTENT_CONTEXT_CUSTOM_FIRST + 999;
 constexpr int kOpenLinkInProfileItems = 100;
 
 ArdiaCoreTab* TabOf(content::WebContents* contents) {
-  BrowserWindowInterface* browser =
-      contents ? GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(contents)
-               : nullptr;
-  return browser && WindowHost::ForBrowser(browser)
-             ? TabBridge::GetOrCreate(contents)->tab()
-             : nil;
+  return WindowHost::ForContents(contents) ? TabBridge::GetOrCreate(contents)->tab() : nil;
 }
 
 NSArray* DescribeMenu(ui::MenuModel* model) {
@@ -320,6 +315,12 @@ class ACViewDelegate : public ChromeWebContentsViewDelegateViewsMac {
  public:
   explicit ACViewDelegate(content::WebContents* contents)
       : ChromeWebContentsViewDelegateViewsMac(contents), contents_(contents) {}
+
+  NSObject<RenderWidgetHostViewMacDelegate>* GetDelegateForHost(
+      content::RenderWidgetHost* render_widget_host,
+      bool is_popup) override {
+    return is_popup ? nil : CreatePageViewDelegate(render_widget_host);
+  }
 
   std::unique_ptr<RenderViewContextMenuBase> BuildMenu(
       content::RenderFrameHost& render_frame_host,

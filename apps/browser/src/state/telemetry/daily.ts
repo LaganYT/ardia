@@ -1,6 +1,7 @@
 import { readDocument, saveDocument } from "../../platform/documents";
 import { updaterState } from "../../platform/app";
-import { environment, uuidv4 } from "./client";
+import { environment } from "./client";
+import { uuidv4 } from "./ids";
 import { appInfo, mayPost, post } from "./transport";
 import { EVENTS_SCOPE, eventRecord, logsRequest, outcome } from "./otlp";
 import { parseSaved, versionedJson, unchanged, type Migrations } from "../../lib/savedDocument";

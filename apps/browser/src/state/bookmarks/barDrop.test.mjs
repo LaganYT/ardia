@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
+const { bookmarkRoots } = await import("./bookmarks.ts");
 const { insertTarget, linkTitle, moveTarget, roomOffsets, sameSpot, zoneHitAt } = await import("./barDrop.ts");
 const { beginBookmarkDrag, dropLinksAt, endBookmarkDrag, moveBookmarkDrag, registerDropZone, useBarDrag } = await import("./barDrag.ts");
 const { closeFolderMenus, openFolderMenu, useFolderMenus } = await import("./folderMenus.ts");
@@ -8,7 +9,8 @@ const { closeFolderMenus, openFolderMenu, useFolderMenus } = await import("./fol
 const S = () => useBrowser.getState();
 
 function seed() {
-  S().hydrate({ bookmarks: { nodes: {}, roots: {} } });
+  useBrowser.setState({ bookmarks: { nodes: {} } });
+  S().hydrate({});
   const add = (title, parentId) => S().addBookmark({ profileId: "default", url: `https://${title.toLowerCase()}.example/`, title, parentId });
   const a = add("A");
   const b = add("B");
@@ -17,7 +19,7 @@ function seed() {
   const x = add("X", f);
   const g = S().addBookmarkFolder({ profileId: "default", title: "G", parentId: f });
   const y = add("Y", g);
-  const roots = S().bookmarks.roots.default;
+  const roots = bookmarkRoots(S(), "default");
   return { a, b, c, f, g, x, y, bar: roots.bar, other: roots.other };
 }
 
@@ -150,7 +152,8 @@ test("a drop reaches Chrome's bookmarks as a move, so sync and the bookmark mana
   const stub = await import("../../test-native/index.ts");
   const { reloadBookmarks, startBookmarks } = await import("./engineSync.ts");
   const settle = () => new Promise((r) => setTimeout(r, 0));
-  S().hydrate({ bookmarks: { nodes: {}, roots: {} } });
+  useBrowser.setState({ bookmarks: { nodes: {} } });
+  S().hydrate({});
   stub.docs.clear();
   stub.bookmarkDbs.clear();
   const stop = startBookmarks();
@@ -161,7 +164,7 @@ test("a drop reaches Chrome's bookmarks as a move, so sync and the bookmark mana
   const f = S().addBookmarkFolder({ profileId: "default", title: "F" });
   const x = add("X", f);
   await settle();
-  const bar = S().bookmarks.roots.default.bar;
+  const bar = bookmarkRoots(S(), "default").bar;
   const zone = registerDropZone("sync", { windowId: "w", depth: 0, resolve: (px) => ({ spot: px < 10 ? { parentId: bar, slot: 0 } : { into: f } }) });
   beginBookmarkDrag({ windowId: "w", id: x, panel: f, x: 0, y: 0, grab: { x: 0, y: 0, width: 1, height: 1 }, sidebarEdge: 0 });
   endBookmarkDrag(true);

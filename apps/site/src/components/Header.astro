@@ -1,4 +1,5 @@
 ---
+import { base, pagePath } from "../data/site";
 import { Image } from "astro:assets";
 import icon from "../assets/app-icon.png";
 import DownloadButton from "./DownloadButton.astro";
@@ -15,12 +16,11 @@ interface Props {
   current?: Page;
 }
 const { home = "", current } = Astro.props;
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const pages: { page: Page; href: string; section?: string; label: string; menuLabel: string }[] = [
-  { page: "home", href: `${base}/`, section: "top", label: "Home", menuLabel: "Home" },
-  { page: "try", href: `${base}/try/`, section: "demo", label: "Demo", menuLabel: "Demo" },
-  { page: "benchmarks", href: `${base}/benchmarks/`, section: "speed", label: "Benchmarks", menuLabel: "Benchmarks" },
-  { page: "notes", href: `${base}/release-notes/`, label: "Notes", menuLabel: "Release notes" },
+  { page: "home", href: pagePath("home"), section: "top", label: "Home", menuLabel: "Home" },
+  { page: "try", href: pagePath("try"), section: "demo", label: "Demo", menuLabel: "Demo" },
+  { page: "benchmarks", href: pagePath("benchmarks"), section: "speed", label: "Benchmarks", menuLabel: "Benchmarks" },
+  { page: "notes", href: pagePath("notes"), label: "Notes", menuLabel: "Release notes" },
 ];
 ---
 

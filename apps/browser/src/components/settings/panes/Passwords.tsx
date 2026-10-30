@@ -2,7 +2,6 @@ import {
   deletePassword,
   exportPasswords,
   getNeverSavePasswordOrigins,
-  getPassword,
   listPasswords,
   setNeverSavePasswords,
   updatePassword,
@@ -17,7 +16,7 @@ import { Text, View } from "react-native";
 import { useTheme } from "../../ui/theme";
 import { currentEngineProfile } from "../../../state/browser/current";
 import { plural } from "../../../state/browser/model";
-import { importPasswordsCsv, unlockPasswordsFor, usePasswordsUnlocked } from "../../../state/site/savedPasswords";
+import { importPasswordsCsv, revealPassword, unlockPasswordsFor, usePasswordsUnlocked } from "../../../state/site/savedPasswords";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
 import { Favicon } from "../../favicon/Favicon";
 import { Group, ProfilePicker, Row, SectionHeader, SheetActions, SheetTitle, useSettingsProfile } from "../Form";
@@ -143,7 +142,13 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
   const [password, setPassword] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [editing, setEditing] = useState(false);
-  useEffect(() => void getPassword(profile, saved.origin, saved.username).catch(orWarn(null)).then(setPassword), []);
+  const unlocked = usePasswordsUnlocked(profile);
+  useEffect(() => void revealPassword(profile, saved.origin, saved.username).then(setPassword), []);
+  useEffect(() => {
+    if (unlocked) return;
+    setPassword(null);
+    closeSettingsSheet();
+  }, [unlocked]);
 
   const save = async () => {
     await updatePassword(profile, saved.origin, saved.username, {

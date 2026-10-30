@@ -30,6 +30,8 @@ const { useBrowser } = await import("../browser/store.ts");
 const lifecycle = await import("./tabLifecycle.ts");
 const { keepActiveSiteOf, memorySaverRequest } = await import("./memorySaver.ts");
 const { reloadRecentTabs } = await import("./recentTabWarmup.ts");
+const { loadSession: loadSavedSession } = await import("../session/persist.ts");
+const { docs: savedDocs } = await import("../../test-native/index.ts");
 
 const S = () => useBrowser.getState();
 const memorySaverCalls = () => globalThis.engineCalls.filter(([name]) => name === "memorySaver").map(([, request]) => request);
@@ -118,7 +120,11 @@ test("Battery Saver turned on by low battery stays on through 20%/21% readings u
 });
 
 test("Battery Saver's old switch: a choice and any off are kept, the old default moves to When battery is low", () => {
-  const hydrated = (settings) => (S().hydrate({ settings }), S().settings);
+  const hydrated = (settings) => {
+    savedDocs.set("session.json", JSON.stringify({ version: 7, profiles: S().profiles, profileOrder: S().profileOrder, settings, windows: [], windowOrder: [], tabs: [], groups: [], splits: [] }));
+    S().hydrate(loadSavedSession());
+    return { ...S().settings, chosen: S().settingsMeta.chosen };
+  };
   const untouched = hydrated({ batterySaver: true, showFullUrl: true, chosen: ["showFullUrl"], inferred: [] });
   assert.equal(untouched.batterySaverWhen, "lowBattery");
   assert.equal("batterySaver" in untouched, false);
@@ -140,7 +146,7 @@ test("a recent pin queued for warming at launch stays closed when the user close
   const w = S().createWindow({ url: "https://a.com" });
   const pin = S().newTab(w, { url: "https://p.com", background: true, pinned: true });
   const warm = S().newTab(w, { url: "https://q.com", background: true, pinned: true });
-  const cold = (id) => ({ ...S().tabs[id], navigation: null, lastActiveAt: Date.now() });
+  const cold = (id) => ({ ...S().tabs[id], page: { kind: "idle" }, lastActiveAt: Date.now() });
   useBrowser.setState({ tabs: { ...S().tabs, [pin]: cold(pin), [warm]: cold(warm) } });
   const sys = { physicalMemory: 32 * 2 ** 30, onBattery: false, lowPowerMode: false, memoryPressure: "normal" };
 
@@ -148,11 +154,11 @@ test("a recent pin queued for warming at launch stays closed when the user close
   assert.ok(queued.includes(pin) && queued.includes(warm));
   S().activate(pin);
   S().closeTab(pin);
-  assert.equal(S().tabs[pin].unloaded, true);
+  assert.equal(S().tabs[pin].page.kind, "asleep");
   t.mock.timers.tick(2000 * queued.length);
 
-  assert.equal(S().tabs[pin].unloaded, true, "the closed pin stays closed");
-  assert.equal(S().tabs[pin].navigation, null);
-  assert.ok(S().tabs[warm].navigation, "a pin left alone still warms up");
-  assert.equal(!!S().tabs[warm].unloaded, false);
+  assert.equal(S().tabs[pin].page.kind, "asleep", "the closed pin stays closed");
+  assert.equal(S().tabs[pin].page.nav, undefined);
+  assert.ok(S().tabs[warm].page.nav, "a pin left alone still warms up");
+  assert.notEqual(S().tabs[warm].page.kind, "asleep");
 });

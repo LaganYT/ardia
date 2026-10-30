@@ -2,7 +2,7 @@ import { chooseFromMenu, type ChoiceItem } from "../app/menuChoice";
 import { closeGroup, moveGroupToProfile, moveGroupToWindow } from "../browser/actions";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId, isIncognitoProfile } from "../browser/model";
-import { groupOf } from "../pins/organize";
+import { groupOf } from "../pins/tabGrouping";
 import { hasOwnGroupIcon } from "../groups/groupIcons";
 import type { GroupColor } from "../browser/types";
 import { GROUP_COLOR_ORDER, GROUP_COLORS, NEUTRAL_GROUP_SWATCH, NO_GROUP_COLOR_SWATCH, nearestGroupColor } from "../groups/tokens";

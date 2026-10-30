@@ -10,6 +10,7 @@ import { everySlowly } from "../../platform/slowTimers";
 import { webviews } from "../../platform/webviews";
 import { useLifecycle } from "./sleepingTabs";
 import { startMemorySaver } from "./memorySaver";
+import { focusedWindowOf } from "../windows/ui";
 
 export { useIsSleeping, useLifecycle } from "./sleepingTabs";
 
@@ -80,7 +81,7 @@ function updateBatterySaver(announce: boolean) {
   if (on === useLifecycle.getState().batterySaver) return;
   useLifecycle.setState({ batterySaver: on });
   syncBatterySaver();
-  const windowId = store().ui.focusedWindowId;
+  const windowId = focusedWindowOf(store());
   if (!announce || !windowId || !store().windows[windowId]) return;
   if (on) {
     showToast(windowId, "Battery Saver Mode Activated", "Busy background tabs are paused.", {

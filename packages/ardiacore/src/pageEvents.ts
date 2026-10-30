@@ -1,6 +1,6 @@
 import { toAppUrl } from "@ardia/core";
 import type { NativeSyntheticEvent } from "react-native";
-import type { ExternalAppRequest } from "./externalApps";
+import type { ExternalAppRequest } from "./permissions";
 import type {
   ActivateRequest,
   AutofillPrompt,

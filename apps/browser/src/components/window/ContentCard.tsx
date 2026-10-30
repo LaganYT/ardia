@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { startChromeTabs } from "../../state/tabs/chromeTabs";
 import { useIsSmallWindow, useSplitOf } from "../../state/windows/card";
@@ -23,8 +23,10 @@ import "../dev/devExpose";
 import { PeekOverlay } from "../peek/PeekOverlay";
 import { dismissPeek, startPeeks } from "../../state/peek/actions";
 import { usePaneLayout } from "./usePaneLayout";
+import { cardChrome } from "./paneChrome";
 import { TabPane } from "./TabPane";
 import { BesidePeekPopovers, PeekPage } from "./PageOverlays";
+import { splitTabIdsOf } from "../../state/splits/splits";
 
 export function ContentCard() {
   const windowId = useWindowId();
@@ -55,15 +57,19 @@ export function ContentCard() {
 
   const { mountedIds, panes, dividers, warmPanes, shown, lingerId, lingerRect } = usePaneLayout(windowId, activeId, split, fullscreenTab, size);
 
+  const chrome = useMemo(
+    () => cardChrome({ addressInSidebar, small, split: !!split, fullscreen: !!fullscreenTab, hideWhileScrolling }),
+    [addressInSidebar, small, !!split, !!fullscreenTab, hideWhileScrolling],
+  );
   const geometryFor = (rect: Rect | undefined): ToolbarGeometry => {
-    if (addressInSidebar || small) return NO_TOOLBAR;
+    if (chrome.kind === "none") return NO_TOOLBAR;
     const leading = !!rect && rect.x === 0 && rect.y === 0;
     return toolbarGeometry({ sidebarButton: leading && tabLayout === "sidebar" && showSidebarButton });
   };
 
   const focusedRect = activeId ? panes[activeId] : undefined;
   useEffect(() => {
-    if (!origin || !focusedRect || addressInSidebar || small) return;
+    if (!origin || !focusedRect || chrome.kind === "none") return;
     const g = geometryFor(focusedRect);
     const place = (extensionsWidth = 0) =>
       setUrlAnchor(windowId, {
@@ -72,7 +78,7 @@ export function ContentCard() {
         width: focusedRect.width - g.urlLeft - urlFieldRight(!!split, extensionsWidth, toolbarRow),
       });
     return watchToolbarExtensionsWidth(windowId, place);
-  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, addressInSidebar, !!split, showSidebarButton, toolbarRow]);
+  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, chrome.kind, !!split, showSidebarButton, toolbarRow]);
 
   useEffect(() => {
     if (origin && size.width > 0) setCardAnchor(windowId, { left: origin.x, top: origin.y, width: size.width, height: size.height });
@@ -94,7 +100,6 @@ export function ContentCard() {
     [windowId],
   );
 
-  const windowToolbar = !split && !fullscreenTab && !addressInSidebar && !small;
   const peekEdge = usePeekEdge(windowId);
   const activeRect = activeId ? panes[activeId] : undefined;
   const popoversOverCard = peekEdge !== undefined && addressInSidebar && !small && !fullscreenTab && origin && activeRect ? activeId : undefined;
@@ -123,17 +128,15 @@ export function ContentCard() {
               fullWidth={size.width}
               fullHeight={size.height}
               focused={tabId === activeId}
-              inActiveSplit={!!split?.tabIds.includes(tabId)}
+              inActiveSplit={!!splitTabIdsOf(split)?.includes(tabId)}
               fullscreen={tabId === fullscreenTab}
               covered={!!fullscreenTab && tabId !== fullscreenTab}
               geometry={geometryFor(rect)}
-              toolbar={!addressInSidebar && !small}
-              autoHide={hideWhileScrolling && !addressInSidebar && !small}
+              chrome={chrome}
               small={small}
               mounted={mountedIds.has(tabId)}
               warm={warmPanes[tabId]}
               barMode={barMode}
-              windowToolbar={windowToolbar}
               popovers={tabId !== popoversOverCard}
               peekShown={!!peekId}
               lingering={tabId === lingerId}
@@ -141,11 +144,11 @@ export function ContentCard() {
             />
           );
         })}
-      {size.width > 0 && windowToolbar && activeId && panes[activeId] && (
-        <WindowToolbar windowId={windowId} tabId={activeId} geometry={geometryFor(panes[activeId])} autoHide={hideWhileScrolling} />
+      {size.width > 0 && chrome.kind === "window" && activeId && panes[activeId] && (
+        <WindowToolbar windowId={windowId} tabId={activeId} geometry={geometryFor(panes[activeId])} autoHide={chrome.autoHide} />
       )}
       {size.width > 0 && !split && !fullscreenTab && (
-        <FrozenPage windowId={windowId} tabId={activeId} top={(!addressInSidebar && !small && !hideWhileScrolling ? toolbarRow.height : 0) + (barMode === "always" && !small && !hideWhileScrolling ? barHeight : 0)} />
+        <FrozenPage windowId={windowId} tabId={activeId} top={(chrome.kind !== "none" && !chrome.autoHide ? toolbarRow.height : 0) + (barMode === "always" && !small && !hideWhileScrolling ? barHeight : 0)} />
       )}
       {split && !fullscreenTab && <SplitDividers split={split} dividers={dividers} width={size.width} height={size.height} />}
       {size.width > 0 && popoversOverCard && origin && activeRect && peekEdge !== undefined && (

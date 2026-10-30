@@ -37,6 +37,12 @@ export function startDevHarness() {
     pageState: usePages,
     openSettings,
     favicons,
+    get bookmarks(): typeof import("../../state/bookmarks/bookmarks") {
+      return require("../../state/bookmarks/bookmarks");
+    },
+    get history(): typeof import("../../state/history/history") {
+      return require("../../state/history/history");
+    },
     get checkIn(): typeof import("../../state/onboarding/defaultBrowserCheckIn") {
       return require("../../state/onboarding/defaultBrowserCheckIn");
     },
@@ -73,14 +79,17 @@ export function startDevHarness() {
     get sidebarHover(): typeof import("../../state/sidebar/hover") & typeof import("../sidebar/hoverMotion") {
       return { ...require("../../state/sidebar/hover"), ...require("../sidebar/hoverMotion") };
     },
+    get windowLayout(): typeof import("../../state/windows/layout") {
+      return require("../../state/windows/layout");
+    },
     get toolbarAutoHide(): typeof import("../../state/windows/toolbarAutoHide") {
       return require("../../state/windows/toolbarAutoHide");
     },
     get hoverShift(): typeof import("../ui/hoverShift") {
       return require("../ui/hoverShift");
     },
-    get settingsSearch(): typeof import("../../state/settings/searchState") & typeof import("../settings/SettingsSearch") {
-      return { ...require("../../state/settings/searchState"), ...require("../settings/SettingsSearch") };
+    get settingsSearch(): typeof import("../../state/settings/searchState") & typeof import("../settings/SettingsSearch") & typeof import("../settings/anchors") {
+      return { ...require("../../state/settings/searchState"), ...require("../settings/SettingsSearch"), ...require("../settings/anchors") };
     },
     get settingsNav(): typeof import("../../state/settings/settingsWindows").useSettingsNav {
       return require("../../state/settings/settingsWindows").useSettingsNav;

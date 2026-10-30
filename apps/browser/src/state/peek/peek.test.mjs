@@ -3,14 +3,14 @@ import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
 const { isPeekTab, otherSitePeekTabIds, peekSourceOf, peekTabId } = await import("./peek.ts");
 const { PRESETS } = await import("../onboarding/presets.ts");
-const { DEFAULT_SETTINGS } = await import("../settings/settings.ts");
+const { DEFAULT_SETTINGS, splitLinkModifierOf } = await import("../settings/settings.ts");
 const peekModifierOf = (settings) => settings.peekModifier;
-const splitLinkModifierOf = (settings) => settings.splitLinkModifier;
 const { stripPlan } = await import("../tabs/liveTabs.ts");
 const { viewTabIds } = await import("../browser/model.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("../session/persist.ts");
 const { SYNCED_SETTINGS } = await import("../sync/settingsAdapter.ts");
 const stub = await import("../../test-native/index.ts");
+const { splitTabIdsOf } = await import("../splits/splits.ts");
 
 const S = () => useBrowser.getState();
 const PERSONAL = { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 };
@@ -36,7 +36,7 @@ test("a peek is a live tab of the window that stays out of its tab list", () => 
   assert.ok(isPeekTab(S(), id));
   assert.equal(peekSourceOf(S(), id), a);
   assert.equal(S().tabs[id].windowId, w);
-  assert.equal(S().tabs[id].navigation.url, "https://peek.example/page");
+  assert.equal(S().tabs[id].page.nav.url, "https://peek.example/page");
   assert.equal(S().tabs[id].openerId, a);
   assert.deepEqual(S().peeks[w].from, { x: 100, y: 200 });
   assert.deepEqual(order(w), before);
@@ -70,14 +70,14 @@ test("closing a peek throws its page away without a closed-tab entry", () => {
 test("Open as Tab keeps the same tab, puts it right after its source and shows it, without reloading", () => {
   const { w, a, b } = windowWithTabs();
   const id = S().openPeek(a, "https://peek.example/");
-  S().navigated(id, { url: "https://peek.example/next", title: "Next" }, { isLoading: false, canGoBack: true });
+  S().updateTab(id, { url: "https://peek.example/next", title: "Next" }, { isLoading: false, canGoBack: true });
   const moved = S().peekToTab(w);
   assert.equal(moved, id);
   assert.equal(S().peeks[w], undefined);
   assert.deepEqual(order(w).slice(0, 3), [a, id, b]);
   assert.equal(S().windows[w].activeTabIds.default, id);
   assert.equal(S().tabs[id].url, "https://peek.example/next");
-  assert.equal(S().tabs[id].navigation.url, "https://peek.example/next");
+  assert.equal(S().tabs[id].page.nav.url, "https://peek.example/next");
   assert.equal(S().live[id].canGoBack, true);
   assert.equal(S().tabs[id].openerId, a);
 });
@@ -101,7 +101,7 @@ test("Open in Split View: the same tab joins a split with its source", () => {
   const result = S().openSplitPane(w, { tabId: moved, anchorTabId: a, side: "right" });
   assert.ok(result.ok);
   const split = S().splits[result.splitId];
-  assert.deepEqual(split.tabIds, [a, id]);
+  assert.deepEqual(splitTabIdsOf(split), [a, id]);
   assert.equal(S().windows[w].activeTabIds.default, id);
   assert.ok(S().settings.cmdClickCreatesTabGroup);
   assert.ok(!Object.values(S().groups).some((g) => g.tabIds.includes(id) || g.tabIds.includes(a)));
@@ -118,9 +118,9 @@ test("switching tab closes the peek", () => {
 test("the source tab closing or navigating away closes the peek, a same-page hash change doesn't", () => {
   const { w, a } = windowWithTabs();
   let id = S().openPeek(a, "https://peek.example/");
-  S().navigated(a, { url: "https://a.example/#section", title: "A" }, {});
+  S().updateTab(a, { url: "https://a.example/#section", title: "A" }, {});
   assert.equal(peekTabId(S(), w), id);
-  S().navigated(a, { url: "https://a.example/elsewhere", title: "A" }, {});
+  S().updateTab(a, { url: "https://a.example/elsewhere", title: "A" }, {});
   assert.equal(S().peeks[w], undefined);
   assert.equal(S().tabs[id], undefined);
 
@@ -141,7 +141,7 @@ test("switching the window's profile closes the peek", () => {
 
 test("Little Ardia doesn't peek", () => {
   S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"] });
-  const small = S().createWindow({ small: true, url: "https://small.example/" });
+  const small = S().createWindow({ kind: "small", url: "https://small.example/" });
   const tab = S().windows[small].tabIds[0];
   assert.equal(S().openPeek(tab, "https://peek.example/"), "");
 });
@@ -178,7 +178,7 @@ test("the Peek modifier setting: ⇧-click by default, ⌥-click or Off, synced,
   assert.equal(peekModifierOf(S().settings), "shift");
   S().updateSettings({ peekModifier: "alt" });
   assert.equal(peekModifierOf(S().settings), "alt");
-  assert.ok(S().settings.chosen.includes("peekModifier"));
+  assert.ok(S().settingsMeta.chosen.includes("peekModifier"));
   S().updateSettings({ peekModifier: "off" });
   assert.equal(peekModifierOf(S().settings), "off");
   S().hydrate({ profiles: { default: PERSONAL }, profileOrder: ["default"], settings: { peekModifier: "control" } });
@@ -196,7 +196,7 @@ test("the split link setting: ⌥⇧-click by default or ⌥-click, synced, neve
   assert.ok(SYNCED_SETTINGS.includes("splitLinkModifier"));
   S().updateSettings({ splitLinkModifier: "alt" });
   assert.deepEqual(keys(), ["shift", "alt"]);
-  assert.ok(S().settings.chosen.includes("splitLinkModifier"));
+  assert.ok(S().settingsMeta.chosen.includes("splitLinkModifier"));
   S().updateSettings({ peekModifier: "alt" });
   assert.deepEqual(keys(), ["alt", "altShift"]);
   assert.equal(S().settings.splitLinkModifier, "altShift");
@@ -249,7 +249,7 @@ test("another window taking a shared pin's page closes the peek opened from it",
   const b = S().createWindow({ url: "https://b.example/" });
   const id = S().openPeek(mail, "https://peek.example/");
   assert.equal(peekTabId(S(), a), id);
-  const copy = viewTabIds(S(), b).find((t) => S().tabs[t].pinned);
+  const copy = viewTabIds(S(), b).find((t) => !!S().tabs[t].pin);
   S().activate(copy);
   assert.equal(S().tabs[mail].windowId, b);
   assert.equal(S().peeks[a], undefined);

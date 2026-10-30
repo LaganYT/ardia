@@ -13,7 +13,7 @@ const render = (items, depth = 0) =>
 const base = {
   place: "sidebar",
   hasIcon: false,
-  iconItems: [{ id: "icon:", title: "None", checked: true }],
+  iconItems: [{ value: { icon: null }, title: "None", checked: true }],
   colors: [
     { id: "plum", title: "Plum", swatch: "#C07A98" },
     { id: "blue", title: "Blue", swatch: "#4691C3" },

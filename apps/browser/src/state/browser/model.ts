@@ -1,7 +1,7 @@
 import { appUrlOrigin, displayHost } from "@ardia/core";
 import type { BrowserState } from "./store";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
-import type { BrowserWindow, Profile, Tab, TabGroup, TabLive, TabSnapshot } from "./types";
+import type { BrowserWindow, Navigation, Profile, Tab, TabGroup, TabLive, TabPin, TabSnapshot } from "./types";
 import { pinnedGroupMembers } from "./structure";
 
 
@@ -9,8 +9,11 @@ const launch = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 let counter = 0;
 export const newId = (prefix: string) => `${prefix}-${launch}-${(++counter).toString(36)}`;
 
+export const pinKeyOf = (x: { id: string; pinKey?: string }) => x.pinKey ?? x.id;
+export const familyKeyOf = (t: Pick<Tab, "profileId" | "id" | "pinKey">) => `${t.profileId}\u0001${pinKeyOf(t)}`;
+
 let navSeq = 0;
-export const navigationTo = (url: string, userInitiated = false) => ({ url, seq: ++navSeq, ...(userInitiated ? { userInitiated } : {}) });
+export const navigationTo = (url: string, userInitiated = false): Navigation => ({ url, seq: ++navSeq, ...(userInitiated ? { userInitiated } : {}) });
 
 export const incognitoProfileId = (windowId: string, originalProfileId: string) => `incognito:${windowId}@${originalProfileId}`;
 export const isIncognitoProfile = (profileId: string) => profileId.startsWith("incognito:");
@@ -50,7 +53,7 @@ export function makeTab(windowId: string, profileId: string, url = "", snapshot?
     url,
     title: "",
     favicon: null,
-    pinned: false,
+    pin: null,
     muted: false,
     zoom: 1,
     customTitle: null,
@@ -58,43 +61,41 @@ export function makeTab(windowId: string, profileId: string, url = "", snapshot?
     pinnedUrl: null,
     openerId: null,
     ...snapshot,
-    navigation: url ? navigationTo(url) : null,
+    page: url ? { kind: "loaded", nav: navigationTo(url) } : { kind: "idle" },
     createdAt: now,
     lastActiveAt: now,
   };
-}
-
-export function wake(t: Tab): Partial<Tab> {
-  return t.wakeAdoptId ? { adoptId: t.wakeAdoptId, wakeAdoptId: undefined, unloaded: undefined } : { navigation: navigationTo(t.url), unloaded: undefined };
 }
 
 export const snapshotTab = (t: Tab): TabSnapshot => ({
   url: t.url,
   title: t.title,
   favicon: t.favicon,
-  pinned: t.pinned,
+  pin: t.pin,
   muted: t.muted,
   zoom: t.zoom,
   customTitle: t.customTitle,
   customIcon: t.customIcon,
   pinnedUrl: t.pinnedUrl,
-  ...(isPinnedRow(t) ? { pinnedAsRow: true as const } : {}),
-  ...(t.tileFolder && pinSection(t) === "tile" ? { tileFolder: t.tileFolder } : {}),
   ...(t.engine ? { engine: t.engine } : {}),
   profileId: t.profileId,
 });
 
-export const isPinnedRow = (t: Pick<Tab, "pinned" | "pinnedAsRow"> | undefined): boolean => !!t?.pinned && !!t.pinnedAsRow;
+export const TILE_PIN: TabPin = { as: "tile" };
+export const ROW_PIN: TabPin = { as: "row" };
+export const isPinnedRow = (t: Pick<Tab, "pin"> | undefined): boolean => t?.pin?.as === "row";
+export const samePin = (a: TabPin | null | undefined, b: TabPin | null | undefined): boolean =>
+  (a?.as ?? null) === (b?.as ?? null) && (a?.as !== "tile" || a.folder === (b as Extract<TabPin, { as: "tile" }>).folder);
 export const pinnedSectionTitle = (s: BrowserState, tab: Pick<Tab, "profileId"> | undefined) => `Pinned in ${s.profiles[tab?.profileId ?? ""]?.name ?? "Profile"}`;
-export const togglePinTitle = (tab: Pick<Tab, "pinned" | "pinnedAsRow"> | undefined) => (isPinnedRow(tab) ? "Unpin" : tab?.pinned ? "Unpin from Top Apps" : "Move to Top Apps");
+export const togglePinTitle = (tab: Pick<Tab, "pin"> | undefined) => (isPinnedRow(tab) ? "Unpin" : tab?.pin ? "Unpin from Top Apps" : "Move to Top Apps");
 
 export type PinSection = "tile" | "row" | "none";
-export const pinSection = (t: Pick<Tab, "pinned" | "pinnedAsRow"> | undefined): PinSection => (!t?.pinned ? "none" : t.pinnedAsRow ? "row" : "tile");
+export const pinSection = (t: Pick<Tab, "pin"> | undefined): PinSection => t?.pin?.as ?? "none";
 
 export function inPinnedContainer(s: Pick<BrowserState, "tabs" | "groups">, id: string): boolean {
   const tab = s.tabs[id];
   if (!tab) return false;
-  return tab.pinned || pinnedGroupMembers(s.groups).has(id);
+  return !!tab.pin || pinnedGroupMembers(s.groups).has(id);
 }
 
 export function viewTabIds(s: BrowserState, windowId: string, profileId?: string): string[] {
@@ -104,11 +105,18 @@ export function viewTabIds(s: BrowserState, windowId: string, profileId?: string
   return w.tabIds.filter((id) => s.tabs[id]?.profileId === profile);
 }
 
+export function pinnedItemsRemain(s: BrowserState, id: string): boolean {
+  const w = s.windows[s.tabs[id]?.windowId ?? ""];
+  if (!w) return false;
+  if (viewTabIds(s, w.id).some((t) => t !== id && inPinnedContainer(s, t))) return true;
+  return Object.values(s.groups).some((g) => g.pinned && g.windowId === w.id && g.profileId === w.profileId);
+}
+
 export function closesWindow(s: BrowserState, id: string): boolean {
   const tab = s.tabs[id];
   const w = tab && s.windows[tab.windowId];
   if (!tab || !w || tab.profileId !== w.profileId || inPinnedContainer(s, id)) return false;
-  return viewTabIds(s, w.id).every((t) => t === id || s.tabs[t]!.unloaded);
+  return viewTabIds(s, w.id).every((t) => t === id || s.tabs[t]!.page.kind === "asleep");
 }
 
 export function activeTabId(s: BrowserState, windowId: string, profileId?: string): string | undefined {
@@ -128,7 +136,7 @@ export function profileFor(s: BrowserState, profileId: string): Profile {
 }
 
 export function bookmarkProfileId(s: BrowserState, window: BrowserWindow | undefined): string {
-  const id = window?.incognito ? window.originalProfileId : window?.profileId;
+  const id = window?.kind === "private" ? incognitoOriginal(window.profileId) : window?.profileId;
   return id && s.profiles[id] ? id : s.settings.defaultProfileId;
 }
 

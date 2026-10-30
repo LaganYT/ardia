@@ -3,12 +3,13 @@ import { useBrowser } from "../browser/store";
 import { activeTabId, tabTitle, viewTabIds } from "../browser/model";
 import { liveTabPlace } from "../live/rows";
 import type { Tab } from "../browser/types";
-import { cleanedTabsFor, groupLabel } from "../pins/organize";
+import { cleanedTabsFor } from "../pins/closedTabs";
+import { groupLabel } from "../pins/tabGrouping";
 import { canTidyPins } from "../pins/tidyPins";
 import { folderIn } from "../pins/tileFolders";
 import { useStoreWhile } from "../tabs/tabWatch";
 import { splitOf, splitRowPanes } from "../splits/splits";
-import { downloadsIn } from "../windows/ui";
+import { downloadsIn } from "../downloads/downloadsSlice";
 import { groupEntries, keptEntry, sidebarEntries } from "./entries";
 import { groupTabIds } from "./groupPanelRows";
 import { capture, type Capture } from "./listCapture";
@@ -26,7 +27,11 @@ export const useIsInSplit = (tabId: string) => useBrowser((s) => !!splitOf(s, ta
 export const useDragGhostLabel = (folderName: string | undefined, groupId: string | undefined, tab: Tab | undefined) =>
   useBrowser((s) => folderName ?? (groupId && s.groups[groupId] ? groupLabel(s, s.groups[groupId]!) : tab ? tabTitle(tab) : ""));
 
-export const useSplitRowKey = (splitId: string) => useBrowser((s) => splitRowPanes(s, s.splits[splitId]).join(","));
+const NO_TABS: string[] = [];
+
+export const useSplitRowPanes = (splitId: string) => useBrowser(useShallow((s) => splitRowPanes(s, s.splits[splitId])));
+
+export const useGroupTabIds = (groupId: string) => useBrowser(useShallow((s) => s.groups[groupId]?.tabIds ?? NO_TABS));
 
 export const useIconPickerCurrent = (kind: "tab" | "group" | "live" | "folder", id: string, liveIcon: string | null | undefined) =>
   useBrowser((s) => (kind === "tab" ? s.tabs[id]?.customIcon : kind === "live" ? liveIcon : s.groups[id]?.icon) ?? null);

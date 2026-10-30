@@ -12,6 +12,7 @@ import { useDragController, useDragItem, useFolderAway } from "./DragProvider";
 import { openTabMenu } from "../../state/sidebar/menus";
 import { TabIcon } from "./TabIcon";
 import { closeFolderPanel, closeFolderPanelOnPress, closeFolderPanelWhenWindowMoves, openTileFolderMenu, useFolderPanel } from "../../state/sidebar/tileFolderUi";
+import { tailKey } from "./dragModel";
 
 const PANEL_GAP = 6;
 const PANEL_PAD = 6;
@@ -32,7 +33,7 @@ function PanelBody({ windowId, folderId, anchor }: { windowId: string; folderId:
   const away = useFolderAway();
   const [root, setRoot] = useState<Frame | null>(null);
   const shown = useMemo(() => new Animated.Value(0), []);
-  const tail = useDragItem("tail:folder", { kind: "tail", tabIds: [], section: "folder" });
+  const tail = useDragItem(tailKey("folder"), { kind: "tail", tabIds: [], section: "folder" });
 
   useEffect(() => {
     controller?.root?.measureInWindow((x, y, w, h) => setRoot({ x, y, w, h }));

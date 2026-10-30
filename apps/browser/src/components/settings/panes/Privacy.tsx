@@ -107,7 +107,7 @@ export function PrivacyPane() {
 
       <SitePermissions />
       <AppLinks />
-      <SectionHeader anchor="privacy.commandScrollZoom" />
+      <SectionHeader anchor="privacy.commandScrollZoom" description={null} />
       <Group>
         <Row anchor="privacy.commandScrollZoom">
           <Toggle value={commandScrollZoom} onChange={(v) => updateSettings({ commandScrollZoom: v })} />

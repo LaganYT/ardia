@@ -26,55 +26,86 @@ public final class AppUpdater: NSObject {
   public func setChannel(_ channel: UpdateChannel) {
     UserDefaults.standard.set(channel.rawValue, forKey: Self.channelDefaultsKey)
     guard started else { return }
-    channelChangePending = true
+    apply(channelSwitch.switched())
     userDriver.leaveOffChannelUpdate()
-    applyChannelChangeWhenIdle()
+    refreshChannelSwitch()
   }
 
-  private func applyChannelChangeWhenIdle() {
-    guard channelChangePending, !updater.sessionInProgress else { return }
-    channelChangePending = false
-    if hasOffChannelStagedUpdate {
-      updater.checkForUpdatesInBackground()
-    } else if updater.automaticallyChecksForUpdates {
-      updater.resetUpdateCycle()
+  private var offChannelNightly: Bool { !allowedChannels.contains(UpdateChannel.nightly.rawValue) }
+
+  private func refreshChannelSwitch() {
+    guard channelSwitch.wantsFacts else { return }
+    guard !surveying else { return surveyAgain = true }
+    guard let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { return }
+    surveying = true
+    let offChannel = offChannelNightly
+    Self.files.async { [weak self] in
+      let survey = offChannel ? StagedSurvey.survey(caches: caches, bundleId: bundleId) : StagedSurvey.Survey()
+      DispatchQueue.main.async { self?.surveyed(survey, offChannel: offChannel) }
     }
   }
 
-  private var hasOffChannelStagedUpdate: Bool {
-    UpdatePrewarm.stagedApps().contains { staged in
-      let built = staged.bundle.object(forInfoDictionaryKey: "ACUpdateChannel") as? String
-      return built == "nightly" && !allowedChannels.contains("nightly")
+  private func surveyed(_ survey: StagedSurvey.Survey, offChannel: Bool) {
+    surveying = false
+    guard offChannel == offChannelNightly else {
+      surveyAgain = false
+      return refreshChannelSwitch()
+    }
+    let nightly = survey.found.filter { $0.channel == UpdateChannel.nightly.rawValue }.map(\.copy)
+    let sighting = ChannelSwitch.Sighting(copies: Set(nightly), residue: survey.residue, blind: survey.blind)
+    let busy = updater.sessionInProgress
+    let facts = channelSwitch.observe(sighting, busy: busy, automaticChecks: updater.automaticallyChecksForUpdates)
+    apply(channelSwitch.changed(facts))
+    if surveyAgain {
+      surveyAgain = false
+      refreshChannelSwitch()
     }
   }
+
+  private func apply(_ effects: [ChannelSwitch.Effect]) {
+    for effect in effects {
+      switch effect {
+      case .resume:
+        updater.checkForUpdatesInBackground()
+      case .resetCycle:
+        updater.resetUpdateCycle()
+      case .watch:
+        guard installationWatch == nil, let caches = StagedUpdateCopies.userCaches, let bundleId = Bundle.main.bundleIdentifier else { continue }
+        let folder = StagedSurvey.root(caches: caches, bundleId: bundleId)
+        let watch = FolderWatch(path: folder.path, queue: Self.files) {
+          DispatchQueue.main.async { [weak self] in self?.refreshChannelSwitch() }
+        }
+        installationWatch = watch
+        Self.files.async { watch.start() }
+      case .unwatch:
+        let watch = installationWatch
+        installationWatch = nil
+        Self.files.async { watch?.stop() }
+      case .release(let waits):
+        for wait in waits { quitWaits.removeValue(forKey: wait)?() }
+      case .log(let line):
+        NSLog("Ardia: \(line)")
+      }
+    }
+  }
+
+  private static let files = DispatchQueue(label: "com.ardia.updater.staged-copies", qos: .userInitiated)
 
   static let quitWaitLimit: TimeInterval = 8
-  static let quitWaitAfterIdle: TimeInterval = 1
 
-  public var holdsQuitForStagedUpdate: Bool {
-    started && hasOffChannelStagedUpdate
-  }
+  public var holdsQuitForStagedUpdate: Bool { started }
 
   public func dropOffChannelStagedUpdateBeforeQuit(then quit: @escaping () -> Void) {
-    guard holdsQuitForStagedUpdate else { return quit() }
-    applyChannelChangeWhenIdle()
-    let deadline = Date().addingTimeInterval(Self.quitWaitLimit)
-    var idleSince: Date?
-    func settle() {
-      guard hasOffChannelStagedUpdate else { return quit() }
-      let busy = channelChangePending || updater.sessionInProgress
-      idleSince = busy ? nil : idleSince ?? Date()
-      if let idleSince, Date().timeIntervalSince(idleSince) >= Self.quitWaitAfterIdle {
-        NSLog("Ardia: a staged nightly is still in Sparkle's cache with nothing left to drop it; quitting")
-        return quit()
-      }
-      if Date() >= deadline {
-        NSLog("Ardia: Sparkle didn't drop the staged nightly within \(Int(Self.quitWaitLimit)) s; quitting, and it may install")
-        return quit()
-      }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { settle() }
+    guard started else { return quit() }
+    lastQuitWait += 1
+    let wait = lastQuitWait
+    quitWaits[wait] = quit
+    channelSwitch.quit(wait)
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.quitWaitLimit) { [weak self] in
+      guard let self else { return }
+      self.apply(self.channelSwitch.deadline(wait))
     }
-    settle()
+    refreshChannelSwitch()
   }
 
   var allowedChannels: Set<String> {
@@ -128,12 +159,21 @@ public final class AppUpdater: NSObject {
     LaunchConfig.shared.isolated && LaunchConfig.shared.instance("updateFeed") == nil
   }
 
-  private lazy var userDriver = ChannelUserDriver(standard: SPUStandardUserDriver(hostBundle: .main, delegate: self)) { [unowned self] item in
-    item.channel.map { self.allowedChannels.contains($0) } ?? true
-  }
+  private lazy var userDriver = ChannelUserDriver(
+    standard: SPUStandardUserDriver(hostBundle: .main, delegate: self),
+    isOnChannel: { [unowned self] item in item.channel.map { self.allowedChannels.contains($0) } ?? true },
+    cancelledInstaller: { [unowned self] item in
+      self.apply(self.channelSwitch.installerCancelled(build: item.versionString))
+      self.refreshChannelSwitch()
+    })
   private lazy var updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: userDriver, delegate: self)
   private var deferredUpdate = false
-  private var channelChangePending = false
+  private var channelSwitch = ChannelSwitch()
+  private var installationWatch: FolderWatch?
+  private var quitWaits: [Int: () -> Void] = [:]
+  private var lastQuitWait = 0
+  private var surveying = false
+  private var surveyAgain = false
   private var sessionObservation: NSKeyValueObservation?
   private var firstCheckPending = false
   private var started = false
@@ -159,13 +199,11 @@ public final class AppUpdater: NSObject {
     }
     sessionObservation = updater.observe(\.sessionInProgress, options: [.new]) { [weak self] _, change in
       guard change.newValue == false else { return }
-      DispatchQueue.main.async { self?.applyChannelChangeWhenIdle() }
+      DispatchQueue.main.async { self?.refreshChannelSwitch() }
     }
     NotificationCenter.default.addObserver(self, selector: #selector(fullScreenChanged), name: NSWindow.didExitFullScreenNotification, object: nil)
-    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.leftoverSweepDelay) { StagedUpdateCopies.sweep() }
   }
 
-  static let leftoverSweepDelay: TimeInterval = 30
 
   @objc public func checkForUpdates(_ sender: Any?) {
     guard isConfigured else {

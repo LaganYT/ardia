@@ -92,6 +92,9 @@ Launch with `scripts/agent/ac launch <app> --data <dir> [--instance K=V] [--test
 - **`pipSelfTest`**: on the first PiP window, `close` / `backToTab` click Chrome's buttons (`pip-button-selftest.json`:
   closed, the prevents-activation tag, app activations), `hover` holds the controls up (`pip-hover.json`, `pipHover`),
   `style` runs the style self-test (`pip-selftest.json`), all in the data dir.
+  `tabs.devPictureInPictureAction` also takes `alpha:<0–1>` (WindowServer alpha, so a hidden run's PiP window can be
+  captured with `screencapture -l`), `mouse:<moved|down|up>:<x>,<y>` (top-left points), `stash` and `handle` (toggles
+  the stash handle's hover).
 - **`allowOcclusion`**: macOS posts no occlusion change for a window a band below normal, so minimizing and
   deminiaturizing post one for it (the page goes hidden as in a user's minimized window).
 - **The `ardia` command** (`cliHome`, `cliBinDir`, `cliUrl` (`file://` works), test `cliInstallScript`): a test
@@ -138,7 +141,7 @@ A Release or RC build starts the dev harness (`dev-eval.js`) only when `$ARDIA_D
 test instance (`src/state/app/perfProbe.ts`): `: > "$ARDIA_DATA_DIR/perf-probe"` before launch, as
 `.claude/skills/release/scripts/smoke.sh` does.
 
-Input and capture hooks on `ac.shell` (Debug builds only; a Release build answers nothing or `null`), for driving
+Input and capture hooks on `ac.shell`, from the `ArdiaDev` module (Debug builds only: in a Release build the module has no functions), for driving
 the app as a person would rather than writing a new helper:
 
 | Hook | What it does |
@@ -146,8 +149,8 @@ the app as a person would rather than writing a new helper:
 | `devKeyEquivalent(windowId, { key, keyCode, modifiers, focus, asKey })` | Presses one shortcut through the window's real key path |
 | `devTypeKeys(windowId, text, interval)` | Types text into the focused field, a key every `interval` ms; resolves with per-key timings |
 | `devMenuCommand(command, arg)` | Fires a menu command as if picked from the menu bar |
-| `ArdiaApp.devMenuItems(title, path?)` | A menu bar menu's items as AppKit has them, its own included (Window › Fill, Move & Resize…); `"tiling:<windowId>"` is the window's green-button menu and whether AppKit tiles it; `path` picks an item |
-| `ArdiaApp.devPostKey(windowId, key, keyCode, modifiers)` | Posts one key press to the app's event queue (`"menu:<key>"`: straight to the menu bar's key equivalents). System hot keys (fn-⌃ tiling) can't be posted |
+| `ArdiaDev.devMenuItems(title, path?)` | A menu bar menu's items as AppKit has them, its own included (Window › Fill, Move & Resize…); `"tiling:<windowId>"` is the window's green-button menu and whether AppKit tiles it; `path` picks an item |
+| `ArdiaDev.devPostKey(windowId, key, keyCode, modifiers)` | Posts one key press to the app's event queue (`"menu:<key>"`: straight to the menu bar's key equivalents). System hot keys (fn-⌃ tiling) can't be posted |
 | `devSnapshotWindow(windowId, path, transparent?)` | Writes the window's layers to a PNG in-process (works with the screen locked; `false` = failed) |
 | `devRenderIntroMusic(cues, path)` | Renders the onboarding intro music to an audio file, for a video's soundtrack |
 

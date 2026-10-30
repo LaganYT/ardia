@@ -171,7 +171,7 @@ const siteUrl = (site: string) => (/^[a-z][\w+.-]*:\/\//i.test(site) ? site : `h
 function KeepActiveSites({ sites }: { sites: string[] }) {
   return (
     <>
-      <SectionHeader anchor="advanced.keepActiveSites" action={<Button title="Add Site…" icon="plus" onPress={() => showSettingsSheet(<KeepActiveSiteSheet />)} />} />
+      <SectionHeader anchor="advanced.keepActiveSites" description={null} action={<Button title="Add Site…" icon="plus" onPress={() => showSettingsSheet(<KeepActiveSiteSheet />)} />} />
       <Group of="advanced.keepActiveSites">
         {sites.length === 0 ? (
           <Row title="No sites added" />

@@ -3,19 +3,17 @@ import ExpoModulesCore
 
 public class EngineModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaEngine")
-    Events("engine")
+    Name(Self.calls.moduleName)
+    Events(Self.calls.domain)
+    Self.calls.forwardEvents(to: self)
 
     OnCreate {
-      EngineCall.listen("engine", self)
       ArdiaEngineBridge.forwardEngineEvents()
       SystemState.shared.onChange = { state in ArdiaEvents.emit("engine.systemState", data: state) }
       SystemState.shared.start()
     }
 
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      EngineModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
 
     Function("inputIdleSeconds") { () -> Double in
       guard NSRunningApplication.current.isActive else { return 3600 }

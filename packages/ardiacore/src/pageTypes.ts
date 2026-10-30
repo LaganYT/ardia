@@ -1,5 +1,5 @@
 import type { ViewProps } from "react-native";
-import type { ExternalAppRequest } from "./externalApps";
+import type { ExternalAppRequest } from "./permissions";
 import type { FaviconImage } from "./favicons";
 import type { PageCookie, PageEngine } from "./webkit";
 

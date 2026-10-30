@@ -49,6 +49,14 @@ export const AUTO_EVENTS = [
 ] as const;
 export type TelemetryEvent = SiteEvent | (typeof AUTO_EVENTS)[number];
 
+export type ChosenDevice = "mac" | "phone";
+const DEVICE_BEFORE_ARDIA_DEVICE: Record<ChosenDevice, (prop: (key: string) => string) => string> = {
+  mac: (prop) => `${prop("$os")} = 'Mac OS X' AND ${prop("$device_type")} = 'Desktop'`,
+  phone: (prop) => `${prop("$device_type")} IN ('Mobile', 'Tablet')`,
+};
+export const visitorOnSql = (device: ChosenDevice, prop: (key: string) => string) =>
+  `if(${prop("ardia_device")} = '', ${DEVICE_BEFORE_ARDIA_DEVICE[device](prop)}, ${prop("ardia_device")} = '${device}')`;
+
 export const EXTENSION_FRAME = /^(chrome|moz|safari(-web)?)-extension:/;
 
 export function classifyNoise({ message, frames, userAgent }: { message: string; frames: { filename?: string }[]; userAgent: string }) {

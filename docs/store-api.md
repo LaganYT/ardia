@@ -44,7 +44,7 @@ store but through `storeAction` wrappers in each domain's `actions.ts` (`newTab`
   `placeTabs({ tileFolder })` sets it, `null` takes a tab out, and leaving it out keeps it. A tab that stops being a tile
   loses it, and a folder that drops to one tab dissolves (`settleTileFolders`, run with the pin mirror). It never reaches
   Chrome: members are plain pinned tabs there. Mirrored, parked and synced with the pins (`tilefold:` records).
-- UI: `ui.focusedWindowId`, `ui.focusOrder`, `ui.lastProfileId` (the regular profile of the window used last, a private
+- UI: `ui.focusOrder` (most recently focused first; `focusedWindowOf(s)` in state/windows/ui.ts reads the focused one), `ui.lastProfileId` (the regular profile of the window used last, a private
   window counting as its `originalProfileId`; saved with the session; read it through `lastActiveProfile(s)`, state/windows/small.ts),
   `ui.appDark`, `windowUi[windowId]` (command panel, downloads popover), `find[tabId]`.
 
@@ -143,7 +143,7 @@ listeners and subscriptions hear them together at the end, except a write that c
 ends its load, which is heard as it lands (a value that flips back within the flush stays visible to the listeners
 that act on it: translate's detection, the web store's script, a screen-share request going with its page).
 
-## Live tabs: Chrome's tab strips (state/tabs/chromeTabs.ts, state/tabs/liveTabs.ts, packages/ardiacore/src/tabStrip.ts)
+## Live tabs: Chrome's tab strips (state/tabs/chromeTabs.ts, state/tabs/liveTabs.ts, packages/ardiacore/src/tabs.ts)
 
 One writer per fact. The store owns the **workspace**: sidebar order, pins, groups, splits, Little Ardia, unloaded
 and parked tiles, and which tab each window shows per profile (`activeTabIds`). Chrome's `TabStripModel` owns

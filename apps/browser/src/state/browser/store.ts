@@ -2,24 +2,27 @@ import { create, type StateCreator } from "zustand";
 import { setHeldReportsTransaction } from "../../platform/nativeEvents";
 import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "../bookmarks/bookmarks";
 import { changedIds } from "./changes";
-import { createGroupsSlice, settleNesting, type GroupsSlice } from "../groups/groups";
+import { createGroupsSlice, type GroupsSlice } from "../groups/groups";
 import { createHistorySlice, type HistorySlice } from "../history/history";
 import { engineProfile, IDLE_LIVE, isIncognitoProfile } from "./model";
-import { createOrganizeSlice, forgetClosedPrivateWindows, keptCleanedTabs, keptDeletedGroups, livePinTable, notePinChoices, type OrganizeSlice } from "../pins/organize";
-import { createPeekSlice, settlePeeks, type PeekSlice } from "../peek/peek";
-import { settlePinHomes } from "../pins/pinHomes";
-import { mirrorPins } from "../pins/pinMirror";
-import { settleSharedPins } from "../pins/pinShare";
-import { mirrorTabs, pagesIntoSplits, unshareTabs } from "../tabs/tabShare";
-import { settleTileFolders } from "../pins/tileFolders";
+import { createOrganizeSlice, type OrganizeSlice } from "../pins/organize";
+import { createMuteSlice, type MuteSlice } from "../tabs/mute";
+import { createCleanUpSlice, type CleanUpSlice } from "../pins/tabCleanup";
+import { keptCleanedTabs, keptDeletedGroups } from "../pins/closedTabs";
+import { notePinChoices } from "../pins/pinChoices";
+import { createPeekSlice, type PeekSlice } from "../peek/peek";
+import { pinHome } from "../pins/pinHomes";
 import { createProfilesSlice, DEFAULT_PROFILE, type ProfilesSlice } from "../profiles/profiles";
-import { createSettingsSlice, migrateSavedSettings, parseSettings, type SettingsSlice } from "../settings/settings";
+import { engineProfiles } from "../profiles/engineProfiles";
+import { createSettingsSlice, parseSettings, parseSettingsMeta, type SettingsSlice } from "../settings/settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "../splits/splits";
 import { activated, apply } from "../tabs/tabs";
 import { createTabsSlice, type TabsSlice } from "../tabs/tabsSlice";
+import { settle, SettleDidNotConverge } from "./settle";
 import { transactional } from "./transaction";
 import type { BrowserWindow, Tab } from "./types";
 import { createUiSlice, type UiSlice } from "../windows/ui";
+import { createDownloadsSlice, type DownloadsSlice } from "../downloads/downloadsSlice";
 import { createWindowsSlice, type WindowsSlice } from "../windows/windows";
 import { orderSections } from "../groups/groups";
 
@@ -28,11 +31,14 @@ export type BrowserState = ProfilesSlice &
   TabsSlice &
   GroupsSlice &
   OrganizeSlice &
+  MuteSlice &
+  CleanUpSlice &
   SplitsSlice &
   HistorySlice &
   BookmarksSlice &
   SettingsSlice &
   UiSlice &
+  DownloadsSlice &
   PeekSlice & {
     hydrate(data: HydrateData): void;
   };
@@ -56,10 +62,9 @@ export type HydrateData = Partial<
     | "closedGroups"
     | "deletedGroups"
     | "cleanedTabs"
-    | "history"
-    | "bookmarks"
     | "downloads"
     | "settings"
+    | "settingsMeta"
   >
 > & { focusedWindowId?: string | null; lastProfileId?: string | null };
 
@@ -82,7 +87,17 @@ const pageMoved = (s: BrowserState, prev: BrowserState) => {
   if (s.live !== prev.live) for (const id of changedIds(s.live, prev.live)) if (!!s.live[id]?.isLoading !== !!prev.live[id]?.isLoading) return true;
   return false;
 };
-const transactions = transactional<BrowserState>(pageMoved);
+const reportsUnsettled = !__DEV__ && !(globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NODE_TEST_CONTEXT;
+const settled = (s: BrowserState, prev: BrowserState) => {
+  try {
+    return settle(s, prev);
+  } catch (error) {
+    if (!(error instanceof SettleDidNotConverge) || !reportsUnsettled) throw error;
+    console.error(error);
+    return error.settled;
+  }
+};
+const transactions = transactional<BrowserState>(pageMoved, settled);
 export const storeTransaction = transactions.transaction;
 setHeldReportsTransaction(storeTransaction);
 
@@ -92,11 +107,14 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
   ...createTabsSlice(...a),
   ...createGroupsSlice(...a),
   ...createOrganizeSlice(...a),
+  ...createMuteSlice(...a),
+  ...createCleanUpSlice(...a),
   ...createSplitsSlice(...a),
   ...createHistorySlice(...a),
   ...createBookmarksSlice(...a),
   ...createSettingsSlice(...a),
   ...createUiSlice(...a),
+  ...createDownloadsSlice(...a),
   ...createPeekSlice(...a),
 
   hydrate(data) {
@@ -107,7 +125,7 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
       ...(data.profileOrder ?? []).filter((id) => profiles[id]),
       ...Object.keys(profiles).filter((id) => !data.profileOrder?.includes(id)),
     ];
-    const settings = parseSettings(migrateSavedSettings(data.settings));
+    const settings = parseSettings(data.settings);
     if (!profiles[settings.defaultProfileId]) settings.defaultProfileId = profileOrder[0]!;
 
     notePinChoices(data.pinChoices ?? {});
@@ -116,15 +134,7 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
     const tabs: Record<string, Tab> = {};
     for (const t of Object.values(data.tabs ?? {})) {
       if (!rawWindows[t.windowId] || !profileOk(t.profileId)) continue;
-      const { adoptId: _, pageIn: _held, ...rest } = t;
-      const { pinnedAsRow, tileFolder, ...kept } = rest;
-      tabs[t.id] = {
-        ...kept,
-        ...(pinnedAsRow && kept.pinned ? { pinnedAsRow } : {}),
-        ...(tileFolder && kept.pinned && !pinnedAsRow ? { tileFolder } : {}),
-        navigation: null,
-        pinnedUrl: kept.pinnedUrl ?? (kept.pinned ? kept.url || null : null),
-      };
+      tabs[t.id] = { ...t, pinnedUrl: t.pinnedUrl ?? pinHome(t, !!t.pin) };
     }
     const windows: Record<string, BrowserWindow> = {};
     for (const w of Object.values(rawWindows)) {
@@ -145,8 +155,8 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
         .map((g) => [g.id, g]),
     );
     const splits = sanitizeSplits(data.splits ?? {}, tabs);
-    let bookmarks = data.bookmarks ?? s.bookmarks;
-    for (const id of profileOrder) bookmarks = ensureRoots({ profiles, bookmarks }, id)[0];
+    let bookmarks = s.bookmarks;
+    for (const engine of engineProfiles({ profiles })) bookmarks = ensureRoots(bookmarks, engine)[0];
     const focused = data.focusedWindowId && windows[data.focusedWindowId] ? data.focusedWindowId : (windowOrder.at(-1) ?? null);
 
     const engines = new Set(Object.keys(profiles).map((id) => engineProfile({ profiles }, id)));
@@ -156,6 +166,7 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
       profileOrder,
       orphanedProfileData: (data.orphanedProfileData ?? []).filter((e) => !engines.has(e)),
       settings,
+      settingsMeta: parseSettingsMeta(data.settingsMeta),
       windows,
       windowOrder,
       tabs,
@@ -174,17 +185,15 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
       privateSiteMutes: {},
       selection: {},
       selectionAnchors: {},
-      history: Object.fromEntries(Object.entries(data.history ?? {}).filter(([p]) => profiles[p])),
-      historyReady: Object.fromEntries(Object.keys(data.history ?? {}).filter((p) => profiles[p]).map((p) => [p, true as const])),
+      history: {},
       bookmarks,
-      bookmarksReady: Object.fromEntries(Object.keys(data.bookmarks?.roots ?? {}).filter((p) => profiles[p]).map((p) => [p, true as const])),
+      bookmarksReady: {},
       downloads: data.downloads ?? [],
       windowUi: {},
       peeks: {},
       find: {},
       ui: {
         ...s.ui,
-        focusedWindowId: focused,
         focusOrder: focused ? [focused, ...windowOrder.filter((id) => id !== focused).reverse()] : [],
         lastProfileId: data.lastProfileId && profiles[data.lastProfileId] ? data.lastProfileId : null,
       },
@@ -193,49 +202,6 @@ export const useBrowser = create<BrowserState>()(transactions.middleware(batched
     set(next);
   },
 }))));
-
-useBrowser.subscribe((s, prev) => {
-  const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
-  if (patch) useBrowser.setState(patch);
-});
-
-useBrowser.subscribe((s, prev) => {
-  if (s.groups === prev.groups && Object.values(s.windows).every((w) => w.tabIds === prev.windows[w.id]?.tabIds)) return;
-  const settled = settleNesting(s);
-  if (settled) useBrowser.setState(settled);
-});
-
-useBrowser.subscribe((s, prev) => {
-  if (s.pinChoices === prev.pinChoices && s.pinSync === prev.pinSync && s.tabs === prev.tabs && s.groups === prev.groups && s.parkedPins === prev.parkedPins && s.profiles === prev.profiles) return;
-  const pinChoices = livePinTable(s.pinChoices, s);
-  const pinSync = livePinTable(s.pinSync, s);
-  if (pinChoices !== s.pinChoices || pinSync !== s.pinSync) useBrowser.setState({ pinChoices, pinSync });
-});
-
-useBrowser.subscribe((s, prev) => {
-  const next = settlePeeks(s, prev);
-  if (next) useBrowser.setState(next);
-});
-
-let mirroring = 0;
-useBrowser.subscribe((s, prev) => {
-  if (mirroring > 3) return;
-  const homes = settlePinHomes(s, prev);
-  const start = homes ? { ...s, ...homes } : s;
-  const unshared = unshareTabs(start, prev) ?? pagesIntoSplits(start, prev) ?? (homes ? start : null);
-  const base = unshared ?? start;
-  const shared = settleSharedPins(base, prev) ?? unshared;
-  const settled = settleTileFolders(shared ?? base, prev) ?? shared;
-  const pinned = mirrorPins(settled ?? base, prev) ?? settled;
-  const next = mirrorTabs(pinned ?? base, prev) ?? pinned;
-  if (!next) return;
-  mirroring++;
-  try {
-    useBrowser.setState(next);
-  } finally {
-    mirroring--;
-  }
-});
 
 export type { CreateWindowOptions } from "../windows/windows";
 

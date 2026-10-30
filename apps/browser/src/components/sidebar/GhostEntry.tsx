@@ -5,7 +5,7 @@ import { FadeLabel, font, radius, Symbol, weight, withAlpha } from "../ui";
 import { layout, useTheme } from "../ui/theme";
 import type { BrowserState } from "../../state/browser/store";
 import type { GroupColor } from "../../state/browser/types";
-import { groupLabel } from "../../state/pins/organize";
+import { groupLabel } from "../../state/pins/tabGrouping";
 import { splitRowPanes } from "../../state/splits/splits";
 import { isSilenced } from "../../state/tabs/mute";
 import { groupEntries, keptEntry } from "../../state/sidebar/entries";
@@ -14,7 +14,7 @@ import { headGap } from "../../state/sidebar/geometry";
 import { pointerOnGroup, pointerOnRow } from "../../state/sidebar/hover";
 import { FaviconFallback, NewTabIcon } from "../favicon/Favicon";
 import { TabIcon } from "./TabIcon";
-import { SYMBOL_PREFIX } from "../../state/groups/groupIcons";
+import { iconSymbol } from "../../lib/customIcon";
 import { groupSurface, TABULAR_NUMS, useSidebarTokens } from "./tokens";
 import { entryKey, parseEntry } from "../../state/sidebar/entryKey";
 
@@ -84,7 +84,8 @@ export function ghostEntry(snapshot: EntrySnapshot, theme: ReturnType<typeof use
 }
 
 function ghostIcon(shot: TabShot, theme: ReturnType<typeof useTheme>) {
-  if (shot.icon?.startsWith(SYMBOL_PREFIX)) return <Symbol name={shot.icon.slice(SYMBOL_PREFIX.length)} size={13} weight="medium" color={theme.icon} style={{ width: 16, height: 16 }} />;
+  const symbol = iconSymbol(shot.icon);
+  if (symbol) return <Symbol name={symbol} size={13} weight="medium" color={theme.icon} style={{ width: 16, height: 16 }} />;
   if (shot.icon) return <TabIcon url={shot.url} icon={shot.icon} profileId={shot.profileId} />;
   if (shot.uri) return <Image source={{ uri: shot.uri }} style={{ width: 16, height: 16, borderRadius: 3, tintColor: shot.template && !theme.dark ? theme.textPrimary : undefined }} />;
   return shot.url ? <FaviconFallback url={shot.url} /> : <NewTabIcon />;

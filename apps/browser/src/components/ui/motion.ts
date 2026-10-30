@@ -28,6 +28,7 @@ export const duration = {
   toggle: 160,
   colorEase: 180,
   fade: 200,
+  dialogAppear: 170,
   slide: 220,
   resize: 260,
   slow: 300,

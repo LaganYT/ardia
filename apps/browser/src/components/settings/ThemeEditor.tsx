@@ -152,8 +152,7 @@ function ThemeStops({ theme, onChange }: { theme: ProfileTheme; onChange: (next:
         </Text>
         <View style={{ flexDirection: "row", gap: 4 }}>
           <Button
-            variant="pill"
-            tone="control"
+            variant="stepper"
             width={24}
             height={20}
             icon="minus"
@@ -165,8 +164,7 @@ function ThemeStops({ theme, onChange }: { theme: ProfileTheme; onChange: (next:
             }}
           />
           <Button
-            variant="pill"
-            tone="control"
+            variant="stepper"
             width={24}
             height={20}
             icon="plus"

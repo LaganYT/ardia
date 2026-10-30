@@ -15,6 +15,7 @@ import {
 import { webStoreExtensionId } from "@ardia/core";
 import { confirm } from "../../platform/dialogs";
 import { showMenu, type MenuItem } from "../../platform/menus";
+import type { ChoiceItem } from "../app/menuChoice";
 import { menuSections } from "../app/menuSections";
 import { openWindow } from "../browser/actions";
 import { webviews } from "../../platform/webviews";
@@ -23,7 +24,7 @@ import { engineProfile } from "../browser/model";
 import { shownPageId } from "../peek/peek";
 import { goToSettingsPane, openSettings, replaceSettingsPlace, settingsBack, useSettingsNav } from "../settings/settingsWindows";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";
-import { extensionProfile, extensionsProfileId, pageProfile, shownIn, useExtensions, windowExtensions, readyTabOf, type Anchor } from "./store";
+import { extensionPageUrl, extensionProfile, extensionsProfileId, pageProfile, shownIn, useExtensions, windowExtensions, readyTabOf, type Anchor } from "./store";
 import { errorText } from "../../lib/errors";
 
 export { reloadExtension } from "../../platform/extensions";
@@ -79,7 +80,7 @@ export function addFromWebStore(windowId: string, urlOrId: string, profile = ext
   }
   const url = `https://chromewebstore.google.com/detail/${id}`;
   const s = useBrowser.getState();
-  const target = s.windows[windowId] ? windowId : s.ui.focusOrder.find((w) => s.windows[w] && extensionProfile(s, w) === profile && !s.windows[w]!.incognito);
+  const target = s.windows[windowId] ? windowId : s.ui.focusOrder.find((w) => s.windows[w] && extensionProfile(s, w) === profile && s.windows[w]!.kind !== "private");
   if (target) s.newTab(target, { url });
   else openWindow({ profileId: s.profileOrder.find((p) => engineProfile(s, p) === profile), url });
 }
@@ -214,7 +215,7 @@ export async function activateExtension(
   const result = web ? await web.executeExtensionAction(ext.id) : null;
   const readyTab = readyTabOf(tabId);
   if (!state && result === "popup" && readyTab) state = (await extensionActionStates(readyTab, [ext.id]))[ext.id];
-  const url = state ? state.popup : ext.popup ? `chrome-extension://${ext.id}/${ext.popup.replace(/^\//, "")}` : "";
+  const url = state ? state.popup : ext.popup ? extensionPageUrl(ext.id, ext.popup) : "";
   if (result === "none") return;
   if (result === "sidePanel") return void toggleSidePanel(windowId, ext.id);
   if (!url) return void (result === null && showExtensionMenu(windowId, ext));
@@ -265,13 +266,15 @@ export async function showExtensionMenu(windowId: string, ext: InstalledExtensio
   }
 }
 
-export const EXTENSION_LIST_ITEMS: MenuItem[] = [
+export type ExtensionListChoice = "add" | "manage" | "pin";
+
+export const EXTENSION_LIST_ITEMS: ChoiceItem<never, ExtensionListChoice>[] = [
   { id: "add", title: "Add Extension…", symbol: "plus" },
   { id: "manage", title: "Manage Extensions…", symbol: "puzzlepiece.extension" },
   { id: "pin", title: "Pin Extensions…", symbol: "pin" },
 ];
 
-export function runExtensionListChoice(choice: string | null, windowId: string) {
+export function runExtensionListChoice(choice: ExtensionListChoice | null, windowId: string) {
   if (choice === "add") openWebStore(windowId);
   if (choice === "manage") openManageExtensions(windowId);
   if (choice === "pin") openPinDialog(windowId);

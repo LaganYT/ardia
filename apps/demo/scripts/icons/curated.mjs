@@ -1,4 +1,5 @@
 export const CURATED = {
+  "globe.americas.fill": "PF:globe-hemisphere-west-fill M:earth TF:world L:earth P:globe-hemisphere-west",
   "minus.circle": "L:circle-minus T:circle-minus P:minus-circle I:minus-circle M:minus-circle-outline",
   "pause": "L:pause T:player-pause P:pause I:pause M:pause",
   "play": "L:play T:player-play P:play I:play M:play-outline",

@@ -69,9 +69,9 @@ async function diagnoseHang() {
   const js = await app.eval("return Math.round(performance.now() / 1000)", { timeout: 3000 })
     .then((up) => `the JS thread answers (JS context up ${up} s, test up ${Math.round((Date.now() - startedAt) / 1000)} s)`, () => "the JS thread doesn't answer either");
   try { copyFileSync(join(data, "app.out.log"), join(scratch, "app.out.log")); } catch {}
-  const main = await app.eval("return globalThis.expo.modules.ArdiaApp.devFocusHandoffTrace().then(() => 1)", { timeout: 3000 })
+  const main = await app.eval("return globalThis.expo.modules.ArdiaDev.devFocusHandoffTrace().then(() => 1)", { timeout: 3000 })
     .then(() => "the main thread answers", () => "the main thread doesn't answer");
-  const presses = await app.eval("return globalThis.expo.modules.ArdiaApp.devKeyEquivalentTrace()", { timeout: 3000 }).catch(() => []);
+  const presses = await app.eval("return globalThis.expo.modules.ArdiaDev.devKeyEquivalentTrace()", { timeout: 3000 }).catch(() => []);
   const seen = await app.eval("return (globalThis.__devEvalLog ?? []).join(' | ')", { timeout: 3000 }).catch(() => null);
   const proxy = app.js?.pid ? (isAlive(app.js.pid) ? `Metro proxy ${app.js.pid} alive` : `Metro proxy ${app.js.pid} gone`) : "no Metro proxy";
   return `hang: ${js}; ${main}; ${proxy}; pending eval ${pending}, result file ${landed}, JS evals: ${seen}; native presses: ${presses.slice(-6).join(" / ")}; main-thread sample in ${sampleFile} (kept: ${scratch})`;
@@ -389,9 +389,9 @@ const devWindow = (action) =>
     return ac.engine.call("windows.list").then((ws) => ws.filter((w) => w.hasRoot).find((w) => {
       const r = w.frame.match(/[-\\d.]+/g).map(Number); return Math.abs(r[0] - f[0]) < 2 && Math.abs(r[2] - f[2]) < 2; }))
       .then((w) => ac.engine.call("windows.dev", { window: w.window, action: ${JSON.stringify(action)} }));`);
-const postKeys = (presses) => ac(`return globalThis.expo.modules.ArdiaApp.devPostKeys("w1", ${JSON.stringify(presses)});`);
+const postKeys = (presses) => ac(`return globalThis.expo.modules.ArdiaDev.devPostKeys("w1", ${JSON.stringify(presses)});`);
 const keyPress = (key, keyCode, after = 0, modifiers = ["command"]) => ({ key, keyCode, modifiers, after });
-const post = (key, keyCode, modifiers = ["command"]) => ac(`return globalThis.expo.modules.ArdiaApp.devPostKey("w1", ${JSON.stringify(key)}, ${keyCode}, ${JSON.stringify(modifiers)});`);
+const post = (key, keyCode, modifiers = ["command"]) => ac(`return globalThis.expo.modules.ArdiaDev.devPostKey("w1", ${JSON.stringify(key)}, ${keyCode}, ${JSON.stringify(modifiers)});`);
 const clipboard = {
   set: (text) => ac(`globalThis.nativeModuleProxy.Clipboard.setString(${JSON.stringify(text)}); return 1;`),
   get: () => ac(`return globalThis.nativeModuleProxy.Clipboard.getString();`),
@@ -499,7 +499,7 @@ for (const busy of [0, 120]) {
   await busyJsOnce(150);
   await postKeys([keyPress("l", 37), keyPress("\r", 36, 20, []), keyPress("v", 9, 20)]);
   await sleep(2000);
-  const trace = await ac(`return globalThis.expo.modules.ArdiaApp.devFocusHandoffTrace();`);
+  const trace = await ac(`return globalThis.expo.modules.ArdiaDev.devFocusHandoffTrace();`);
   const replayAt = trace.findLastIndex((l) => / replay /.test(l));
   const dropped = replayAt >= 0 && trace.slice(replayAt).some((l) => / drop /.test(l));
   const inPage = await pageField("f.value");
@@ -573,7 +573,7 @@ for (const [name, keys, busy, firstExpected] of handoffEnds) {
   await sleep(600);
   const second = await pastesIn(active);
   const responder = await devWindow("responder");
-  const trace = first === firstExpected ? "" : `; trace ${(await ac(`return globalThis.expo.modules.ArdiaApp.devFocusHandoffTrace();`)).slice(-8).join(" / ")}`;
+  const trace = first === firstExpected ? "" : `; trace ${(await ac(`return globalThis.expo.modules.ArdiaDev.devFocusHandoffTrace();`)).slice(-8).join(" / ")}`;
   check(`${name} then ⌘V: ${firstExpected ? "pastes once into the page that has the focus" : "dropped with a beep, nowhere else"}; the next ⌘V pastes`,
     first === firstExpected && strays === 0 && second === firstExpected + 1 && responder.startsWith("RenderWidgetHostViewCocoa"),
     `active ${active}, pastes ${first} then ${second}, elsewhere ${strays}, first responder ${responder}${trace}`);

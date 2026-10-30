@@ -44,7 +44,7 @@ class Mac {
   constructor(name) {
     this.name = name;
     S().hydrate({});
-    useBrowser.setState({ bookmarksReady: { default: true } });
+    useBrowser.setState({ bookmarksReady: { "": true } });
     this.browser = S();
     this.docs = new Map();
   }

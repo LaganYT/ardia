@@ -24,28 +24,16 @@ class AssociatedInterfaceRegistry;
 }
 
 namespace content {
-class NavigationThrottleRegistry;
 class RenderFrameHost;
-class RenderProcessHost;
 class WebContents;
 }
 
 namespace ardiacore {
 
-void SetPageScript(const std::string& script);
-const std::string& GetPageScript();
-void SendPageScript(content::RenderProcessHost* host);
-
-mojo::AssociatedRemote<mojom::ACPage> PageOf(content::RenderFrameHost* frame);
-
 void RegisterPageChannelBinders(content::RenderFrameHost& render_frame_host,
                                 blink::AssociatedInterfaceRegistry& registry);
-void AddAppSchemeThrottle(content::NavigationThrottleRegistry& registry);
-bool IsAppURL(const GURL& url);
-bool IsWebUIURL(const GURL& url);
-void ReportAppURLRequest(content::WebContents* contents,
-                         const GURL& url,
-                         bool user_gesture);
+
+mojo::AssociatedRemote<mojom::ACPage> PageOf(content::RenderFrameHost* frame);
 
 enum class PictureInPictureRoute { kNone, kMediaSession, kElement };
 

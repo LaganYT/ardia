@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { useTheme } from "../../ui/theme";
 import { useSettings, useTabLayout } from "../../../state/browser/hooks";
 import { chooseTabLayout, updateSettings } from "../../../state/settings/actions";
-import type { PeekModifier, Settings, SplitLinkModifier } from "../../../state/settings/settings";
+import { splitLinkModifierOf, type PeekModifier, type Settings, type SplitLinkModifier } from "../../../state/settings/settings";
 import { Box, Button, Checkbox, PopUp, Sheet, Text, TextField, type Option } from "../../ui";
 import { durationMinutes, durationParts, type DurationUnit } from "../../../lib/time";
 import { cleanUpChoices, CUSTOM_CLEAN_UP, DAILY_CLEAN_UP_MINUTES } from "../../../state/settings/cleanUpAfter";
@@ -28,7 +28,7 @@ const withNote = (anchor: SettingId, note: string | null) => (note ? `${setting(
 
 function LinkKeys() {
   const peekWith = useSettings((s) => s.peekModifier);
-  const splitWith = useSettings((s) => s.splitLinkModifier);
+  const splitWith = useSettings(splitLinkModifierOf);
   const peekOptions = PEEK_WITH.map((o) => (o.value === "alt" && splitWith === "alt" ? { ...o, title: "⌥-click (split view moves to ⌥⇧-click)" } : o));
   const splitOptions = SPLIT_WITH.map((o) => (o.value === "alt" && peekWith === "alt" ? { ...o, title: "⌥-click (Peek moves to ⇧-click)" } : o));
   return (
@@ -86,7 +86,6 @@ export function TabsPane() {
         <SettingToggle anchor="tabs.showSidebarButton" />
         <SettingToggle anchor="tabs.showClearButton" />
         <SettingToggle anchor="tabs.balancedTopApps" />
-        <SettingToggle anchor="tabs.pinnedTabIconRing" />
         <SettingToggle anchor="tabs.fadeUnloadedTabs" />
       </Group>
 

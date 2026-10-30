@@ -1,8 +1,7 @@
-import { getSiteSettings, resolveExternalApp, setSiteSetting } from "../../state/site/siteSettings";
+import { setSiteSetting } from "../../state/site/siteSettings";
+import { answerExternalApp } from "../../state/site/prompts";
 import {
-  type AutofillPrompt as ChromeAutofillPrompt,
   type AutofillPromptAnswer,
-  type PasswordPrompt as ChromePasswordPrompt,
   type PasswordPromptAnswer,
   patchPage,
   pageOf,
@@ -145,19 +144,6 @@ export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string
   );
 }
 
-export async function shouldPromptForPopups(profile: string, origin: string): Promise<boolean> {
-  try {
-    const settings = await getSiteSettings(profile, origin);
-    return settings.popups.isDefault;
-  } catch {
-    return true;
-  }
-}
-
-export function showPasswordPrompt(tabId: string, prompt: ChromePasswordPrompt) {
-  patchPage(tabId, { passwordPrompt: prompt.state === "saved" ? null : prompt });
-}
-
 export function PasswordPrompt({ tabId, right, top }: { tabId: string; right: number; top: number }) {
   const { well } = useSiteTokens();
   const prompt = usePage(tabId, (p) => p.passwordPrompt);
@@ -209,11 +195,6 @@ export function PasswordPrompt({ tabId, right, top }: { tabId: string; right: nu
       </View>
     </Popover>
   );
-}
-
-export function showAutofillPrompt(tabId: string, prompt: ChromeAutofillPrompt | null, id: number) {
-  if (prompt) patchPage(tabId, { autofillPrompt: prompt });
-  else if (pageOf(tabId).autofillPrompt?.id === id) patchPage(tabId, { autofillPrompt: null });
 }
 
 export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: number; top: number }) {
@@ -308,13 +289,6 @@ export function ExternalAppPrompt({ tabId, left, top }: { tabId: string; left: n
       </View>
     </Popover>
   );
-}
-
-export function answerExternalApp(tabId: string, open: boolean, remember = false) {
-  const request = pageOf(tabId).externalApp;
-  if (!request) return;
-  patchPage(tabId, { externalApp: null });
-  void resolveExternalApp(request.id, open, remember);
 }
 
 function UsernameChoice({ name, selected, onPress }: { name: string; selected: boolean; onPress: () => void }) {

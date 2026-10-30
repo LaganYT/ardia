@@ -33,7 +33,7 @@ const DEFS: ActionDef[] = [
   { command: "reopenClosedTab", keywords: ["undo close", "restore tab"] },
   {
     command: "togglePin",
-    title: ({ tab }) => (isPinnedRow(tab) ? "Unpin Tab" : tab?.pinned ? "Unpin from Top Apps" : "Move to Top Apps"),
+    title: ({ tab }) => (isPinnedRow(tab) ? "Unpin Tab" : tab?.pin ? "Unpin from Top Apps" : "Move to Top Apps"),
     keywords: ["pin", "unpin", "pin tab", "unpin tab", "remove from top apps", "favorites"],
     needs: "tab",
   },
@@ -71,7 +71,7 @@ const DEFS: ActionDef[] = [
   {
     command: "bookmarkPage",
     title: ({ s, windowId, tab }) =>
-      tab?.url && isBookmarked(s.bookmarks, bookmarkProfileId(s, s.windows[windowId]), tab.url) ? "Remove Bookmark" : "Bookmark This Page",
+      tab?.url && isBookmarked(s, bookmarkProfileId(s, s.windows[windowId]), tab.url) ? "Remove Bookmark" : "Bookmark This Page",
     keywords: ["add bookmark", "bookmark"],
     needs: page,
   },
@@ -109,7 +109,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
   for (const d of DEFS) {
     if (d.needs === "page" && !tab?.url) continue;
     if (d.needs === "tab" && !tab) continue;
-    if (d.needs === "profiles" && w?.incognito) continue;
+    if (d.needs === "profiles" && w?.kind === "private") continue;
     if (d.needs === "pins" && !canTidyPins(s, windowId)) continue;
     if (d.needs === "boostable" && !(tab && canBoostTab(tab.id))) continue;
     if (d.needs === "boosts" && !(tab && siteBoostsOfTab(tab.id).length)) continue;
@@ -124,7 +124,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
       ...(d.keywords ? { keywords: d.keywords } : {}),
     });
   }
-  if (w && !w.incognito) {
+  if (w && w.kind !== "private") {
     s.profileOrder.forEach((id) => {
       if (id === w.profileId) return;
       const name = s.profiles[id]?.name ?? "";

@@ -1,4 +1,4 @@
-import { previewBoost } from "../../platform/boosts";
+import { clearBoostPreview, previewBoost } from "../../platform/boosts";
 import { orWarn } from "../../lib/fallback";
 import { compileBoost } from "../boosts/compile";
 import type { Boost } from "../boosts/types";
@@ -8,6 +8,11 @@ const latest = new Map<string, Boost>();
 
 export function dropPendingPreview(tabId: string) {
   latest.delete(tabId);
+}
+
+export function endPreview(tabId: string) {
+  dropPendingPreview(tabId);
+  void Promise.resolve(clearBoostPreview(tabId)).catch(orWarn(undefined));
 }
 
 export function previewDraft(tabId: string, boost: Boost) {

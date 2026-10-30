@@ -48,14 +48,14 @@ function pendingClear(engine) {
   const restore = [recording(ardiaCoreNativeModules.ArdiaSites, engineCalls)];
   let answer;
   const asked = [];
-  const confirm = shellNativeModules.ArdiaShell.confirm;
-  shellNativeModules.ArdiaShell.confirm = (options) => (asked.push(options.title), new Promise((resolve) => (answer = (confirmed) => resolve({ confirmed, suppressed: false }))));
+  const confirm = shellNativeModules.ArdiaDialogs.confirm;
+  shellNativeModules.ArdiaDialogs.confirm = (options) => (asked.push(options.title), new Promise((resolve) => (answer = (confirmed) => resolve({ confirmed, suppressed: false }))));
   const done = clearSiteDataAfterConfirm(S().tabs[id], "https://a.com");
   const finish = async (confirmed) => {
     answer(confirmed);
     const result = await done;
     restore.forEach((undo) => undo());
-    shellNativeModules.ArdiaShell.confirm = confirm;
+    shellNativeModules.ArdiaDialogs.confirm = confirm;
     webviews.delete(id);
     return result;
   };
@@ -70,7 +70,7 @@ test("Clear Cookies and Site Data clears the site the confirmation named, also w
   assert.equal(stay.view.reloaded, 1, "the page reloads without its data");
 
   const moved = pendingClear();
-  S().navigated(moved.id, { url: "https://b.com/", title: "B" }, {});
+  S().updateTab(moved.id, { url: "https://b.com/", title: "B" }, {});
   await moved.finish(true);
   assert.deepEqual(moved.engineCalls.map((c) => c.origin), ["https://a.com"], "a.com, never b.com");
   assert.equal(moved.view.cleared, 0, "the page's own clear, which takes whatever it shows now, isn't used");
@@ -88,7 +88,7 @@ test("a WebKit tab clears the origin its confirmation named in its profile's sto
   assert.equal(stay.view.cleared, 0, "not the view's own clear, which reads the page's host when native runs it");
   assert.equal(stay.view.reloaded, 1);
   const moved = pendingClear("webkit");
-  S().navigated(moved.id, { url: "https://b.com/", title: "B" }, {});
+  S().updateTab(moved.id, { url: "https://b.com/", title: "B" }, {});
   await moved.finish(true);
   assert.deepEqual(moved.engineCalls.map((c) => [c.origin, c.engine]), [["https://a.com", "webkit"]]);
   assert.equal(moved.view.cleared, 0);

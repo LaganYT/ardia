@@ -20,6 +20,7 @@ import { isInternalTab } from "../pages/urls";
 import { afterFirstWindow } from "../../lib/afterFirstWindow";
 import { parseSaved, unchanged, versionedJson, type Migrations } from "../../lib/savedDocument";
 import { errorText } from "../../lib/errors";
+import { focusedWindowOf } from "../windows/ui";
 
 const DOC = "ardia-cli.json";
 const DOC_VERSION = 1;
@@ -128,7 +129,7 @@ export function describeCliInstall(state: Pick<CliState, "installing" | "step" |
 let sentActive: string | null | undefined;
 
 function shownReadyTab(s: BrowserState): string | null {
-  const windowId = s.ui.focusedWindowId;
+  const windowId = focusedWindowOf(s);
   const id = windowId ? shownPageId(s, windowId) : undefined;
   const tab = id ? s.tabs[id] : undefined;
   if (!id || !tab?.url || pageOf(id).newTabShown || !hasPage(tab) || isInternalTab(tab)) return null;

@@ -2,11 +2,9 @@ import ExpoModulesCore
 
 public class SitesModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaSites")
+    Name(Self.calls.moduleName)
 
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      SitesModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
   }
 
   enum EngineName: String {

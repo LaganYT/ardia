@@ -21,6 +21,7 @@ import { ROW_PITCH, ROWS_PER_FRAME, type SidebarGeometry } from "./pageLayout";
 import { NewTabRow } from "./NewTabRow";
 import { CleanUpUpsell } from "./CleanUpUpsell";
 import { SIDEBAR_TYPE, sidebarTokens } from "./tokens";
+import { tailKey } from "./dragModel";
 
 type PageRowsProps = {
   windowId: string;
@@ -92,7 +93,7 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
               estimate={(key) => entryHeightNow(windowId, profileId, key)}
             />
           ) : null}
-          <Tail id="tail:pinnedGroups" section="pinnedGroups" />
+          <Tail section="pinnedGroups" />
         </View>
         {divided ? (
           <ClearDivider
@@ -122,7 +123,7 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
               )
             : list.map((entry) => <SidebarEntry key={entry} entry={entry} section="list" motion={motion.motion(entry)} />)}
           {pending ? <View style={{ height: pending }} /> : null}
-          <Tail id="tail:list" section="list" />
+          <Tail section="list" />
           {!newTabButtonAtTop && inlineNewTab ? <NewTabRow windowId={windowId} shift={motion.tail} clip={motion.tailClip} /> : null}
         </View>
         {current ? <CleanUpUpsell windowId={windowId} shift={motion.tail} /> : null}
@@ -131,8 +132,8 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
   );
 }
 
-const Tail = memo(function Tail({ id, section }: { id: string; section: "list" | "pinnedRows" | "pinnedGroups" }) {
-  const { wrapper } = useDragItem(id, { kind: "tail", tabIds: [], section });
+const Tail = memo(function Tail({ section }: { section: "list" | "pinnedGroups" }) {
+  const { wrapper } = useDragItem(tailKey(section), { kind: "tail", tabIds: [], section });
   return <Animated.View ref={wrapper.ref} style={wrapper.style} />;
 });
 

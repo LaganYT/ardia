@@ -1,23 +1,23 @@
 import type { AddressInput, SavedAddress, SavedCard } from "../autofill";
 import type { EngineBookmark, BookmarkOp } from "../bookmarks";
-import type { ActionPopupRequest, CastDialog, CastRoute, DeviceChooser, SidePanelRequest } from "../chromeUI";
-import type { CliControlStatus } from "../cliControl";
+import type { CastDialog, CastRoute, DeviceChooser } from "../media";
 import type { ContentBlockerState, ContentBlockerStats } from "../contentBlocker";
 import type {
-  ActionState, ChromeSearchEngine, ExtensionActionChange, ExtensionInstallPrompt, ExtensionPackage, ExtensionsChange, ExtensionsSyncApplied, ExtensionsSyncApply,
-  ExtensionsSyncState, ExtensionSyncIntent, InstalledExtension, TabsRequest,
+  ActionPopupRequest, ActionState, ChromeSearchEngine, ExtensionActionChange, ExtensionInstallPrompt, ExtensionPackage, ExtensionsChange, ExtensionsSyncApplied, ExtensionsSyncApply,
+  ExtensionsSyncState, ExtensionSyncIntent, InstalledExtension, SidePanelRequest, TabsRequest,
 } from "../extensions";
 import type { HistoryChangedBatch, HistoryWireRow } from "../history";
-import type { ExternalAppAllowance } from "../externalApps";
 import type { FaviconImage } from "../favicons";
+import type { Download, DownloadSettings } from "../downloads";
 import type {
-  BrowsingDataType, ChromeWindowState, Download, DownloadSettings, EngineComponent, EngineInfo, EngineTask, LinkRoute,
-  PermissionRequest, PermissionResult, SystemState,
-} from "../module";
-import type { BatterySaverMode, BatterySaverState, MemorySaverRequest, MemorySaverState } from "../performance";
+  BatterySaverMode, BatterySaverState, CliControlStatus, EngineComponent, EngineInfo, EngineTask, MemorySaverRequest, MemorySaverState, SystemState,
+} from "../engineDomain";
+import type { ExternalAppAllowance, PermissionRequest, PermissionResult } from "../permissions";
+import type { BrowsingDataType } from "../profiles";
+import type { ChromeWindowState } from "../windows";
 import type { PasswordExportStatus, SavedPassword } from "../passwords";
 import type { ClearSiteDataResult, SiteSettings, SiteSettingType, SiteSettingValue } from "../siteSettings";
-import type { TabStripCommand, TabStripTransaction } from "../tabStrip";
+import type { LinkRoute, TabStripCommand, TabStripTransaction } from "../tabs";
 import type { PageCookie, PageEngine, PasskeyAccess } from "../webkit";
 import type { DisplayMediaSource } from "../pageTypes";
 
@@ -50,6 +50,8 @@ export type EngineCalls = {
   "tabs.devEvents": [{ tabId: string }, { name: string; payload: unknown }[]];
   "tabs.devWindowNumber": [{ tabId: string }, number];
   "tabs.devFocusPage": [{ tabId: string }, boolean];
+  "tabs.devPagePhase": [{ tabId: string }, "waiting" | "creating" | "attached" | "closing" | null];
+  "tabs.devClosePage": [{ tabId: string }, boolean];
   "tabs.devPictureInPicture": [{}, unknown[]];
   "tabs.devPictureInPictureAction": [{ action: string }, string];
   "tabs.devPostPeekMouseUp": [{ keys: string; tabId: string }, boolean];
@@ -182,6 +184,7 @@ export type EngineCalls = {
   "webKit.devStoreExists": [Profile, boolean];
   "webKit.devTouchStore": [Profile, boolean];
   "webKit.devHoldStore": [Profile, null];
+  "webKit.devParkedTransfers": [{}, string[]];
   "webKit.passkeyAccess": [{}, PasskeyAccess];
   "webKit.requestPasskeyAccess": [{}, PasskeyAccess];
 };

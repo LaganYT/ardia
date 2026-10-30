@@ -1,4 +1,5 @@
 import { showMenu } from "../../state/app/system";
+import { chooseFromMenu } from "../../state/app/menuChoice";
 import {
   translation,
   defaultTarget,
@@ -57,7 +58,7 @@ async function showTranslateMenu(tabId: string) {
   if (!tab) return;
   const target = translationTarget(tabId);
   const languages = await otherLanguages();
-  const choice = await showMenu(
+  const choice = await chooseFromMenu(
     translateMenuItems({
       translated: isTranslated(tabId),
       target: languageName(defaultTarget()),
@@ -67,7 +68,7 @@ async function showTranslateMenu(tabId: string) {
   );
   if (choice === "original") void revertPage(tabId);
   else if (choice === "translate") void translatePage(tabId);
-  else if (choice?.startsWith("language:")) void translatePage(tabId, choice.slice("language:".length));
+  else if (choice && typeof choice === "object") void translatePage(tabId, choice.language);
   else if (choice === "never") setNeverTranslate(tabId, !isNeverTranslated(tab.profileId, tab.url));
 }
 

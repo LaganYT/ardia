@@ -62,7 +62,7 @@ final class WebKitDownloads: NSObject, WKDownloadDelegate {
     ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
 
   private func resolveDestination(for profile: String, completion: @escaping (URL, Bool) -> Void) {
-    ArdiaEngineBridge.call("ac_downloads_settings", profile: WebKitHub.regularProfile(profile), args: nil) { [weak self] json in
+    ArdiaEngineBridge.call("ac_downloads_settings", profile: ArdiaHost.baseProfile(of: profile), args: nil) { [weak self] json in
       let parsed = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
       let folder = (parsed?["folder"] as? String).flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
       let ask = parsed?["askWhereToSave"] as? Bool ?? (folder == nil)

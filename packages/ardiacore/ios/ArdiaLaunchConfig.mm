@@ -30,6 +30,7 @@ NSArray<NSString *> *EngineTestKeys() {
   return @[
     @"keychain", @"keychainHiddenReads", @"keychainFail", @"safeStorageAnswer", @"reauth", @"bluetoothChooser",
     @"externalProtocolNoLaunch", @"externalProtocolApp", @"mediaRouteProvider", @"systemMediaPermission", @"applyProfileGate", @"contextMenu",
+    @"loginsDelay", @"loginsReleaseAfter",
   ];
 }
 
@@ -37,7 +38,7 @@ NSArray<NSString *> *AppTestKeys() {
   return @[
     @"pipSelfTest", @"pipHover", @"fakeFullScreenMs", @"shadersKeyWindow", @"peekStrict", @"importSecret", @"importDiaBundleId", @"importDiaWindows",
     @"cliInstallScript", @"legacySource", @"legacyCrashAfter", @"bangsUrl", @"onboarding", @"whatsNew", @"telemetry",
-    @"liveMock", @"calendarFixture", @"appMenu", @"appDialog",
+    @"liveMock", @"calendarFixture", @"appMenu", @"appDialog", @"loginsTimeout",
   ];
 }
 
@@ -177,6 +178,7 @@ BOOL SignedForDistribution() {
 @implementation ArdiaLaunchConfig {
   NSDictionary<NSString *, NSString *> *_instance;
   NSDictionary<NSString *, NSNumber *> *_switches;
+  NSDictionary<NSString *, NSNumber *> *_cachedSwitches;
   NSSet<NSString *> *_requestedAreas;
   NSDictionary<NSString *, NSString *> *_requestedTest;
   BOOL (^_signedForDistribution)(void);
@@ -242,8 +244,14 @@ BOOL SignedForDistribution() {
   return _switches[name];
 }
 
-- (BOOL)switchOn:(NSString *)name {
-  if (NSNumber *said = _switches[name]) return said.boolValue;
+- (NSDictionary<NSString *, NSNumber *> *)cachedSwitches {
+  @synchronized(self) {
+    if (!_cachedSwitches) _cachedSwitches = [self readCachedSwitches];
+    return _cachedSwitches;
+  }
+}
+
+- (NSDictionary<NSString *, NSNumber *> *)readCachedSwitches {
   NSString *directory = _dataDirectory;
   if (!directory) {
     NSString *support = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
@@ -251,9 +259,18 @@ BOOL SignedForDistribution() {
   }
   NSData *data = [NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:kSwitchesCacheDocument]];
   NSDictionary *cache = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-  NSDictionary *switches = [cache isKindOfClass:NSDictionary.class] && [cache[@"switches"] isKindOfClass:NSDictionary.class] ? cache[@"switches"] : nil;
-  id value = switches[name];
-  if ([value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return [value boolValue];
+  NSDictionary *saved = [cache isKindOfClass:NSDictionary.class] && [cache[@"switches"] isKindOfClass:NSDictionary.class] ? cache[@"switches"] : @{};
+  NSMutableDictionary<NSString *, NSNumber *> *switches = [NSMutableDictionary dictionary];
+  [saved enumerateKeysAndObjectsUsingBlock:^(id name, id value, BOOL *) {
+    if ([name isKindOfClass:NSString.class] && [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID())
+      switches[name] = value;
+  }];
+  return [switches copy];
+}
+
+- (BOOL)switchOn:(NSString *)name {
+  if (NSNumber *said = _switches[name]) return said.boolValue;
+  if (NSNumber *cached = self.cachedSwitches[name]) return cached.boolValue;
   return YES;
 }
 

@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useRef, useState } from "react";
 import { Animated, StyleSheet, View, type LayoutRectangle } from "react-native";
 import { currentBookmarks } from "../../state/browser/current";
-import { useBookmarkProfileId, useBookmarks } from "../../state/bookmarks/hooks";
+import { useBookmarkProfileId, useBookmarkRoots, useBookmarks } from "../../state/bookmarks/hooks";
 import { useSettings, useWindowId } from "../../state/browser/hooks";
 import { dropLinksAt, linkDragAt, linkDragLeft, registerDropZone, useBarDrag } from "../../state/bookmarks/barDrag";
 import { roomOffsets, zoneHitAt } from "../../state/bookmarks/barDrop";
@@ -51,8 +51,9 @@ function Bar({ windowId }: { windowId: string }) {
   const size = useBarSize();
   const zone = useId();
   const profileId = useBookmarkProfileId(windowId);
-  const barId = useBookmarks((b) => b.roots[profileId]?.bar);
-  const otherId = useBookmarks((b) => b.roots[profileId]?.other);
+  const roots = useBookmarkRoots(profileId);
+  const barId = roots?.bar;
+  const otherId = roots?.other;
   const children = useBookmarks((b) => {
     const bar = barId ? b.nodes[barId] : undefined;
     return bar?.kind === "folder" ? bar.children : EMPTY;

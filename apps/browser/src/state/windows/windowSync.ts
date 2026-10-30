@@ -3,6 +3,8 @@ import type { OpenWindowOptions, WindowEvent } from "../../platform/windows";
 import type { BrowserState } from "../browser/store";
 import { engineProfile, windowTitle } from "../browser/model";
 import { windowOpens } from "./windowOpenOrder";
+import { focusedWindowOf } from "./ui";
+import { adoptOf } from "../tabs/pageSession";
 
 export type LightsCenter = [number, number] | null;
 
@@ -29,7 +31,7 @@ export function createWindowSync({ port, getState, isQuitting, lightsCenter, isU
   const titles = new Map<string, string>();
 
   const releaseIfIncognito = (w: BrowserState["windows"][string] | undefined) => {
-    if (w?.incognito) port.releaseProfile(engineProfile(useBrowser.getState(), w.profileId));
+    if (w?.kind === "private") port.releaseProfile(engineProfile(useBrowser.getState(), w.profileId));
   };
 
   const listen = () =>
@@ -53,14 +55,14 @@ export function createWindowSync({ port, getState, isQuitting, lightsCenter, isU
       open.add(id);
       titles.set(id, windowTitle(s, id));
       const profile = engineProfile(s, w.profileId);
-      const claim = w.kind === "small" ? s.tabs[w.tabIds[0] ?? ""]?.adoptId : undefined;
+      const claim = w.kind === "small" ? adoptOf(s.tabs[w.tabIds[0] ?? ""]) : undefined;
       const small = w.kind === "small"
         ? { kind: "small" as const, size: s.settings.littleArdiaSize, ...(claim?.startsWith("link:") ? { claim } : {}), ...(w.linkPointer ? { pointer: w.linkPointer } : {}) }
         : {};
-      const made = w.chromeWindow ? { chromeWindow: w.chromeWindow } : {};
+      const made = w.kind !== "small" && w.chromeWindow ? { chromeWindow: w.chromeWindow } : {};
       port.open(
         id,
-        { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus, profile, ...(behind ? { behind } : {}), ...(prev && w.kind !== "small" && !w.chromeWindow ? { animated: true } : {}), ...small, ...made },
+        { frame: w.frame, incognito: w.kind === "private", title: titles.get(id), focus, profile, ...(behind ? { behind } : {}), ...(prev && w.kind !== "small" && !w.chromeWindow ? { animated: true } : {}), ...small, ...made },
         lightsCenter(s, id),
       );
     }
@@ -84,7 +86,7 @@ export function createWindowSync({ port, getState, isQuitting, lightsCenter, isU
   const restoreFullScreen = (s: BrowserState) => {
     const stamp = (id: string) => s.windows[id]?.fullScreen ?? 0;
     const ids = s.windowOrder.filter((id) => stamp(id) > 0).sort((a, b) => stamp(a) - stamp(b));
-    if (ids.length) port.restoreFullScreen(ids, s.ui.focusedWindowId);
+    if (ids.length) port.restoreFullScreen(ids, focusedWindowOf(s));
   };
 
   const sweep = () =>

@@ -64,6 +64,8 @@ What the build adds:
 | `chromium-neterror-game.patch` | "Where's the lamb?" replaces the dino: the offline page and chrome://game (below) |
 | `chromium-autofill-address-bubble-window.patch` | Chrome's offers to save or update an address (and its address sign-in promo) look the `AutofillBubbleHandler` up on the tab's Browser (`AutofillBubbleHandler::Get` on its unowned user data, as the save-card bubble already does), so they reach ArdiaCore's handler (`ACBrowserWindow::AttachBrowser` registers it): `FindBrowserWindowWithWebContents` finds BrowserViews only. It also carries CEF's `chrome_autofill_bubble_3796`: a tab with no window, or a handler that shows nothing, gets no address or card bubble instead of a crash |
 | `chromium-password-generation-local.patch` | Chrome offers "Suggest strong password" without password sync (`PasswordFeatureManagerImpl::IsGenerationEnabled`); generated passwords save to the profile's local store like any other. With no account, its popup says "Passwords are saved to Password Manager on this device." instead of "…saved to Google Password Manager for ." |
+| `chromium-password-string-erase.patch` | A `PasswordString` that holds its password as a plain `std::u16string` (Chrome's default; the process-bound backing, `kUseProcessBoundPasswordString`, is off) zeroes it, every byte of its capacity, when it is destroyed, cleared or assigned over. Chrome only cleared it, so every saved password a store read decrypted stayed in freed memory, including the results Chrome drops when their consumer has gone (`ConsumerReplyConverter`). Only `password_string.cc` changes, so the header and its ~180 includers don't rebuild. `ac_passwords_logins` (sync's read) refuses to run with the process-bound backing on, since that backing's buffer isn't erased |
+| `chromium-os-crypt-decrypt-erase.patch` | `os_crypt_async::Encryptor`'s decrypt paths zero their plaintext temporaries, every byte of their capacity, before they're freed: the byte vector a key decrypts into (`DecryptData`), the string `DecryptString` copies from (it now assigns straight into the caller's string, with no temporary in between) and `DecryptString16`'s UTF-8 copy. What they return is unchanged; cookies and every other os_crypt user decrypt exactly as before. Without it a saved password's plaintext stayed in freed memory twice on every read, before it reached the `PasswordString` that `chromium-password-string-erase.patch` erases |
 | `chromium-extension-installed-bubble.patch` | Chrome's "<extension> has been added" bubble (`ShowInfoDialog`): a window without Chrome's toolbar (every client window) gets it as a bubble under the top-right corner of the window, with a close button, closing on Esc and when the window is clicked. Chrome fell back to a browser-modal sheet there, with no buttons and no way to dismiss it. The app renames "Chromium" in Chrome's strings itself (`ac_strings.cc`) |
 | `chromium-tab-sharing-capturer.patch` | Each tab-sharing infobar remembers the frame whose capture it's for (`TabSharingInfoBarDelegate::capturer_id()`): a tab shows one infobar per share, and "Share this tab instead" moves only that share, never another call's |
 | `chromium-desktop-capture-window-audio.patch` | A desktop getUserMedia of a window gets audio when its `DesktopMediaID` carries a `window_audio_type` (`ShouldCaptureAudio` in `desktop_capture_access_handler.cc`, which allowed audio only for screens and tabs). Only ArdiaCore's grant sets one (`ac_desktop_capture.mm`, from the share picker's audio checkbox); Chrome's own picker sets it only for getDisplayMedia, which doesn't take this path, so extensions' desktopCapture is unchanged |
@@ -83,7 +85,7 @@ What the build adds:
 | `chromium-background-instance-no-default-handlers.patch` | A hidden test instance (`ARDIA_BACKGROUND=1`, which the app passes as `--ardia-background`; ArdiaCore sets `g_ardia_background_instance`) never sets a system default: `shell_integration`'s `SetAsDefaultBrowser`, `SetAsDefaultClientForScheme` and `SetAsDefaultHandlerForUTType` log a line and return false, so chrome://settings' Make default, the default browser prompt or a default protocol handler in a scratch copy can't change the owner's defaults. The app's own Set as Default goes through `ArdiaSystem.setAsDefaultBrowser`, which does the same |
 | `chromium-apple-passwords-host-skipped.patch` | Native messaging never starts Apple Passwords' helper (`com.apple.passwordmanager`): its launch constraint kills it at exec under any browser it doesn't know, which left a crash report at every connectNative of the iCloud Passwords extension once Helium's `scan-chrome-native-messaging-hosts` found its manifest in `/Library/Google/Chrome/NativeMessagingHosts`. `FindManifest` answers "Can't find native messaging host" for it |
 | `chromium-ardia-layer.patch` | The macOS `//chrome:chrome_dll` (ArdiaCore's framework) links `//chrome/browser/ardia` and exports its `ac_*` calls |
-| `chromium-pip-overlay-window.patch` | Chrome makes our `ArdiaVideoOverlayWindow` (`chrome/browser/ardia/pip/`, a `VideoOverlayWindowViews` subclass with its own buttons, progress bar, fade and bounds memory; the hook makes six methods virtual): Dia's video Picture in Picture window (measured in `docs/dia-spec.md` › Picture in Picture): nothing but the video at rest (the origin shows only with the controls); on hover a 35 % black scrim, back to tab (top left) and close (top right) as 28 pt rounded squares with 1 pt line glyphs, the origin centred in 13 pt, a bare play/pause glyph between bare ±10 s buttons (Chrome's, restyled; ← and → seek while they show), and a 5 pt progress bar that seeks; no previous/next track, time, mute, captions or minimize controls. The idle fade (Chrome's 2.5 s timer, rebound) skips while the pointer rests on a control. Controls fade in 200 ms ease-in-out. The window shows at once and fades out in Core Animation (100 ms from the close button, 70 ms otherwise, smooth while the tab is being shown), and a new window opens where the last one was left, sized to the new video and kept on screen (`ArdiaPictureInPicture.plist` in the user data dir). Closing it, by its button or by the window going away any other way, never pauses the video, which keeps playing in its tab, as in Dia and Arc (`OnCloseButtonPressed` asks for `kCloseWindowOnly`, and the subclass's `OnNativeWidgetDestroyed` tells the controller not to pause; Chrome paused whenever the window had a play/pause button) |
+| `chromium-pip-overlay-window.patch` | Chrome makes our `ArdiaVideoOverlayWindow` (`chrome/browser/ardia/pip/`, a `VideoOverlayWindowViews` subclass with its own buttons, progress bar, fade and bounds memory; the hook makes six methods virtual): Dia's video Picture in Picture window (measured in `docs/dia-spec.md` › Picture in Picture): nothing but the video at rest (the origin shows only with the controls); on hover a 35 % black scrim, back to tab (top left) and close (top right) as 28 pt rounded squares with 1 pt line glyphs (the window can hand each one's frame, hover, press and fade opacity to a presenter set on the NSWindow, `presentArdiaPictureInPictureControls:` in `ac_pip_mac.mm`; the app sets none since its liquid glass was removed (2026-10-29), so Chrome paints them), the origin centred in 13 pt, a bare play/pause glyph between bare ±10 s buttons (Chrome's, restyled; ← and → seek while they show), and a 5 pt progress bar that seeks; no previous/next track, time, mute, captions or minimize controls. The idle fade (Chrome's 2.5 s timer, rebound) skips while the pointer rests on a control. Controls fade in 200 ms ease-in-out. The window shows at once and fades out in Core Animation (100 ms from the close button, 70 ms otherwise, smooth while the tab is being shown), and a new window opens where the last one was left, sized to the new video and kept on screen (`ArdiaPictureInPicture.plist` in the user data dir). Closing it, by its button or by the window going away any other way, never pauses the video, which keeps playing in its tab, as in Dia and Arc (`OnCloseButtonPressed` asks for `kCloseWindowOnly`, and the subclass's `OnNativeWidgetDestroyed` tells the controller not to pause; Chrome paused whenever the window had a play/pause button) |
 
 Removed, all in git history:
 
@@ -119,13 +121,21 @@ and the next app build picks it up.
 Where our patches and `engine/ardiacore/apply.sh` let ArdiaCore decide something in Chrome's code, the hook is a
 `g_ardia_*` function pointer (or flag) defined in the Chrome file that calls it; unset, Chrome behaves as stock. Each is
 declared once, in `//ardia/core`'s `ac_hooks.h` (hooks in `chrome/`) or `ac_content_hooks.h` (in `content/`,
-`components/`, `extensions/`, which can't see `chrome/`'s headers), and both the Chrome file and ArdiaCore include that
-header (`// nogncheck`), so a signature that drifts on either side is a compile error, not a crash at the first call.
+`components/`, `extensions/`, which can't see `chrome/`'s headers), and both the Chrome file (`// nogncheck`) and our
+layers include that header (ArdiaCore and `chrome/browser/ardia` through the header-only `//ardia/core:hooks` target), so
+a signature that drifts on either side is a compile error, not a crash at the first call.
 (Some changes are direct instead: `ChromeMain` making ArdiaCore's main delegate, the PiP window factory, the `CHECK`s made tolerant of a Browser without a `BrowserView`.) ArdiaCore sets the patches' hooks as
 the browser process starts (`ACMainDelegate::PreSandboxStartup`), in `ardiacore::InstallChromeHooks` (`ac_seams.mm`: the
-password bubble, the extension install prompt, device choosers, the Cast dialog, extension side panels, hidden
-windows, windows without tabs, docked DevTools' changes, the WebContentsDelegate (H2), and `g_ardia_viewless_browsers`, which apply.sh's toast and
-reading mode hooks read); apply.sh's other hooks are set next to the code they serve.
+browser window factory (H1), reserved and global accelerators, history eligibility, DNR rule matches, the extension
+installed bubble, action popups, the password bubble, the extension install prompt, device choosers, the Cast dialog,
+extension side panels, hidden windows, windows without tabs, docked DevTools' changes, the WebContentsDelegate (H2), and
+`g_ardia_viewless_browsers`, which apply.sh's toast and reading mode hooks read). Hooks that need a started browser are
+installed in one list, `ardiacore::OnEngineStarted` (`ardiacore_engine.mm`: permission prompts, external apps, host
+visibility…). `ACMainDelegate` sets the process-wide switches (idle timers, storage, Bluetooth) in
+`BasicStartupComplete`, and a few hooks are still set by the object that serves them when it is first made
+(`ac_navigation_hold.mm`, `ac_tab_bridge.mm`'s opacity flag, the extension sync installer, the scripts policy, the CLI
+control server). A new hook goes into the patch series (`engine/patches/`), not into `apply.sh`, and is installed in
+`InstallChromeHooks` unless it needs a started browser.
 
 `apply.sh` also adds H1–H6, which stand where CEF's patches had seams ArdiaCore used. "Is this Browser ours" is
 `WindowHost::ForBrowser`: ArdiaCore's record (`ac_browser_window.h`), made when a Browser gets one of ArdiaCore's
@@ -275,14 +285,22 @@ framework.
   Chromium's at the same path (`apply.sh --paths` lists them; `series.py` counts each as the layer's). Only Chromium's
   logo, by Ardia's (`docs/brand/ardia/build.py` writes them): binary files a patch can't carry.
 - **How it links.** One `source_set("ardia")` in `chrome/browser/ardia/BUILD.gn`: add your
-  `ac_<domain>.{h,cc}` to its sources (sorted) and its deps.
+  `ac_<domain>.cc` to its sources (sorted) and its deps. A header only when another file calls into the domain
+  (`ac_tab_restore.h`, `ac_scripts_policy.h`, `ac_external_apps.h`…); exports need none. `//ardia/core` depends on
+  this target, so ArdiaCore includes those headers through a real GN dependency.
   `chromium-ardia-layer.patch` links it into the macOS `//chrome:chrome_dll` (ArdiaCore's framework), through the
   `:exports` group that exports `_ac_*`.
 - **The C surface.** `public/ac_engine.h` is plain C with the rules: exports are `ac_<domain>_<verb>`, all with one
   signature `void (const char* profile_dir, const char* args_json, ac_engine_reply_t reply, void* context)`; JSON
   object in, JSON object out (`{"error": …}` on failure); UI thread only; the reply runs once, maybe before the
   call returns. Events go to one sink (`ac_engine_set_event_sink`) as `("<domain>.<what>", {profile, …})`.
-  `ac_engine.h` has the C++ side (`AC_ENGINE_CALL`, `ardia::Call`, `Reply`, `Emit`).
+  `ac_engine.h` has the C++ side: `AC_PROFILE_CALL(name, …)` defines an export whose body gets a resolved
+  `ardia::Call& call` (args parsed, profile found; the export has already replied with the error otherwise),
+  `AC_ARGS_CALL(name)` one that needs no profile (`ardia::ArgsCall&`), and `Reply`, `Emit`, `StateFor`, `TabWithId`.
+  Args are cleansed when the call ends; a call taking secrets passes `ardia::Sensitive{max_bytes}` and reads them with
+  `call.SecretAt`. A private window's call carries `offTheRecord: true`; `Call` refuses it ("no engine data for a
+  private profile") unless the call passes `ardia::OffTheRecord::kAllow`, so the engine is the one place that says which
+  calls serve a private session.
 - **The app** includes `public/ac_engine.h` from the repo and looks each export up with `dlsym` on the engine
   framework (`packages/ardiacore/ios/ArdiaEngineBridge.mm`). A missing export aborts: the app bundles an engine it wasn't built
   for. Add each new call to `docs/ardiacore-parity.md`.

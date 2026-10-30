@@ -27,6 +27,7 @@ import { ThemeScope } from "./components/window/ThemeScope";
 import { useBrowser } from "./state/browser/store";
 import { useWindowId, WindowContext } from "./state/browser/hooks";
 import { provideProfileLooks } from "./state/profiles/looks";
+import { focusedWindowOf } from "./state/windows/ui";
 
 provideProfileLooks({ accent: profileAccent, theme: profileTheme });
 
@@ -41,7 +42,7 @@ export function WindowRoot({ windowId }: { windowId?: string }) {
 }
 
 function BrowserWindowRoot({ windowId }: { windowId?: string }) {
-  const id = useBrowser((s) => windowId ?? s.ui.focusedWindowId ?? s.windowOrder[0] ?? null);
+  const id = useBrowser((s) => windowId ?? focusedWindowOf(s) ?? s.windowOrder[0] ?? null);
   const exists = useBrowser((s) => !!id && !!s.windows[id]);
   const small = useBrowser((s) => !!id && s.windows[id]?.kind === "small");
   if (!id || !exists) return null;

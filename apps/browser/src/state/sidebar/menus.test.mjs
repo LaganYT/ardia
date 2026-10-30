@@ -10,6 +10,7 @@ const { openTabMenu } = await import("./tabMenu.ts");
 const { openMultiMenu } = await import("./multiTabMenu.ts");
 const { openGroupMenu } = await import("./groupMenu.ts");
 const { shellNativeModules } = await import("../../test-native/shell.ts");
+const { splitTabIdsOf } = await import("../splits/splits.ts");
 
 const S = () => useBrowser.getState();
 const MODS = [
@@ -231,7 +232,7 @@ test("a group's colour menu: None, Neutral, the site's colour, then the palette;
   const g = S().groupTabs([ids[1]], { name: "G", pinned: false });
   const items = groupMenuItems(S(), w, g);
   assert.deepEqual(sub(items, "color").slice(0, 4), ["None", "Neutral ✓", "Match Site Color (off)", "---"]);
-  const shell = shellNativeModules.ArdiaShell;
+  const shell = shellNativeModules.ArdiaMenus;
   const real = shell.showMenu;
   shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "color").children.find((it) => it.title === "Blue").id);
   try {
@@ -244,7 +245,7 @@ test("a group's colour menu: None, Neutral, the site's colour, then the palette;
 
 test("Move to Window › New Window moves the tab to a new window", async () => {
   const { w, ids } = windowWith("a", "b");
-  const shell = shellNativeModules.ArdiaShell;
+  const shell = shellNativeModules.ArdiaMenus;
   const real = shell.showMenu;
   shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "moveToWindow").children.at(-1).id);
   try {
@@ -293,7 +294,7 @@ test("a rebound key moves the hint with it, and an alternate keeps its pair only
 });
 
 async function whileMenuIsUp(open, meanwhile, choice) {
-  const shell = shellNativeModules.ArdiaShell;
+  const shell = shellNativeModules.ArdiaMenus;
   const real = shell.showMenu;
   let pick;
   shell.showMenu = () => new Promise((resolve) => (pick = resolve));
@@ -311,8 +312,8 @@ test("Open as Split splits the tab the menu was opened on, even if another tab c
   const { w, ids } = windowWith("a", "b", "c");
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[0]), "split");
   const split = Object.values(S().splits)[0];
-  assert.ok(split?.tabIds.includes(ids[2]), "c is a pane");
-  assert.equal(split.tabIds.includes(ids[0]), false, "a, now in front, is left alone");
+  assert.ok(splitTabIdsOf(split).includes(ids[2]), "c is a pane");
+  assert.equal(splitTabIdsOf(split).includes(ids[0]), false, "a, now in front, is left alone");
 });
 
 test("a tab menu whose tab left the window meanwhile does nothing, and Close Other Tabs spares tabs that left", async () => {
@@ -361,14 +362,14 @@ test("Open as Split on a tab that came to the front while its menu was up opens 
   S().activate(ids[0]);
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[2]), "split");
   const split = Object.values(S().splits)[0];
-  assert.ok(split?.tabIds.includes(ids[2]), "c is a pane");
-  assert.equal(split.tabIds.length, 2);
-  assert.equal(split.tabIds.includes(ids[0]), false, "a isn't");
+  assert.ok(splitTabIdsOf(split).includes(ids[2]), "c is a pane");
+  assert.equal(splitTabIdsOf(split).length, 2);
+  assert.equal(splitTabIdsOf(split).includes(ids[0]), false, "a isn't");
 });
 
 test("Open as Split on a background tab pairs it with the tab in front when the choice lands", async () => {
   const { w, ids } = windowWith("a", "b", "c");
   S().activate(ids[0]);
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[1]), "split");
-  assert.deepEqual(Object.values(S().splits).map((v) => [...v.tabIds].sort()), [[ids[1], ids[2]].sort()]);
+  assert.deepEqual(Object.values(S().splits).map((v) => [...splitTabIdsOf(v)].sort()), [[ids[1], ids[2]].sort()]);
 });

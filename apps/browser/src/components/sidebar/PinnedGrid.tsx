@@ -9,10 +9,10 @@ import { useIsSelected } from "../../state/pins/hooks";
 import { useMuteState } from "../../state/tabs/hooks";
 import { NextMeetingBadge } from "../live/NextMeetingBadge";
 import { returnShownTabToPinnedUrl } from "../../state/sidebar/actions";
-import { cellKey, PIN_SLOT } from "./dragModel";
+import { cellKey, PIN_SLOT, tailKey } from "./dragModel";
 import { useDragController, useDragging, useDragItem, useDropPins, useFolderTarget, usePinnedCount, usePinSlots } from "./DragProvider";
 import { FolderTile } from "./FolderTile";
-import { useRowHover } from "../../state/sidebar/hover";
+import { useRowHover } from "./hoverController";
 import { pinGrid, pinGridHeight, TILE_GAP } from "./pinZone";
 import { registerRow } from "../../state/sidebar/sidebarUi";
 import { FolderDropRing, TileFace, useSlotPosition } from "./TileFace";
@@ -27,7 +27,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth, flush = f
   const balanced = useSettings((st) => st.balancedTopApps);
   const { columns, width } = pinGrid(count, innerWidth, balanced);
   const slots = usePinSlots(tabs);
-  const tail = useDragItem("tail:tiles", { kind: "tail", tabIds: [], section: "tiles" });
+  const tail = useDragItem(tailKey("tiles"), { kind: "tail", tabIds: [], section: "tiles" });
   const dragging = useDragging();
   const addressBar = useAddressBarInSidebar();
   const topGap = listTopGap(addressBar);
@@ -92,7 +92,7 @@ export function PinSlotZone() {
   const theme = useTheme();
   const controller = useDragController();
   const active = useDropPins();
-  const gap = controller?.items.get("tail:tiles")?.gap;
+  const gap = controller?.items.get(tailKey("tiles"))?.gap;
   const opacity = gap ? gap.interpolate({ inputRange: [0, PIN_SLOT], outputRange: [0, 1], extrapolate: "clamp" }) : active ? 1 : 0;
   return (
     <>

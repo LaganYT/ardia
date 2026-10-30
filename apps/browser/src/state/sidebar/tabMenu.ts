@@ -4,7 +4,8 @@ import { closeTab, moveTabsToProfile, moveTabToWindow, openWindow, toggleMute, t
 import { muteState, muteSymbol, muteTitle, siteMuteTitle } from "../tabs/mute";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId, inPinnedContainer, isIncognitoProfile, pinnedSectionTitle, pinSection, togglePinTitle, viewTabIds, tabLayoutOf } from "../browser/model";
-import { awayFromPin, groupOf, selectedTabIds } from "../pins/organize";
+import { awayFromPin, selectedTabIds } from "../pins/organize";
+import { groupOf } from "../pins/tabGrouping";
 import { splitOf, splitRowPanes } from "../splits/splits";
 import { openSplitPane } from "../splits/actions";
 import type { Tab } from "../browser/types";
@@ -18,6 +19,7 @@ import { canSwitchEngine, ENGINE_NAMES, otherEngine, tabEngine } from "../engine
 import { bookmarkFolderItems, groupItems, hintWhen, profileItems, sections, windowItems, withAlternate, type Destination } from "./menuParts";
 import { openMultiMenu } from "./multiTabMenu";
 import { boostTarget, newBoostForTab } from "../boostUi/actions";
+import { tileFolderOf } from "../pins/tileFolders";
 
 const store = () => useBrowser.getState();
 
@@ -28,7 +30,7 @@ export function tabMenuFacts(s: BrowserState, windowId: string, tab: Tab) {
   const split = splitOf(s, tab.id);
   return {
     housed,
-    memberPin: housed && !tab.pinned,
+    memberPin: housed && !tab.pin,
     section: pinSection(tab),
     above: housed || index < 0 ? [] : list.slice(0, index),
     below: housed || index < 0 ? [] : list.slice(index + 1),
@@ -62,7 +64,7 @@ function pinItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
     : [];
   if (f.memberPin) return [{ id: "unpinMember", title: "Unpin", symbol: "pin.slash" }, ...editPinned];
   const row = f.section === "row";
-  const toggle: MenuItem = { id: "pin", title: togglePinTitle(tab), symbol: tab.pinned ? "pin.slash" : "pin", ...(row ? hintWhen(f.active, "togglePinnedRow", s) : {}) };
+  const toggle: MenuItem = { id: "pin", title: togglePinTitle(tab), symbol: tab.pin ? "pin.slash" : "pin", ...(row ? hintWhen(f.active, "togglePinnedRow", s) : {}) };
   const other: MenuItem[] = f.splitRow
     ? []
     : f.section === "none"
@@ -88,7 +90,7 @@ function openItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
 }
 
 function calendarItems(tab: Tab): MenuItem[] {
-  if (!tab.pinned || !isCalendarUrl(tab.pinnedUrl ?? tab.url)) return [];
+  if (!tab.pin || !isCalendarUrl(tab.pinnedUrl ?? tab.url)) return [];
   return [...(pinSection(tab) === "tile" ? dismissNowMenuItems() : []), calendarMenuItem()];
 }
 
@@ -98,7 +100,7 @@ function organiseItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): T
   const groups = f.section === "tile" ? [] : groupItems(s, windowId, f.group?.id);
   const grouping: TabMenuItem[] =
     f.section === "tile"
-      ? [tab.tileFolder ? { id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" } : { id: "newFolder", title: "New Folder…", symbol: "folder.badge.plus" }]
+      ? [tileFolderOf(tab) ? { id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" } : { id: "newFolder", title: "New Folder…", symbol: "folder.badge.plus" }]
       : [
           ...(f.memberPin
             ? []

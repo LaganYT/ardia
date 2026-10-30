@@ -8,13 +8,15 @@ import {
   isIncognitoProfile,
   navigationTo,
   newId,
+  pinKeyOf,
   resolveWindowId,
   snapshotTab,
   viewTabIds,
   without,
 } from "../browser/model";
-import { nextPinChoice, placeChoiceKey, restoringGroup } from "../pins/organize";
-import { hasLoadedPage } from "../tabs/pageSession";
+import { restoringGroup } from "../pins/closedTabs";
+import { markPinned } from "../pins/pinChoices";
+import { hasLoadedPage, hasPage, IDLE, isAsleep, loadedPage, withWake } from "../tabs/pageSession";
 import { adoptParkedPins, parkWindowPins } from "../pins/parkedPins";
 import { settleMovedPins } from "../pins/pinMirror";
 import { returnSharedPages } from "../pins/pinShare";
@@ -23,20 +25,20 @@ import { pendingRestore } from "../tabs/adoptIds";
 import { sharedElsewhere, sharesTabs } from "../tabs/tabShare";
 import { isSmall, isSmallWindow, lastActiveProfile, linkProfileOf, mainWindowFor } from "./small";
 import { activated, apply, removeTabs, withNewTab } from "../tabs/tabs";
-import type { BrowserWindow, ClosedWindow, Frame, ParkedPins, Tab } from "../browser/types";
+import type { AdoptId, BrowserWindow, ClosedWindow, Frame, ParkedPins, Tab, WindowKind } from "../browser/types";
 import { emptyWindow, smallWindow, withWindow } from "./newWindow";
 import { lastClosedEntry, lastClosedTab, restoreTab, restoreWindow } from "./reopenClosed";
 import { groupTree, regrouped, splitsWithin, withSplitsBack } from "./groupMoves";
 import { orderSections } from "../groups/groups";
+import { focusedWindowOf } from "./ui";
 
 export type CreateWindowOptions = {
   profileId?: string;
-  incognito?: boolean;
+  kind?: WindowKind;
   url?: string;
-  adoptId?: string;
+  adoptId?: AdoptId;
   tabIds?: string[];
   frame?: Frame | null;
-  small?: boolean;
   linkPointer?: [number, number];
   background?: boolean;
   chromeWindow?: string;
@@ -67,7 +69,7 @@ export type WindowsSlice = {
 
 function lastProfileAfterClosing(s: BrowserState, id: string): string | null {
   const w = s.windows[id];
-  if (!w || w.incognito || s.ui.focusedWindowId !== id) return s.ui.lastProfileId;
+  if (!w || w.kind === "private" || focusedWindowOf(s) !== id) return s.ui.lastProfileId;
   const next = s.ui.focusOrder.find((f) => f !== id && linkProfileOf(s, s.windows[f]));
   return linkProfileOf(s, next ? s.windows[next] : undefined) ?? s.ui.lastProfileId;
 }
@@ -77,7 +79,7 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
   if (!target || isSmallWindow(target)) return s;
   const moving = ids
     .map((id) => s.tabs[id])
-    .filter((t): t is Tab => !!t && t.windowId !== targetId && !isIncognitoProfile(t.profileId) && !target.incognito);
+    .filter((t): t is Tab => !!t && t.windowId !== targetId && !isIncognitoProfile(t.profileId) && target.kind !== "private");
   if (!moving.length) return s;
 
   const sources = new Set(moving.map((t) => t.windowId));
@@ -87,9 +89,9 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
   const live = { ...next.live };
   const activeTabIds = { ...w.activeTabIds };
   for (const tab of moving) {
-    const { adoptId: _adopted, ...t } = tab;
+    const t = tab;
     const loaded = hasLoadedPage(tab);
-    tabs[t.id] = { ...t, windowId: targetId, navigation: loaded ? navigationTo(t.url) : null };
+    tabs[t.id] = { ...t, windowId: targetId, page: loaded ? loadedPage(navigationTo(t.url)) : hasPage(tab) ? IDLE : tab.page };
     live[t.id] = IDLE_LIVE;
     activeTabIds[t.profileId] ??= t.id;
   }
@@ -111,16 +113,12 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
 function intoProfile(s: BrowserState, tabId: string, profileId: string): BrowserState {
   const tab = s.tabs[tabId];
   const w = tab && s.windows[tab.windowId];
-  if (!tab || !w || w.incognito || !s.profiles[profileId] || tab.profileId === profileId) return s;
+  if (!tab || !w || w.kind === "private" || !s.profiles[profileId] || tab.profileId === profileId) return s;
   const next = removeTabs(s, [tabId], false);
   const base = next.windows[w.id] ?? { ...w, tabIds: [], activeTabIds: {} };
   const loaded = hasLoadedPage(tab);
-  const { adoptId: _, wakeAdoptId: _w, ...rest } = tab;
-  const moved: Tab = { ...rest, profileId, navigation: loaded ? navigationTo(tab.url) : null, lastActiveAt: Date.now() };
-  const movedKey = moved.pinKey ?? moved.id;
-  const pinChoices = tab.pinned
-    ? { ...next.pinChoices, [profileId]: { ...next.pinChoices[profileId], [movedKey]: nextPinChoice(), [placeChoiceKey(movedKey)]: nextPinChoice() } }
-    : next.pinChoices;
+  const moved: Tab = { ...tab, profileId, page: loaded ? loadedPage(navigationTo(tab.url)) : hasPage(tab) ? IDLE : withWake(tab.page, undefined), lastActiveAt: Date.now() };
+  const pinChoices = tab.pin ? markPinned(next.pinChoices, profileId, { tabs: [pinKeyOf(moved)], placed: [pinKeyOf(moved)] }) : next.pinChoices;
   const tabs = { ...next.tabs, [tabId]: moved };
   const index = Math.min(w.tabIds.indexOf(tabId), base.tabIds.length);
   const tabIds = [...base.tabIds];
@@ -144,16 +142,17 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
   createWindow(o = {}) {
     const s = get();
     const id = newId("w");
-    const small = !!o.small && !o.incognito;
+    const kind = o.kind ?? "main";
+    const small = kind === "small";
     const known = o.profileId && s.profiles[o.profileId] ? o.profileId : undefined;
-    const original = o.incognito ? (known ?? lastActiveProfile(s)) : undefined;
+    const original = kind === "private" ? (known ?? lastActiveProfile(s)) : undefined;
     const profileId = original !== undefined
       ? incognitoProfileId(id, original)
       : (known ?? (small ? lastActiveProfile(s) : s.settings.defaultProfileId));
-    const w = small ? smallWindow(id, profileId, o.frame ?? null) : emptyWindow(id, profileId, !!o.incognito, o.frame ?? null);
-    if (original !== undefined) w.originalProfileId = original;
-    if (small && o.linkPointer) w.linkPointer = o.linkPointer;
-    if (o.chromeWindow && !small) w.chromeWindow = o.chromeWindow;
+    const w: BrowserWindow =
+      kind === "small"
+        ? { ...smallWindow(id, profileId, o.frame ?? null), ...(o.linkPointer ? { linkPointer: o.linkPointer } : {}) }
+        : { ...emptyWindow(id, profileId, kind, o.frame ?? null), ...(o.chromeWindow ? { chromeWindow: o.chromeWindow } : {}) };
     let next = withWindow(s, w);
     if (o.tabIds?.length && !small) next = moveTabsInto(next, o.tabIds, id);
     if (!next.windows[id]!.tabIds.length) next = withNewTab(next, id, { url: o.url, adoptId: o.adoptId })[0];
@@ -161,11 +160,11 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const shown = next.windows[id]!.activeTabIds[next.tabs[first]!.profileId] ?? first;
     if (!small) next = adoptParkedPins(next, id, next.tabs[shown]!.profileId);
     next = apply(next, activated(next, shown));
-    const focused = s.ui.focusedWindowId;
+    const focused = focusedWindowOf(s);
     if (o.background && focused && s.windows[focused]) {
       next = {
         ...next,
-        ui: { ...next.ui, focusedWindowId: focused, focusOrder: [focused, id, ...s.ui.focusOrder.filter((w) => w !== focused)], lastProfileId: s.ui.lastProfileId },
+        ui: { ...next.ui, focusOrder: [focused, id, ...s.ui.focusOrder.filter((w) => w !== focused)], lastProfileId: s.ui.lastProfileId },
       };
     }
     set(next);
@@ -180,7 +179,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const tabIds = tabs.map((t) => t.id);
     const small = isSmallWindow(w);
     let closedWindows = s.closedWindows;
-    if (!w.incognito && !small && tabs.some((t) => t.url)) {
+    if (w.kind !== "private" && !small && tabs.some((t) => t.url)) {
       const active = new Set(Object.values(w.activeTabIds));
       const entry = closedWindowEntry(
         w,
@@ -200,11 +199,10 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       windowUi: without(next.windowUi, [id]),
       closedWindows,
       parkedPins: small ? s.parkedPins : parkWindowPins(s.parkedPins, w, s),
-      closedTabs: w.incognito ? next.closedTabs.filter((c) => c.windowId !== id) : next.closedTabs,
+      closedTabs: w.kind === "private" ? next.closedTabs.filter((c) => c.windowId !== id) : next.closedTabs,
       ui: {
         ...next.ui,
         focusOrder: next.ui.focusOrder.filter((f) => f !== id),
-        focusedWindowId: next.ui.focusedWindowId === id ? (next.ui.focusOrder.find((f) => f !== id) ?? null) : next.ui.focusedWindowId,
         lastProfileId: lastProfileAfterClosing(s, id),
       },
     });
@@ -241,14 +239,14 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
   switchProfile(windowId, profileId) {
     let s = get();
     const w = s.windows[windowId];
-    if (!w || w.incognito || isSmallWindow(w) || !s.profiles[profileId] || w.profileId === profileId) return;
+    if (!w || w.kind === "private" || isSmallWindow(w) || !s.profiles[profileId] || w.profileId === profileId) return;
     s = adoptParkedPins(s, windowId, profileId);
     const remembered = w.activeTabIds[profileId];
     let target = remembered && s.tabs[remembered]?.windowId === windowId ? remembered : undefined;
-    target ??= s.windows[windowId]!.tabIds.find((id) => s.tabs[id]?.profileId === profileId && !s.tabs[id]!.unloaded);
+    target ??= s.windows[windowId]!.tabIds.find((id) => s.tabs[id]?.profileId === profileId && !isAsleep(s.tabs[id]));
     if (!target) [s, target] = withNewTab(s, windowId, { profileId, background: true });
     s = apply(s, activated(s, target));
-    if (s.ui.focusedWindowId === windowId) s = { ...s, ui: { ...s.ui, lastProfileId: profileId } };
+    if (focusedWindowOf(s) === windowId) s = { ...s, ui: { ...s.ui, lastProfileId: profileId } };
     set(s);
   },
 
@@ -296,9 +294,9 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
 
   mergeAllWindows(windowId) {
     const s = get();
-    const target = s.windows[windowId]?.incognito || isSmallWindow(s.windows[windowId]) ? mainWindowFor(s) : windowId;
+    const target = s.windows[windowId]?.kind === "private" || isSmallWindow(s.windows[windowId]) ? mainWindowFor(s) : windowId;
     if (!target) return;
-    const others = s.windowOrder.filter((id) => id !== target && !s.windows[id]?.incognito && !isSmallWindow(s.windows[id]));
+    const others = s.windowOrder.filter((id) => id !== target && s.windows[id]?.kind !== "private" && !isSmallWindow(s.windows[id]));
     const tabIds = others.flatMap((id) => s.windows[id]!.tabIds);
     if (!tabIds.length) return;
     let next = moveTabsInto(s, tabIds, target);

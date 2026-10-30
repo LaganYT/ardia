@@ -96,7 +96,7 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
 - **Two channels: nightly and stable.** One app; Settings › General picks the channel, and nightly users get
   stable releases too.
   - **Nightly** is for fast iteration. Each fix is reproduced, fixed and verified, its adjacent tests run, then it
-    is built and released as a nightly (`scripts/release.sh <version> --channel nightly`). Run only the focused
+    is built and released as a nightly (`scripts/release.sh <version>` with a `-nightly.<n>` version). Run only the focused
     checks for what changed: no full suite, no perf gate, no landing-page refresh. A nightly is a GitHub
     prerelease and never reaches stable users.
   - **Stable** gets the full run (about 1.5 h): smoke, update test, perf ratchet and perf gate. Its perf is

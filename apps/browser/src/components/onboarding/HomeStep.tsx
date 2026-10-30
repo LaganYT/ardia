@@ -7,7 +7,6 @@ import {
   setAsDefaultBrowser,
   setLaunchAtLogin,
 } from "../../state/app/appSettings";
-import { GlassBacking, solidFill } from "./GlassBacking";
 import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { Symbol } from "../ui";
@@ -140,13 +139,12 @@ function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: b
         paddingLeft: 12,
         paddingRight: 10,
         borderRadius: 17,
-        backgroundColor: solidFill(colors.row),
+        backgroundColor: colors.row,
         borderWidth: StyleSheet.hairlineWidth * 2,
         borderColor: colors.rowBorder,
         opacity: on ? 1 : 0.45,
       }}
     >
-      <GlassBacking fill={colors.row} radius={17} border={StyleSheet.hairlineWidth * 2} />
       <Symbol name={icon} size={13} color={colors.title} style={{ width: 16, height: 16 }} />
       <Text style={{ ...font.small, fontWeight: weight.medium, color: colors.title }}>{label}</Text>
       <CheckMark on={on} size={16} />

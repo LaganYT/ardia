@@ -47,7 +47,7 @@ export function EnginesPane() {
         </Row>
       </Group>
 
-      <SectionHeader anchor="engines.websiteRules" action={<Button title="Add Website Rule…" icon="plus" onPress={() => showSettingsSheet(<RuleSheet />)} />} />
+      <SectionHeader anchor="engines.websiteRules" description={null} action={<Button title="Add Website Rule…" icon="plus" onPress={() => showSettingsSheet(<RuleSheet />)} />} />
       <Group of="engines.websiteRules">
         {sites.length === 0 ? (
           <Row title="No website rules" description="Choose “Opens in” in a site's controls, or add a rule here." />

@@ -18,7 +18,8 @@ import { FadeLabel, font, Panel, radius, Symbol, useHover, weight } from "../ui"
 import { SIDEBAR_SHADOW, SIDEBAR_TYPE } from "./tokens";
 import { clickTab, toggleBookmarkInWindow } from "../../state/sidebar/actions";
 import { GroupPanel } from "./GroupPanel";
-import { cardHoverProps, dismissHover, setHoverSpace } from "../../state/sidebar/hover";
+import { dismissHover, setHoverSpace } from "../../state/sidebar/hover";
+import { cardHoverProps } from "./hoverController";
 import { hoverCardOrigin, useHoverCardMotion, useHoverCardPlacement } from "./hoverMotion";
 import { useSidebarUi, type Anchor, type Hover } from "../../state/sidebar/sidebarUi";
 import { TabIcon } from "./TabIcon";
@@ -106,7 +107,7 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
         </Text>
       ) : null}
       <View style={{ flexDirection: "row", gap: 4, marginTop: 8 }}>
-        <Action icon={tab.pinned ? "pin.slash" : "pin"} label={tab.pinned ? "Unpin" : "Pin"} onPress={() => togglePin(tabId)} />
+        <Action icon={tab.pin ? "pin.slash" : "pin"} label={tab.pin ? "Unpin" : "Pin"} onPress={() => togglePin(tabId)} />
         {tab.url ? (
           <Action
             icon={bookmarked ? "bookmark.fill" : "bookmark"}
@@ -114,7 +115,7 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
             onPress={() => toggleBookmarkInWindow(windowId, { url: tab.url, title: tabTitle(tab), favicon: tab.favicon })}
           />
         ) : null}
-        {!isActive && !tab.pinned ? (
+        {!isActive && !tab.pin ? (
           <Action
             icon="rectangle.split.2x1"
             label="Split"

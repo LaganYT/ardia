@@ -1,9 +1,9 @@
-import { Surface, Symbol, Button, useHover } from "../ui";
+import { Panel, Symbol, Button, useHover } from "../ui";
 import { useShallow } from "zustand/react/shallow";
 import { useRef } from "react";
 import { Image, Pressable, View } from "react-native";
 import { switchToTab, toggleMute } from "../../state/browser/actions";
-import { hex, useTheme } from "../ui/theme";
+import { useTheme } from "../ui/theme";
 import { font, radius, weight } from "../ui/tokens";
 import { useTab } from "../../state/browser/hooks";
 import { useMuteState } from "../../state/tabs/hooks";
@@ -56,11 +56,10 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
 
   return (
     <View {...hoverProps} style={{ height: ROW_HEIGHT }}>
-      <Surface
-        fill={hex(tokens.groupFill)}
-        cornerRadius={radius.panel}
-        borderColor={hex(tokens.groupStroke)}
-        borderWidth={0.5}
+      <Panel
+        fill={tokens.groupFill}
+        radius={radius.panel}
+        border={tokens.groupStroke}
         style={{ flex: 1, flexDirection: "row", alignItems: "center", paddingLeft: ROW_INSET, paddingRight: TRAILING_INSET }}
       >
         <Pressable onPress={go} style={{ flex: 1, minWidth: 0, alignSelf: "stretch", flexDirection: "row", alignItems: "center", marginRight: TRAILING_INSET }}>
@@ -87,7 +86,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
           </View>
         ) : null}
         <Button variant="icon" icon={playing ? "pause.fill" : "play.fill"} size={13} box={BUTTON} radius={radius.m} tooltip={playing ? "Pause" : "Play"} onPress={() => mediaCommand(tabId, "toggle")} />
-      </Surface>
+      </Panel>
     </View>
   );
 }

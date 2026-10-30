@@ -1,9 +1,11 @@
 #import "ArdiaWebViewInternal.h"
+#import "ArdiaRuntime.h"
 #import "ArdiaLaunchConfig.h"
 
 #import <QuartzCore/QuartzCore.h>
 
 using namespace ardia_web_view;
+using namespace ardia_runtime;
 
 namespace ardia_web_view {
 
@@ -81,7 +83,7 @@ void PeekTrace(NSDictionary *entry) {
   NSString *dir = ArdiaLaunchConfig.shared.dataDirectory;
   if (!PeekTracing() || !dir) return;
   NSString *path = [dir stringByAppendingPathComponent:@"peek.log"];
-  NSData *line = [[NSString stringWithFormat:@"%@ %@\n", NSDate.date, JSONString(entry)] dataUsingEncoding:NSUTF8StringEncoding];
+  NSData *line = [[NSString stringWithFormat:@"%@ %@\n", NSDate.date, JSONText(entry)] dataUsingEncoding:NSUTF8StringEncoding];
   NSFileHandle *file = [NSFileHandle fileHandleForWritingAtPath:path];
   if (!file) return (void)[line writeToFile:path atomically:NO];
   if ([file seekToEndOfFile] < (2 << 20)) [file writeData:line];
@@ -93,7 +95,7 @@ NSString *SplitLinkModifier() {
 }
 
 NSString *PeekConfigJSON(ArdiaWebView *view) {
-  return JSONString(@{@"modifier" : gPeekModifier, @"split" : SplitLinkModifier(), @"trace" : @(PeekTracing()), @"otherSites" : @(view.peeksLinksToOtherSites)});
+  return JSONText(@{@"modifier" : gPeekModifier, @"split" : SplitLinkModifier(), @"trace" : @(PeekTracing()), @"otherSites" : @(view.peeksLinksToOtherSites)});
 }
 }
 
@@ -189,7 +191,7 @@ static NSString *LinkKeyAction(NSString *key) {
   NSString *key = Text(dict, @"key", 8) ?: @"";
   if ([key isEqualToString:kOtherSiteKey]) {
     PeekTrace(@{@"event" : @"fallback", @"url" : url ?: @"", @"key" : key, @"reason" : reason, @"action" : @"follow"});
-    return [self callFrame:frameId kind:@"peekRefused" json:JSONString(@{@"url" : url ?: @"", @"reason" : reason, @"follow" : @YES})];
+    return [self callFrame:frameId kind:@"peekRefused" json:JSONText(@{@"url" : url ?: @"", @"reason" : reason, @"follow" : @YES})];
   }
   const NSEventModifierFlags pageFlag = LinkKeyFlags(key);
   const BOOL split = [LinkKeyAction(key) isEqualToString:@"split"];
@@ -205,7 +207,7 @@ static NSString *LinkKeyAction(NSString *key) {
   if (!fallsBack) return;
   if (!test) gPeekUsedSeq = gPeekUpSeq;
   if (pageFlag == NSEventModifierFlagShift) return [self emit:@"openWindow" payload:@{@"url" : url, @"disposition" : @"window", @"userGesture" : @YES}];
-  if (sameOrigin) return [self callFrame:frameId kind:@"peekRefused" json:JSONString(@{@"url" : url, @"reason" : reason, @"download" : @YES})];
+  if (sameOrigin) return [self callFrame:frameId kind:@"peekRefused" json:JSONText(@{@"url" : url, @"reason" : reason, @"download" : @YES})];
   [self emit:@"openWindow" payload:@{@"url" : url, @"disposition" : @"background", @"userGesture" : @YES}];
 }
 

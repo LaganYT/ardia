@@ -2,14 +2,11 @@ import ExpoModulesCore
 
 public class ContentBlockerModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaContentBlocker")
-    Events("contentBlocker")
+    Name(Self.calls.moduleName)
+    Events(Self.calls.domain)
+    Self.calls.forwardEvents(to: self)
 
-    OnCreate { EngineCall.listen("contentBlocker", self) }
-
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      ContentBlockerModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
   }
 
   static func settled(_ reply: CallReply) -> (String?) -> Void {

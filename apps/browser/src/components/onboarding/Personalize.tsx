@@ -1,5 +1,4 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { GlassBacking, solidFill } from "./GlassBacking";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { PROFILE_COLORS } from "../ui/theme";
 import { useTabLayout, useWindow } from "../../state/browser/hooks";
@@ -37,7 +36,7 @@ export function ThemeColorPicker({
   onTheme?: (theme: ProfileTheme) => void;
 }) {
   const profileId = useWindow(windowId, (w) => w?.profileId);
-  const incognito = useWindow(windowId, (w) => !!w?.incognito);
+  const incognito = useWindow(windowId, (w) => w?.kind === "private");
   const look = useThemeDraft(profileId ?? "", (theme) => onTheme?.(theme));
   if (!profileId || incognito || !look.profile) return null;
   const { custom } = look;
@@ -144,13 +143,12 @@ function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sid
               padding: 10,
               gap: 10,
               borderRadius: 12,
-              backgroundColor: solidFill(hovered || selected ? colors.button : colors.row),
+              backgroundColor: hovered || selected ? colors.button : colors.row,
               borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth * 2,
               borderColor: selected ? colors.title : colors.rowBorder,
               transform: [{ scale: pressed ? 0.98 : 1 }],
             }}
           >
-            <GlassBacking fill={colors.row} radius={12} border={selected ? 1.5 : StyleSheet.hairlineWidth * 2} raised={selected} highlight={hovered || selected ? colors.outlinedHover : null} />
             <View style={{ height: 64, borderRadius: 7, padding: 5, gap: 4, backgroundColor: colors.preview, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.previewBorder, flexDirection: kind === "sidebar" ? "row" : "column" }}>
               {kind === "sidebar" ? (
                 <View style={{ width: "26%", gap: 3, paddingTop: 7 }}>

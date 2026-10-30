@@ -125,9 +125,11 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
   must be named `ArdiaCore*` to be exported (the `ardiacore.exports` wildcard). The pod reads `ArdiaCore.h` from the repo and
   the app and the engine ship together, so the app calls new selectors directly (no `respondsToSelector:`).
 - **Adding an engine call** (Chrome's services are `ac_*` C calls in `engine/chromium`, which the app finds with
-  dlsym through `ArdiaEngineBridge`): (1) write `AC_ENGINE_CALL(ac_<domain>_<verb>)` in
-  `engine/chromium/src/chrome/browser/ardia/ac_<domain>.cc` (conventions in `public/ac_engine.h`; a new file goes
-  in that `BUILD.gn`; `ac_engine.exports` exports every `ac_*`); (2) `scripts/agent/engine-build`; (3) call it with
+  dlsym through `ArdiaEngineBridge`): (1) write `AC_PROFILE_CALL(ac_<domain>_<verb>) { … }` in
+  `engine/chromium/src/chrome/browser/ardia/ac_<domain>.cc` (`AC_ARGS_CALL` for a call that needs no profile; conventions
+  in `public/ac_engine.h` and `ac_engine.h`; a new file goes in that `BUILD.gn`; `ac_engine.exports` exports every
+  `ac_*`). A private window's calls arrive with `offTheRecord: true` and are refused unless the call says
+  `ardia::OffTheRecord::kAllow`: the engine alone decides which calls serve a private session; (2) `scripts/agent/engine-build`; (3) call it with
   `ArdiaEngineBridge call:` (`callWithSecret:` for secrets); for JS, add `"verb": EngineCall.passing("ac_<domain>_<verb>")`
   to the domain module's call table and its `"domain.verb": [args, result]` row to `packages/ardiacore/src/engine/api.ts`.
 - **The page script** is `packages/ardiacore/ios/page_script.js`, a pod resource: `ArdiaHostEngineDelegate.mm` hands it to the
@@ -239,6 +241,10 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
     key as AppKit dispatches it (Chrome's window, then the menu bar), `ac.shell.devTypeKeys("key", text, ms)` types
     into whatever window is key, and
     `node apps/browser/scripts/shortcuts-test.mjs <Debug app>` checks every shortcut in every focus.
+    `expo.modules.ArdiaDev.devMenuBar()` returns the whole menu bar (titles, keys, hidden, checked, enabled) to diff
+    a menu change before and after. The menu's titles and default keys live in `state/commands/commandCatalog.ts`;
+    after editing it, run `node apps/browser/scripts/command-tables.mjs` to regenerate `BrowserCommand` and
+    `packages/shell/ios/CommandTable.swift`.
   - Page content: `scripts/agent/ac page <data dir> <url part> '<expression>'`, or CDP on the instance's port
     (`http://localhost:<port>/json`, `Runtime.evaluate`, `Page.captureScreenshot`). A `ARDIA_BACKGROUND` instance's windows answer NO to
     `-[NSWindow isOccluded]` (`ArdiaHost+Launch.mm`), so a covered window shows a tab at once instead of after Chrome's 1 s
@@ -258,6 +264,13 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
     render blank; text opacity is applied twice, so a label at α reads 1 − (1 − α)², don't match colours on it),
     `globalThis.expo.modules.ArdiaAreaLight.debugSnapshot(dir)` (every Metal view, offscreen, with its frame),
     the accessibility tree and store state, and list "needs visual check" items in your report.
+  - Hover and pressed states in a hidden instance (Debug builds): `ac.shell.devSetPointer(windowId, { x, y })` puts the
+    pointer at a window point (points from the window's top left) for every hover check, `null` gives the real pointer back.
+    The window id is the store's (`ac.store.getState().windowOrder[0]`); `"w1"` exists only in instances launched with a
+    session that names it, and an unknown id rejects. Hold a press with
+    `ac.engine.call("windows.dev", { window: <windows.list's hasRoot window>, action: "mouse:down:x,y" })`, capture, then
+    `mouse:up`. `ac.shell.devHoverStats(false).log` lists the enters and leaves the pointer caused. Controls that are
+    disabled (back, forward and reload on a New Tab) show no hover.
 - Code style: read the surrounding code first and match its naming and idioms. No comments (AGENTS.md).
   Keep files cohesive; new features go in new files where sensible.
 - Dia fidelity: when you build UI, match Dia, and check it with numbers against a Dia capture
@@ -306,6 +319,7 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | | `cliInstallScript=<path>` | Another `ardia` installer script |
 | | `legacySource=<home>` · `legacyCrashAfter=<step>` | The Netnyahoo → Ardia migration from a scratch home |
 | | `bangsUrl` · `onboarding` · `whatsNew` · `telemetry` · `liveMock=<url>` · `calendarFixture` | Debug builds only: bang list, run onboarding, show What's New, send telemetry, live folders from a mock, the calendar fixture |
+| | `loginsDelay=<profile\|account>:<ms>`, `loginsReleaseAfter=<profile\|account>`, `loginsTimeout=<s>` | Sync's password read (`ac_passwords_logins`): hold one store's answer, drop the read as a profile shutdown does once that store has answered, and the bridge's deadline (30 s otherwise) |
 | `ARDIA_PREWARM` | set | Not a setting: an older running app sets it on the staged update it prewarms, which then exits at once |
 
 `ARDIA_TEST` and `ARDIA_TRACE` count only in a test instance: a build that isn't signed for distribution (Debug and

@@ -23,11 +23,13 @@ export function SplitDividers({ split, dividers, width, height }: { split: Split
   );
 }
 
+const sizesOf = (split: SplitView) => ({ sizes: split.slots.map((slot) => slot.size), stack: split.slots.find((slot) => "stack" in slot)?.stackSizes });
+
 function DividerHandle({ split, divider, width, height }: { split: SplitView; divider: Divider; width: number; height: number }) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const start = useRef<{ sizes: number[]; stack?: [number, number] }>({ sizes: split.sizes });
+  const start = useRef<{ sizes: number[]; stack?: [number, number] }>(sizesOf(split));
   const latest = useRef({ split, divider, width, height });
   latest.current = { split, divider, width, height };
 
@@ -37,7 +39,7 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
         onStartShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           const { split: v } = latest.current;
-          start.current = { sizes: v.sizes, stack: v.stack?.sizes };
+          start.current = sizesOf(v);
           setDragging(true);
         },
         onPanResponderMove: (_, g) => {
@@ -89,12 +91,12 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
 
 export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; origin: { x: number; y: number } | null }) {
   const windowId = useWindowId();
-  const dragging = useTabDrag((s) => (s.windowId === windowId ? s.tabId : null));
-  const x = useTabDrag((s) => s.x);
-  const y = useTabDrag((s) => s.y);
-  const lifted = useTabDrag((s) => s.lifted);
-  const outside = useTabDrag((s) => s.outside);
-  const target = useTabDrag((s) => s.target);
+  const dragging = useTabDrag((s) => (s.phase === "tab" && s.windowId === windowId ? s.tabId : null));
+  const x = useTabDrag((s) => (s.phase === "tab" ? s.x : -1));
+  const y = useTabDrag((s) => (s.phase === "tab" ? s.y : -1));
+  const lifted = useTabDrag((s) => (s.phase === "tab" ? s.lifted : null));
+  const outside = useTabDrag((s) => s.phase === "tab" && s.outside);
+  const target = useTabDrag((s) => (s.phase === "tab" ? s.target : null));
   const full = Object.keys(panes).length >= 3;
   const fallback = useDragFallbackPane(dragging, panes, windowId);
   const candidates = useMemo((): [string, Rect][] => {

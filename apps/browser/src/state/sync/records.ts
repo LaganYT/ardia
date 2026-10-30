@@ -1,4 +1,5 @@
 import type { ProfileRecord } from "./profileAdapters";
+import { isFields, isNumber, isString, type Fields } from "../../lib/decode";
 
 export type ShareRecord = { o: string };
 export type DeviceRecord = { n: string };
@@ -18,12 +19,6 @@ export const BOOST = "boost:";
 
 export const recordId = (prefix: string, key: string) => key.slice(prefix.length);
 export const profileScope = (syncId: string) => `p:${syncId}`;
-
-type Fields = Record<string, unknown>;
-
-const isFields = (v: unknown): v is Fields => typeof v === "object" && v !== null && !Array.isArray(v);
-const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const isString = (v: unknown): v is string => typeof v === "string";
 
 const decoder =
   <T,>(valid: (v: Fields) => boolean) =>

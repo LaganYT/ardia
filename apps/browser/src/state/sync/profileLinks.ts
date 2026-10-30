@@ -1,9 +1,9 @@
-import { emptyScope, SyncNative, visible, type ScopeState } from "../../platform/sync";
+import { emptyScope, holdsBack, SyncNative, visible, type ScopeState } from "../../platform/sync";
 import { useBrowser } from "../browser/store";
 import { isIncognitoProfile } from "../browser/model";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
 import { PROFILE, SHARE, profileRecord, profileScope, recordId, shareRecord } from "./records";
-import { legacyThemeOf, type ProfileRecord } from "./profileAdapters";
+import type { ProfileRecord } from "./profileAdapters";
 import { APP_SCOPE, type SyncDoc } from "./syncDoc";
 import { pairTheme } from "./syncThemes";
 
@@ -50,8 +50,7 @@ export function readyToPair(doc: SyncDoc, app: ScopeState, now = Date.now()): bo
   if (!doc.joining || pairingOverdue(doc, now)) return true;
   const synced = [...visible(app, PROFILE).values()].flatMap((v) => profileRecord(v) ?? []);
   if (synced.some((r) => r.d)) return true;
-  const downloading = Object.values(app.pendingSince ?? {}).some((at) => now - at <= PAIRING_WAIT_MS);
-  return synced.length > 0 && !downloading && !Object.keys(app.damaged).length;
+  return synced.length > 0 && !holdsBack(app, now, PAIRING_WAIT_MS);
 }
 
 export function linkProfiles(doc: SyncDoc, app: ScopeState) {
@@ -81,14 +80,8 @@ export function linkProfiles(doc: SyncDoc, app: ScopeState) {
 
 export function addLinkedProfile(doc: SyncDoc, syncId: string, record: ProfileRecord, shareWith: string | null): string {
   const id = useBrowser.getState().createProfile({ name: record.n, color: record.c, icon: record.i, shareWith });
-  const app = doc.scopes[APP_SCOPE];
   doc.profiles[id] = { syncId, enabled: true };
-  if (app) pairTheme(app, id, doc.profiles[id]!);
-  else {
-    const theme = legacyThemeOf(record);
-    if (theme) useBrowser.getState().setProfileLook(id, theme);
-    doc.profiles[id]!.themeAdopting = true;
-  }
+  pairTheme(doc.scopes[APP_SCOPE], id, doc.profiles[id]!, record);
   doc.scopes[profileScope(syncId)] = { ...emptyScope(), awaitRemote: true };
   return id;
 }

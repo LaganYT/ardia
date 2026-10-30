@@ -1,9 +1,11 @@
 import { ContextMenuArea, Symbol, Box, Button, font, PopUp, TextField, Toggle, useHover } from "../../ui";
-import { hapticTick, showMenu } from "../../../state/app/system";
+import { hapticTick } from "../../../state/app/system";
+import { chooseFromMenu } from "../../../state/app/menuChoice";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
-import { createProfile, deleteProfile } from "../../../state/browser/actions";
+import { deleteProfile } from "../../../state/browser/actions";
+import { requestCreateProfile } from "../../../state/profiles/createProfileRequest";
 import { hex, profileAccent, useTheme } from "../../ui/theme";
 import { useProfileDataStats, useProfileOrder, useProfileRecords } from "../../../state/profiles/hooks";
 import { currentProfileOrder, currentProfiles } from "../../../state/browser/current";
@@ -15,7 +17,8 @@ import type { Profile } from "../../../state/browser/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { Group, Row, SectionHeader } from "../Form";
 import { ColorStack } from "../../profiles/CreateProfile";
-import { iconMenuItems, PROFILE_SYMBOLS, ProfileBadge, profileSymbol } from "../../profiles/ProfileIcons";
+import { iconMenuItems, PROFILE_SYMBOLS, ProfileBadge } from "../../profiles/ProfileIcons";
+import { iconSymbol } from "../../../lib/customIcon";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
 import { ThemeSection } from "../ThemeEditor";
 import { goToSettingsPane, SETTINGS_WINDOW_ID } from "../../../state/settings/settingsWindows";
@@ -68,7 +71,7 @@ export function ProfilesPane() {
 
       <SectionHeader
         anchor="profiles.list"
-        action={<Button title="Create Profile" icon="plus" onPress={() => void createProfile()} />}
+        action={<Button title="Create Profile" icon="plus" onPress={() => void requestCreateProfile()} />}
       />
       <ProfileList />
     </View>
@@ -221,7 +224,7 @@ function ProfileRow({
 }
 
 function iconTitle(icon: string | null): string {
-  const symbol = profileSymbol(icon);
+  const symbol = iconSymbol(icon);
   if (symbol) return PROFILE_SYMBOLS.find((s) => s.name === symbol)?.title ?? "Symbol";
   return icon ?? "Initial";
 }
@@ -242,8 +245,8 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
   const sharing = shared.length > 1;
 
   const pickIcon = async () => {
-    const choice = await showMenu(iconMenuItems(profile.icon));
-    if (choice?.startsWith("icon:")) update({ icon: choice.slice("icon:".length) || null });
+    const choice = await chooseFromMenu(iconMenuItems(profile.icon));
+    if (choice && typeof choice === "object") update({ icon: choice.icon });
   };
 
   return (

@@ -12,9 +12,12 @@ export function ZapPicker({ tabId, onZap }: { tabId: string; onZap: (chip: ZapCh
   const [pick, setPick] = useState<ZapPick | null>(null);
   const [level, setLevel] = useState(0);
   const asked = useRef(false);
+  const mounted = useRef(true);
   const url = useTab(tabId, (t) => t?.url);
   useEffect(() => {
     setPick(null);
+    asked.current = false;
+    mounted.current = true;
     void startZap(tabId);
     const stop = watchZapPicks(tabId, (next) => {
       if (!asked.current) setLevel(0);
@@ -22,6 +25,7 @@ export function ZapPicker({ tabId, onZap }: { tabId: string; onZap: (chip: ZapCh
       setPick(next);
     });
     return () => {
+      mounted.current = false;
       stop();
       void stopZap(tabId);
     };
@@ -55,7 +59,7 @@ export function ZapPicker({ tabId, onZap }: { tabId: string; onZap: (chip: ZapCh
               title="Cancel"
               onPress={() => {
                 setPick(null);
-                void Promise.resolve(stopZap(tabId)).then(() => startZap(tabId));
+                void Promise.resolve(stopZap(tabId)).then(() => (mounted.current ? startZap(tabId) : undefined));
               }}
             />
           </Box>

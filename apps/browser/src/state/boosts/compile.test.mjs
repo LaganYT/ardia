@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { colorMatrix, compileBoost, boostStylesheet, fitsEngine } = await import("./compile.ts");
+const { colorMatrix, compileBoost, boostStylesheet, fitsEngine, fitEngineList } = await import("./compile.ts");
 const { DEFAULT_COLORS } = await import("./types.ts");
 
 const near = (actual, expected) => {
@@ -70,4 +70,11 @@ test("compiled code is measured in UTF-8 bytes against the engine limit", () => 
   assert.ok(fitsEngine(compileBoost({ ...blank, css: "a".repeat(1024 * 1024) })));
   assert.ok(!fitsEngine(compileBoost({ ...blank, css: "a".repeat(1024 * 1024), font: "Inter" })));
   assert.ok(!fitsEngine(compileBoost({ ...blank, js: "é".repeat(600 * 1024) })));
+});
+
+test("the engine list stops at 1000 boosts and 32 MiB", () => {
+  const many = Array.from({ length: 1200 }, (_, i) => compileBoost({ ...blank, id: String(i) }));
+  assert.equal(fitEngineList(many).length, 1000);
+  const big = Array.from({ length: 40 }, (_, i) => compileBoost({ ...blank, id: String(i), css: "a".repeat(1024 * 1024) }));
+  assert.equal(fitEngineList(big).length, 31);
 });

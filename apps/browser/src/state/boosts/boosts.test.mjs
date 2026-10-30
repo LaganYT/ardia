@@ -58,6 +58,7 @@ test("a malformed boost is rejected", () => {
   assert.equal(validBoost("x", { ...good, size: 99 }), null);
   assert.equal(validBoost("x", { ...good, domain: " " }), null);
   for (const domain of ["com", "co.uk", "www.com", "uk"]) assert.equal(validBoost("x", { ...good, domain }), null, domain);
+  for (const domain of ["example.com/path", "a b.com", "exa_mple.com:80"]) assert.equal(validBoost("x", { ...good, domain }), null, domain);
   assert.ok(validBoost("x", { ...good, domain: "localhost" }));
   assert.ok(validBoost("x", { ...good, domain: "example.co.uk" }));
   assert.equal(validBoost("x", { ...good, zaps: [1] }), null);

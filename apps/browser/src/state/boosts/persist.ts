@@ -4,7 +4,7 @@ import { versionedJson } from "../../lib/savedDocument";
 import { orWarn } from "../../lib/fallback";
 import { useBrowser } from "../browser/store";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
-import { compileBoost, fitsEngine } from "./compile";
+import { compileBoost, fitEngineList, fitsEngine } from "./compile";
 import { BOOSTS_VERSION, boostsDocument, boostsKey, loadBoosts, useBoostStore } from "./store";
 import type { Boost } from "./types";
 
@@ -15,7 +15,7 @@ const profileKeys = () => {
   return [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map((id) => boostsKey(s, id)))];
 };
 
-const engineJson = (boosts: Boost[]) => JSON.stringify(boosts.filter((b) => b.enabled).sort((a, c) => (a.id < c.id ? -1 : 1)).map(compileBoost).filter(fitsEngine));
+const engineJson = (boosts: Boost[]) => JSON.stringify(fitEngineList(boosts.filter((b) => b.enabled).sort((a, c) => (a.id < c.id ? -1 : 1)).map(compileBoost).filter(fitsEngine)));
 
 function push(key: string, boosts: Boost[]) {
   const engine = engineProfile(useBrowser.getState(), key);

@@ -39,6 +39,19 @@ const MAX_ENGINE_SOURCE_BYTES = 1024 * 1024;
 const utf8Bytes = (text: string) => new TextEncoder().encode(text).length;
 export const fitsEngine = (boost: EngineBoost) => utf8Bytes(boost.css) <= MAX_ENGINE_SOURCE_BYTES && utf8Bytes(boost.js) <= MAX_ENGINE_SOURCE_BYTES;
 
+const MAX_ENGINE_BOOSTS = 1000;
+const MAX_ENGINE_LIST_BYTES = 32 * 1024 * 1024;
+export function fitEngineList(boosts: EngineBoost[]) {
+  const kept: EngineBoost[] = [];
+  let bytes = 2;
+  for (const boost of boosts) {
+    bytes += utf8Bytes(JSON.stringify(boost)) + 1;
+    if (kept.length >= MAX_ENGINE_BOOSTS || bytes > MAX_ENGINE_LIST_BYTES) break;
+    kept.push(boost);
+  }
+  return kept;
+}
+
 export const compileBoost = (boost: Boost): EngineBoost => ({
   id: boost.id,
   domain: boost.domain,

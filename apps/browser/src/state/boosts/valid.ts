@@ -63,10 +63,11 @@ const FETCHING_CSS = /@import|image-set\(|image\(|cross-fade\(|src\(|\\/i;
 export const safeSelector = (selector: string) => selector.trim().length > 0 && !UNSAFE_SELECTOR.test(selector) && !/(^|[^\\])(\\\\)*\\$/.test(selector);
 export const importableCss = (css: string) => !FETCHING_CSS.test(css) && !WEB_URL.test(css);
 
+const HOSTNAME = /^([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}$/;
 const GENERIC_SECOND_LEVEL = /^(co|com|org|net|gov|edu|ac|or|ne|go)\.[a-z]{2}$/;
 export function boostableDomain(domain: string) {
   const host = domain.trim().toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
-  return host === "localhost" || (host.includes(".") && !GENERIC_SECOND_LEVEL.test(host));
+  return HOSTNAME.test(host) && (host === "localhost" || (host.includes(".") && !GENERIC_SECOND_LEVEL.test(host)));
 }
 
 const MAX_ID = 128;

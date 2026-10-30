@@ -45,8 +45,10 @@ export function fitEngineList(boosts: EngineBoost[]) {
   const kept: EngineBoost[] = [];
   let bytes = 2;
   for (const boost of boosts) {
-    bytes += utf8Bytes(JSON.stringify(boost)) + 1;
-    if (kept.length >= MAX_ENGINE_BOOSTS || bytes > MAX_ENGINE_LIST_BYTES) break;
+    if (kept.length >= MAX_ENGINE_BOOSTS) break;
+    const next = bytes + utf8Bytes(JSON.stringify(boost)) + (kept.length ? 1 : 0);
+    if (next > MAX_ENGINE_LIST_BYTES) continue;
+    bytes = next;
     kept.push(boost);
   }
   return kept;

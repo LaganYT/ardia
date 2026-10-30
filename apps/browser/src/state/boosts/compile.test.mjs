@@ -78,3 +78,9 @@ test("the engine list stops at 1000 boosts and 32 MiB", () => {
   const big = Array.from({ length: 40 }, (_, i) => compileBoost({ ...blank, id: String(i), css: "a".repeat(1024 * 1024) }));
   assert.equal(fitEngineList(big).length, 31);
 });
+
+test("a boost too big for the engine list doesn't hide the small ones after it", () => {
+  const big = Array.from({ length: 40 }, (_, i) => compileBoost({ ...blank, id: String(i).padStart(2, "0"), css: "a".repeat(1024 * 1024) }));
+  const small = compileBoost({ ...blank, id: "zz" });
+  assert.ok(fitEngineList([...big, small]).some((b) => b.id === "zz"));
+});

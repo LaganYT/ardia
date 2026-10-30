@@ -29,7 +29,7 @@ export function validBoost(id: string, raw: unknown): Boost | null {
   if (!isFields(raw)) return null;
   const { name, author, domain, subdomains, enabled, colors, font, size, textCase, zaps, css, js, modified } = raw;
   if (![name, author, domain, css, js].every(isString) || !isBoolean(subdomains) || !isBoolean(enabled) || !isNumber(modified)) return null;
-  if (!(domain as string).trim()) return null;
+  if (!boostableDomain(domain as string)) return null;
   if (font !== null && !isString(font)) return null;
   if (!BOOST_SIZES.includes(size as BoostSize) || !BOOST_CASES.includes(textCase as BoostCase)) return null;
   if (!Array.isArray(zaps) || !zaps.every(isString)) return null;
@@ -62,6 +62,12 @@ const FETCHING_CSS = /@import|image-set\(|image\(|cross-fade\(|src\(|\\/i;
 
 export const safeSelector = (selector: string) => selector.trim().length > 0 && !UNSAFE_SELECTOR.test(selector) && !/(^|[^\\])(\\\\)*\\$/.test(selector);
 export const importableCss = (css: string) => !FETCHING_CSS.test(css) && !WEB_URL.test(css);
+
+const GENERIC_SECOND_LEVEL = /^(co|com|org|net|gov|edu|ac|or|ne|go)\.[a-z]{2}$/;
+export function boostableDomain(domain: string) {
+  const host = domain.trim().toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  return host === "localhost" || (host.includes(".") && !GENERIC_SECOND_LEVEL.test(host));
+}
 
 const MAX_ID = 128;
 const MAX_SOURCE = 1024 * 1024;

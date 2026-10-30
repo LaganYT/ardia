@@ -35,6 +35,10 @@ export function boostStylesheet(boost: Pick<Boost, "zaps" | "font" | "textCase" 
   return rules.join("\n");
 }
 
+const MAX_ENGINE_SOURCE_BYTES = 1024 * 1024;
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).length;
+export const fitsEngine = (boost: EngineBoost) => utf8Bytes(boost.css) <= MAX_ENGINE_SOURCE_BYTES && utf8Bytes(boost.js) <= MAX_ENGINE_SOURCE_BYTES;
+
 export const compileBoost = (boost: Boost): EngineBoost => ({
   id: boost.id,
   domain: boost.domain,

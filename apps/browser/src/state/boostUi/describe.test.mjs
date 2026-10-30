@@ -13,7 +13,7 @@ test("each setting adds one line", () => {
   assert.deepEqual(lines, [
     "Recolours the page with inverted lightness",
     "Sets the font to Futura",
-    "Sets the text size to 125%",
+    "Sets the page zoom to 125%",
     "Shows text in UPPERCASE",
     "Hides 2 elements",
     "Adds 2 lines of CSS",

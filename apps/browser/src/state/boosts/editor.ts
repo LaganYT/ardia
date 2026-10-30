@@ -7,8 +7,14 @@ export type BoostEditor = { tabId: string; boostId: string };
 
 const useBoostEditors = create<{ byWindow: Record<string, BoostEditor> }>()(() => ({ byWindow: {} }));
 
-export const openBoostEditor = (windowId: string, tabId: string, boostId: string) =>
+export function openBoostEditor(windowId: string, tabId: string, boostId: string) {
+  const open = useBoostEditors.getState().byWindow[windowId];
+  if (open && open.tabId !== tabId) {
+    dropPendingPreview(open.tabId);
+    void clearBoostPreview(open.tabId).catch(orWarn(undefined));
+  }
   useBoostEditors.setState((s) => ({ byWindow: { ...s.byWindow, [windowId]: { tabId, boostId } } }));
+}
 
 export function closeBoostEditor(windowId: string) {
   const open = useBoostEditors.getState().byWindow[windowId];

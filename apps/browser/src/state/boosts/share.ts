@@ -1,4 +1,4 @@
-import { importableCss, safeSelector } from "./valid";
+import { boostableDomain, importableCss, safeSelector } from "./valid";
 import { BOOST_CASES, BOOST_FONTS, BOOST_SIZES, type Boost, type BoostColors } from "./types";
 
 export const SHARE_VERSION = 1;
@@ -173,7 +173,7 @@ export function decodeBoost(code: string): Boost | ShareError {
   const { name, author, domain, subdomains, colors, font, size, textCase, zaps, css } = data;
   if (!shortText(name, MAX_SHARE_NAME)) return invalid("a name");
   if (!shortText(author, MAX_SHARE_NAME)) return invalid("an author name");
-  if (typeof domain !== "string" || !DOMAIN.test(domain)) return invalid("a site");
+  if (typeof domain !== "string" || !DOMAIN.test(domain) || !boostableDomain(domain)) return invalid("a site");
   if (typeof subdomains !== "boolean") return invalid("a subdomains setting");
   const readColorsResult = readColors(colors);
   if (readColorsResult === undefined) return invalid("colours");

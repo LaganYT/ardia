@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TextInput, View } from "react-native";
 import { boostChanges, siteLine } from "../../state/boostUi/describe";
 import { installBoost, previewImport } from "../../state/boostUi/importCode";
@@ -10,6 +10,7 @@ import { CODE_FONT, IMPORT_SHEET } from "./tokens";
 export function ImportBoostSheet({ profileId, initialCode = "" }: { profileId: string; initialCode?: string }) {
   const theme = useTheme();
   const [code, setCode] = useState(initialCode);
+  useEffect(() => setCode(initialCode), [initialCode]);
   const result = previewImport(code);
   const boost = result && !("error" in result) ? result : null;
   const changes = boost ? boostChanges(boost) : [];

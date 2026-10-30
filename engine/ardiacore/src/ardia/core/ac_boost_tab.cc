@@ -113,9 +113,11 @@ class BoostTab : public content::WebContentsObserver,
     }
     const bool restored = navigation->IsPageActivation();
     BoostEffect effect = EffectFor(navigation->GetURL());
-    if (effect.css.empty() && effect.scripts.empty() && !restored) {
+    const bool empty = effect.css.empty() && effect.scripts.empty();
+    if (empty && !restored && !armed_) {
       return;
     }
+    armed_ = !empty && !restored;
     if (auto page = PageOf(frame)) {
       page->SetBoost(effect.css, restored ? std::vector<std::string>() : effect.scripts,
                      !restored);
@@ -176,6 +178,7 @@ class BoostTab : public content::WebContentsObserver,
   }
 
   std::optional<Boost> preview_;
+  bool armed_ = false;
   std::pair<int, std::string> zoom_key_{100, std::string()};
   const void* color_view_ = nullptr;
   std::optional<std::array<float, 20>> color_;

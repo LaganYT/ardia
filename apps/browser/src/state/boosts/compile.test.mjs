@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { colorMatrix, compileBoost, boostStylesheet } = await import("./compile.ts");
+const { colorMatrix, compileBoost, boostStylesheet, fitsEngine } = await import("./compile.ts");
 const { DEFAULT_COLORS } = await import("./types.ts");
 
 const near = (actual, expected) => {
@@ -64,4 +64,10 @@ test("a zap that would break out of its rule is left out", () => {
 
 test("a picker-escaped selector keeps its rule, a trailing backslash does not", () => {
   assert.equal(boostStylesheet({ ...blank, zaps: [".post\\:card", ".x\\"] }), ".post\\:card{display:none !important;}");
+});
+
+test("compiled code is measured in UTF-8 bytes against the engine limit", () => {
+  assert.ok(fitsEngine(compileBoost({ ...blank, css: "a".repeat(1024 * 1024) })));
+  assert.ok(!fitsEngine(compileBoost({ ...blank, css: "a".repeat(1024 * 1024), font: "Inter" })));
+  assert.ok(!fitsEngine(compileBoost({ ...blank, js: "é".repeat(600 * 1024) })));
 });

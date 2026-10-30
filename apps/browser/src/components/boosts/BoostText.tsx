@@ -95,7 +95,7 @@ export function BoostTextControls({
 }) {
   return (
     <Box row gap="s">
-      <ToolButton icon="textformat.size" title={`${size}%`} tooltip="Change text size" onPress={() => onSize(next(BOOST_SIZES, size))} />
+      <ToolButton icon="textformat.size" title={`${size}%`} tooltip="Change page zoom" onPress={() => onSize(next(BOOST_SIZES, size))} />
       <ToolButton icon="textformat" title={CASE_LABELS[textCase]} tooltip="Change text case" onPress={() => onCase(next(BOOST_CASES, textCase))} />
       <ToolButton icon="bolt.fill" title="Zap" tooltip={zapping ? "Stop Zapping" : "Hide elements on the page"} active={zapping} onPress={onZap} />
     </Box>

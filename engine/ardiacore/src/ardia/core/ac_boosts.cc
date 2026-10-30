@@ -3,12 +3,14 @@
 #include "ardia/core/ac_boosts.h"
 
 #include <cmath>
+#include <limits>
 #include <set>
 #include <utility>
 
 #include "base/json/json_reader.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
 namespace ardiacore {
@@ -33,6 +35,13 @@ std::string BareHost(std::string_view host) {
   return bare;
 }
 
+bool BoostableDomain(const std::string& domain) {
+  return domain == "localhost" ||
+         !net::registry_controlled_domains::GetDomainAndRegistry(
+              domain, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)
+              .empty();
+}
+
 std::optional<Boost> BoostFromValue(const base::Value& value) {
   const base::DictValue* dict = value.GetIfDict();
   if (!dict) {
@@ -48,7 +57,7 @@ std::optional<Boost> BoostFromValue(const base::Value& value) {
     return std::nullopt;
   }
   if (id->empty() || id->size() > kMaxBoostIdBytes || domain->size() > kMaxBoostDomainBytes ||
-      BareHost(*domain).empty() || css->size() > kMaxBoostSourceBytes ||
+      !BoostableDomain(BareHost(*domain)) || css->size() > kMaxBoostSourceBytes ||
       js->size() > kMaxBoostSourceBytes) {
     return std::nullopt;
   }
@@ -77,7 +86,7 @@ std::optional<Boost> BoostFromValue(const base::Value& value) {
         return std::nullopt;
       }
       const double entry = (*list)[i].GetDouble();
-      if (!std::isfinite(entry)) {
+      if (!std::isfinite(entry) || std::abs(entry) > std::numeric_limits<float>::max()) {
         return std::nullopt;
       }
       matrix[i] = static_cast<float>(entry);

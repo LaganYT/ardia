@@ -12,7 +12,7 @@ export function boostChanges(boost: Boost): string[] {
   const lines: string[] = [];
   if (boost.colors) lines.push(boost.colors.invert ? "Recolours the page with inverted lightness" : "Recolours the page");
   if (boost.font) lines.push(`Sets the font to ${boost.font}`);
-  if (boost.size !== 100) lines.push(`Sets the text size to ${boost.size}%`);
+  if (boost.size !== 100) lines.push(`Sets the page zoom to ${boost.size}%`);
   if (boost.textCase !== "none") lines.push(`Shows text in ${CASES[boost.textCase]}`);
   if (boost.zaps.length) lines.push(`Hides ${plural(boost.zaps.length, "element")}`);
   const css = boost.css.trim();

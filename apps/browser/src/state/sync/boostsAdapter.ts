@@ -12,6 +12,7 @@ export function boostsAdapter(profileId: string): Adapter {
       let next = current;
       for (const key of changed) {
         const id = key.slice(BOOST.length);
+        if (!id) continue;
         const remote = visible.has(key) ? validBoost(id, visible.get(key)) : null;
         const local = next.find((b) => b.id === id);
         if (!remote) {

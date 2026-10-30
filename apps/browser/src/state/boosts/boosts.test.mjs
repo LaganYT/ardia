@@ -94,5 +94,5 @@ test("code past the engine's limit isn't stored", () => {
   const boost = actions.createBoost("default", "example.com");
   actions.updateBoost("default", boost.id, { css: "a{}" });
   actions.updateBoost("default", boost.id, { css: "a".repeat(1024 * 1024 + 1) });
-  assert.equal(useBoostStore.getState().boostsByProfile.default[0].css, "a{}");
+  assert.equal(useBoostStore.getState().boostsByProfile.default.find((b) => b.id === boost.id).css, "a{}");
 });

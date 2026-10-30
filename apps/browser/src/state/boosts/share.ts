@@ -116,7 +116,8 @@ export function encodeBoost(boost: Boost): string | null {
     zaps: boost.zaps,
     css: boost.css,
   };
-  return SHARE_PREFIX + toBase64Url(compress(new TextEncoder().encode(JSON.stringify(shared))));
+  const code = SHARE_PREFIX + toBase64Url(compress(new TextEncoder().encode(JSON.stringify(shared))));
+  return "error" in decodeBoost(code) ? null : code;
 }
 
 export function shareLink(code: string): string {

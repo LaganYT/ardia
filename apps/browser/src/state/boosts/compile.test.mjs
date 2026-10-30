@@ -61,3 +61,7 @@ test("a compiled boost carries zoom, scheme and matrix", () => {
 test("a zap that would break out of its rule is left out", () => {
   assert.equal(boostStylesheet({ ...blank, zaps: [".ad", ".x{}body{display:none}", " "] }), ".ad{display:none !important;}");
 });
+
+test("a picker-escaped selector keeps its rule, a trailing backslash does not", () => {
+  assert.equal(boostStylesheet({ ...blank, zaps: [".post\\:card", ".x\\"] }), ".post\\:card{display:none !important;}");
+});

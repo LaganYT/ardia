@@ -111,7 +111,7 @@ class BoostTab : public content::WebContentsObserver,
     if (navigation->IsSameDocument() || !frame) {
       return;
     }
-    const bool restored = navigation->IsServedFromBackForwardCache();
+    const bool restored = navigation->IsPageActivation();
     BoostEffect effect = EffectFor(navigation->GetURL());
     if (effect.css.empty() && effect.scripts.empty() && !restored) {
       return;

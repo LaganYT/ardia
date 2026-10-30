@@ -190,7 +190,13 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
   },
 
   navigated(id, page, live) {
+    const previous = get().tabs[id]?.url;
     get().updateTab(id, page, live);
+    const action = previous !== page.url ? appUrlAction(page.url) : null;
+    if (action?.kind === "boost") {
+      showImportBoost(action.code);
+      openSettings("boosts");
+    }
   },
 
   faviconChanged(id, favicon) {

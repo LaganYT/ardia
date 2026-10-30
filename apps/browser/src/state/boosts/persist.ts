@@ -15,7 +15,7 @@ const profileKeys = () => {
   return [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map((id) => boostsKey(s, id)))];
 };
 
-const engineJson = (boosts: Boost[]) => JSON.stringify(boosts.filter((b) => b.enabled).map(compileBoost));
+const engineJson = (boosts: Boost[]) => JSON.stringify(boosts.filter((b) => b.enabled).sort((a, c) => (a.id < c.id ? -1 : 1)).map(compileBoost));
 
 function push(key: string, boosts: Boost[]) {
   const engine = engineProfile(useBrowser.getState(), key);

@@ -13,7 +13,7 @@ export type BoostTarget = { profileId: string; host: string };
 
 export function boostTarget(tabId: string): BoostTarget | null {
   const tab = currentTab(tabId);
-  if (!tab || isIncognitoProfile(tab.profileId) || !/^https?:/i.test(tab.url)) return null;
+  if (!tab || tab.engine === "webkit" || isIncognitoProfile(tab.profileId) || !/^https?:/i.test(tab.url)) return null;
   try {
     return { profileId: tab.profileId, host: new URL(tab.url).hostname };
   } catch {

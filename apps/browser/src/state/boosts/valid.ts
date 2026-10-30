@@ -35,6 +35,7 @@ export function validBoost(id: string, raw: unknown): Boost | null {
   if (!Array.isArray(zaps) || !zaps.every(isString)) return null;
   const checked = colors === null ? null : validColors(colors);
   if (colors !== null && !checked) return null;
+  if (id.length > MAX_ID || (css as string).length > MAX_SOURCE || (js as string).length > MAX_SOURCE || (domain as string).length > 253) return null;
   return {
     id,
     name: name as string,
@@ -55,9 +56,12 @@ export function validBoost(id: string, raw: unknown): Boost | null {
 
 export const withoutId = ({ id: _id, ...rest }: Boost) => rest;
 
-const UNSAFE_SELECTOR = /[{};@<>\\]|\/\*/;
+const UNSAFE_SELECTOR = /[{};@<>]|\/\*/;
 const WEB_URL = /url\(\s*(?!["']?data:)/i;
-const IMPORT_RULE = /@import/i;
+const FETCHING_CSS = /@import|image-set\(|image\(|cross-fade\(|src\(|\\/i;
 
-export const safeSelector = (selector: string) => selector.trim().length > 0 && !UNSAFE_SELECTOR.test(selector);
-export const importableCss = (css: string) => !IMPORT_RULE.test(css) && !WEB_URL.test(css);
+export const safeSelector = (selector: string) => selector.trim().length > 0 && !UNSAFE_SELECTOR.test(selector) && !/(^|[^\\])(\\\\)*\\$/.test(selector);
+export const importableCss = (css: string) => !FETCHING_CSS.test(css) && !WEB_URL.test(css);
+
+const MAX_ID = 128;
+const MAX_SOURCE = 1024 * 1024;

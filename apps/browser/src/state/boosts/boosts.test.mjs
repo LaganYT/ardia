@@ -80,3 +80,11 @@ test("boosts are saved per profile and read back", () => {
   useBoostStore.setState({ boostsByProfile: {} });
   assert.deepEqual(loadBoosts("default").map((b) => b.id), [boost.id]);
 });
+
+test("a boost past the engine's limits is dropped", () => {
+  const ok = { name: "n", author: "", domain: "example.com", subdomains: false, enabled: true, colors: null, font: null, size: 100, textCase: "none", zaps: [], css: "", js: "", modified: 1 };
+  assert.ok(validBoost("x", ok));
+  assert.equal(validBoost("x".repeat(129), ok), null);
+  assert.equal(validBoost("x", { ...ok, css: "a".repeat(1024 * 1024 + 1) }), null);
+  assert.equal(validBoost("x", { ...ok, js: "a".repeat(1024 * 1024 + 1) }), null);
+});

@@ -206,7 +206,19 @@ test("css that loads from the web and selectors that escape their rule are refus
     assert.match(decodeBoost(await codeFor(shared({ css }))).error, /web/);
   }
   assert.equal(decodeBoost(await codeFor(shared({ css: "a{background:url(data:image/png;base64,AAAA)}" }))).error, undefined);
+  for (const css of ["a{background:u\\72l(https://evil.test/a)}", "@\\69mport 'x';", 'a{background:image-set("https://evil.test/a" 1x)}', 'a{background:image("https://evil.test/a")}']) {
+    assert.match(decodeBoost(await codeFor(shared({ css }))).error, /web/);
+  }
   for (const zap of [".a{}body{display:none}", ".a;b", "@media x", ".a/*", ".a\\"]) {
     assert.match(decodeBoost(await codeFor(shared({ zaps: [zap] }))).error, /hidden elements/);
   }
+});
+
+test("a selector the picker escaped is accepted", async () => {
+  assert.equal(decodeBoost(await codeFor(shared({ zaps: [".post\\:card"] }))).error, undefined);
+});
+
+test("a boost the decoder would refuse is not shared", () => {
+  assert.equal(encodeBoost(boost({ css: "a{background:url(https://example.com/bg.png)}" })), null);
+  assert.equal(encodeBoost(boost({ name: "x".repeat(101) })), null);
 });

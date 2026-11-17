@@ -551,6 +551,125 @@ test("an hour with only a drag let go with no place to drop still sends it", asy
   assert.deepEqual([props.drags_without_drop, props.presses, props.drags], [1, 0, 0]);
 });
 
+const touch = (x, y, startTimeStamp) => ({ nativeEvent: { identifier: "0", pageX: x, pageY: y }, touchHistory: { touchBank: [{ startTimeStamp }] } });
+const sent = async () => {
+  presses.emitTabPresses();
+  await client.saveQueueNow();
+  return events("tab_presses").at(-1).properties;
+};
+
+test("a click endHeldTabPress drops is counted under the condition that dropped it, with no tab id", async () => {
+  const held = await import("../sidebar/heldTabPress.ts");
+  const hold = (tabId, start) => held.holdTabPress("win-a", tabId, touch(10, 10, start));
+  hold("tab-1", 100);
+  held.endHeldTabPress(["tab-1"], null);
+  hold("tab-2", 200);
+  held.endHeldTabPress(["other"], touch(10, 10, 200));
+  hold("tab-3", undefined);
+  held.endHeldTabPress(["tab-3"], touch(10, 10, 300));
+  hold("tab-4", 400);
+  held.endHeldTabPress(["tab-4"], touch(10, 10, 999));
+  hold("tab-5", 500);
+  held.endHeldTabPress([], null);
+  hold("tab-6", 600);
+  held.endHeldTabPress(["tab-6"], touch(10, 10, 600));
+
+  const props = await sent();
+  assert.equal(props.presses, 6);
+  assert.equal(props.drags, 5);
+  assert.equal(props.drag_clicks, 1);
+  assert.equal(props.drop_no_release, 2);
+  assert.equal(props.drop_not_dragged, 1);
+  assert.equal(props.drop_no_start, 1);
+  assert.equal(props.drop_start_mismatch, 1);
+  assert.equal(props.drop_no_release + props.drop_not_dragged + props.drop_no_start + props.drop_start_mismatch, props.drags);
+  assert.ok(!JSON.stringify(props).includes("tab-"), "no tab id goes out with the counts");
+});
+
+test("presses Pressable ends without onPress are counted with the window's key state and the drift, whichever of onPress and onPressOut comes first", async () => {
+  const held = await import("../sidebar/heldTabPress.ts");
+  const { useBrowser } = await import("../browser/store.ts");
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  useBrowser.setState((s) => ({ ui: { ...s.ui, focusOrder: ["win-a", "win-b"] } }));
+  const hold = (windowId, tabId, start) => held.holdTabPress(windowId, tabId, touch(10, 10, start));
+
+  const away = hold("win-b", "tab-1", 100);
+  held.pressOutTabPress(away, touch(17, 10, 100));
+  held.endHeldTabPress([], null);
+  const slow = hold("win-a", "tab-2", 200);
+  held.pressOutTabPress(slow, touch(11, 10, 200));
+  held.clickHeldTabPress("win-a", "tab-2", touch(11, 10, 200), slow);
+  const quick = hold("win-a", "tab-3", 300);
+  held.clickHeldTabPress("win-a", "tab-3", touch(10, 12, 300), quick);
+  held.pressOutTabPress(quick, touch(10, 12, 300));
+  held.pressOutTabPress(quick, touch(10, 12, 300));
+  held.pressOutTabPress(hold("win-a", "tab-4", 400), { nativeEvent: {} });
+  held.pressOutTabPress(hold("win-a", "tab-5", 500), touch(40, 10, 500));
+  await tick();
+
+  const props = await sent();
+  assert.equal(props.presses, 5);
+  assert.equal(props.clicks, 2);
+  assert.equal(props.press_out_no_press, 3);
+  assert.equal(props.unfocused_presses, 1);
+  assert.equal(props.unfocused_no_press, 1);
+  assert.deepEqual([props.drift_lt5, props.drift_5_9, props.drift_10_plus, props.drift_unknown], [2, 1, 1, 1]);
+  assert.deepEqual([props.no_press_drift_lt5, props.no_press_drift_5_9, props.no_press_drift_10_plus, props.no_press_drift_unknown], [0, 1, 1, 1]);
+  assert.ok(!JSON.stringify(props).includes("tab-"), "no tab id goes out with the counts");
+});
+
+test("a press that leaves the tab and comes back before release is one press, and its click counts no lost click", async () => {
+  const held = await import("../sidebar/heldTabPress.ts");
+  const first = held.holdTabPress("win-a", "tab-1", touch(10, 10, 700));
+  held.pressOutTabPress(first, touch(40, 10, 700));
+  const back = held.holdTabPress("win-a", "tab-1", touch(12, 10, 700), first);
+  assert.equal(back, first, "the same gesture keeps its record");
+  held.pressOutTabPress(back, touch(12, 10, 700));
+  held.clickHeldTabPress("win-a", "tab-1", touch(12, 10, 700), back);
+  const early = held.holdTabPress("win-a", "tab-2", touch(10, 10, 710));
+  held.pressOutTabPress(early, touch(40, 10, 710));
+  const again = held.holdTabPress("win-a", "tab-2", touch(10, 10, 710), early);
+  held.clickHeldTabPress("win-a", "tab-2", touch(10, 10, 710), again);
+  held.pressOutTabPress(again, touch(10, 10, 710));
+
+  const props = await sent();
+  assert.equal(props.presses, 2);
+  assert.equal(props.clicks, 2);
+  assert.equal(props.press_out_no_press, 0);
+  assert.deepEqual([props.drift_lt5, props.drift_5_9, props.drift_10_plus, props.drift_unknown], [2, 0, 0, 0], "one drift per gesture, from where it was released");
+});
+
+test("a press released off the tab counts one lost click, at the next press or when the hour's event is built", async () => {
+  const held = await import("../sidebar/heldTabPress.ts");
+  const off = held.holdTabPress("win-a", "tab-1", touch(10, 10, 800));
+  held.pressOutTabPress(off, touch(40, 10, 800));
+  assert.equal(presses.devTabPresses().press_out_no_press, 0, "not counted while Pressable may still answer");
+  const next = held.holdTabPress("win-a", "tab-2", touch(10, 10, 900), off);
+  assert.equal(presses.devTabPresses().press_out_no_press, 1, "the next gesture settles it");
+  held.pressOutTabPress(next, touch(17, 10, 900));
+
+  const props = await sent();
+  assert.equal(props.presses, 2);
+  assert.equal(props.press_out_no_press, 2);
+  assert.deepEqual([props.no_press_drift_lt5, props.no_press_drift_5_9, props.no_press_drift_10_plus, props.no_press_drift_unknown], [0, 1, 1, 0]);
+  assert.equal(presses.devTabPresses().unansweredOut, false);
+});
+
+test("a lost click still waiting when the hour's event is built goes out in that event, even with no press that hour", async () => {
+  const held = await import("../sidebar/heldTabPress.ts");
+  const press = held.holdTabPress("win-a", "tab-1", touch(10, 10, 1000));
+  const before = await sent();
+  assert.equal(before.presses, 1);
+  assert.equal(before.press_out_no_press, 0);
+  held.pressOutTabPress(press, touch(40, 10, 1000));
+  const count = events("tab_presses").length;
+  const props = await sent();
+  assert.equal(events("tab_presses").length, count + 1, "the hour with only the lost click still sends");
+  assert.equal(props.presses, 0);
+  assert.equal(props.press_out_no_press, 1);
+  assert.equal(props.no_press_drift_10_plus, 1);
+});
+
 test("turning sharing off forgets pending presses and samples, so they never go out under the next install id", async () => {
   await diagnostics.recordContext();
   assert.ok(diagnostics.contextSamples().length > 0);
@@ -566,7 +685,8 @@ test("turning sharing off forgets pending presses and samples, so they never go 
   presses.emitTabPresses();
   await client.saveQueueNow();
   assert.equal(events("tab_presses").length, 0);
-  assert.deepEqual(presses.devTabPresses(), { presses: 0, down_switches: 0, clicks: 0, drag_clicks: 0, drags: 0, drags_without_drop: 0, unanswered: 0, range_selects: 0, range_from_shown: 0, page_refused: 0, pending: false, toPageClick: 0, held: 0 });
+  assert.deepEqual(Object.values(presses.devTabPresses()).filter((n) => n !== 0 && n !== false), []);
+  assert.ok("drop_start_mismatch" in presses.devTabPresses() && "no_press_drift_unknown" in presses.devTabPresses() && "page_refused" in presses.devTabPresses() && "drags_without_drop" in presses.devTabPresses());
 });
 
 test("with sharing off no context is saved, and tab presses stay in the local copy, never queued", async () => {

@@ -105,6 +105,7 @@ export const LINUX_WORDING: readonly Wording[] = [
       ["and how many times its Open System Settings button was pressed", "and how many times its settings button was pressed"],
       ["how many Dock icon clicks brought a browser window forward", "how many taskbar icon clicks brought a browser window forward"],
       ["How many times ⌘T kept a New Tab bar", "How many times Ctrl+T kept a New Tab bar"],
+      ["How many times ⇧⌘C went to a focused Developer Tools", "How many times Ctrl+Shift+C went to a focused Developer Tools"],
       ["and how many use ⌥ without ⌘ or ⌃,", "and how many use Alt without Ctrl or Super,"],
       ["How many times ⌥↩ in the command bar", "How many times Alt+Enter in the command bar"],
       ["how often the ⌃Tab switcher opens", "how often the Ctrl+Tab switcher opens"],

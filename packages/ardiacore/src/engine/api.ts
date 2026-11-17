@@ -197,6 +197,7 @@ export type EngineCalls = {
   "webView.setVideoUpscalingTestConditions": [{ lowPower?: boolean; thermalPressure?: boolean; capturing?: boolean }, null];
   "webView.videoUpscalingState": [{}, VideoUpscalingState | null];
   "webView.takeContentDrift": [{}, { layouts: number; fits: number; maxPoints: number }];
+  "webView.takeFirstPaintHolds": [{}, { held: number; painted: number; loaded: number; pressed: number; timedOut: number; heldMs: number }];
 
   "webKit.removeDownloadStaging": [{ path: string }, boolean];
   "webKit.endPrivateSession": [{ session: string }, null];
@@ -216,6 +217,7 @@ export type EngineEvents = {
   "engine.cliControl": CliControlStatus;
   "engine.hoverLost": HoverLostEpisode;
   "engine.popupProtectedMedia": PopupProtectedMedia;
+  "engine.devToolsKeyKept": Record<string, never>;
   "engine.cursorRestored": { hidden: boolean };
   "engine.windowUnpainted": WindowUnpaintedRecord;
   "engine.pressLoopLong": PressLoopLongReport;

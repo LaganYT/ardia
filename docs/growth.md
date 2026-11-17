@@ -222,7 +222,14 @@ owner's Mac ──▶ ardia.dev/_ch/ (read-only ClickHouse user)   ardia.dev/_re
     to the first press in its page, within 60 s), `range_selects` (⇧-clicks that selected a range of tabs) and
     `range_from_shown` (those whose last clicked tab was no longer the shown one, so the range started at the shown tab:
     #1074, where it started at a Top Apps tile and took every pinned tab), `page_refused` (presses on the sidebar or anything else drawn over a
-    WebKit page that the page turned away, `WebKitPagePresses.swift`).
+    WebKit page that the page turned away, `WebKitPagePresses.swift`). Issue #1386 (a sidebar tab sometimes needs a second click) adds
+    counts of where a press is lost: `drop_no_release`/`drop_not_dragged`/`drop_no_start`/`drop_start_mismatch` (the
+    condition that stopped a drag from being rescued as a click; they add up to `drags`), `press_out_no_press` (presses
+    Pressable ended without `onPress`), `unfocused_presses` and `unfocused_no_press` (presses that began while the
+    window was not the key window of an active app, in all and among those without `onPress`), and the pointer's
+    drift from where the press began when Pressable ended it, in buckets of under 5 pt, 5-9 pt, 10 pt or more and
+    unknown, for every press (`drift_lt5`/`drift_5_9`/`drift_10_plus`/`drift_unknown`) and for those without `onPress`
+    (`no_press_drift_*`). Counts only: no tab id, URL, title or position.
   - `usage_counts` adds `web_notifications_from_shim` (website notifications that reached the page script this
     period; a notification that never reaches the page script doesn't count, so a gap shows up as missing counts),
     `web_notification_clicks` (clicks on Ardia's website notifications) and `worker_notification_responses` (clicks or

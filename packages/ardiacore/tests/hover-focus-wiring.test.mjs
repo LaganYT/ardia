@@ -55,8 +55,9 @@ test("taking focus from a lingering pane gives it back to the tab's remembered D
 });
 
 test("a focus handoff's late page refocus stands down when a newer gate has opened in the window", () => {
-  const end = body(handoff, "private func end(_ gate: Gate, restoring: Bool) {", "\n  }\n");
-  assert.match(end, /Self\.unfocused\(window\), self\.gates\[ObjectIdentifier\(window\)\] == nil else \{ return \}/);
+  const end = body(handoff, "private func end(_ gate: Gate, restoring: Bool", "\n  }\n");
+  assert.notEqual(end, "", "FocusHandoff's end(_:restoring:) is found");
+  assert.match(end, /afterPendingUI \{[^}]*guard [^\n]*Self\.unfocused\(window\), self\.gates\[ObjectIdentifier\(window\)\] == nil else \{ return \}[\s\S]*ArdiaWebView\.focusVisiblePage\(in: window\)/);
 });
 
 test("lending a page to a successor asks the successor to take the focus the page held", () => {
@@ -66,8 +67,10 @@ test("lending a page to a successor asks the successor to take the focus the pag
 });
 
 test("a focus handoff that ends without restoring the page refocuses the visible page when the window has no responder", () => {
-  const end = body(handoff, "private func end(_ gate: Gate, restoring: Bool) {", "\n  }\n");
+  const end = body(handoff, "private func end(_ gate: Gate, restoring: Bool", "\n  }\n");
+  assert.notEqual(end, "", "FocusHandoff's end(_:restoring:) is found");
   assert.match(end, /guard let window = gate\.window, Self\.unfocused\(window\) else \{ return \}/);
+  assert.match(end, /if restoring, [^\n]*\{\s*window\.makeFirstResponder\(page\)\s*return\s*\}\s*afterPendingUI \{/);
   assert.match(end, /afterPendingUI \{[\s\S]*Self\.unfocused\(window\)[\s\S]*ArdiaWebView\.focusVisiblePage\(in: window\)/);
 });
 

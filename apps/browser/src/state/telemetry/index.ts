@@ -17,6 +17,7 @@ import { startWatchNotice } from "./watchNotice";
 import { watchPressLoops } from "./pressLoops";
 import { reportIdentity, resetAnonymousId, telemetryIdentity } from "./identity";
 import { diagnosticsText } from "./diagnosticsSnapshot";
+import { watchPasteRefused } from "./pasteRefused";
 
 export { installErrorReporting };
 export { telemetryIdentity, reportIdentity, resetAnonymousId, type ReportIdentity, type TelemetryIdentity } from "./identity";
@@ -27,6 +28,7 @@ export { diagnosticsSnapshot, type DiagnosticsSnapshot } from "./diagnosticsSnap
 export function startTelemetry({ continuing = false }: { continuing?: boolean } = {}) {
   startUsage(continuing);
   watchPlatformCounts();
+  watchPasteRefused();
   startWatchNotice();
   watchPressLoops();
   startDaily(onboardingCompletedAt() !== null);

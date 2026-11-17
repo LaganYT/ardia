@@ -21,5 +21,5 @@ test("every edit key a page hands back is counted as accepted or refused, the fi
   const check = focusHandoff.slice(focusHandoff.indexOf("func refusesUnhandledKey"), focusHandoff.indexOf("func takeEditKeyAcks"));
   assert.ok(check.includes("let afterHandback = keyEpochs.takeHandback(of: window.windowNumber)"));
   assert.ok(check.indexOf('countEditKeyAck(afterHandback ? "afterHandbackAccepted" : "accepted")') < check.indexOf("acknowledged = event"), "an accepted key is counted before it goes on");
-  assert.ok(check.indexOf('countEditKeyAck(afterHandback ? "afterHandbackRefused" : "refused")') < check.indexOf("NSSound.beep()"), "a refused key is counted where it beeps");
+  assert.ok(check.indexOf('countEditKeyAck(afterHandback ? "afterHandbackRefused" : "refused")') < check.indexOf("refuse(.staleEpoch"), "a refused key is counted where it beeps");
 });

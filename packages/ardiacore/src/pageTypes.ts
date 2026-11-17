@@ -169,13 +169,6 @@ export type FocusRestoreOutcome = "focused" | "kept" | "refused" | "gaveUp" | "u
 export type ProtectedMediaRequest = { keySystem: string; main: boolean };
 export type ZapPick = { selector: string; matches: number; levels: number };
 export type ZapAction = "start" | "stop" | "related";
-export type FairPlayReport = {
-  event: "played" | "failed" | "mirrored" | "mirrorResync" | "pip" | "pipReopen" | "choppy" | "nowPlayingCommand";
-  step?: "license" | "playback" | "player";
-  video?: boolean;
-  site?: "youtube";
-  fitted?: boolean;
-};
 
 export type WebViewProps = ViewProps & {
   engine?: PageEngine;
@@ -232,7 +225,6 @@ export type WebViewProps = ViewProps & {
   onSelection?: (selection: PageSelection | null) => void;
   onScroll?: (state: ScrollState) => void;
   onProtectedMedia?: (request: ProtectedMediaRequest) => void;
-  onFairPlay?: (report: FairPlayReport) => void;
   onAutoplayBlocked?: (count: number) => void;
   onReady?: () => void;
   onDiscarded?: (url: string, reason: DiscardReason | null) => void;

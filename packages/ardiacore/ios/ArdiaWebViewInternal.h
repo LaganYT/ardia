@@ -282,12 +282,6 @@ typedef NS_ENUM(NSInteger, ArdiaTransfer) {
 + (BOOL)playsForAutoPictureInPictureInWindow:(NSWindow *)window;
 @end
 
-@interface ArdiaWebView (SystemNowPlaying)
-- (void)systemNowPlayingChanged;
-- (void)withdrawSystemNowPlaying;
-- (void)noteSystemNowPlayingCommand;
-@end
-
 @interface ArdiaWebView (NavigationInternal)
 - (void)emitNavigation;
 - (void)queueNavigation;

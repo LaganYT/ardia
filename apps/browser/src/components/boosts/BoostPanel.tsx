@@ -5,6 +5,7 @@ import { Box, Button, space, Symbol, Text, TextField, useTheme } from "../ui";
 import { updateBoost } from "../../state/boosts/actions";
 import { closeBoostEditor, type BoostEditor } from "../../state/boosts/editor";
 import { useProfileBoosts } from "../../state/boosts/hooks";
+import { boostMatchesHost } from "../../state/boosts/match";
 import type { Boost } from "../../state/boosts/types";
 import { useTab } from "../../state/browser/hooks";
 import { copyShareCode, showBoostMenu } from "../../state/boostUi/actions";
@@ -45,10 +46,17 @@ function useDraft(profileId: string, tabId: string, boost: Boost) {
 export function BoostPanel({ windowId, editor }: { windowId: string; editor: BoostEditor }) {
   const profileId = useTab(editor.tabId, (t) => t?.profileId) ?? "";
   const stored = useProfileBoosts(profileId).find((b) => b.id === editor.boostId);
-  const gone = !stored;
+  const siteHost = useTab(editor.tabId, (t) => {
+    try {
+      return new URL(t?.url ?? "").hostname;
+    } catch {
+      return "";
+    }
+  });
+  const leave = !stored || (!!siteHost && !boostMatchesHost(stored, siteHost));
   useEffect(() => {
-    if (gone) closeBoostEditor(windowId);
-  }, [gone, windowId]);
+    if (leave) closeBoostEditor(windowId);
+  }, [leave, windowId]);
   if (!stored) return null;
   return <Panel windowId={windowId} tabId={editor.tabId} profileId={profileId} stored={stored} />;
 }

@@ -1,5 +1,5 @@
 import { diagnosticsSample, hardwareInfo, type HardwareInfo } from "../../platform/app";
-import { onHoverLost, systemState, type HoverLostEpisode } from "../../platform/performance";
+import { onHoverLost, onWindowUnpainted, systemState, type HoverLostEpisode, type WindowUnpaintedRecord } from "../../platform/performance";
 import { cliControlStatus } from "../../platform/cli";
 import { call } from "../../platform/engine";
 import { withDeadline } from "../../lib/deadline";
@@ -20,6 +20,8 @@ const HARDWARE_WAIT_MS = 1_000;
 const MAX_PAGE_PROCESS_EVENTS = 30;
 const MAX_HOVER_LOST_EVENTS = 20;
 const MAX_HOVER_LOST_SECONDS = 24 * 60 * 60;
+const MAX_WINDOW_UNPAINTED_EVENTS = 20;
+const MAX_WINDOW_VIEWS = 1_000;
 const MINUTE_MS = 60_000;
 const MIN_SAMPLES = 12;
 const MAX_SAMPLES = 600;
@@ -34,6 +36,7 @@ let appMemoryMb: number | null = null;
 let pageProcessesGone = 0;
 let pageProcessEvents = 0;
 let hoverLostEvents = 0;
+let windowUnpaintedEvents = 0;
 let samples: SavedContext[] = [];
 let recentPages: RecentPage[] = [];
 let shownPage: string | null = null;
@@ -291,7 +294,47 @@ export function trackHoverLost(e: HoverLostEpisode) {
   capture("page_hover_lost", hoverLostProperties(e));
 }
 
-export const watchHoverLost = () => onHoverLost(trackHoverLost);
+const UNPAINTED_WINDOWS = new Set(["regular", "private"]);
+const UNPAINTED_TRIGGERS = new Set(["seen", "key"]);
+const UNPAINTED_OCCLUSIONS = new Set(["visible", "occluded"]);
+
+const cappedCount = (value: unknown) => (Number.isFinite(value) ? Math.min(Math.max(0, Math.round(value as number)), MAX_WINDOW_VIEWS) : null);
+const hasBit = (bits: unknown, bit: number) => typeof bits === "number" && Number.isSafeInteger(bits) && (bits & (1 << bit)) !== 0;
+
+export function windowUnpaintedProperties(r: WindowUnpaintedRecord) {
+  return {
+    window: oneOf(UNPAINTED_WINDOWS, r.window),
+    trigger: oneOf(UNPAINTED_TRIGGERS, r.trigger),
+    seen: r.seen === true,
+    occlusion: oneOf(UNPAINTED_OCCLUSIONS, r.occlusion),
+    overruled: r.overruled === true,
+    app_active: r.appActive === true,
+    windows: cappedCount(r.windows),
+    share_tabs: !!useBrowser.getState().settings?.shareTabsAcrossWindows,
+    views: cappedCount(r.views),
+    unpainted: cappedCount(r.unpainted),
+    alpha_zero: hasBit(r.reasons, 0),
+    view_hidden: hasBit(r.reasons, 1),
+    page_hidden: hasBit(r.reasons, 2),
+    page_detached: hasBit(r.reasons, 3),
+    frame_hold_awaiting: hasBit(r.reasons, 4),
+    stand_in_lent: hasBit(r.reasons, 5),
+    stand_in_leaving: hasBit(r.reasons, 6),
+    veil_up: hasBit(r.reasons, 7),
+    session_min: sessionMinutes(),
+  };
+}
+
+export function trackWindowUnpainted(r: WindowUnpaintedRecord) {
+  if (windowUnpaintedEvents >= MAX_WINDOW_UNPAINTED_EVENTS) return;
+  windowUnpaintedEvents++;
+  capture("window_unpainted", windowUnpaintedProperties(r));
+}
+
+export function watchEngineReports() {
+  onHoverLost(trackHoverLost);
+  onWindowUnpainted(trackWindowUnpainted);
+}
 
 export const LAUNCH_GUARD_DOC = "launch-guard.json";
 

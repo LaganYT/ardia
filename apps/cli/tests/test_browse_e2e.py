@@ -513,6 +513,8 @@ class BrowseEndToEnd(unittest.TestCase):
         done = self.browse("batch", "--bail", session=session, stdin="\n".join(lines) + "\n")
         elapsed = time.monotonic() - started
         self.assertEqual(done.stdout.count("POST http://"), 5, done.stdout)
+        self.assertEqual(done.stdout.count('✓ fill #i-title "Item'), 5, done.stdout)
+        self.assertNotIn("was empty", done.stdout.split("✓ fill #i-title \"Item 4\"")[0])
         self.assertEqual(self.report(session)["items"], [
             {"title": f"Item {index}", "day": f"2026-11-{9 + index:02d}", "at": f"{9 + index:02d}:30", "kind": "b"} for index in range(5)])
         self.assertLess(elapsed, 30)
@@ -1134,6 +1136,33 @@ class BrowseEndToEnd(unittest.TestCase):
         out = self.browse("click", "#next", session=session).stdout
         self.assertIn("A popup was in the way", out)
         self.assertEqual(self.report(session), {"clicked": ["next"], "closed": True})
+
+    def test_a_covered_click_names_the_layers_close_control(self):
+        import re
+
+        session = "store-banner"
+        self.browse("open", self.url("storebanner.html"), "--show", session=session)
+        failed = self.browse("click", "#go", session=session, check=False)
+        said = failed.stdout + failed.stderr
+        self.assertIn("its close control is @e", said)
+        ref = re.search(r"its close control is (@e\d+)", said).group(1)
+        self.browse("click", ref, session=session)
+        self.browse("click", "#go", session=session)
+        self.assertEqual(self.report(session), {"clicked": ["go"], "closed": True})
+
+    def test_open_with_read_prints_the_page_text_in_the_same_call(self):
+        out = self.browse("open", self.url("scopebadge.html"), "--read", session="open-read").stdout
+        self.assertIn("Kombucha starter kit", out)
+        self.assertRegex(out, r"\[read \d{4}-\d{2}-\d{2} ")
+
+    def test_a_timed_out_script_shows_what_it_kept(self):
+        session = "script-kept"
+        self.browse("open", self.url("scopebadge.html"), session=session)
+        done = self.browse("script", "--timeout", "5s", session=session, check=False,
+                           stdin="state.rows = ['alpha', 'beta']; await sleep(20000); return 1;")
+        said = done.stdout + done.stderr
+        self.assertIn("timed out", said)
+        self.assertIn('So far: {"rows":["alpha","beta"]}', said.replace(" ", "").replace("Sofar:", "So far: "))
 
     def test_text_with_half_an_emoji_still_reads(self):
         session = "surrogate"

@@ -82,6 +82,7 @@ chromium chromium-tab-sharing-capturer.patch
 chromium chromium-desktop-capture-window-audio.patch
 chromium chromium-video-super-resolution.patch mac
 chromium chromium-keep-old-frame-on-swap.patch mac
+chromium chromium-keep-compositor-on-occlusion.patch mac
 chromium chromium-windowless-page-screen-rects.patch mac
 chromium chromium-page-color-matrix.patch mac
 chromium chromium-freeze-spares-live-connections.patch

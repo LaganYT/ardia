@@ -462,7 +462,8 @@ def refuse_on_borrowed(ctx: Ctx, page, what: str):
 
 @command("open")
 async def cmd_open(ctx: Ctx, argv):
-    options, args = parse(argv, {"--enable": "multi", "--init-script": "multi", "--capture-console": "bool", "--headers": "value", "--label": "value", "--show": "bool"})
+    options, args = parse(argv, {"--enable": "multi", "--init-script": "multi", "--capture-console": "bool", "--headers": "value", "--label": "value", "--show": "bool",
+                                 "--read": "bool"})
     if options.get("headers"):
         raise Usage("ardia browse can't scope headers to an origin at launch; run `ardia browse set headers <json>` before `open`")
     ctx.options.setdefault("enable", []).extend(sum((value.split(",") for value in options.get("enable") or []), []))
@@ -475,7 +476,7 @@ async def cmd_open(ctx: Ctx, argv):
     show = wants_show(ctx, options)
     borrowed = state.extras.get("attached") if state.current and state.current == state.extras.get("attached") else None
     came_from = "about:blank"
-    reporting = bool(url) and not ctx.options.get("no_changes") and state.extras.get("top_command") != "script"
+    reporting = bool(url) and not ctx.options.get("no_changes") and state.extras.get("top_command") != "script" and not options.get("read")
     fresh_tab = not (state.current and state.current in state.target_infos and not borrowed)
     if fresh_tab:
         page = await new_tab(ctx, None if reporting else url, options.get("label"), show=show and not reporting)
@@ -517,6 +518,13 @@ async def cmd_open(ctx: Ctx, argv):
             where = f"→ Opened in its own background tab [{tab}]"
         if borrowed or not background:
             text += f"\n{where}; " + ("it takes input without being shown" if background else f"this Ardia doesn't deliver input there. use: ardia browse tab {tab} --show (or open <url> --show)")
+    if options.get("read"):
+        from ardia_cli import command_metrics
+
+        command_metrics.flag("open_read", True)
+        read = await cmd_read(ctx, [])
+        data["read"] = read.data
+        return Result(data, f"{text}\n\n{read.text}", page_content=True)
     result = Result(data, text)
     if reporting:
         report = await changes.arrival(ctx, page, came_from)
@@ -2290,6 +2298,7 @@ async def cmd_batch(ctx: Ctx, argv):
         else:
             outcomes.append({"command": ["close"], "success": False, "result": None, "code": "not_run", "text": None,
                              "error": "close not run: an earlier line failed or didn't run, so the session stays open"})
+    compact_batch_lines(outcomes)
     text = "\n\n".join((outcome["text"] if outcome["success"] or outcome.get("text") else f"✗ {outcome['error']}") or "" for outcome in outcomes)
     if options.get("out"):
         text = save_batch(ctx, options["out"], text, outcomes)
@@ -2300,6 +2309,41 @@ async def cmd_batch(ctx: Ctx, argv):
     if any(not outcome["success"] for outcome in outcomes):
         result.failed = True
     return result
+
+
+VALUE_ONLY_LINE = re.compile(r"^~ .*\(was .*\)$|^~ option .*\(was (\[selected\]|plain)\)$")
+NOTHING_ELSE = "→ Nothing else on the page changed yet."
+COMPACTED_COMMANDS = {"fill", "select", "check", "uncheck", "type"}
+
+
+def value_only(text: str | None) -> bool:
+    lines = [line for line in (text or "").split("\n") if line.strip()]
+    if len(lines) < 2 or not lines[0].startswith("✓") or lines[1].strip() != "changes:":
+        return False
+    rest = [line for line in lines[2:] if not line.startswith(NOTHING_ELSE)]
+    return bool(rest) and all(VALUE_ONLY_LINE.match(line.strip()) for line in rest)
+
+
+def compact_batch_lines(outcomes: list[dict]):
+    from ardia_cli import command_metrics
+
+    succeeded = [index for index, outcome in enumerate(outcomes) if outcome["success"]]
+    if len(succeeded) < 2:
+        return
+    compacted = 0
+    for index in succeeded[:-1]:
+        outcome = outcomes[index]
+        command = outcome["command"]
+        words = command if isinstance(command, list) else shlex.split(str(command))
+        name = words[0] if words else ""
+        if words[:1] == ["find"] and len(words) >= 4:
+            name = words[3] if words[1] in ("role", "text", "label", "placeholder", "alt", "title", "testid") else words[2]
+        if name not in COMPACTED_COMMANDS or not value_only(outcome.get("text")):
+            continue
+        outcome["text"] = "✓ " + " ".join(word if re.fullmatch(r"[\w@#.:/=+,-]+", word) else json.dumps(word, ensure_ascii=False) for word in words)
+        compacted += 1
+    if compacted:
+        command_metrics.add("batch_lines_compacted", compacted)
 
 
 FETCHING = re.compile(r"\bfetch\s*\(|\bXMLHttpRequest\b|\bnew\s+DOMParser\b|\bwindow\.open\s*\(")

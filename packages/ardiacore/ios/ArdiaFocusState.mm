@@ -182,6 +182,7 @@ void WatchFocusChanges() {
                                         }];
   WatchHover();
   WatchPageCursor();
+  WatchPainting();
 }
 
 void NotePointer(NSEvent *event, NSString *swallowedBy) {
@@ -240,6 +241,7 @@ NSString *FocusState() {
     [lines addObject:line];
   }
   [lines addObject:HoverProbeLine()];
+  [lines addObject:PaintProbeLine()];
   for (NSWindow *window in NSApp.windows)
     if (IsBrowserWindow(window)) [lines addObjectsFromArray:BrowserWindowLines(window)];
   for (NSString *change in FocusHistory()) [lines addObject:[@"was " stringByAppendingString:change]];

@@ -418,6 +418,57 @@ test("a lost-hover episode sends only its enums, flags and duration, capped per 
   assert.equal(events("page_hover_lost").length, 20);
 });
 
+test("an unpainted window sends its enums, flags, counts and reason bits, capped per session", async () => {
+  const { useBrowser } = await import("../browser/store.ts");
+  const record = { window: "private", trigger: "seen", seen: true, occlusion: "visible", overruled: false, appActive: true, windows: 2, views: 3, unpainted: 2, reasons: (1 << 0) | (1 << 4) | (1 << 7) };
+  diagnostics.trackWindowUnpainted(record);
+  diagnostics.trackWindowUnpainted({ window: "https://private.example", trigger: "Title of a page", seen: 1, occlusion: 7, overruled: "yes", appActive: "yes", windows: 1e9, views: -4, unpainted: 1e9, reasons: "all", url: "https://private.example", title: "Inbox", profile: "Work" });
+  const settings = useBrowser.getState().settings;
+  useBrowser.setState({ settings: { ...settings, shareTabsAcrossWindows: true } });
+  diagnostics.trackWindowUnpainted(record);
+  useBrowser.setState({ settings });
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  await client.saveQueueNow();
+  const [first, odd, shared] = events("window_unpainted").map((e) => e.properties);
+  assert.equal(first.app_active, true);
+  assert.equal(first.windows, 2);
+  assert.equal(first.share_tabs, false);
+  assert.equal(shared.share_tabs, true);
+  assert.equal(odd.app_active, false);
+  assert.equal(odd.windows, 1000);
+  assert.equal(first.window, "private");
+  assert.equal(first.trigger, "seen");
+  assert.equal(first.seen, true);
+  assert.equal(first.occlusion, "visible");
+  assert.equal(first.overruled, false);
+  assert.equal(first.views, 3);
+  assert.equal(first.unpainted, 2);
+  assert.equal(first.alpha_zero, true);
+  assert.equal(first.view_hidden, false);
+  assert.equal(first.page_hidden, false);
+  assert.equal(first.page_detached, false);
+  assert.equal(first.frame_hold_awaiting, true);
+  assert.equal(first.stand_in_lent, false);
+  assert.equal(first.stand_in_leaving, false);
+  assert.equal(first.veil_up, true);
+  assert.equal(odd.window, "unknown");
+  assert.equal(odd.trigger, "unknown");
+  assert.equal(odd.seen, false);
+  assert.equal(odd.occlusion, "unknown");
+  assert.equal(odd.overruled, false);
+  assert.equal(odd.views, 0);
+  assert.equal(odd.unpainted, 1000);
+  assert.equal(odd.alpha_zero, false);
+  assert.equal(odd.veil_up, false);
+  assert.equal(JSON.stringify(odd).includes("private.example"), false);
+  assert.equal(JSON.stringify(odd).includes("Inbox"), false);
+  assert.equal(JSON.stringify(odd).includes("Work"), false);
+  for (let i = 0; i < 30; i++) diagnostics.trackWindowUnpainted(record);
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  await client.saveQueueNow();
+  assert.equal(events("window_unpainted").length, 20);
+});
+
 test("tab presses count clicks, drags turned into clicks, drags and presses that got no answer", async () => {
   presses.notePressStarted(true);
   presses.notePressEnded("click", "t1");

@@ -29,7 +29,8 @@ function measured(spec: SettingSpec<unknown>, value: unknown): string | null {
 
 function customShortcutCounts(overrides: Settings["shortcuts"]): Record<string, string> {
   const keys = Object.values(overrides).filter((stored) => stored[0]).map((stored) => storedShortcut(stored).key);
-  return { custom_shortcuts: String(keys.length), custom_shortcuts_navigation_keys: String(keys.filter(isNavigationOrFunctionKey).length) };
+  const optionOnly = Object.values(overrides).filter((stored) => stored[0]).map((stored) => storedShortcut(stored).modifiers).filter((mods) => mods.includes("option") && !mods.includes("command") && !mods.includes("control"));
+  return { custom_shortcuts: String(keys.length), custom_shortcuts_navigation_keys: String(keys.filter(isNavigationOrFunctionKey).length), custom_shortcuts_option_only: String(optionOnly.length) };
 }
 
 export function settingsSnapshot(settings: Settings): Record<string, string> {

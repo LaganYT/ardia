@@ -86,6 +86,19 @@ export type HoverLostEpisode = {
   episode: number;
 };
 
+export type WindowUnpaintedRecord = {
+  window: "regular" | "private";
+  trigger: "seen" | "key";
+  seen: boolean;
+  occlusion: "visible" | "occluded";
+  overruled: boolean;
+  appActive: boolean;
+  windows: number;
+  views: number;
+  unpainted: number;
+  reasons: number;
+};
+
 export type PressLoopLongReport = { loop: string; inner: string; open: boolean; buttonsHeld: boolean };
 
 export type CliTabTarget = { targetId: string | null; pageGeneration: number };

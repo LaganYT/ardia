@@ -108,7 +108,7 @@ export const TabRow = memo(function TabRow({
       style={moved.style as object}
       onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
     >
-      <TabPressArea windowId={windowId} tab={tab}>
+      <TabPressArea windowId={windowId} tab={tab} hitSlop={rowGapSlop(0)}>
       {({ pressed }) => (
           <SidebarRowSurface
             fill={onto || (!active && pressed) ? pressedFill : fill}
@@ -298,6 +298,12 @@ export const SplitRowItem = memo(function SplitRowItem({
 });
 
 const SPLIT_DIVIDER_LENGTH = 16;
+const SPLIT_PANE_INSET = 3;
+
+function rowGapSlop(inset: number) {
+  const reach = inset + layout.rowGap / 2;
+  return { top: reach, bottom: reach };
+}
 const SPLIT_SLOT = { flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0, gap: space.xxs } as const;
 
 function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
@@ -310,11 +316,11 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
   if (!tab) return null;
   return (
     <View {...hoverProps} style={{ flex: 1, minWidth: 0 }}>
-      <TabPressArea windowId={windowId} tab={tab}>
+      <TabPressArea windowId={windowId} tab={tab} hitSlop={rowGapSlop(SPLIT_PANE_INSET)}>
         {({ pressed }) => (
           <View
             style={{
-              height: layout.rowHeight - 6,
+              height: layout.rowHeight - SPLIT_PANE_INSET * 2,
               borderRadius: radius.tile,
               flexDirection: "row",
               alignItems: "center",

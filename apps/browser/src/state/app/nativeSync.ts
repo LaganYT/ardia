@@ -1,9 +1,10 @@
-import { lastTabClosesWindow } from "../../platform/tabs";
+import { lastTabClosesWindow, onWindowRequest } from "../../platform/tabs";
 import { onDownload } from "../../platform/downloads";
 import { releaseProfile } from "../../platform/profiles";
 import { closeWindow, onWindowEvent, openWindow, restoreFullScreen, setTrafficLightsCenter, setWindowTitle, windowIds } from "../../platform/windows";
 import { isDarkAppearance, onAppEvent, onOpenURLs, replyToTerminate } from "../../platform/app";
 import { startNativeSettings } from "../settings/nativeSettings";
+import { startInterfaceScaleRefresh } from "./interfaceScaleRefresh";
 import { menuShortcuts, onCommand, setMenuStateParts } from "../../platform/commands";
 import { Appearance } from "react-native";
 import { useBrowser } from "../browser/store";
@@ -11,29 +12,36 @@ import { setLastTabKeepsWindow } from "../omnibox/newTabBarPolicy";
 import { isUtilityWindowId } from "../settings/settingsWindows";
 import { openingLightsCenter } from "../windows/layout";
 import { createWindowSync, type WindowPort } from "../windows/windowSync";
-import { openExternalUrls } from "../littleArdia/actions";
+import { closeLittleArdiaForAppLink, openExternalUrls } from "../littleArdia/actions";
 import { startUnclaimedEscape } from "../windows/unclaimedEscape";
 import { SMALL_LIGHTS_CENTER } from "../windows/small";
 import { runCommand } from "../commands/commands";
 import { setMenuBarShortcuts } from "../commands/commandShortcuts";
 import { finishAnimatedCloses } from "../windows/closeAnimated";
+import { followHandedBack, startKeyboardFollows } from "../focus/keyboardFollows";
 import { cancelAbandonedFocusMoves, settlingCommandFocus } from "../focus/focusHandoff";
 import { flushPersistence, resumePersistence } from "../session/persist";
 import { flushLive } from "../live/store";
 import { startWindowCloseGuard } from "../windows/windowClose";
 import { openLastWindowOrNew } from "../windows/lastWindow";
 import { noteDockReopen } from "../telemetry/usage";
+import { noteWindowReopenedMaximized } from "../telemetry/windowPlacementCounts";
+import { noteLittleArdiaAppHandoff } from "../telemetry/littleArdiaEscapes";
 import { startExtensionsBridge } from "../extensions/bridge";
 import { useExtensions } from "../extensions/actions";
+import { useReader } from "../reader/reader";
 import { answerQuitAfterSaves, isQuitting, setQuitting } from "./quit";
 import { menuInputsChanged, trackedMenuState, type MenuReads } from "../commands/menuState";
 import { usePages } from "../tabs/pageState";
+import { openFromWindowlessPage } from "../tabs/openFromWindowlessPage";
+import { startCaptionRegionSync } from "../windows/captionRegions";
 
 const QUIT_SAVES_WAIT_MS = 3_000;
 
 
 export const shellWindowPort: WindowPort = {
   open(id, options, lightsCenter) {
+    if (options.maximized) noteWindowReopenedMaximized();
     void setTrafficLightsCenter(id, lightsCenter);
     void openWindow(id, options);
   },
@@ -52,8 +60,10 @@ export function startNativeSync() {
   onCommand((e) => settlingCommandFocus(e, runCommand));
   startWindowCloseGuard();
   startExtensionsBridge();
-  onOpenURLs((urls, pointer, source) => openExternalUrls(urls, pointer, source));
+  onOpenURLs((urls, pointer, source, returnTo) => openExternalUrls(urls, pointer, source, returnTo));
+  onWindowRequest(({ request, profile, fromWindow }) => openFromWindowlessPage(request, profile, fromWindow));
   startUnclaimedEscape();
+  startKeyboardFollows();
   void lastTabClosesWindow()
     .catch(() => true)
     .then((closes) => setLastTabKeepsWindow(!closes));
@@ -61,6 +71,7 @@ export function startNativeSync() {
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   startNativeSettings();
+  startInterfaceScaleRefresh();
   void isDarkAppearance().then((dark) => store.getState().setAppDark(dark));
 
   onAppEvent((e) => {
@@ -70,6 +81,10 @@ export function startNativeSync() {
       noteDockReopen(e.pastFloating);
       openLastWindowOrNew("dock");
     }
+    if (e.type === "appLinkOpened") closeLittleArdiaForAppLink(e.windowId);
+    if (e.type === "snapKeyHandedBack") followHandedBack(e.windowId);
+    if (e.type === "littleArdiaReturnedToApp") noteLittleArdiaAppHandoff("returnToApp");
+    if (e.type === "littleArdiaGlobalShortcut") noteLittleArdiaAppHandoff("globalShortcut");
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
     if (e.type === "willQuit") {
       setQuitting(true);
@@ -131,5 +146,9 @@ export function startNativeSync() {
   useExtensions.subscribe((e, prev) => {
     if (e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
   });
+  useReader.subscribe(() => {
+    menuTimer ??= setTimeout(syncMenu, 120);
+  });
   void windows.sweep();
+  startCaptionRegionSync();
 }

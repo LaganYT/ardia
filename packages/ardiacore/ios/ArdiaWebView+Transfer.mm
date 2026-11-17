@@ -138,7 +138,9 @@ static ArdiaCoreTab *StartParkedPage(NSString *url, NSString *profileName, NSStr
 - (BOOL)takeLinkTab:(NSString *)adoptId {
   ArdiaCoreTab *tab = [ArdiaTabParking parkLinkTab:adoptId forKey:_transferKey];
   if (!tab) return NO;
+  [ArdiaTabRegistry expectFirstShowFocus:YES forTab:tab];
   if ([self takeTransferredTab] != ArdiaTransferNone) return YES;
+  [ArdiaTabRegistry expectFirstShowFocus:NO forTab:tab];
   [ArdiaTabParking discardTab:tab forKey:_transferKey];
   return NO;
 }
@@ -175,10 +177,16 @@ static ArdiaCoreTab *StartParkedPage(NSString *url, NSString *profileName, NSStr
       offered = nil;
     }
     if (offered && !offered.closed && [self holdTransferOf:offered]) {
-      if (_transferKey.length) [ArdiaTabParking park:offered forKey:_transferKey];
+      if (_transferKey.length) {
+        [ArdiaTabParking park:offered forKey:_transferKey];
+        [ArdiaTabRegistry expectFirstShowFocus:YES forTab:offered];
+      }
       return;
     }
-    if (offered && !offered.closed) return [self attach:offered];
+    if (offered && !offered.closed) {
+      [ArdiaTabRegistry expectFirstShowFocus:YES forTab:offered];
+      return [self attach:offered];
+    }
   }
   NSString *kind = nil, *key = nil;
   NSRange colon = _adoptId ? [_adoptId rangeOfString:@":"] : NSMakeRange(NSNotFound, 0);
@@ -344,6 +352,10 @@ static ArdiaCoreTab *StartParkedPage(NSString *url, NSString *profileName, NSStr
             completion:^(NSDictionary *) {}];
 }
 
+- (void)forgetRestoreKey {
+  if (_transferKey.length) [BoundRestoreKeys() removeObject:_transferKey];
+}
+
 - (void)closeBrowser {
   ArdiaCoreTab *tab = _tab;
   if (tab && _life.handingOff && _transferKey.length && !tab.closed) {
@@ -354,6 +366,7 @@ static ArdiaCoreTab *StartParkedPage(NSString *url, NSString *profileName, NSStr
   }
   _life.close();
   if (!tab) return;
+  [self tabWillClose:tab];
   if (_transferKey.length && !ardia_host::IsPrivateProfile(_profile) && ArdiaHost.isStarted)
     [ArdiaServices call:@"ac_tab_restore_tag" profile:_profile args:@{@"tab" : @(tab.tabId), @"key" : _transferKey}
               completion:^(NSDictionary *) {}];

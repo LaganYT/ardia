@@ -1,16 +1,16 @@
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import { Animated, Pressable, View } from "react-native";
 import { useTheme } from "../ui/theme";
-import { useGroup, usePageProfileId, useWindowId } from "../../state/browser/hooks";
+import { useGroup, usePageProfileId, useWindowId, useWindowProfileId } from "../../state/browser/hooks";
 import { updateGroup } from "../../state/groups/actions";
 import { noteGroupHeaderHide } from "../../state/telemetry/usage";
 import { useGroupLabel } from "../../state/groups/hooks";
 import { useSelectionInGroup } from "../../state/pins/hooks";
 import { newCapture } from "../../state/sidebar/listCapture";
-import { useCapturedGroupEntries, useGroupFirstTabIcon, useGroupTabIds, useKeptEntries, useShowsExtraTabs } from "../../state/sidebar/hooks";
+import { useCapturedGroupEntries, useGroupTabIds, useKeptEntries, useShowsExtraTabs } from "../../state/sidebar/hooks";
 import { MeetingTimeLabel, useMeetingCountdown } from "../live/MeetingCountdown";
 import { HoverSlot } from "../ui/HoverSlot";
-import { Button, ContextMenuArea, FadeLabel, font, ink, space, Symbol, Text, weight, withAlpha } from "../ui";
+import { Button, ContextMenuArea, FadeLabel, ink, space, Symbol, Text, weight, withAlpha } from "../ui";
 import { commitRename, endRename } from "../../state/sidebar/actions";
 import { useDragFolded, useDragItem, useDropInto } from "./DragProvider";
 import { useShift, type EntryMotion } from "./EntryMotion";
@@ -19,26 +19,25 @@ import { GROUP_BORDER, GROUP_INNER_RADIUS, GROUP_INDENT, GROUP_INSET, GROUP_RADI
 import { entryHeightNow, foldedGroupHeight, headGap } from "../../state/sidebar/geometry";
 import { dismissHover } from "../../state/sidebar/hover";
 import { useGroupHover, useRowHover } from "./hoverController";
-import { HOVER_CARD_FADE_MS } from "./hoverMotion";
+import { useHoverFade } from "./hoverMotion";
 import { GhostSlot, ListMotionContext, useGroupMotion } from "./ListMotion";
 import { pressGroupClose, useGroupCloseControlWhile } from "../../state/sidebar/closeControl";
 import { openGroupMenu } from "../../state/sidebar/menus";
 import { registerRow, useSidebarUi } from "../../state/sidebar/sidebarUi";
-import { TabIcon } from "./TabIcon";
+import { FolderOrIcon } from "./AnimatedFolder";
 import { RenameField, SplitRowItem, TabRowItem } from "./TabRow";
-import { groupBoxAtRest, groupSurface, TAB_ROW, TABULAR_NUMS, useSidebarTokens } from "./tokens";
+import { groupBoxAtRest, groupSurface, SIDEBAR_TYPE, TAB_ROW, TABULAR_NUMS, useSidebarTokens } from "./tokens";
 import { SidebarRowSurface } from "./SidebarRow";
-import { curve } from "../ui/motion";
 import { entryKey, parseEntry } from "../../state/sidebar/entryKey";
 import { LiveFolderBlock } from "./LiveFolderBlock";
 import { tailKey, type RowSection } from "./dragModel";
 import { SharedFolderMark } from "./SharedFolderMark";
 
-const BOX_FADE = curve.fade;
 const NO_GROUPS: ReadonlySet<string> = new Set();
 
 type ReportInnerHover = (groupId: string, hovered: boolean) => void;
 const InnerGroupHover = createContext<ReportInnerHover | null>(null);
+const NO_SLIDE_BELOW = { slideBelow: null };
 
 function useInnermostHover(groupId: string, hovered: boolean) {
   const reportToParent = useContext(InnerGroupHover);
@@ -58,16 +57,6 @@ function useInnermostHover(groupId: string, hovered: boolean) {
     return () => reportToParent(groupId, false);
   }, [reportToParent, hovered, groupId]);
   return { innermost: hovered && hoveredInside.size === 0, reportInside };
-}
-
-function useBoxOpacity(shown: boolean) {
-  const [opacity] = useState(() => new Animated.Value(shown ? 1 : 0));
-  useEffect(() => {
-    const fade = Animated.timing(opacity, { toValue: shown ? 1 : 0, duration: HOVER_CARD_FADE_MS, easing: BOX_FADE, useNativeDriver: true });
-    fade.start();
-    return () => fade.stop();
-  }, [shown]);
-  return opacity;
 }
 
 export const GroupBlock = memo(function GroupBlock({
@@ -98,12 +87,13 @@ export const GroupBlock = memo(function GroupBlock({
 
   const fold = useFold(collapsed);
   const scope = useContext(ListMotionContext);
-  const motion = useGroupMotion(windowId, profileId, groupId, entries, captured, section === "list" && !parentGroup ? scope : { enabled: scope.enabled, slideBelow: null }, scope.enabled && !collapsed);
+  const onShownPage = useWindowProfileId() === profileId;
+  const motion = useGroupMotion(windowId, profileId, groupId, entries, captured, section === "list" && !parentGroup ? scope : NO_SLIDE_BELOW, onShownPage && !collapsed);
   const [moved, movedRef] = useShift(own?.shift ?? null);
   const box = useGroupHover(windowId, groupId);
-  const dropInto = useDropInto() === groupId;
+  const dropInto = useDropInto(groupId);
   const nested = useInnermostHover(groupId, box.hovered);
-  const boxOpacity = useBoxOpacity(nested.innermost || dropInto || groupBoxAtRest(color));
+  const boxOpacity = useHoverFade(nested.innermost || dropInto || groupBoxAtRest(color));
 
   const { fill, stroke } = groupSurface(color, tokens);
 
@@ -175,9 +165,8 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const tokens = useSidebarTokens();
   const group = useGroup(groupId, (g) => g);
   const label = useGroupLabel(groupId);
-  const firstTab = useGroupFirstTabIcon(groupId);
   const renaming = useSidebarUi((u) => u.renaming?.kind === "group" && u.renaming.id === groupId);
-  const dropInto = useDropInto() === groupId;
+  const dropInto = useDropInto(groupId);
   const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming ? { kind: "group", id: groupId } : null);
   const countdown = useMeetingCountdown(groupId);
   const closeControl = useGroupCloseControlWhile(groupId, hovered && !renaming);
@@ -205,11 +194,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
         >
           {() => (
             <SidebarRowSurface fill={dropInto ? theme.tabPressed : ink.clear} cornerRadius={GROUP_INNER_RADIUS}>
-              {group.icon || firstTab ? (
-                <TabIcon url={firstTab?.url ?? ""} favicon={firstTab?.favicon} icon={group.icon ?? firstTab?.customIcon} profileId={firstTab?.profileId} />
-              ) : (
-                <View style={{ width: 16 }} />
-              )}
+              <FolderOrIcon icon={group.icon} open={!collapsed || dropInto} color={group.color} />
               {renaming ? (
                 <RenameField
                   initial={group.name}
@@ -224,7 +209,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                     <Text lines={1} weight="medium" style={MEASURE_LABEL}>
                       {label}
                     </Text>
-                    <FadeLabel text={label} fontSize={font.body.fontSize} weight="medium" color={tokens.groupTitle} style={{ position: "absolute", left: 0, right: 0, top: 0, height: TAB_ROW.titleHeight }} />
+                    <FadeLabel text={label} fontSize={SIDEBAR_TYPE.title} weight="medium" color={tokens.groupTitle} style={{ position: "absolute", left: 0, right: 0, top: 0, height: TAB_ROW.titleHeight }} />
                   </View>
                   <SharedFolderMark groupId={groupId} />
                   <Animated.View

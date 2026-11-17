@@ -1,6 +1,6 @@
 import type { Settings } from "../settings/settings";
 
-export type BrowserSourceId = "arc" | "dia" | "chrome" | "safari" | "firefox" | "zen" | "brave" | "edge" | "helium" | "fresh";
+export type BrowserSourceId = "arc" | "dia" | "chrome" | "safari" | "firefox" | "zen" | "brave" | "edge" | "helium" | "chromium" | "vivaldi" | "opera" | "fresh";
 
 export type Preset = BrowserSourceId;
 
@@ -14,6 +14,9 @@ export const PRESET_NAMES: Record<Preset, string> = {
   brave: "Brave",
   edge: "Edge",
   helium: "Helium",
+  chromium: "Chromium",
+  vivaldi: "Vivaldi",
+  opera: "Opera",
   fresh: "Ardia",
 };
 
@@ -36,7 +39,6 @@ const CLASSIC_TABS: Partial<Settings> = {
   hideToolbarWhileScrolling: false,
   bookmarksBar: "newTab",
   searchEngine: "google",
-  commandBarPreference: "search",
   openLinksInLittleArdia: false,
   profileSwitcherIcons: false,
   peekLinksToOtherSites: false,
@@ -63,7 +65,6 @@ export const PRESETS: Record<Preset, Partial<Settings>> = {
     hideToolbarWhileScrolling: true,
     bookmarksBar: "never",
     searchEngine: "google",
-    commandBarPreference: "website",
     openLinksInLittleArdia: true,
     profileSwitcherIcons: false,
     peekLinksToOtherSites: true,
@@ -88,7 +89,6 @@ export const PRESETS: Record<Preset, Partial<Settings>> = {
     hideToolbarWhileScrolling: true,
     bookmarksBar: "never",
     searchEngine: "google",
-    commandBarPreference: "website",
     openLinksInLittleArdia: true,
     profileSwitcherIcons: true,
     peekLinksToOtherSites: true,
@@ -113,7 +113,6 @@ export const PRESETS: Record<Preset, Partial<Settings>> = {
     hideToolbarWhileScrolling: false,
     bookmarksBar: "never",
     searchEngine: "google",
-    commandBarPreference: "search",
     openLinksInLittleArdia: false,
     profileSwitcherIcons: true,
     peekLinksToOtherSites: true,
@@ -125,6 +124,9 @@ export const PRESETS: Record<Preset, Partial<Settings>> = {
   brave: { ...CLASSIC_TABS, searchEngine: "brave" },
   edge: { ...CLASSIC_TABS, searchEngine: "bing" },
   helium: CLASSIC_TABS,
+  chromium: CLASSIC_TABS,
+  vivaldi: CLASSIC_TABS,
+  opera: CLASSIC_TABS,
   fresh: { addressBar: "sidebar", commandBarPlacement: "centred", newTabPosition: "nextToCurrent", newTabButtonPosition: "bottom", profileSwitcherIcons: false },
 };
 

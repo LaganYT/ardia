@@ -1,9 +1,10 @@
-import { ContextMenuArea, Symbol, type SymbolProps } from "@ardia/shell";
+import { ContextMenuArea } from "@ardia/shell";
+import { Symbol, type SymbolProps } from "./Symbol";
 import { memo, type ReactNode } from "react";
 import { Animated, Image, Pressable, Text, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from "react-native";
 import { modifiersOf, type ClickModifiers } from "../../lib/keys";
 import { useToolbarRowContext } from "./toolbarRowContext";
-import { useHover } from "./useHover";
+import { useHover, useTooltip } from "./useHover";
 import { CloseButtonView, PillButtonView, PushButtonView, StepperButtonView } from "./ButtonKinds";
 import { useTheme } from "./theme";
 import { buttonMotion, usePressScaleMotion } from "./motion";
@@ -118,6 +119,7 @@ function IconButtonView(props: IconProps) {
   const { icon, disabled, active, glyphBox, weight = "regular", tooltip, palette, color, style, hit, image, badge, children } = props;
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+  const tip = useTooltip(tooltip);
   const metrics = useIconMetrics(props);
   const hover = palette ? palette.hover : theme.toolbarHover;
   const pressedFill = palette ? palette.pressed : theme.toolbarPressed;
@@ -169,7 +171,7 @@ function IconButtonView(props: IconProps) {
   );
   if (!props.toolbar)
     return (
-      <View tooltip={tooltip} style={style} {...hoverProps}>
+      <View tooltip={tip} style={style} {...hoverProps}>
         <Pressable onPress={props.onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} disabled={disabled} accessibilityRole="button" accessibilityLabel={tooltip} style={hit ? { width: hit.width, height: hit.height } : undefined}>
           {({ pressed }) => plate(pressed)}
         </Pressable>
@@ -191,7 +193,7 @@ function IconButtonView(props: IconProps) {
     </Pressable>
   );
   return (
-    <View tooltip={tooltip} style={style} mouseDownCanMoveWindow={false} {...hoverProps}>
+    <View tooltip={tip} style={style} mouseDownCanMoveWindow={false} {...hoverProps}>
       {onContextMenu && !disabled ? <ContextMenuArea onContextMenu={onContextMenu}>{button}</ContextMenuArea> : button}
     </View>
   );

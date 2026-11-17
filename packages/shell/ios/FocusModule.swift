@@ -1,4 +1,5 @@
 import AppKit
+import ArdiaCore
 import ExpoModulesCore
 
 public class FocusModule: Module {
@@ -30,7 +31,7 @@ public class FocusModule: Module {
         guard let self else { return }
         FocusHandoff.shared.install()
         self.watchUnclaimedEscape()
-        if let queue = self.appContext?.reactBridge?.uiManager.methodQueue {
+        if let queue = self.appContext?.reactBridge?.uiManager?.methodQueue {
           FocusHandoff.shared.afterPendingUI = { block in queue.async { DispatchQueue.main.async(execute: block) } }
           Self.pendingUIOwner = ObjectIdentifier(self)
         }
@@ -40,7 +41,10 @@ public class FocusModule: Module {
     OnDestroy { self.lifetime.end() }
 
     Function("pressesWithoutRelease") { () -> Int in PressRelease.pressesWithoutRelease }
+    Function("takeFocusHandoffCounts") { () -> [String: Int] in FocusHandoff.shared.takeOutcomes() }
     AsyncFunction("pressRepeated") { () -> [String: Any]? in PressRelease.pressRepeated }.runOnQueue(.main)
+    Function("takeEditKeyAcks") { () -> [String: Int] in FocusHandoff.shared.takeEditKeyAcks() }
+    Function("takeInputSourceKeys") { () -> Int in InputSourceKeys.takeWebKitTabKeys() }
     AsyncFunction("cancelFocusMove") { (generation: Int, restoringSource: Bool) in
       FocusHandoff.shared.cancel(generation, restoringSource: restoringSource)
     }.runOnQueue(.main)
@@ -87,6 +91,8 @@ public class FocusModule: Module {
       case 53: emit(["type": "switcherKey", "key": "escape"])
       case 124: emit(["type": "switcherKey", "key": "next"])
       case 123: emit(["type": "switcherKey", "key": "previous"])
+      case _ where event.charactersIgnoringModifiers?.lowercased() == "w" && !event.isARepeat && !event.modifierFlags.intersection([.control, .command]).isEmpty:
+        emit(["type": "switcherKey", "key": "close"])
       default: break
       }
       return nil

@@ -1,6 +1,8 @@
+import { hermesHeapBytes } from "../../lib/hermesHeap";
 import { inputIdleSeconds, trimEngineMemory } from "../../platform/performance";
 import { useBrowser } from "../browser/store";
 import { isQuitting } from "../app/quit";
+import { noteMemoryTrim, noteMemoryTrimFailure, noteMemoryTrimGivenUp } from "../telemetry/memoryTrimCounts";
 
 const QUIET_MS = 5000;
 const MIN_GAP_MS = 30000;
@@ -11,10 +13,9 @@ const MAX_POSTPONES = 30;
 const INPUT_IDLE_SECONDS = 2;
 const TIMER_LATE_MS = 50;
 
-type HermesStats = { js_heapSize?: number };
-const runtime = globalThis as { gc?: () => void; HermesInternal?: { getInstrumentedStats?: () => HermesStats } };
+const runtime = globalThis as { gc?: () => void };
 
-const heapSize = () => runtime.HermesInternal?.getInstrumentedStats?.().js_heapSize ?? null;
+const heapSize = hermesHeapBytes;
 
 let started = false;
 
@@ -43,13 +44,15 @@ export function startMemoryTrim() {
   const idle = (lateMs: number) => lateMs < TIMER_LATE_MS && (inputIdleSeconds() ?? Infinity) >= INPUT_IDLE_SECONDS;
 
   const finish = () => {
-    if (!isQuitting()) trimEngineMemory().catch(() => {});
+    if (isQuitting()) return;
+    trimEngineMemory().then(noteMemoryTrim, noteMemoryTrimFailure);
   };
 
   const compact = (step: number, before: number, postponed: number, lateMs: number) => {
     if (isQuitting()) return;
     if (!idle(lateMs)) {
       if (postponed < MAX_POSTPONES) later((late) => compact(step, before, postponed + 1, late), BUSY_RETRY_MS);
+      else noteMemoryTrimGivenUp();
       return;
     }
     runtime.gc!();
@@ -64,6 +67,7 @@ export function startMemoryTrim() {
     if (wait > 0) return later((late) => begin(late, postponed), wait);
     if (!idle(lateMs)) {
       if (postponed < MAX_POSTPONES) later((late) => begin(late, postponed + 1), BUSY_RETRY_MS);
+      else noteMemoryTrimGivenUp();
       return;
     }
     lastTrimAt = Date.now();

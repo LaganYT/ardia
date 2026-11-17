@@ -1,23 +1,27 @@
+import { layout, useScopedTheme } from "../ui/theme";
 import { devRegister } from "../dev/devRegister";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { Animated, PanResponder, type View } from "react-native";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { radius } from "../ui";
+import { perLook, radius } from "../ui";
 import { useClipped, type ClipSource } from "./EntryMotion";
 import { noDragMarks } from "../../state/sidebar/dragMarks";
-import { cellKey, RESTING_TAIL, ROW_GAP, type Ghost, type ItemSpec } from "./dragModel";
+import { cellKey, restingTail, type Ghost, type ItemSpec } from "./dragModel";
 import { DragController } from "./dragController";
+import { DragItems } from "./dragItems";
 import { onAppEvent } from "../../state/drag/dragNative";
 import { WindowDropGlow } from "../tabstrip/WindowDropGlow";
 import { TAB_CLICK_SLOP } from "../../state/sidebar/heldTabPress";
 
-const DROP_GLOW_PLACE = { left: 5, right: 5, top: 44, bottom: 6, borderRadius: radius.chrome } as const;
+const dropGlowPlace = perLook(() => ({ left: 5, right: 5, top: 44, bottom: 6, borderRadius: radius.chrome }));
 
 const DragContext = createContext<DragController | null>(null);
+const DragItemsContext = createContext<DragItems | null>(null);
 
 export function DragProvider({ children }: { children: (ghost: Ghost | null, controller: DragController) => ReactNode }) {
   const controller = useMemo(() => new DragController(), []);
+  const items = useMemo(() => new DragItems(controller, true), [controller]);
   const [ghost, setGhost] = useState<Ghost | null>(null);
   controller.setGhost = setGhost;
   useEffect(() => () => void (controller.active && controller.end(false)), [controller]);
@@ -28,10 +32,19 @@ export function DragProvider({ children }: { children: (ghost: Ghost | null, con
   }, [controller]);
   return (
     <DragContext.Provider value={controller}>
-      {children(ghost, controller)}
-      <WindowDropGlow place={DROP_GLOW_PLACE} />
+      <DragItemsContext.Provider value={items}>
+        {children(ghost, controller)}
+        <WindowDropGlow place={dropGlowPlace()} />
+      </DragItemsContext.Provider>
     </DragContext.Provider>
   );
+}
+
+export function DragPage({ live, children }: { live: boolean; children: ReactNode }) {
+  const controller = useContext(DragContext);
+  const items = useMemo(() => controller && new DragItems(controller, false), [controller]);
+  useLayoutEffect(() => items?.setLive(live), [items, live]);
+  return <DragItemsContext.Provider value={items}>{children}</DragItemsContext.Provider>;
 }
 
 export function DragScope({ enabled, children }: { enabled: boolean; children: ReactNode }) {
@@ -40,7 +53,7 @@ export function DragScope({ enabled, children }: { enabled: boolean; children: R
 }
 
 export const useDragController = () => useContext(DragContext) ?? undefined;
-export const useDropInto = () => useStore(useContext(DragContext)?.marks ?? noDragMarks, (m) => m.dropInto);
+export const useDropInto = (groupId: string) => useStore(useContext(DragContext)?.marks ?? noDragMarks, (m) => m.dropInto === groupId);
 export const useDropOnto = (key: string) => useStore(useContext(DragContext)?.marks ?? noDragMarks, (m) => m.onto === key);
 export const useDropPins = () => useStore(useContext(DragContext)?.marks ?? noDragMarks, (m) => m.pins);
 export const usePinSlots = (cells: string[]) =>
@@ -63,17 +76,15 @@ export const useDragFolded = (key: string) => useStore(useContext(DragContext)?.
 export const useDragging = () => useStore(useContext(DragContext)?.marks ?? noDragMarks, (m) => m.sources.size > 0);
 
 export function useDragItem(key: string, spec: ItemSpec, clip: ClipSource | null = null) {
-  const controller = useContext(DragContext) ?? undefined;
+  const items = useContext(DragItemsContext);
+  const controller = items?.controller;
   const marks = controller?.marks ?? noDragMarks;
   const item = useMemo(() => controller?.create(key), [controller, key]);
   if (item) Object.assign(item, spec);
   useEffect(() => {
-    if (!controller || !item) return;
-    controller.items.set(key, item);
-    return () => {
-      if (controller.items.get(key) === item) controller.items.delete(key);
-    };
-  }, [controller, item, key]);
+    if (!items || !item) return;
+    return items.add(key, item);
+  }, [items, item, key]);
 
   const responder = useMemo(() => {
     let far = 0;
@@ -115,21 +126,23 @@ export function useDragItem(key: string, spec: ItemSpec, clip: ClipSource | null
   const landing = useStore(marks, (m) => m.landing === key);
   const clipped = useClipped(clip);
   const horizontal = spec.kind === "tile";
-  const tailOffset = useMemo(() => item && Animated.add(item.gap, -ROW_GAP), [item]);
+  useScopedTheme();
+  const rowGap = layout.rowGap;
+  const tailOffset = useMemo(() => item && Animated.add(item.gap, -rowGap), [item, rowGap]);
   const style = item
     ? {
         ...(horizontal ? null : { marginTop: spec.kind === "tail" ? tailOffset! : item.gap }),
         ...(source
           ? horizontal
             ? { opacity: 0 }
-            : { height: item.size, marginBottom: -ROW_GAP, opacity: 0, overflow: "hidden" as const }
+            : { height: item.size, marginBottom: -layout.rowGap, opacity: 0, overflow: "hidden" as const }
           : landing
             ? { opacity: 0 }
             : {}),
-        ...(clipped && !source && !landing ? { marginTop: -ROW_GAP, paddingTop: ROW_GAP, overflow: "hidden" as const } : {}),
+        ...(clipped && !source && !landing ? { marginTop: -layout.rowGap, paddingTop: layout.rowGap, overflow: "hidden" as const } : {}),
       }
     : spec.kind === "tail"
-      ? RESTING_TAIL
+      ? restingTail()
       : {};
   return { wrapper: { ref, style }, handle: responder.panHandlers, headerRef, dragging: source, gap: item?.gap };
 }

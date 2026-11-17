@@ -1,6 +1,9 @@
 import type { BrowserState } from "../browser/store";
 import { activeTabId, isPinnedRow, viewTabIds } from "../browser/model";
 import { hiddenEmptyCard } from "../omnibox/newTabBarPolicy";
+import { changedIds } from "../browser/changes";
+import type { Tab } from "../browser/types";
+import { hasPage } from "../tabs/pageSession";
 import { splitRowPanes, splitTabIds, splitTabIdsOf } from "../splits/splits";
 import { groupIndex, splitIndex, stableList } from "../browser/structure";
 import { tileCells } from "../pins/tileFolders";
@@ -8,13 +11,33 @@ import { entryKey, parseEntry } from "./entryKey";
 
 type SidebarEntries = { tiles: string[]; cells: string[]; pinned: string[]; list: string[] };
 
-const memo = new Map<string, { inputs: unknown[]; result: SidebarEntries }>();
+export const ENTRY_TAB_FIELDS = ["pin", "liveItem", "profileId", "url", "page"] as const satisfies readonly (keyof Tab)[];
+
+const placesAlike = (a: Tab | undefined, b: Tab | undefined) =>
+  a === b || (!!a && !!b && a.pin === b.pin && a.liveItem === b.liveItem && a.profileId === b.profileId && !a.url === !b.url && hasPage(a) === hasPage(b));
+
+export function sameEntryTabs(tabs: BrowserState["tabs"], was: BrowserState["tabs"]): boolean {
+  if (tabs === was) return true;
+  for (const id of changedIds(tabs, was)) if (!placesAlike(tabs[id], was[id])) return false;
+  return true;
+}
+
+export type EntriesInputs = { tabs: BrowserState["tabs"]; rest: readonly unknown[] };
+
+export const entriesInputs = (s: BrowserState): EntriesInputs => ({ tabs: s.tabs, rest: [s.windows, s.groups, s.splits, s.settings.newTabOpens, s.settings.minimalismMode] });
+
+export const sameEntriesInputs = (now: EntriesInputs, was: EntriesInputs) => now.rest.every((v, i) => v === was.rest[i]) && sameEntryTabs(now.tabs, was.tabs);
+
+const memo = new Map<string, { inputs: EntriesInputs; result: SidebarEntries }>();
 
 export function sidebarEntries(s: BrowserState, windowId: string, profileId?: string): SidebarEntries {
-  const inputs = [s.tabs, s.windows, s.groups, s.splits, s.settings.newTabOpens];
+  const inputs = entriesInputs(s);
   const key = profileId ? `${windowId}|${profileId}` : windowId;
   const cached = memo.get(key);
-  if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
+  if (cached && sameEntriesInputs(inputs, cached.inputs)) {
+    cached.inputs = inputs;
+    return cached.result;
+  }
   let result = computeEntries(s, windowId, profileId);
   if (cached) {
     const was = cached.result;
@@ -62,13 +85,23 @@ function computeEntries(s: BrowserState, windowId: string, profileId?: string): 
 export function numberedTabs(s: BrowserState, windowId: string): string[] {
   const { tiles, pinned, list } = sidebarEntries(s, windowId);
   const active = activeTabId(s, windowId);
+  const profileId = s.windows[windowId]?.profileId;
+  const latest = (ids: string[]) => ids.reduce<string | undefined>((a, b) => (!a || s.tabs[b]!.lastActiveAt > s.tabs[a]!.lastActiveAt ? b : a), undefined);
+  const collapsedGroup = (groupId: string): string[] => {
+    const keptRows = profileId ? keptEntries(s, windowId, profileId, groupId) : [];
+    const kept = keptRows.flatMap(rowTab);
+    const onScreen = new Set(keptRows.flatMap((entry) => entryTabIds(s, entry)));
+    const members = s.groups[groupId]!.tabIds.filter((id) => s.tabs[id]);
+    const header = latest(members.filter((id) => !onScreen.has(id))) ?? latest(members);
+    return header ? [header, ...kept] : kept;
+  };
   const rowTab = (entry: string): string[] => {
     const { kind, id } = parseEntry(entry);
-    if (kind === "group") return groupEntries(s, id).flatMap(rowTab);
+    if (kind === "group") return s.groups[id]?.collapsed ? collapsedGroup(id) : groupEntries(s, id).flatMap(rowTab);
     if (kind !== "split") return [id];
     const panes = splitRowPanes(s, s.splits[id]);
     if (active && panes.includes(active)) return [active];
-    const last = panes.reduce<string | undefined>((a, b) => (!a || s.tabs[b]!.lastActiveAt > s.tabs[a]!.lastActiveAt ? b : a), undefined);
+    const last = latest(panes);
     return last ? [last] : [];
   };
   return [...tiles, ...pinned.flatMap(rowTab), ...list.flatMap(rowTab)];
@@ -116,6 +149,13 @@ export function showsExtraTabs(s: BrowserState, windowId: string, profileId: str
   });
 }
 
+function entryTabIds(s: BrowserState, entry: string): string[] {
+  const { kind, id } = parseEntry(entry);
+  if (kind === "group") return s.groups[id]?.tabIds ?? [];
+  if (kind === "split") return splitTabIdsOf(s.splits[id]) ?? [];
+  return [id];
+}
+
 export function holdsTab(s: BrowserState, entry: string, tabId: string): boolean {
   const { kind, id } = parseEntry(entry);
   if (kind === "group") return !!s.groups[id]?.tabIds.includes(tabId);
@@ -127,7 +167,10 @@ export function groupEntries(s: BrowserState, groupId: string): string[] {
   const g = s.groups[groupId];
   if (!g) return [];
   const cached = groupMemo.get(g);
-  if (cached && cached.tabs === s.tabs && cached.splits === s.splits && cached.groups === s.groups) return cached.result;
+  if (cached && cached.splits === s.splits && cached.groups === s.groups && sameEntryTabs(s.tabs, cached.tabs)) {
+    cached.tabs = s.tabs;
+    return cached.result;
+  }
   const splits = splitIndex(s.splits);
   const childOf = new Map<string, string>();
   for (const c of childGroups(s.groups, groupId)) for (const id of c.tabIds) childOf.set(id, c.id);

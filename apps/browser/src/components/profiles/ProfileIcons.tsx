@@ -1,6 +1,8 @@
-import { PixelRatio, Text } from "react-native";
+import { Text } from "react-native";
+import { snappedToDevicePixels } from "../../state/settings/interfaceScale";
 import { Dot, hairline, ink, Symbol, weight } from "../ui";
 import { profileAccent } from "../ui/theme";
+import { typeFace } from "../ui/tokens";
 import type { Profile } from "../../state/browser/types";
 import { profileBadge, profileColors, profileSwitcher } from "./tokens";
 import { iconSymbol } from "../../lib/customIcon";
@@ -78,7 +80,8 @@ const BADGE_EDGE_MIN = 22;
 export function ProfileBadge({ profile, size = 26 }: { profile: Pick<Profile, "name" | "color" | "icon"> & Partial<Pick<Profile, "theme">>; size?: number }) {
   const swatch = profileAccent(profile);
   const symbol = iconSymbol(profile.icon);
-  const nudge = PixelRatio.roundToNearestPixel(size * profileBadge.nudge);
+  const nudge = snappedToDevicePixels(size * profileBadge.nudge);
+  const tracking = profile.icon ? 0 : size * profileBadge.initialTracking;
   return (
     <Dot size={size} color={swatch} ring={size >= BADGE_EDGE_MIN ? profileColors.badgeEdge : undefined} ringWidth={hairline.ring}>
       {symbol ? (
@@ -87,13 +90,14 @@ export function ProfileBadge({ profile, size = 26 }: { profile: Pick<Profile, "n
         <Text
           numberOfLines={1}
           style={{
+            ...typeFace(),
             width: size,
             textAlign: "center",
             fontSize: profile.icon ? size * 0.55 : size * profileBadge.initialScale,
-            letterSpacing: profile.icon ? 0 : size * profileBadge.initialTracking,
+            letterSpacing: tracking,
             fontWeight: weight.semibold,
             color: ink.white,
-            transform: [{ translateX: profile.icon ? nudge : 0 }, { translateY: nudge }],
+            ...(profile.icon ? { transform: [{ translateX: nudge }, { translateY: nudge }] } : { height: size, lineHeight: size, transform: [{ translateX: tracking / 2 }] }),
           }}
         >
           {profile.icon ?? (profile.name.trim()[0] ?? "?").toUpperCase()}

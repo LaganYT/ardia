@@ -155,6 +155,36 @@ static void (^gQuitCancelledHandler)(void);
   if (p) [engine releaseProfile:p];
 }
 
++ (NSDictionary<NSString *, id> *)unloadIdleProfile:(NSString *)profile {
+  profile = profile ?: @"";
+  ArdiaCoreEngine *engine = ArdiaCoreEngine.sharedEngine;
+  ArdiaCoreProfile *p = ardia_host::LoadedProfile(profile);
+  NSDictionary * (^busy)(NSString *) = ^(NSString *heldBy) {
+    return @{@"status" : @"busy", @"tabs" : @[], @"heldBy" : heldBy};
+  };
+  if (!p) return ProfileWaiters()[profile] ? busy(@"profile") : @{@"status" : @"released", @"tabs" : @[]};
+  if (!engine || p.offTheRecord || ardia_host::IsPrivateSessionId(profile) || ardia_host::IsDeletedProfile(profile)) return busy(@"profile");
+  NSMutableArray<ArdiaWebView *> *views = [NSMutableArray array];
+  NSMutableArray<ArdiaCoreTab *> *hosted = [NSMutableArray array];
+  for (ArdiaWindowController *controller in ArdiaWindowController.all) {
+    for (ArdiaCoreTab *tab in [controller.coreWindow tabsForProfile:p]) {
+      ArdiaWebView *view = [ArdiaTabRegistry viewForTab:tab];
+      if (!view) return busy(@"tab");
+      if (NSString *heldBy = view.keptFromUnloadingBy) return busy(heldBy);
+      [views addObject:view];
+      [hosted addObject:tab];
+    }
+  }
+  if (NSString *heldBy = [engine sleepIdleProfile:p hostedTabs:hosted]) return busy(heldBy);
+  NSMutableArray<NSString *> *tabs = [NSMutableArray array];
+  for (ArdiaWebView *view in views) {
+    NSString *key = view.transferKey;
+    if (![view unloadKeepingHistory]) return @{@"status" : @"busy", @"tabs" : tabs, @"heldBy" : @"history"};
+    [tabs addObject:key];
+  }
+  return @{@"status" : [engine unloadIdleProfile:p], @"tabs" : tabs};
+}
+
 + (NSArray<NSString *> *)loadedProfiles {
   return ardia_host::LoadedDataProfileNames();
 }
@@ -386,6 +416,7 @@ static NSDictionary<NSString *, id> *OffscreenRefusal(NSString *reason) {
       @"height" : @(screen.frame.size.height),
     }];
   }
+  if (ArdiaLaunchConfig.shared.background) return sources;
   NSArray *windows = CFBridgingRelease(
       CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID));
   for (NSDictionary *w in windows) {
@@ -411,7 +442,15 @@ static NSDictionary<NSString *, id> *OffscreenRefusal(NSString *reason) {
 + (BOOL)screenRecordingAllowed {
   NSString *answer = [ArdiaLaunchConfig.shared testValue:@"screenRecording"];
   if (answer.length) return [answer isEqualToString:@"allowed"];
+  if (ArdiaLaunchConfig.shared.background) return NO;
   return CGPreflightScreenCaptureAccess();
+}
+
++ (BOOL)mayCaptureDesktopSource:(NSString *)sourceId {
+  if (!ArdiaLaunchConfig.shared.background) return YES;
+  if (![sourceId hasPrefix:@"screen:"] && ![sourceId hasPrefix:@"window:"]) return YES;
+  NSLog(@"[ardia] background mode: %@ capture refused, it would ask macOS for Screen Recording", [sourceId componentsSeparatedByString:@":"].firstObject);
+  return NO;
 }
 
 + (BOOL)requestScreenRecording {
@@ -432,6 +471,18 @@ static NSDictionary<NSString *, id> *OffscreenRefusal(NSString *reason) {
 
 + (NSString *)dataDirectory {
   return gDataDirectory ?: @"";
+}
+
++ (void)beginPressLoop:(NSString *)name {
+  ardia_host::BeginPressLoop(name);
+}
+
++ (void)endPressLoop {
+  ardia_host::EndPressLoop();
+}
+
++ (void)notePointer:(NSEvent *)event swallowedBy:(NSString *)name {
+  ardia_host::NotePointer(event, name);
 }
 
 + (NSDictionary<NSString *, id> *)engineInfo {

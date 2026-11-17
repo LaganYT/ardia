@@ -22,7 +22,7 @@ const rep = reporter(join(scratch, "tab-drag-test.log"), { name: "tab-drag-test"
 const tab = (id, windowId, pinned = false) => ({ id, windowId, pinned, lastActiveAt: id === "t1" ? 2 : 1 });
 const fixture = () => session({
   profiles: [{ id: "default", name: "Personal", color: "plum" }],
-  settings: { tabLayout: "top", dragToGroupInTopStrip: true },
+  settings: { tabLayout: "top" },
   windows: [
     { id: "w1", tabIds: ["p1", "p2", "t1", "t2", "t3", "t4"], activeTabIds: { default: "t1" }, frame: [80, 80, 1280, 800], createdAt: 1 },
     { id: "w2", tabIds: ["l1"], activeTabIds: { default: "l1" }, frame: [200, 120, 1100, 700], createdAt: 2 },
@@ -45,7 +45,7 @@ const win = (id) => ac.engine.call("windows.list").then((ws) => { const f = st()
 const act = (id, a) => win(id).then((n) => ac.engine.call("windows.dev", { window: n, action: a }));
 const items = (id) => win(id).then((n) => { const xs = []; for (let x = 70; x < st().windows[id].frame[2] - 100; x += 1) xs.push(x);
   return Promise.all(xs.map((x) => ac.engine.call("windows.dev", { window: n, action: "hit:" + x + ",21" }))).then((hits) => { const runs = []; let cur = null;
-    hits.forEach((h, i) => { const on = /ContextMenuArea|ImageView|Symbol|FadeLabel/.test(h); if (on && !cur) cur = [xs[i], xs[i]]; else if (on) cur[1] = xs[i]; else if (cur) { runs.push(cur); cur = null; } });
+    hits.forEach((h, i) => { const on = /ContextMenuArea|ImageView|Symbol|FadeLabel/.test(h) && !/^NSClipView|ContextMenuArea < RCTView < RCTView < RCTScrollContentView/.test(h); if (on && !cur) cur = [xs[i], xs[i]]; else if (on) cur[1] = xs[i]; else if (cur) { runs.push(cur); cur = null; } });
     if (cur) runs.push(cur); return runs; }); });
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const loose = (id) => st().windows[id].tabIds.filter((t) => !st().tabs[t].pin);
@@ -295,22 +295,16 @@ try {
     assert.deepEqual(await run(`return [loose("w3"), st().groups.grp.tabIds];`), [["g2", "g1", "x1"], ["g2", "g1"]]);
   });
 
-  await check("a tab let go on another tab's middle only reorders with Drag a tab onto another to group them off, and groups the two with it on", async () => {
+  await check("a tab let go on another tab's middle only reorders", async () => {
     const groupsIn = () => run(`return Object.values(st().groups).filter((g) => g.windowId === "w7").map((g) => g.tabIds);`);
     const dropOnSecond = async () => {
       const items = await run(`return tabItems("w7");`);
       const at = (i) => Math.round((items[i][0] + items[i][1]) / 2);
       return drag("w7", [[at(0), 21], [at(0) + 20, 21], [at(1) - 10, 21], [at(1), 21], [at(1), 21]]);
     };
-    await run(`st().updateSettings({ dragToGroupInTopStrip: false }); return settle(400);`);
     assert.equal(await dropOnSecond(), 0, "window drags");
-    assert.deepEqual(await groupsIn(), [], "setting off: no group");
-    assert.deepEqual(await tabsOf("w7"), ["c2", "c1", "c3"], "setting off: a reorder");
-    await run(`st().updateSettings({ dragToGroupInTopStrip: true }); return settle(400);`);
-    assert.equal(await dropOnSecond(), 0, "window drags");
-    const groups = await groupsIn();
-    assert.equal(groups.length, 1, `setting on: one group ${JSON.stringify(groups)}`);
-    assert.deepEqual([...groups[0]].sort(), ["c1", "c2"]);
+    assert.deepEqual(await groupsIn(), [], "no group");
+    assert.deepEqual(await tabsOf("w7"), ["c2", "c1", "c3"], "a reorder");
   });
 
   await check("a tab dragged onto another window's tabs: the strip makes room at the pointer, and it lands there", async () => {

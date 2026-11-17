@@ -12,6 +12,7 @@ import type { ClosedTab, ClosedWindow, SplitView, TabGroup } from "../browser/ty
 import { mapSlotIds, slotTabIds } from "../splits/splits";
 import { emptyWindow, smallWindow, withWindow } from "./newWindow";
 import { orderSections } from "../groups/groups";
+import { clearableRecentlyClosed, newestClosed } from "./recentlyClosedList";
 
 function restoreGroup(groups: Record<string, TabGroup>, g: Omit<TabGroup, "tabIds">, tabIds: string[]): [Record<string, TabGroup>, string] {
   const id = groups[g.id] ? newId("g") : g.id;
@@ -38,6 +39,20 @@ export function lastClosedEntry(s: BrowserState, windowId: string | null | undef
     (latest, e) => (e && (!latest || e.closedAt > latest.closedAt) ? e : latest),
     undefined,
   );
+}
+
+export function withoutRecentlyClosed(s: BrowserState, windowId: string | null | undefined): { cleared: number; next: Pick<BrowserState, "closedTabs" | "closedWindows" | "closedGroups"> } | undefined {
+  const list = clearableRecentlyClosed(s, windowId);
+  if (!list) return undefined;
+  const reopensNext = lastWindowToRestore(s);
+  const shown = newestClosed(list);
+  const gone = new Set<string>([...list.tabs, ...list.windows.filter((c) => c !== reopensNext || shown.includes(c)), ...list.groups].map((c) => c.id));
+  const next = {
+    closedTabs: s.closedTabs.filter((c) => !gone.has(c.id)),
+    closedWindows: s.closedWindows.filter((c) => !gone.has(c.id)),
+    closedGroups: s.closedGroups.filter((c) => !gone.has(c.id)),
+  };
+  return gone.size ? { cleared: gone.size, next } : undefined;
 }
 
 function canRestoreTabInto(s: BrowserState, c: ClosedTab, windowId: string | undefined): boolean {
@@ -108,6 +123,8 @@ export function restoreWindow(s: BrowserState, entry: ClosedWindow): BrowserStat
   const id = newId("w");
   const profileOk = (p: string) => (s.profiles[p] ? p : s.settings.defaultProfileId);
   const w = emptyWindow(id, profileOk(entry.window.profileId), "main", entry.window.frame);
+  if (entry.window.restoredFrame) w.restoredFrame = entry.window.restoredFrame;
+  if (entry.window.maximized) w.maximized = true;
   if (entry.window.tabLayout) w.tabLayout = entry.window.tabLayout;
   if (entry.window.autoHideTabs !== undefined) w.autoHideTabs = entry.window.autoHideTabs;
   const tabs = { ...s.tabs };

@@ -6,6 +6,7 @@ import { encodeBoost, shareLink } from "../boosts/share";
 import { currentBoostsKey, loadBoosts } from "../boosts/store";
 import type { Boost } from "../boosts/types";
 import { boostableDomain } from "../boosts/valid";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { currentTab } from "../browser/current";
 import { isIncognitoProfile } from "../browser/model";
 import { activate } from "../tabs/actions";
@@ -14,7 +15,7 @@ export type BoostTarget = { profileId: string; host: string };
 
 export function boostTarget(tabId: string): BoostTarget | null {
   const tab = currentTab(tabId);
-  if (!tab || tab.engine === "webkit" || isIncognitoProfile(tab.profileId) || !/^https?:/i.test(tab.url)) return null;
+  if (!PLATFORM_FEATURES.boosts || !tab || tab.engine === "webkit" || isIncognitoProfile(tab.profileId) || !/^https?:/i.test(tab.url)) return null;
   try {
     const host = new URL(tab.url).hostname;
     return host !== EVERY_SITE && boostableDomain(host) ? { profileId: tab.profileId, host } : null;

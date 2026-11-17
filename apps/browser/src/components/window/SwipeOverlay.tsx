@@ -18,9 +18,11 @@ import {
   CAPSULE_SIZE_CONFIRMED,
   capsuleOffset,
   LIST_ROW,
+  LIST_FOLD_PROGRESS,
   listSelection,
   swipeProgress,
 } from "./swipeMotion";
+import { noteSwipeHistoryList } from "../../state/telemetry/swipeHistoryListCounts";
 
 const SIZE = CAPSULE_SIZE;
 const SIZE_CONFIRMED = CAPSULE_SIZE_CONFIRMED;
@@ -29,7 +31,6 @@ const ICON_CONFIRMED = 34;
 const LIST_WIDTH = 200;
 const ROW = LIST_ROW;
 const LIST_PAD = space.m;
-const LIST_RADIUS = radius.sheet;
 const LIST_IDLE_MS = 300;
 
 function spring(value: Animated.Value, toValue: number, spec: SpringSpec, native = false) {
@@ -142,9 +143,19 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     g.listY = lastDy.current;
     swipeHaptic("generic");
     v.pill.setValue(rowsAboveSelected(list.length, 0) * ROW);
-    layoutTo(LIST_WIDTH, list.length * ROW + LIST_PAD * 2, listTop(height, list.length, 0), LIST_RADIUS);
+    layoutTo(LIST_WIDTH, list.length * ROW + LIST_PAD * 2, listTop(height, list.length, 0), radius.sheet);
     Animated.timing(v.list, { toValue: 1, ...SWIPE_MOTION.list, useNativeDriver: true }).start();
     setShown((s) => (s ? { ...s, list, selected: 0 } : s));
+    noteSwipeHistoryList("opened");
+  };
+
+  const foldList = () => {
+    g.list = null;
+    g.selected = 0;
+    v.nudge.setValue(0);
+    Animated.timing(v.list, { toValue: 0, ...SWIPE_MOTION.list, useNativeDriver: true }).start();
+    setShown((s) => (s ? { ...s, list: null, selected: 0 } : s));
+    noteSwipeHistoryList("folded");
   };
 
   const select = (dy: number) => {
@@ -195,6 +206,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     }
 
     const progress = swipeProgress(e.distance);
+    if (g.list && progress < LIST_FOLD_PROGRESS) foldList();
     if (g.list) select(e.dy);
     else setConfirmed(progress >= 1);
     v.x.setValue(capsuleOffset(progress, g.width));
@@ -241,7 +253,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
           <Animated.View style={{ ...StyleSheet.absoluteFillObject, opacity: v.fade, transform: [{ scale: v.scale }] }}>
             <Surface
               style={StyleSheet.absoluteFill}
-              cornerRadius={shown.list ? LIST_RADIUS : (shown.confirmed ? SIZE_CONFIRMED : SIZE) / 2}
+              cornerRadius={shown.list ? radius.sheet : (shown.confirmed ? SIZE_CONFIRMED : SIZE) / 2}
               shadowColor={SHADOWS.swipe.color}
               shadowOpacity={theme.dark ? SHADOWS.swipe.opacity.dark : SHADOWS.swipe.opacity.light}
               shadowRadius={SHADOWS.swipe.radius}
@@ -295,7 +307,7 @@ function DestinationList({ tabId, items, selected, appear, pill }: { tabId: stri
           right: space.m,
           top: LIST_PAD,
           height: ROW,
-          borderRadius: concentric(LIST_RADIUS, space.m),
+          borderRadius: concentric(radius.sheet, space.m),
           backgroundColor: windowColors(theme.dark).swipeSelection,
           transform: [{ translateY: pill }],
         }}

@@ -6,11 +6,16 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(class, nonatomic, readonly) CGFloat windowCornerRadius;
 
++ (CGFloat)frameCornerRadiusOfWindow:(NSWindow *)window;
+
 + (nullable NSWindow *)makeWindowForProfile:(NSString *)profile;
 + (nullable NSWindow *)makeWindowForProfile:(NSString *)profile chromeWindow:(nullable NSString *)chromeWindow;
 + (nullable NSWindow *)makeWindowForProfile:(NSString *)profile
                                chromeWindow:(nullable NSString *)chromeWindow
                                   appWindow:(nullable NSString *)appWindow;
+
++ (void)floatForWindowManagers:(NSWindow *)window;
++ (void)floatOverActiveSpace:(NSWindow *)window;
 
 + (void)recordLaunchLayout;
 + (void)forgetLaunchPictures;
@@ -26,15 +31,24 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)setTrafficLightsCenter:(nullable NSValue *)center trailing:(BOOL)trailing inWindow:(NSWindow *)window;
 + (void)moveTrafficLightsCenter:(nullable NSValue *)center trailing:(BOOL)trailing inWindow:(NSWindow *)window;
++ (void)insetTrafficLightsOfWindow:(NSWindow *)window NS_SWIFT_NAME(insetTrafficLights(of:));
 
 + (void)closeWindow:(NSWindow *)window;
 
++ (NSSize)windowSizeFromInterfaceSize:(NSSize)size forWindow:(nullable NSWindow *)window NS_SWIFT_NAME(windowSize(fromInterface:for:));
++ (void)setInterfaceMinSize:(NSSize)size ofWindow:(NSWindow *)window NS_SWIFT_NAME(setInterfaceMinSize(_:of:));
++ (void)keepInterfaceContentSizeOfWindow:(NSWindow *)window NS_SWIFT_NAME(keepInterfaceContentSize(of:));
+
 + (void)showProfile:(NSString *)profile inWindow:(NSWindow *)window;
++ (void)showProfile:(NSString *)profile
+           inWindow:(NSWindow *)window
+             report:(nullable void (^)(BOOL profileLoaded, double activeMs, double swapMs, BOOL heldTimedOut))report;
 + (void)prepareProfiles:(NSArray<NSString *> *)profiles forWindow:(NSWindow *)window;
 @property(class, nonatomic, copy, nullable) void (^swappedHandler)(NSWindow *from, NSWindow *to);
 
 @property(class, nonatomic, copy, nullable) BOOL (^shouldCloseHandler)(NSWindow *window);
 @property(class, nonatomic, copy, nullable) BOOL (^refusesUnhandledKeyHandler)(NSWindow *window, NSEvent *event);
+@property(class, nonatomic, copy, nullable) NSString *(^focusHandoffSummaryHandler)(NSWindow *window);
 + (BOOL)windowShouldClose:(NSWindow *)window;
 + (BOOL)windowFullScreenIsForPage:(NSWindow *)window;
 + (BOOL)userSeesWindow:(nullable NSWindow *)window NS_SWIFT_NAME(userSees(_:));
@@ -47,6 +61,19 @@ NSView *_Nullable ArdiaWindowRootView(NSWindow *_Nullable window);
 NSValue *_Nullable ArdiaTrafficLightsCenter(NSWindow *_Nullable window);
 BOOL ArdiaTrafficLightsTrailing(NSWindow *_Nullable window);
 FOUNDATION_EXPORT BOOL ArdiaPerformReservedKey(NSEvent *event);
+
+@interface ArdiaChromeWindowHost (AccessibilityTitle)
+
+@property(class, nonatomic, copy, nullable) void (^accessibilityTitleReadHandler)(NSWindow *window);
+
+@end
+
+@interface ArdiaChromeWindowHost (LittleFit)
+
++ (nullable NSValue *)littleFrameFittingLandingOf:(NSWindow *)window
+                                      minimumSize:(NSSize)minimum NS_SWIFT_NAME(littleFrameFittingLanding(of:minimumSize:));
+
+@end
 
 @interface ArdiaChromeWindowHost (Dev)
 

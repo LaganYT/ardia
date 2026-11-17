@@ -5,7 +5,7 @@ import { layout, useTheme } from "../ui/theme";
 import type { BrowserState } from "../../state/browser/store";
 import { workspaceSnapshot } from "../../state/browser/current";
 import type { Capture, ListSnapshot } from "../../state/sidebar/listCapture";
-import { useAnimatedStyle, type ClipSource, type EntryMotion } from "./EntryMotion";
+import { setSliding, useAnimatedStyle, type ClipSource, type EntryMotion } from "./EntryMotion";
 import { groupEntries } from "../../state/sidebar/entries";
 import { entryHeight } from "../../state/sidebar/geometry";
 import { ghostEntry, snapshotEntry, type EntrySnapshot } from "./GhostEntry";
@@ -13,18 +13,17 @@ import { curve } from "../ui/motion";
 import { SIDEBAR_MOTION } from "./tokens";
 import { entryId, entryKey, parseEntry } from "../../state/sidebar/entryKey";
 import { splitTabIdsOf } from "../../state/splits/splits";
-import { noteSidebarMotionMerge } from "../../state/telemetry/usage";
+import { noteSidebarMotion } from "../../state/telemetry/usage";
+import { settleSlides, type Slide } from "./slideSettle";
 
 export const SLIDE_MS = SIDEBAR_MOTION.listSlide;
 export const FADE_MS = SIDEBAR_MOTION.listFade;
 export const SLIDE_EASING = curve.cssEase;
 export const FADE_EASING = curve.cssEaseOut;
-const GAP = layout.rowGap;
 const TAIL = "~tail";
 const FRAME_SLACK_MS = 50;
 const devScale = () => (__DEV__ ? ((globalThis as { sidebarMotionScale?: number }).sidebarMotionScale ?? 1) : 1);
 
-type Slide = { value: Animated.Value; from: number; at: number; until: number; landed: boolean };
 type Ghost = { key: string; anchor: string | null; y: number; snapshot: EntrySnapshot; opacity: Animated.Value; until: number };
 type Snapshot = ListSnapshot;
 type Move = { key: string; from: number };
@@ -33,9 +32,9 @@ type Offsets = { at: Map<string, number>; end: number };
 type Height = (s: BrowserState, entry: string) => number;
 type Planner = (before: Snapshot, after: Snapshot, slides: Map<string, Slide>, ghosts: Ghost[], t: number) => Plan | null;
 export type ListSlot = { entry: string } | { ghost: Ghost; top: number };
-export type ListMotionScope = { enabled: boolean; slideBelow: ((entry: string, delta: number) => void) | null };
+export type ListMotionScope = { slideBelow: ((entry: string, delta: number) => void) | null };
 
-export const ListMotionContext = createContext<ListMotionScope>({ enabled: false, slideBelow: null });
+export const ListMotionContext = createContext<ListMotionScope>({ slideBelow: null });
 let ghostIds = 0;
 
 const tabsOf = (s: BrowserState, entry: string): string[] => {
@@ -60,7 +59,7 @@ function offsets(s: BrowserState, entries: string[], height: Height, start = 0, 
   let y = base;
   for (let i = start; i < entries.length; i++) {
     at.set(entries[i]!, y);
-    y += height(s, entries[i]!) + GAP;
+    y += height(s, entries[i]!) + layout.rowGap;
   }
   return { at, end: y };
 }
@@ -73,7 +72,7 @@ function sharedPrefix(a: string[], b: string[]): number {
 
 function prefixHeight(s: BrowserState, entries: string[], count: number, height: Height): number {
   let y = 0;
-  for (let i = 0; i < count; i++) y += height(s, entries[i]!) + GAP;
+  for (let i = 0; i < count; i++) y += height(s, entries[i]!) + layout.rowGap;
   return y;
 }
 
@@ -213,20 +212,15 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
   if (enabled) devRegister("sidebarMotion", devKey, { slides, ghosts, clipped });
 
   const now = Date.now();
-  for (const slide of slides.values()) {
-    if (slide.until && now >= slide.until) {
-      slide.until = 0;
-      if (!slide.landed) slide.value.setValue(0);
-    }
-  }
+  if (settleSlides(slides.values(), now)) noteSidebarMotion("overrun");
   if (ghosts.current.some((g) => g.until && now >= g.until)) ghosts.current = ghosts.current.filter((g) => !g.until || now < g.until);
 
   const prepare = (plan: Plan, at: number) => {
-    for (const m of plan.moves) if (!slides.has(m.key)) slides.set(m.key, { value: new Animated.Value(m.from), from: m.from, at, until: 0, landed: false });
+    for (const m of plan.moves) if (!slides.has(m.key)) slides.set(m.key, { value: new Animated.Value(m.from), from: m.from, at, until: 0, run: null, landed: false });
     ghosts.current = [...ghosts.current, ...plan.ghosts];
     const pending = queued.current;
     const next = pending ? mergePlans(pending, plan) : plan;
-    if (pending) noteSidebarMotionMerge();
+    if (pending) noteSidebarMotion("merge");
     clipped.clear();
     for (const key of next.clipped) clipped.add(key);
     queued.current = next;
@@ -272,9 +266,15 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
       slide.at = at;
       slide.until = at + slideMs + FRAME_SLACK_MS;
       slide.landed = false;
-      const timing = Animated.timing(slide.value, { toValue: 0, duration: slideMs, easing: SLIDE_EASING, useNativeDriver: nativeTail || m.key !== TAIL });
+      const run = Animated.timing(slide.value, { toValue: 0, duration: slideMs, easing: SLIDE_EASING, useNativeDriver: nativeTail || m.key !== TAIL });
+      slide.run = run;
+      setSliding(slide.value, true);
       const clips = i === 0 && token;
-      timing.start(({ finished }) => {
+      run.start(({ finished }) => {
+        if (slide.run === run) {
+          slide.run = null;
+          setSliding(slide.value, false);
+        }
         if (!finished) return;
         slide.landed = true;
         if (!clips) return;
@@ -321,7 +321,7 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
         shown++;
       }
       if (here) byAnchor.delete(entry);
-      y += height(entry) + GAP;
+      y += height(entry) + layout.rowGap;
     }
     for (const left of byAnchor.values()) for (const ghost of left) if (!ghost.anchor || !entries.includes(ghost.anchor)) out.push(place(ghost, ghost.y - y));
     return out;
@@ -392,7 +392,7 @@ export const GhostSlot = memo(function GhostSlot({ snapshot, top, opacity }: { s
   const [fade, ref] = useAnimatedStyle(style);
   const theme = useTheme();
   return (
-    <View pointerEvents="none" {...fade} ref={ref} style={[{ height: 0, marginBottom: -GAP }, fade.style as object]}>
+    <View pointerEvents="none" {...fade} ref={ref} style={[{ height: 0, marginBottom: -layout.rowGap }, fade.style as object]}>
       {ghostEntry(snapshot, theme, top)}
     </View>
   );

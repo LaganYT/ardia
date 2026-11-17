@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 const script = readFileSync(new URL("../../../../packages/ardiacore/ios/page_script.js", import.meta.url), "utf8");
 const start = script.indexOf("  const ZAP_MAX_MATCHES = 100;\n");
-const end = script.indexOf("\n  return receive;\n})", start);
+const end = script.indexOf("\n  const scrollDirection = () => {", start);
 assert.ok(start > 0 && end > start, "page_script.js has the zap block");
 const source = script.slice(start, end);
 

@@ -1,19 +1,22 @@
-import { createContext, useContext } from "react";
+import { createContext, use } from "react";
 import { opaqueThemeTint, PRESET_BACKDROP, resolveTheme, requestedDarkFor, shownLook, themeAccent, themeBackdrop, themePalette, type LookSource, type ProfileColor, type ProfileLookFields, type ProfileTheme } from "../../lib/profileLook";
 import type { ThemeBackdropProps } from "@ardia/core";
 import { backdropTint, opaqueTint, tintForHue, type BackdropTint } from "../../lib/windowTint";
 import { isRgbFunction, luminance, mix, over, parseColor, rgbToHsl, toHex } from "../../lib/color";
 import { CARD_INSET, DEFAULT_SIDEBAR_WIDTH } from "../../lib/windowLayout";
 import { SIDEBAR_ROW } from "../../lib/sidebarMetrics";
-import { arcSelectedFill, colorRoles, ink, INCOGNITO_TINT, PROFILE_COLORS, radius, type ColorRoles, type ProfileColorSpec, type ShadowLevel } from "./tokens";
+import { WINDOW_CHROME } from "../../lib/windowChrome";
+import { arcSelectedFill, colorRoles, HIGH_CONTRAST_INK, ink, INCOGNITO_TINT, withAlpha, PROFILE_COLORS, radius, type ColorRoles, type ProfileColorSpec, type ShadowLevel } from "./tokens";
 import type { BasePalette } from "../../lib/themeFile";
-import { visibleSelection } from "../../lib/selectionContrast";
+import { visibleLine, visibleSelection } from "../../lib/selectionContrast";
 
 export { PROFILE_COLORS } from "./tokens";
 
 export type Theme = ColorRoles & {
   rowSelectedText: string;
+  pinnedDivider: string;
   adaptiveInk: boolean;
+  highContrastText: boolean;
   profileColor: ProfileColor | "incognito";
   backdrop: BackdropTint & ThemeBackdropProps;
   windowTint: [string, string];
@@ -64,9 +67,9 @@ export function inkOn(rows: readonly string[], dark: boolean): string {
   return worst(own) >= MIN_INK_CONTRAST || worst(other) <= worst(own) ? own : other;
 }
 
-function arcSelectionRoles(base: ColorRoles, windowTint: readonly string[], adaptiveInk: boolean): Pick<Theme, "tabSelected" | "pinnedSelectedFill" | "rowSelectedText" | "tabSelectedText"> {
+function arcSelectionRoles(base: ColorRoles, windowTint: readonly string[]): Pick<Theme, "tabSelected" | "pinnedSelectedFill" | "rowSelectedText" | "tabSelectedText"> {
   const tabSelected = base.dark ? arcSelectedFill.dark : visibleSelection(arcSelectedFill.light, ink.black, windowTint);
-  const inkOver = (fill: string) => (adaptiveInk ? inkOn(windowTint.map((tint) => over(fill, tint)), base.dark) : base.tabSelectedText);
+  const inkOver = (fill: string) => inkOn(windowTint.map((tint) => over(fill, tint)), base.dark);
   return {
     tabSelected,
     pinnedSelectedFill: visibleSelection(base.pinnedSelectedFill, base.dark ? ink.white : ink.black, windowTint),
@@ -91,6 +94,28 @@ export function tintTheme(theme: Theme): Theme {
   return tint;
 }
 
+const contrastThemes = new WeakMap<Theme, Theme>();
+
+export function contrastTheme(theme: Theme): Theme {
+  if (theme.highContrastText) return theme;
+  let strong = contrastThemes.get(theme);
+  if (!strong) {
+    const inkAt = (alpha: number) => withAlpha(theme.textPrimary, alpha);
+    strong = {
+      ...theme,
+      highContrastText: true,
+      textTab: inkAt(HIGH_CONTRAST_INK.tab),
+      textSecondary: inkAt(HIGH_CONTRAST_INK.secondary),
+      textTertiary: inkAt(HIGH_CONTRAST_INK.tertiary),
+      placeholder: inkAt(HIGH_CONTRAST_INK.placeholder),
+      icon: withAlpha(theme.icon, HIGH_CONTRAST_INK.icon),
+    };
+    contrastThemes.set(theme, strong);
+    windowThemes.set(strong, windowThemes.get(theme) ?? theme);
+  }
+  return strong;
+}
+
 export function surfaceTheme(theme: Theme): Theme {
   return windowThemes.get(theme) ?? theme;
 }
@@ -107,7 +132,9 @@ export function themeFor(key: string, palette?: BasePalette | null): Theme {
     theme = {
       ...base,
       rowSelectedText: base.tabSelectedText,
+      pinnedDivider: base.divider,
       adaptiveInk: false,
+      highContrastText: false,
       profileColor: color,
       backdrop: { ...backdrop, ...PRESET_BACKDROP },
       windowTint: opaqueTint(backdrop, base.dark),
@@ -139,8 +166,8 @@ export function nearestPreset(hexColor: string): ProfileColor {
   return best;
 }
 
-function customTheme(custom: ProfileTheme, color: ProfileColor, appDark: boolean, source: LookSource, base: BasePalette | null | undefined, adaptiveInk: boolean): Theme {
-  const key = `${color}:${requestedDarkFor(custom, appDark, source) ? "dark" : "light"}:${source}:${adaptiveInk ? "adaptive" : "mode"}`;
+function customTheme(custom: ProfileTheme, color: ProfileColor, appDark: boolean, source: LookSource, base: BasePalette | null | undefined): Theme {
+  const key = `${color}:${requestedDarkFor(custom, appDark, source) ? "dark" : "light"}:${source}`;
   const layer = layerOf(base);
   let byKey = layer.custom.get(custom);
   if (!byKey) layer.custom.set(custom, (byKey = new Map()));
@@ -153,8 +180,9 @@ function customTheme(custom: ProfileTheme, color: ProfileColor, appDark: boolean
     const windowTint = opaqueThemeTint(look, dark);
     theme = {
       ...preset,
-      ...arcSelectionRoles(dark ? preset.palettes.dark : preset.palettes.light, windowTint, adaptiveInk),
-      adaptiveInk,
+      ...arcSelectionRoles(dark ? preset.palettes.dark : preset.palettes.light, windowTint),
+      pinnedDivider: visibleLine(preset.divider, inkOn(windowTint, dark), windowTint),
+      adaptiveInk: true,
       profileColor: nearestPreset(accent),
       backdrop: {
         ...backdropTint(accent, false),
@@ -171,9 +199,9 @@ function customTheme(custom: ProfileTheme, color: ProfileColor, appDark: boolean
   return theme;
 }
 
-export function profileTheme(profile: ProfileLookFields | undefined, appDark: boolean, source: LookSource = "own", palette?: BasePalette | null, adaptTextToColor = true): Theme {
+export function profileTheme(profile: ProfileLookFields | undefined, appDark: boolean, source: LookSource = "own", palette?: BasePalette | null): Theme {
   const color = profile?.color ?? "plum";
-  if (profile?.theme) return customTheme(profile.theme, color, appDark, source, palette, adaptTextToColor);
+  if (profile?.theme) return customTheme(profile.theme, color, appDark, source, palette);
   return themeFor(`${color}:${appDark ? "dark" : "light"}`, palette);
 }
 
@@ -182,8 +210,8 @@ export function profileAccent(profile: ProfileLookFields | undefined): string {
   return (PROFILE_COLORS[profile?.color ?? "plum"] ?? PROFILE_COLORS.plum).swatch;
 }
 
-export function scopedTheme(incognito: boolean, profile: ProfileLookFields | undefined, appDark: boolean, source: LookSource, palette?: BasePalette | null, adaptTextToColor = true): Theme {
-  return incognito ? themeFor("incognito", palette) : profileTheme(profile, appDark, source, palette, adaptTextToColor);
+export function scopedTheme(incognito: boolean, profile: ProfileLookFields | undefined, appDark: boolean, source: LookSource, palette?: BasePalette | null): Theme {
+  return incognito ? themeFor("incognito", palette) : profileTheme(profile, appDark, source, palette);
 }
 
 export function shadowOpacityOf(level: Omit<ShadowLevel, "opacity"> & { opacity: ShadowLevel["opacity"] | number }, theme: Theme): number {
@@ -193,9 +221,12 @@ export function shadowOpacityOf(level: Omit<ShadowLevel, "opacity"> & { opacity:
 }
 
 export const ThemeContext = createContext<Theme | null>(null);
+export const PageThemeContext = createContext<Theme | null>(null);
+
+export const useScopedTheme = (): Theme | null => use(PageThemeContext) ?? use(ThemeContext);
 
 export function useTheme(): Theme {
-  const scoped = useContext(ThemeContext);
+  const scoped = useScopedTheme();
   if (scoped) return scoped;
   if (__DEV__) console.warn("useTheme outside a ThemeScope");
   return themeFor("plum:dark");
@@ -221,12 +252,20 @@ export const layout = {
   sidebarHeader: 46,
   sidebarInset: SIDEBAR_INSET,
   pinnedTop: 54,
-  pinnedHeight: 41,
-  rowHeight: SIDEBAR_ROW.height,
-  rowGap: SIDEBAR_ROW.gap,
-  cardRadius: radius.chrome,
+  get pinnedHeight() {
+    return SIDEBAR_ROW.pinnedHeight;
+  },
+  get rowHeight() {
+    return SIDEBAR_ROW.height;
+  },
+  get rowGap() {
+    return SIDEBAR_ROW.gap;
+  },
+  get cardRadius() {
+    return radius.chrome;
+  },
   toolbarButton: 30,
   toolbarIconCenters: [21, 56, 92, 127],
   breadcrumbX: 153,
-  trafficLightsWidth: 78,
+  trafficLightsWidth: WINDOW_CHROME.leadingWidth,
 } as const;

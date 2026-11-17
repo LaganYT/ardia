@@ -21,6 +21,7 @@ import {
   refreshExtensions,
   refreshExtensionsAfterChange,
   wantedSidePanels,
+  watchSidePanelCards,
   syncSidePanel,
   useExtensions,
   windowExtensions,
@@ -55,14 +56,14 @@ export function startExtensionsBridge() {
 
 export function openExtensionFromMenu(windowId: string, extensionId: string, tabId?: string) {
   const ext = findExtension(extensionProfile(useBrowser.getState(), windowId), extensionId);
-  if (ext) void activateExtension(windowId, ext, toolbarAnchor(windowId, ext.id, tabId), undefined, tabId);
+  if (ext) void toolbarAnchor(windowId, ext.id, tabId).then((anchor) => activateExtension(windowId, ext, anchor, undefined, tabId));
 }
 
 function startActionPopups() {
   onExtensionActionPopup(({ tabId, extensionId }) => {
     const windowId = tabId ? useBrowser.getState().tabs[tabId]?.windowId : undefined;
     if (!tabId || !windowId) return console.warn(`action.openPopup for ${extensionId}: ${tabId ? "its tab has no window" : "no app tab"}`);
-    void state.openActionPopup(windowId, extensionId, toolbarAnchor(windowId, extensionId, tabId), tabId);
+    void toolbarAnchor(windowId, extensionId, tabId).then((anchor) => state.openActionPopup(windowId, extensionId, anchor, tabId));
   });
   onExtensionActionShortcut(({ tabId, extensionId }) => {
     const windowId = tabId ? useBrowser.getState().tabs[tabId]?.windowId : undefined;
@@ -71,6 +72,7 @@ function startActionPopups() {
 }
 
 function startSidePanels() {
+  watchSidePanelCards();
   onExtensionSidePanel(({ tabId, extensionId, open }) => {
     const windowId = tabId ? useBrowser.getState().tabs[tabId]?.windowId : undefined;
     if (!windowId) return;

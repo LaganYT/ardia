@@ -60,10 +60,10 @@ const usesPageA = [
   "restore-after-close", "discard-outcomes", "memory-saver", "memory-saver-pinned", "capture-picture", "unresponsive", "permission-dismissed",
   "save-page", "activate-request", "extension-popup-and-panel", "scroll-zoom", "print-preview",
   "extension-prompts", "traffic-lights-after-profile-switch", "extension-configure",
-  "private-windows-create", "extension-private-window", "extension-installed-bubble", "popup-window", "autofill-save-prompts",
+  "private-windows-create", "extension-private-window", "extension-installed-bubble", "popup-window", "popup-window-full-screen", "autofill-save-prompts",
   "settings-services", "download-navigation", "page-events", "page-background", "external-app-answer",
   "external-app-from-extension",
-  "notifications", "now-playing", "media-state", "auto-picture-in-picture", "auto-picture-in-picture-app-switch", "picture-in-picture-opt-out", "pip-window", "pip-framing", "report-recording-pip", "report-recording-guard", "report-recording-webkit-media", "page-focus",
+  "notifications", "now-playing", "media-state", "auto-picture-in-picture", "auto-picture-in-picture-app-switch", "auto-picture-in-picture-other-window", "auto-picture-in-picture-paused", "media-plays-on-move", "picture-in-picture-opt-out", "pip-window", "pip-framing", "report-recording-pip", "report-recording-guard", "report-recording-webkit-media", "page-focus",
   "fullscreen-tab-switch", "fullscreen-native", "fullscreen-system-title-bar", "fullscreen-transition-picture", "fullscreen-hidden-page", "fullscreen-split-sibling",
   "fullscreen-pip", "autofill-suggestions", "images", "extension-surfaces", "frozen", "discard",
   "permission-prompt", "popup-blocked", "move-tab-slow-mount", "move-last-tab-slow-mount",
@@ -72,7 +72,7 @@ const usesPageA = [
   "window-close-before-reveal", "window-close-during-exit", "window-close-while-full-screen-restore-waits",
   "webkit-clearing-keeps-zoom", "webkit-private-session-ends-mid-transfer", "webkit-now-playing-frames",
   "page-view-calls", "tab-close-then-load", "tab-close-before-create", "tab-load-before-attach", "tab-create-interrupted-by-move", "tab-close-while-lent",
-  "page-reports-follow-the-tab",
+  "page-reports-follow-the-tab", "link-tab-focus",
 ];
 const needs = {
   ...Object.fromEntries([...usesPageA, "task-manager", "internal-pages-not-history", "second-profile"].map((name) => [name, ["open-url"]])),
@@ -318,7 +318,7 @@ const server = createServer((req, res) => {
   if (url.pathname === "/drag")
     return res.end(page("Drag", `<div id="card" draggable="true" style="position: absolute; left: 40px; top: 40px; width: 180px; height: 60px; background: #ccd">card</div>
       <div id="clicker" style="position: absolute; left: 300px; top: 40px; width: 120px; height: 60px; background: #dcc">click</div>
-      <script>window.__events = []; for (const t of ["mousedown", "click", "dragstart", "dragend"]) addEventListener(t, (e) => __events.push([t, e.target.id || "", e.clientX, e.clientY]), true);
+      <script>window.__events = []; for (const t of ["mousedown", "click", "dragstart", "dragend"]) addEventListener(t, (e) => __events.push([t, e.target.id || "", e.clientX, e.clientY, Date.now()]), true);
       card.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", "card"));</script>`));
   if (url.pathname === "/capture-target") return res.end(page("Capture Target", "the tab that tab capture picks"));
   if (url.pathname === "/solid")
@@ -974,6 +974,36 @@ try {
     const later = (await state()).tabs.find((x) => x.id === s.c.id);
     if (!later) throw new Error("the popup's tab went away");
     return { tabs: s.s.tabs.length, adoptId: s.c.adoptId ?? null, stays: !!later };
+  });
+
+  await check("link-tab-focus", async () => {
+    const hasFocus = async (id, urlPart) =>
+      (await cdp(await pageFor(id, urlPart), "Runtime.evaluate", { expression: "document.hasFocus()", returnByValue: true })).result.value;
+    const showFirst = async () => {
+      await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
+      await until("A shown", async () => (await state()).active === first.id);
+    };
+    await showFirst();
+    const switchedTo = await until("A's page to report focus after switching to it", async () => (await hasFocus(first.id, `${base}/a`)) || null, 5000);
+    const opened = {};
+    for (const [how, open] of [
+      ["target-blank", "document.getElementById('blank').click()"],
+      ["window-open", `window.open("${base}/c?link-focus", "_blank")`],
+    ]) {
+      await showFirst();
+      const before = new Set((await state()).tabs.map((x) => x.id));
+      const openedByCheck = (x) => !before.has(x.id) && x.url?.startsWith(`${base}/c`);
+      try {
+        await cdp(await pageFor(first.id, `${base}/a`), "Runtime.evaluate", { expression: open, userGesture: true });
+        const tab = await until(`the ${how} tab`, async () => (await state()).tabs.find((x) => openedByCheck(x) && x.title === "Page C" && !x.loading), 10000);
+        await until(`the ${how} tab in front`, async () => (await state()).active === tab.id);
+        opened[how] = await until(`the ${how} page to have focus without a click`, async () => (await hasFocus(tab.id, `${base}/c`)) || null, 5000);
+      } finally {
+        for (const left of (await state()).tabs.filter(openedByCheck)) await closeTab(left.id);
+      }
+    }
+    await showFirst();
+    return { switchedTo, opened };
   });
 
   await check("window-open", async () => {
@@ -2886,6 +2916,67 @@ try {
     return { size, opener: hasOpener, message };
   });
 
+  await check("popup-window-full-screen", async () => {
+    await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
+    const opener = await pageFor(first.id, `${base}/a`);
+    const openerWindow = await engine("tabs.devWindowNumber", { tabId: first.id });
+    const fullScreenPrimary = 1 << 7, fullScreenAuxiliary = 1 << 8;
+    const actFullScreen = async (on) => {
+      await engine("windows.dev", { window: openerWindow, action: `fakeFullScreen:${on ? 1 : 0}` });
+      await until(on ? "the opener in full screen" : "the opener out of full screen", async () => {
+        const w = JSON.parse(await engine("windows.dev", { window: openerWindow, action: "fullScreen" }));
+        return w.fullScreen === on && !w.pageFullScreen?.transitioning ? w : null;
+      }, 6000);
+    };
+    const popupBehavior = async (open) => {
+      const before = new Set([...onScreenWindows(), ...(await engine("windows.list")).map((w) => w.window)]);
+      const close = await open();
+      try {
+        const popup = await until("the popup window on screen", async () => onScreenWindows().find((w) => !before.has(w)) ?? null, 10000);
+        return JSON.parse(await engine("windows.dev", { window: popup, action: "winfo" })).collectionBehavior;
+      } finally {
+        await close();
+        await until("the popup window closed", async () => (!(await pageTarget("/popup-page")) ? true : null), 10000);
+      }
+    };
+    const fromPage = async () => {
+      await cdp(opener, "Runtime.evaluate", { expression: `window.open("${base}/popup-page", "pop", "width=480,height=360"); true`, userGesture: true });
+      const page = await until("the popup's page", () => pageTarget("/popup-page"));
+      return () => closeFromPage(page);
+    };
+    return withPopupExtension({}, async (id) => {
+      const worker = await until("the extension's worker", async () => {
+        for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(id))) {
+          const r = await cdp(t, "Runtime.evaluate", { expression: "typeof chrome?.windows?.create", returnByValue: true }).catch(() => null);
+          if (r?.result?.value === "function") return t;
+        }
+        return null;
+      }, 15000);
+      const fromExtension = async () => {
+        const created = await cdp(worker, "Runtime.evaluate", {
+          expression: `chrome.windows.create({ url: "${base}/popup-page", type: "popup", width: 480, height: 360 }).then((w) => w.id)`,
+          awaitPromise: true, returnByValue: true,
+        });
+        await until("the extension popup's page", () => pageTarget("/popup-page"));
+        return () => cdp(worker, "Runtime.evaluate", { expression: `chrome.windows.remove(${created.result.value})`, awaitPromise: true });
+      };
+      const windowed = await popupBehavior(fromPage);
+      await actFullScreen(true);
+      let page, extension;
+      try {
+        page = await popupBehavior(fromPage);
+        extension = await popupBehavior(fromExtension);
+      } finally {
+        await actFullScreen(false);
+      }
+      if (windowed & fullScreenAuxiliary) throw new Error(`a popup from a window that isn't full screen can't take full screen itself (collectionBehavior ${windowed})`);
+      const stuck = Object.entries({ page, extension }).filter(([, behavior]) => !(behavior & fullScreenAuxiliary) || behavior & fullScreenPrimary);
+      if (stuck.length)
+        throw new Error(`popups from a full-screen window that can't join its Space, so macOS shows them on another desktop (collectionBehavior): ${JSON.stringify(Object.fromEntries(stuck))}`);
+      return { windowed, page, extension };
+    });
+  });
+
   await check("download", async () => {
     await evalApp(`ac.actions.openUrls(["${base}/file.bin"], ${JSON.stringify(mainWindow)}); return true`);
     const d = await until("the finished download", async () => {
@@ -3178,7 +3269,7 @@ try {
 
   await check("download-controls", async () => {
     await evalApp(`ac.actions.openUrls(["${base}/slow.bin"], ${JSON.stringify(mainWindow)}); return true`);
-    const find = () => evalApp(`return ac.store.getState().downloads.map((d) => ({ id: d.id, state: d.state, paused: d.paused, filename: d.filename, received: d.received }))`)
+    const find = () => evalApp(`return ac.downloads.withLiveProgress(ac.store.getState().downloads).map((d) => ({ id: d.id, state: d.state, paused: d.paused, filename: d.filename, received: d.received }))`)
       .then((l) => l.find((x) => x.filename?.includes("ardiacore-slow")) ?? null);
     try {
       const d = await until("the slow download running", async () => { const x = await find(); return x?.state === "downloading" && !x.paused && x.received > 0 ? x : null; }, 15000);
@@ -3613,6 +3704,113 @@ try {
       await closeTab(tab.id);
       await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
     }
+  });
+
+  await check("auto-picture-in-picture-other-window", async () => {
+    const tab = await openTab(`${secureBase}/video?auto&file`, "Video");
+    const focus = (windowId) => evalApp(`return globalThis.expo.modules.ArdiaAppWindows.focusWindow(${JSON.stringify(windowId)}).then(() => true)`);
+    let other = null;
+    try {
+      await startVideo(tab.id, true);
+      await until("live.playingAudio", async () => (await live(tab.id))?.playingAudio === true, 8000);
+      await until("onNowPlaying with video", async () => lastEvent(tab.id, "nowPlaying", (p) => p.state?.hasVideo && p.state?.playbackState === "playing"), 5000);
+      other = await evalApp(`return ac.actions.openWindow({ url: "${base}/b?other-window" })`);
+      await sleep(1500);
+      await focus(mainWindow);
+      await sleep(800);
+      await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
+      const out = await until("auto PiP", async () => lastEvent(tab.id, "pictureInPicture", (p) => p.kind === "video" && p.active), 8000);
+      await sleep(1000);
+      const steps = [];
+      for (const [what, act] of [["the other window focused", () => focus(other)], ["the video's window focused", () => focus(mainWindow)], ["the other window focused again", () => focus(other)]]) {
+        await act();
+        await sleep(2000);
+        const last = await lastEvent(tab.id, "pictureInPicture");
+        const open = !!(await pipWindows())?.find((w) => w.video);
+        steps.push({ what, active: last?.payload?.active ?? null, window: open });
+        if (!last?.payload?.active || !open) throw new Error(`auto PiP closed once ${what}: ${JSON.stringify(steps)}`);
+      }
+      await evalApp(`ac.actions.switchToTab("${tab.id}"); return true`);
+      const back = await until("auto PiP ended on going back to the tab", async () => {
+        const e = await lastEvent(tab.id, "pictureInPicture");
+        return e && e.payload.kind === "video" && !e.payload.active ? e : null;
+      }, 8000);
+      return { out: out.payload, steps, back: back.payload };
+    } finally {
+      if (other) await evalApp(`ac.store.getState().closeWindow(${JSON.stringify(other)}); return true`).catch(() => null);
+      await focus(mainWindow).catch(() => null);
+      await closeTab(tab.id);
+      await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
+    }
+  });
+
+  await check("auto-picture-in-picture-paused", async () => {
+    const n = await engine("tabs.devWindowNumber", { tabId: first.id });
+    const win = (action) => engine("windows.dev", { window: n, action });
+    const tab = await openTab(`${secureBase}/video?auto&file&handlers`, "Video");
+    const pip = async () => ({ event: (await lastEvent(tab.id, "pictureInPicture"))?.payload ?? null, window: !!(await pipWindows())?.find((w) => w.video) });
+    const setPlaying = (on) => pageFor(tab.id, "/video").then((t) => cdp(t, "Runtime.evaluate", { expression: `document.getElementById('v').${on ? "play()" : "pause()"}; true`, userGesture: true }));
+    const results = {};
+    try {
+      await startVideo(tab.id, true);
+      await until("live.playingAudio", async () => (await live(tab.id))?.playingAudio === true, 8000);
+      await until("onNowPlaying with video", async () => lastEvent(tab.id, "nowPlaying", (p) => p.state?.hasVideo && p.state?.playbackState === "playing"), 5000);
+      await sleep(300);
+      await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
+      await until("auto PiP (tab switch)", async () => lastEvent(tab.id, "pictureInPicture", (p) => p.kind === "video" && p.active), 8000);
+      await setPlaying(false);
+      await sleep(2500);
+      results.tabSwitchPaused = await pip();
+      await setPlaying(true);
+      await sleep(1000);
+      results.tabSwitchResumed = await pip();
+      await evalApp(`ac.actions.switchToTab("${tab.id}"); return true`);
+      await until("auto PiP ended", async () => (await lastEvent(tab.id, "pictureInPicture"))?.payload?.active === false, 8000);
+      await win("fakeOcclusion:visible");
+      await win("fakeWindowServer:shows");
+      await sleep(500);
+      await win("fakeAppActive:0");
+      await win("fakeWindowServer:hides");
+      await until("auto PiP (app switch)", async () => (await lastEvent(tab.id, "pictureInPicture"))?.payload?.active === true, 8000);
+      await setPlaying(false);
+      await sleep(2500);
+      results.appSwitchPaused = await pip();
+      for (const [k, v] of Object.entries(results)) if (!v.event?.active || !v.window) throw new Error(`auto PiP closed (${k}): ${JSON.stringify(results)}`);
+      return results;
+    } finally {
+      await win("fakeAppActive:1").catch(() => null);
+      for (const action of ["fakeWindowServer:hides", "fakeOcclusion:off"]) await win(action).catch(() => null);
+      await closeTab(tab.id);
+      await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
+    }
+  });
+
+  await check("media-plays-on-move", async () => {
+    const results = {};
+    for (const pinned of [true, false]) {
+      const tab = await openTab(`${secureBase}/video?auto&file`, "Video");
+      let moved = null;
+      try {
+        if (pinned) await evalApp(`ac.store.getState().togglePin("${tab.id}"); return true`);
+        await startVideo(tab.id, true);
+        await until("live.playingAudio", async () => (await live(tab.id))?.playingAudio === true, 8000);
+        const playback = async () => {
+          const t = await pageFor(tab.id, "/video");
+          return (await cdp(t, "Runtime.evaluate", { expression: "(() => { const v = document.getElementById('v'); return { paused: v.paused, time: v.currentTime }; })()", returnByValue: true })).result.value;
+        };
+        const before = await playback();
+        moved = await evalApp(`return ac.store.getState().moveTabsToWindow(["${tab.id}"], null)`);
+        await until("its WebView in the new window", () => evalApp(`return !!ac.webviews.get(${JSON.stringify(tab.id)})`), 15000);
+        await sleep(2500);
+        const after = await playback();
+        results[pinned ? "pinned" : "unpinned"] = { before, after, window: moved };
+        if (after.paused || !(after.time > before.time + 1)) throw new Error(`the video stopped on moving the ${pinned ? "pinned" : ""} tab: ${JSON.stringify(results)}`);
+      } finally {
+        await evalApp(`const s = ac.store.getState(); if (s.tabs["${tab.id}"]?.pin) s.togglePin("${tab.id}"); s.closeTab("${tab.id}"); return true`).catch(() => null);
+        if (moved) await evalApp(`const s = ac.store.getState(); if (s.windows[${JSON.stringify(moved)}]) s.closeWindow(${JSON.stringify(moved)}); return true`).catch(() => null);
+      }
+    }
+    return results;
   });
 
   await check("picture-in-picture-opt-out", async () => {
@@ -4294,7 +4492,8 @@ try {
       if (!spot) throw new Error("no window point over the page");
       await press(spot);
       const down = await until("the calibration press", async () => (await events()).find((e) => e[0] === "mousedown"), 4000);
-      const at = (x, y) => [Math.round(x + spot[0] - down[2]), Math.round(y + spot[1] - down[3])];
+      const rootPointsPerPagePoint = 1 / (await evalApp("return globalThis.expo.modules.ArdiaApp.interfaceScale()"));
+      const at = (x, y) => [Math.round(spot[0] + (x - down[2]) * rootPointsPerPagePoint), Math.round(spot[1] + (y - down[3]) * rootPointsPerPagePoint)];
       const [x, y] = at(130, 70);
       await act(`mouse:down:${x},${y}`);
       for (let i = 1; i <= 12; i++) {
@@ -4308,7 +4507,40 @@ try {
       const clicksBefore = await clickerClicks();
       await press(at(360, 70));
       await until("a new click on the page after the drag", async () => (await clickerClicks()) > clicksBefore, 4000);
-      return { spot, events: (await events()).map((e) => `${e[0]}:${e[1]}`) };
+      const command = 1048576;
+      const ofType = async (type) => (await events()).filter((e) => e[0] === type);
+      const clickerEvents = async () => (await ofType("click")).filter((e) => e[1] === "clicker");
+      const dragendsBefore = (await ofType("dragend")).length;
+      const clicksAfterDrag = (await clickerEvents()).length;
+      const [cardX, cardY] = at(130, 70);
+      await act(`mouse:down:${cardX},${cardY},1,${command}`);
+      for (const step of [2, 4, 6]) {
+        await act(`mouse:dragged:${cardX + step},${cardY + step},1,${command}`);
+        await sleep(30);
+      }
+      const releasedAt = Date.now();
+      await act(`mouse:up:${cardX + 6},${cardY + 6},1,${command}`);
+      const [clickerX, clickerY] = at(360, 70);
+      const pressedAt = [];
+      for (let i = 0; i < 5; i++) {
+        await act(`mouse:down:${clickerX},${clickerY},1,${command}`);
+        await sleep(40);
+        pressedAt.push(Date.now());
+        await act(`mouse:up:${clickerX},${clickerY},1,${command}`);
+      }
+      await until("the clicks after the moved ⌘-click", async () => (await clickerEvents()).length >= clicksAfterDrag + pressedAt.length, 6000);
+      await sleep(800);
+      const movedDragend = (await ofType("dragend"))[dragendsBefore];
+      if (!movedDragend) throw new Error("the moved ⌘-click never started a page drag");
+      const sinceRelease = movedDragend[4] - releasedAt;
+      if (sinceRelease > 250) throw new Error(`the page drag ended ${sinceRelease} ms after mouse-up: AppKit's slide-back kept the session open`);
+      const burst = (await clickerEvents()).slice(clicksAfterDrag).map((e) => e[4]);
+      if (burst.length !== pressedAt.length) throw new Error(`${pressedAt.length} clicks were made and ${burst.length} reached the page`);
+      const late = burst.map((t, i) => t - pressedAt[i]);
+      if (late.some((ms) => ms > 300)) throw new Error(`clicks reached the page late, ${JSON.stringify(late)} ms after each was made`);
+      const gaps = burst.slice(1).map((t, i) => t - burst[i]);
+      if (gaps.some((ms, i) => ms < 20 && late[i] > 100)) throw new Error(`clicks queued and reached the page together: ${JSON.stringify({ late, gaps })} ms`);
+      return { spot, sinceRelease, late, gaps, events: (await events()).map((e) => `${e[0]}:${e[1]}`) };
     } finally {
       await closeTab(tab).catch(() => null);
     }
@@ -6110,7 +6342,7 @@ try {
     await pressQuit(windowId);
     await until("the quit", async () => exited, 30000);
     const layout = JSON.parse(readFileSync(join(data, "launch-layout.json"), "utf8"));
-    if (layout.version !== 4 || !layout.windows?.[windowId]) throw new Error(`no launch layout for the window: ${JSON.stringify(Object.keys(layout.windows ?? {}))}`);
+    if (layout.version !== 5 || !layout.windows?.[windowId]) throw new Error(`no launch layout for the window: ${JSON.stringify(Object.keys(layout.windows ?? {}))}`);
     const before = served.get(path) ?? 0;
     await appUp("app-launch-tab-2.out.log");
     const tab = await until("the launch tab restored", async () => (await state()).tabs.find((t) => t.id === id && t.title === "Fresh" && !t.loading), 20000);
@@ -6538,7 +6770,7 @@ try {
     return { split: second.r.split.tabIds, kept: b.id, requests: [first.requests, second.requests], referer: second.referer };
   });
   // MARK: Camera and microphone (the 0.2.21 crash: Allow on a camera + microphone prompt aborted the app)
-  const mediaChecks = ["camera-mic-allow", "permission-answer-once", "permission-element-allow"];
+  const mediaChecks = ["camera-mic-allow", "permission-answer-once", "permission-element-allow", "camera-dot-unloaded", "call-auto-pip"];
   if (!only.length || mediaChecks.some((c) => only.includes(c))) {
     const mediaApp = join(scratch, "media-app", basename(app));
     let media = null;
@@ -6565,8 +6797,8 @@ try {
       const port = server.address().port;
       let site = 0;
       media = {
-        async open(path, title) {
-          const url = `http://media${++site}.localhost:${port}${path}`;
+        async open(path, title, fileUrl = null) {
+          const url = fileUrl ?? `http://media${++site}.localhost:${port}${path}`;
           const before = new Set((await state()).tabs.map((t) => t.id));
           await evalApp(`ac.actions.openUrls([${JSON.stringify(url)}], ${JSON.stringify(mainWindow)}); return true`);
           const tab = await until(`a tab for ${url}`, async () => (await state()).tabs.find((t) => !before.has(t.id) && t.title === title && !t.loading), 15000);
@@ -6607,6 +6839,77 @@ try {
         if (again) throw new Error(`a second prompt: ${JSON.stringify(again)}`);
         if (exited) throw new Error("the app exited");
         return { permissions: request.permissions, audio: answer.audio, video: answer.video };
+      } finally {
+        await media.js(tab.target, "stopAll()").catch(() => null);
+        await closeTab(tab.id);
+      }
+    });
+
+    await mediaCheck("camera-dot-unloaded", async () => {
+      const results = {};
+      for (const how of ["unload", "sleep"]) {
+        const tab = await media.open("/cam", "Cam");
+        try {
+          await evalApp(`ac.store.getState().togglePin("${tab.id}"); return true`);
+          await media.js(tab.target, `ask({ audio: false, video: true })`);
+          const request = await until("the prompt", () => media.prompt(tab.id), 10000);
+          await media.answer(tab.id, request.id, "accept");
+          const answer = await media.answered(tab.target);
+          if (answer.state !== "ok") throw new Error(`getUserMedia: ${JSON.stringify(answer)}`);
+          const lit = await until("the camera dot", () => evalApp(`return ac.pageState.getState().pages["${tab.id}"]?.mediaAccess ?? null`), 8000);
+          const other = (await state()).tabs.find((t) => t.id !== tab.id);
+          await evalApp(`ac.actions.switchToTab("${other.id}"); return true`);
+          if (how === "unload") await evalApp(`ac.store.getState().closeTabs(["${tab.id}"], { keepTopApps: false }); return true`);
+          const outcome = how === "sleep" ? await evalApp(`return ac.webviews.get("${tab.id}").discard()`).catch((e) => ({ error: String(e) })) : null;
+          await sleep(2500);
+          const after = await evalApp(`const s = ac.store.getState(); return { kept: !!s.tabs["${tab.id}"], view: !!ac.webviews.get("${tab.id}"), access: ac.pageState.getState().pages["${tab.id}"]?.mediaAccess ?? null }`);
+          const host = new URL(tab.target.url).host;
+          const page = (await targets()).find((t) => t.url.includes("/cam") && t.url.includes(host));
+          const tracks = page ? await cdp(page, "Runtime.evaluate", { expression: "JSON.stringify((window.__streams ?? []).flatMap((s) => s.getTracks().map((t) => t.readyState)))", returnByValue: true }).then((r) => r.result?.value ?? null, () => null) : null;
+          results[how] = { lit, outcome, ...after, tracks };
+          if (after.access) throw new Error(`the camera dot stayed after ${how}: ${JSON.stringify(results)}`);
+          if (tracks?.includes("live")) throw new Error(`the camera kept running after ${how}: ${JSON.stringify(results)}`);
+        } finally {
+          await evalApp(`const s = ac.store.getState(); if (s.tabs["${tab.id}"]?.pin) s.togglePin("${tab.id}"); s.closeTab("${tab.id}"); return true`).catch(() => null);
+        }
+      }
+      return results;
+    });
+
+    await mediaCheck("call-auto-pip", async () => {
+      const callPage = join(scratch, "call.html");
+      writeFileSync(callPage, await (await fetch(`${base}/cam`)).text());
+      const tab = await media.open("/cam", "Cam", `file://${callPage}`);
+      const other = (await state()).tabs.find((t) => t.id !== tab.id);
+      try {
+        await media.js(tab.target, `navigator.mediaSession.setActionHandler("enterpictureinpicture", async () => {
+          const w = await documentPictureInPicture.requestWindow({ width: 320, height: 180 });
+          w.document.body.append("call");
+        }); true`);
+        await media.js(tab.target, `ask({ audio: true, video: true })`);
+        const request = await until("the prompt", () => media.prompt(tab.id), 10000);
+        await media.answer(tab.id, request.id, "accept");
+        const answer = await media.answered(tab.target);
+        if (answer.state !== "ok") throw new Error(`getUserMedia: ${JSON.stringify(answer)}`);
+        const played = await media.js(tab.target, `(async () => {
+          const self = document.createElement("video"); self.muted = true; self.srcObject = window.__streams[0]; document.body.append(self); await self.play();
+          const ac = new AudioContext(), osc = ac.createOscillator(), quiet = new GainNode(ac, { gain: 0.001 }), out = ac.createMediaStreamDestination();
+          osc.connect(quiet).connect(out); osc.start();
+          const remote = document.createElement("audio"); remote.srcObject = out.stream; document.body.append(remote); await remote.play();
+          return "ok";
+        })()`);
+        if (played !== "ok") throw new Error(`the call didn't play: ${played}`);
+        await until("the camera dot", () => evalApp(`return ac.pageState.getState().pages["${tab.id}"]?.mediaAccess ?? null`), 8000);
+        await sleep(1500);
+        await evalApp(`ac.actions.switchToTab("${other.id}"); return true`);
+        const out = await until("the call popped out", async () => lastEvent(tab.id, "pictureInPicture", (p) => p.kind === "document" && p.active), 8000)
+          .catch(async (e) => { throw new Error(`${e.message}: ${JSON.stringify((await eventsOf(tab.id)).filter((x) => /pictureInPicture|media/.test(x.name)).slice(-6))}`); });
+        await evalApp(`ac.actions.switchToTab("${tab.id}"); return true`);
+        const back = await until("the call's PiP closed on coming back", async () => {
+          const e = await lastEvent(tab.id, "pictureInPicture");
+          return e && e.payload.kind === "document" && !e.payload.active ? e : null;
+        }, 8000);
+        return { out: out.payload, back: back.payload };
       } finally {
         await media.js(tab.target, "stopAll()").catch(() => null);
         await closeTab(tab.id);

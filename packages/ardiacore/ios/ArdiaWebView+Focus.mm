@@ -34,6 +34,20 @@ static BOOL InTabPage(NSView *view) {
   return nil;
 }
 
++ (BOOL)focusVisiblePageIn:(NSWindow *)window {
+  ArdiaWebView *chosen = nil;
+  for (ArdiaWebView *view in LiveViews().allObjects) {
+    NSView *page = view->_tab.view;
+    if (view.window != window || !view->_visible || view->_standalone || !page || page.superview != view ||
+        page.isHiddenOrHasHiddenAncestor)
+      continue;
+    if (!chosen || (view->_focus.page == ArdiaPageFocus::Page && chosen->_focus.page != ArdiaPageFocus::Page)) chosen = view;
+  }
+  if (!chosen) return NO;
+  [chosen focusPage];
+  return YES;
+}
+
 - (void)storePageFocus {
   NSResponder *responder = self.window.firstResponder;
   const BOOL unfocused = !responder || responder == self.window;
@@ -49,6 +63,7 @@ static BOOL InTabPage(NSView *view) {
 - (void)storePageFocusFrom:(NSResponder *)responder {
   _focus.onActivate = NO;
   _focus.devTools = nil;
+  _focus.elsewhere = nil;
   NSWindow *window = self.window;
   if (!window || !_tab) return;
   NSView *view = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
@@ -61,6 +76,7 @@ static BOOL InTabPage(NSView *view) {
     _focus.page = ArdiaPageFocus::Unknown;
   } else {
     _focus.page = ArdiaPageFocus::Elsewhere;
+    _focus.elsewhere = view;
   }
 }
 
@@ -75,6 +91,16 @@ static BOOL InTabPage(NSView *view) {
   _focus.activatedIn = window;
   [self restoreFocusIfDue];
   if (_focus.onActivate) [self schedulePainting];
+}
+
+- (void)settleFirstShowFocus {
+  NSWindow *window = self.window;
+  NSView *page = _tab.view;
+  if (!_tab || !_visible || !window || _standalone || !page || page.superview != self || page.isHiddenOrHasHiddenAncestor) return;
+  ArdiaWindowController *controller = self.controller;
+  if (!controller || [ArdiaTabStrip activeTabInWindow:controller profile:_tab.profile] != _tab) return;
+  if (![ArdiaTabRegistry takeFirstShowFocusOfTab:_tab]) return;
+  [self requestFocusRestoreIn:window];
 }
 
 - (void)restoreFocusIfDue {
@@ -93,16 +119,30 @@ static BOOL InTabPage(NSView *view) {
   NSView *view = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
   if (view && [view isDescendantOf:self]) return;
   if (responder && responder != window && !(view && InTabPage(view))) return;
+  if ([self focusRememberedDevToolsIn:window]) return;
+  if (_focus.page != ArdiaPageFocus::Elsewhere || _focus.elsewhere.window != window) [self focusPage];
+}
+
+- (BOOL)focusRememberedDevToolsIn:(NSWindow *)window {
   NSView *devTools = _focus.devTools;
-  if (_focus.page == ArdiaPageFocus::DevTools && devTools.window == window && _devtoolsView && [devTools isDescendantOf:_devtoolsView]) {
-    [window makeFirstResponder:devTools];
-  } else if (_focus.page != ArdiaPageFocus::Elsewhere) {
-    [self focusPage];
-  }
+  if (_focus.page != ArdiaPageFocus::DevTools || devTools.window != window || !_devtoolsView || ![devTools isDescendantOf:_devtoolsView]) return NO;
+  [window makeFirstResponder:devTools];
+  return YES;
+}
+
+- (void)focusAfterLingeringPane {
+  NSWindow *window = self.window;
+  NSView *page = _tab.view;
+  if (!window || !_visible || _standalone || !page || page.superview != self || page.isHiddenOrHasHiddenAncestor) return;
+  if (![self focusRememberedDevToolsIn:window]) [self focusPage];
 }
 
 - (void)focusAfterLoad {
-  if (_visible && _tab) [self focusPage];
+  if (!_tab) return;
+  if (_visible) return [self focusPage];
+  _focus.page = ArdiaPageFocus::Page;
+  _focus.devTools = nil;
+  [self requestFocusRestore];
 }
 
 - (void)focusPage {

@@ -30,6 +30,9 @@ const CHECKS = {
   "on-1080": "1920×1080 H.264 in a 1600×900 box on a 2x screen: MetalFX only",
   "mse-720": "the 720p clip through Media Source Extensions",
   "vp9-480": "854×480 VP9 (WebM)",
+  "hevc-720": "1280×720 HEVC, decoded into a frame with padding rows: VideoToolbox on a copy, the GPU process never crashes",
+  "vp9-720": "1280×720 VP9 (WebM) in a 1920×1080 box, the GPU process never crashes",
+  "av1-720": "1280×720 AV1 in a 1920×1080 box, the GPU process never crashes",
   "crop-cover": "854×480 with object-fit: cover in a square box (a cropped source region)",
   paused: "a paused video: redraws reuse the output, no new jobs",
   native: "a video drawn at its own size: nothing",
@@ -39,6 +42,8 @@ const CHECKS = {
   occluded: "the window occluded: nothing",
   "low-power": "Low Power Mode (acted): nothing",
   thermal: "serious thermal pressure (acted): nothing",
+  "screen-share": "the tab sharing a tab, window or screen (acted): nothing",
+  "tab-share": "a real tab share (getDisplayMedia answered from the app's picker) from the tab playing: nothing while it runs, upscaled again once it stops",
   pip: "the video in Picture in Picture: nothing",
   "hdr-pq": "an HDR10 (PQ) clip: declined",
   "hdr-hlg": "an HLG clip: declined",
@@ -85,6 +90,13 @@ function makeClips() {
   if (!existsSync(frag)) ff("-i", join(media, "clip_1280x720.mp4"), "-c", "copy", "-movflags", "frag_keyframe+empty_moov+default_base_moof", frag);
   const vp9 = join(media, "clip_854x480.webm");
   if (!existsSync(vp9)) ff("-i", join(media, "clip_854x480.mp4"), "-c:v", "libvpx-vp9", "-b:v", "1M", "-deadline", "realtime", "-cpu-used", "8", vp9);
+  const hevc = join(media, "clip_1280x720_hevc.mp4");
+  if (!existsSync(hevc))
+    ff("-i", join(media, "clip_1280x720.mp4"), "-vf", "format=yuv420p", "-c:v", "libx265", "-preset", "ultrafast", "-crf", "20", ...tags, "-tag:v", "hvc1", hevc);
+  const vp9720 = join(media, "clip_1280x720.webm");
+  if (!existsSync(vp9720)) ff("-i", join(media, "clip_1280x720.mp4"), "-c:v", "libvpx-vp9", "-b:v", "2M", "-deadline", "realtime", "-cpu-used", "8", ...tags, vp9720);
+  const av1 = join(media, "clip_1280x720_av1.mp4");
+  if (!existsSync(av1)) ff("-i", join(media, "clip_1280x720.mp4"), "-c:v", "libsvtav1", "-preset", "12", "-crf", "35", ...tags, av1);
   for (const [name, transfer, extra] of [["pq", "smpte2084", ":hdr10=1:max-cll=1000,400"], ["hlg", "arib-std-b67", ""]]) {
     const f = join(media, `clip_720_${name}.mp4`);
     if (!existsSync(f))
@@ -100,6 +112,9 @@ v.style.width = (q.get("w") || "1280") + "px";
 v.style.height = (q.get("h") || "720") + "px";
 v.style.objectFit = q.get("fit") || "contain";
 const src = q.get("src") || "clip_854x480.mp4";
+window.cap = "idle";
+window.share = () => { window.cap = "pending"; navigator.mediaDevices.getDisplayMedia({ video: true }).then((s) => { window.stream = s; window.cap = "live"; }, (e) => (window.cap = e.name)); return true; };
+window.unshare = () => { window.stream?.getTracks().forEach((t) => t.stop()); window.stream = null; window.cap = "idle"; return true; };
 window.frames_ = 0;
 const tick = () => { window.frames_++; v.requestVideoFrameCallback(tick); };
 v.requestVideoFrameCallback(tick);
@@ -184,6 +199,16 @@ const gate = async (v) => {
   return { allowed: tab?.allowed ?? null, state };
 };
 
+const gpuPid = async () => {
+  const browser = await instance.browser();
+  try {
+    const { processInfo } = await browser.send("SystemInfo.getProcessInfo");
+    return processInfo.find((p) => p.type === "GPU")?.id ?? null;
+  } finally {
+    browser.close();
+  }
+};
+
 async function watch(ms = seconds * 1000, during) {
   const browser = await instance.browser();
   const events = [];
@@ -214,10 +239,11 @@ async function watch(ms = seconds * 1000, during) {
     late: named("LateSwap").length,
     teardowns: named("TearDown").length,
     wakes: named("IdleWake").length,
+    copies: named("SourceCopiedForExtendedPixels").length,
     extra,
   };
 }
-const fmt = (w) => `jobs ${w.ok}/${w.jobs}${w.ms !== null ? ` (median ${w.ms.toFixed(2)} ms: encode ${w.encodeMs?.toFixed(2)}, done ${w.doneMs?.toFixed(2)}, GPU ${w.gpuMs?.toFixed(2)} ms; ×${w.factor}, ${w.source} → ${w.target})` : ""}, hits ${w.hits}, late swaps ${w.late}, misses ${w.misses}${w.setups.length ? `, setups ${w.setups.join("; ")}` : ""}`;
+const fmt = (w) => `${w.copies ? `padded sources copied ${w.copies}, ` : ""}jobs ${w.ok}/${w.jobs}${w.ms !== null ? ` (median ${w.ms.toFixed(2)} ms: encode ${w.encodeMs?.toFixed(2)}, done ${w.doneMs?.toFixed(2)}, GPU ${w.gpuMs?.toFixed(2)} ms; ×${w.factor}, ${w.source} → ${w.target})` : ""}, hits ${w.hits}, late swaps ${w.late}, misses ${w.misses}${w.setups.length ? `, setups ${w.setups.join("; ")}` : ""}`;
 
 const results = [];
 async function check(name, body) {
@@ -249,10 +275,13 @@ async function warm(query) {
 }
 async function playing(name, query, expectFactor) {
   await check(name, async () => {
+    const gpuBefore = await gpuPid();
     const v = await warm(query);
     try {
       const w = await watch();
       const g = await gate(v);
+      const gpuAfter = await gpuPid();
+      if (gpuBefore !== gpuAfter) throw new Error(`the GPU process restarted (${gpuBefore} → ${gpuAfter}): ${fmt(w)}`);
       const r = expectWork(w, g);
       if (expectFactor !== undefined && w.factor !== expectFactor) throw new Error(`expected ×${expectFactor}: ${r}`);
       return r;
@@ -269,6 +298,9 @@ await playing("on-720", "src=clip_1280x720.mp4&w=1600&h=900", 1.5);
 await playing("on-1080", "src=clip_1920x1080.mp4&w=1600&h=900", 0);
 await playing("mse-720", "src=clip_1280x720_frag.mp4&mse=1&w=1600&h=900");
 await playing("vp9-480", "src=clip_854x480.webm&w=1280&h=720");
+await playing("hevc-720", "src=clip_1280x720_hevc.mp4&w=1920&h=1080", 1.5);
+await playing("vp9-720", "src=clip_1280x720.webm&w=1920&h=1080", 1.5);
+await playing("av1-720", "src=clip_1280x720_av1.mp4&w=1920&h=1080", 1.5);
 await playing("crop-cover", "src=clip_854x480.mp4&w=900&h=900&fit=cover");
 
 await check("paused", async () => {
@@ -322,6 +354,40 @@ await closedBy("app-inactive", q480, (v) => win(v.id, "fakeAppActive:0"), (v) =>
 await closedBy("occluded", q480, (v) => win(v.id, "fakeOcclusion:occluded"), (v) => win(v.id, "fakeOcclusion:visible"));
 await closedBy("low-power", q480, () => engine("webView.setVideoUpscalingTestConditions", { lowPower: true }), () => engine("webView.setVideoUpscalingTestConditions"));
 await closedBy("thermal", q480, () => engine("webView.setVideoUpscalingTestConditions", { thermalPressure: true }), () => engine("webView.setVideoUpscalingTestConditions"));
+await closedBy("screen-share", q480, () => engine("webView.setVideoUpscalingTestConditions", { capturing: true }), () => engine("webView.setVideoUpscalingTestConditions"));
+
+await check("tab-share", async () => {
+  const capturing = async (v) => (await gate(v)).state.tabs.find((t) => t.url === v.url)?.capturing ?? null;
+  const target = await openVideo("src=clip_640x360.mp4&w=160&h=90");
+  const v = await warm(q480);
+  try {
+    const before = expectWork(await watch(), await gate(v));
+    if (await capturing(v)) throw new Error("the tab reports a share before one started");
+    await v.page.eval("window.share()", { userGesture: true });
+    let cap = "pending";
+    await until("the share going live", async () => {
+      cap = await v.page.eval("window.cap");
+      if (cap !== "pending") return true;
+      await evalApp(`return globalThis.acSharePicker.shareTab(${JSON.stringify(v.id)}, ${JSON.stringify(target.id)}, false)`);
+      return null;
+    });
+    if (cap !== "live") throw new Error(`getDisplayMedia: ${cap}`);
+    await until("the engine to report the share", async () => (await capturing(v)) === true || null, 8000);
+    await evalApp(`ac.actions.switchToTab(${JSON.stringify(v.id)}); return true`);
+    await until("the sharing tab back in front", async () => (await gate(v)).state.windows.some((w) => w.focusedTab === v.url) || null, 8000);
+    await sleep(800);
+    const during = expectNothing(await watch(), await gate(v));
+    await v.page.eval("window.unshare()");
+    await until("the engine to report the share ended", async () => (await capturing(v)) === false || null, 8000);
+    await sleep(800);
+    const after = expectWork(await watch(), await gate(v));
+    return `before: ${before}; sharing: ${during}; after: ${after}`;
+  } finally {
+    await v.page.eval("window.unshare?.()").catch(() => null);
+    await closeTab(v.id);
+    await closeTab(target.id);
+  }
+});
 
 await check("pip", async () => {
   const v = await warm(q480);

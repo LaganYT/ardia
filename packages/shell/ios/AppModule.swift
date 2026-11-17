@@ -6,11 +6,18 @@ import ExpoModulesCore
 public class AppModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ArdiaApp")
-    Constant("apiVersion") { () -> Int in 61 }
+    Constant("apiVersion") { () -> Int in 76 }
 
     OnCreate {
       DispatchQueue.main.async { AppIcons.restore() }
     }
+
+    Function("interfaceScale") { () -> Double in Double(InterfaceScale.scale) }
+    Function("interfaceScaleRange") { () -> [Double] in [Double(InterfaceScale.minimum), Double(InterfaceScale.maximum)] }
+    AsyncFunction("setInterfaceScale") { (scale: Double) -> Double in
+      InterfaceScale.scale = CGFloat(scale)
+      return Double(InterfaceScale.scale)
+    }.runOnQueue(.main)
 
     AsyncFunction("setWindowActivity") { (windowId: String, url: String?, title: String?) in
       Handoff.setActivity(windowId: windowId, url: url, title: title)
@@ -71,6 +78,7 @@ public class AppModule: Module {
         "bootTime": Self.bootTime as Any,
         "launchMarks": ArdiaHost.launchMarks,
         "launchedHidden": ArdiaHost.launchedHidden as Any,
+        "launchSource": ArdiaHost.launchSource as Any,
         "loadAverage1m": Self.loadAverage1m as Any,
         "inApplicationsFolder": Self.inApplicationsFolder,
         "updatePrewarm": UserDefaults.standard.dictionary(forKey: UpdatePrewarm.lastRunKey) as Any,

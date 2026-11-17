@@ -37,11 +37,14 @@ export type SystemInfo = {
     mainStarted?: number;
     startupPrepared?: number;
     chromiumEntered?: number;
+    appKitWillFinish?: number;
+    appKitDidFinish?: number;
     engineStarted?: number;
     earlyWindowShown?: number;
     reactNativeStarted?: number;
   } | null;
   launchedHidden?: boolean | null;
+  launchSource?: "login_item" | "documents" | "user" | null;
   loadAverage1m?: number | null;
   inApplicationsFolder?: boolean;
   updatePrewarm?: { build?: string; at?: number; ms?: number; status?: number } | null;
@@ -60,6 +63,8 @@ export type CrashReport = {
   terminationNamespace?: string;
   uptimeSeconds?: number;
   vmWritableMB?: number;
+  jsFatal?: string;
+  jsFatalSource?: "hermes" | "reactNative";
   exceptionType?: string;
   signal?: string;
   frames: NativeFrame[];
@@ -78,7 +83,14 @@ export type HardwareInfo = {
   hardwareDecode: { av1: boolean; vp9: boolean; hevc: boolean; h264: boolean };
 };
 
-export type DiagnosticsSample = { footprintMB?: number; freeDiskGB?: number };
+export type DiagnosticsSample = {
+  footprintMB?: number;
+  freeDiskGB?: number;
+  cpuMs?: number;
+  wakeups?: number;
+  dragRegionRebuilds?: number;
+  dragRegionStalePresses?: number;
+};
 
 type NativeFrame = { image: string; symbol?: string; symbolOffset?: number; offset?: number };
 
@@ -95,6 +107,9 @@ export type IntroMusicCues = {
 };
 
 export type AppNative = {
+  interfaceScale(): number;
+  interfaceScaleRange(): [min: number, max: number];
+  setInterfaceScale(scale: number): Promise<number>;
   setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;
   share(url: string, title: string | null, windowId: string | null, anchor: ShareAnchor | null): Promise<void>;
   shareVia(service: string, url: string, title: string | null, windowId: string | null): Promise<void>;

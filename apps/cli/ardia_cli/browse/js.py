@@ -72,6 +72,18 @@ LIBRARY = r"""
       const found = api.queryAll(selector, root);
       return found.find((el) => api.visible(el)) || found[0] || null;
     },
+    validCss(css) {
+      try {
+        document.createDocumentFragment().querySelector(css);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    },
+    quoteAttributeValues(css) {
+      return css.replace(/\[\s*([^\s~|^$*!=\]"']+)\s*([~|^$*]?=)\s*([^"'\]\s][^\]]*?)(\s+[iIsS])?\s*\]/g,
+        (whole, name, op, value, flag) => `[${name}${op}"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"${flag || ""}]`);
+    },
     queryAll(selector, root) {
       root = root || document;
       const chain = api.chainParts(selector);
@@ -111,6 +123,7 @@ LIBRARY = r"""
       let css = selector.replace(/^css=/, "").replace(/\[role=(["']?)([A-Za-z]+)\1\]/g, (whole, q, name) => api.roleCss(name.toLowerCase()) === `[role="${name.toLowerCase()}"]` ? whole : `:is(${api.roleCss(name.toLowerCase())})`);
       css = api.outsideStrings(css, (piece) => piece.replace(/:text\(/g, ":has-text("));
       if (/^[a-z]+$/.test(css) && ROLE_WORDS.has(css) && !root.querySelector(css)) css = api.roleCss(css);
+      if (!api.validCss(css)) css = api.quoteAttributeValues(css);
       const parts = api.textPseudos(css);
       if (parts.length === 1) return Array.from(root.querySelectorAll(css));
       let found = null;
@@ -227,6 +240,117 @@ LIBRARY = r"""
       if (label) return null;
       return api.describe(hit);
     },
+    scope() {
+      const text = ((document.body && document.body.innerText) || "").slice(0, 200000);
+      const counts = [];
+      const range = text.match(/\b\d[\d,.]*[ \u00a0]*[-–—][ \u00a0]*\d[\d,.]*[ \u00a0]+of[ \u00a0]+(about[ \u00a0]+|over[ \u00a0]+)?\d[\d,.]*\+?([ \u00a0]+[A-Za-z]+)?/);
+      if (range) counts.push(range[0]);
+      const total = text.match(/\b\d[\d,.]*\+?[ \u00a0]+(results|items|products|listings|jobs|homes|properties|matches|reviews|rentals|vehicles|cars|hotels|apartments|roles|positions|articles|stores|locations|courses|events|deals)\b/i);
+      if (total && !(range && range[0].includes(total[0]))) counts.push(total[0]);
+      const paged = text.match(/\bpage[ \u00a0]+\d+[ \u00a0]+of[ \u00a0]+\d+\b/i);
+      if (paged) counts.push(paged[0]);
+      const controls = [];
+      const named = (pattern) => {
+        for (const el of document.querySelectorAll("a, button, [role=button], [role=link]")) {
+          const name = ((el.getAttribute("aria-label") || el.innerText || "").trim()).slice(0, 40);
+          if (pattern.test(name) && api.visible(el)) return true;
+        }
+        return false;
+      };
+      if (document.querySelector("a[rel=next], link[rel=next]") || named(/^(next( page)?|next ›|›|»)$/i)) controls.push("a Next page link");
+      if (named(/^(load|show|see|view) more\b/i)) controls.push("a Load more button");
+      const pager = document.querySelector("nav[aria-label*=pagination i], [class*=pagination i]");
+      if (pager) {
+        const numbers = Array.from(pager.querySelectorAll("a, button")).map((el) => parseInt((el.innerText || "").replace(/[^\d]/g, ""), 10)).filter((n) => n > 0 && n < 100000);
+        if (numbers.length) controls.push("pages up to " + Math.max(...numbers));
+      }
+      const parts = [];
+      if (counts.length) parts.push("page says " + counts.map((count) => JSON.stringify(count.trim())).join(", "));
+      if (controls.length) parts.push("has " + controls.join(", "));
+      return parts.join("; ");
+    },
+    dismissConsent(x, y) {
+      const about = /\b(cookies?|consent|gdpr|ccpa)\b/i;
+      const vendor = "[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i],[class*=onetrust i],[id*=osano i],[class*=osano i],[id*=didomi i],[id*=usercentrics i],[id*=truste i],[class*=truste i],[class*=qc-cmp i],[id*=sp_message i],[class*=cmp-],[id*=cmpbox i],[class*=cmpbox i],[id*=cookiebot i],[class*=cookiebot i],[id*=iubenda i],[class*=iubenda i],[id*=termly i],[class*=termly i],[id*=klaro i],[class*=klaro i],[id*=cmplz i],[class*=cmplz i],[class*=cky-consent i]";
+      const reject = /^(reject|decline|refuse)( all| optional| non-essential)?( cookies)?$|^(only|strictly) (essential|necessary)( cookies)?$|^(necessary|essential) (cookies )?only$|^use (only )?necessary cookies$|^just (necessary|essential)( cookies)?$|^(use|allow|accept) (only )?(necessary|essential)( cookies)?( only)?$|^deny( all)?$|^continue without accepting$/i;
+      const accept = /^(accept|allow)( all)?( cookies)?$|^(i agree|agree|got it|ok|okay)$/i;
+      const close = /^(close|dismiss)$|^(×|✕)$/i;
+      const layerOf = (node) => {
+        for (let el = node; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+          const position = getComputedStyle(el).position;
+          if (el.matches(vendor) || position === "fixed" || position === "sticky" || el.getAttribute("role") === "dialog" ||
+              el.getAttribute("role") === "alertdialog" || el.getAttribute("aria-modal") === "true") return el;
+        }
+        return null;
+      };
+      const hit = document.elementFromPoint(x, y);
+      const roots = [];
+      const layer = hit && layerOf(hit);
+      if (layer) roots.push(layer);
+      const box = hit ? hit.getBoundingClientRect() : null;
+      const backdrop = box && getComputedStyle(hit).position === "fixed" && box.width * box.height >= innerWidth * innerHeight * 0.5 && !hit.querySelector("button, a, [role=button]");
+      if (backdrop) for (const el of document.querySelectorAll(vendor)) roots.push(el);
+      let best = null;
+      for (const root of roots) {
+        if (!api.visible(root)) continue;
+        const names = root.id + " " + (typeof root.className === "string" ? root.className : "") + " " + (root.getAttribute("aria-label") || "");
+        const declared = /cookie|consent|gdpr|ccpa|onetrust|didomi|usercentrics|truste|osano|qc-cmp|sp_message|cmpbox|cookiebot|iubenda|termly|klaro|cmplz|cky-/i.test(names);
+        const platform = /onetrust|didomi|usercentrics|truste|osano|qc-cmp|sp_message|cmpbox|cookiebot|iubenda|termly|klaro|cmplz|cky-/i.test(names);
+        const text = (root.innerText || "").slice(0, 20001);
+        if (text.length > (platform ? 20000 : 3000) || !(declared || about.test(text))) continue;
+        if (!declared && !/\bcookies?\b/i.test(text)) continue;
+        for (const button of root.querySelectorAll("button, [role=button], a, input[type=button], input[type=submit]")) {
+          if (!api.visible(button)) continue;
+          const name = ((button.innerText || button.value || "").trim() || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+          if (!name || name.length > 40) continue;
+          const rank = reject.test(name) ? 0 : accept.test(name) ? 1 : close.test(name) ? 2 : -1;
+          if (rank >= 0 && (!best || rank < best.rank)) best = { rank, button, name, root };
+        }
+        if (best && best.rank === 0) break;
+      }
+      if (!best) {
+        const signup = /\b(newsletter|subscribe|sign ?up|join|discount|coupon|offer|deal|email|survey|feedback|questionnaire)\b|\d+ ?% ?off\b|\b(tell us|rate your|share your) /i;
+        const surveyVendor = /kampyle|medallia|qualtrics|qsi_|hotjar|foresee|usabilla|survicate|invite/i;
+        const dismiss = /^(close|dismiss|no,? thanks?|no thank you|not now|maybe later|skip|×|✕|✖)$/i;
+        const popups = backdrop ? [...roots, ...document.querySelectorAll("[role=dialog], [aria-modal=true], dialog[open]")] : roots;
+        for (const root of popups) {
+          if (!api.visible(root)) continue;
+          const text = (root.innerText || "").slice(0, 3001);
+          const named = root.id + " " + (typeof root.className === "string" ? root.className : "");
+          if (text.length > 3000 || !(root.querySelector("input[type=email]") || signup.test(text) || surveyVendor.test(named))) continue;
+          for (const button of root.querySelectorAll("button, [role=button], a, input[type=button]")) {
+            if (!api.visible(button)) continue;
+            const shown = ((button.innerText || button.value || "").trim()).replace(/\s+/g, " ");
+            const label = (button.getAttribute("aria-label") || button.getAttribute("title") || "").trim();
+            const name = shown || label;
+            if (dismiss.test(shown) || (shown.length <= 2 && /^(close|dismiss)\b/i.test(label))) {
+              button.click();
+              return { name: name || "close", choice: "close", kind: "popup", layer: api.describe(root) };
+            }
+          }
+        }
+        const modalName = /(^|[\s_-])(modal|overlay|popup|pop-?layer|lightbox|interstitial)([\s_-]|$)|bx-group|wisepops|wiz-/i;
+        const closeLabel = /^(close|dismiss|close (dialog|modal|popup|window)|×|✕|✖|x)$/i;
+        const modals = backdrop ? [...roots, ...document.querySelectorAll("[role=dialog], [aria-modal=true], dialog[open]")] : roots;
+        for (const root of modals) {
+          if (!api.visible(root)) continue;
+          const named = root.id + " " + (typeof root.className === "string" ? root.className : "");
+          if (!modalName.test(named)) continue;
+          for (const button of root.querySelectorAll("button, [role=button], a, [aria-label]")) {
+            if (!api.visible(button)) continue;
+            const shown = ((button.innerText || button.value || "").trim()).replace(/\s+/g, " ");
+            const label = (button.getAttribute("aria-label") || button.getAttribute("title") || "").trim();
+            if (closeLabel.test(shown) || (shown.length <= 2 && closeLabel.test(label))) {
+              button.click();
+              return { name: shown || label || "close", choice: "close", kind: "modal", layer: api.describe(root) };
+            }
+          }
+        }
+        return null;
+      }
+      best.button.click();
+      return { name: best.name, choice: ["reject", "accept", "close"][best.rank], kind: "consent", layer: api.describe(best.root) };
+    },
     clickables(root) {
       const out = [];
       const hints = [];
@@ -256,7 +380,35 @@ LIBRARY = r"""
     readable(root) {
       root = root || document.body || document.documentElement;
       const lines = [];
-      const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD", "IFRAME"]);
+      const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD"]);
+      const ASIDE_TITLE = /^(related|recently viewed|you (may|might) also like|similar (items|products)|sponsored|recommended|customers (also|who)|more (from|like this)|frequently bought|people also)/i;
+      const ASIDE_NAME = /(^|[-_\s])(related|recently-?viewed|recommend\w*|sponsored|similar-?(items|products)|also-?(bought|viewed))([-_\s]|$)/i;
+      const asideLabel = (el) => {
+        const tag = el.tagName, role = roleOf(el);
+        if (tag === "NAV" || role === "navigation") return "navigation";
+        const label = norm(el.getAttribute("aria-label") || "");
+        if (label && ASIDE_TITLE.test(label)) return label;
+        const first = el.firstElementChild;
+        const isHeading = (node) => !!node && /^H[2-4]$/.test(node.tagName);
+        const heading = isHeading(first) ? first : first && isHeading(first.firstElementChild) ? first.firstElementChild : null;
+        const title = heading ? norm(heading.innerText || "") : "";
+        if (title && ASIDE_TITLE.test(title) && title.length <= 60) return title;
+        const names = (el.id || "") + " " + (typeof el.className === "string" ? el.className : "");
+        if (ASIDE_NAME.test(names) && /^(SECTION|DIV|ASIDE|UL)$/.test(tag)) return title || "related items";
+        if (tag === "ASIDE" || role === "complementary") return title || label || "aside";
+        return "";
+      };
+      let insideAside = false;
+      const iconLabel = (el) => {
+        if (el.getAttribute("aria-hidden") === "true") return "";
+        const own = norm(el.getAttribute("aria-label") || "");
+        if (own) return own;
+        if (el.tagName === "SVG" || el.tagName === "svg") {
+          const title = el.querySelector("title");
+          return title ? norm(title.textContent || "") : "";
+        }
+        return "";
+      };
       const BLOCK = /^(P|DIV|SECTION|ARTICLE|MAIN|HEADER|FOOTER|NAV|ASIDE|FORM|FIELDSET|UL|OL|TABLE|TR|BLOCKQUOTE|PRE|FIGURE|DETAILS|DL|DT|DD|ADDRESS|HR|BR|LABEL|SELECT|TEXTAREA|BUTTON)$/;
       const CELL_ROLES = new Set(["gridcell", "cell", "columnheader", "rowheader"]);
       const GRID_ROLES = new Set(["grid", "treegrid", "table"]);
@@ -273,14 +425,53 @@ LIBRARY = r"""
       };
       let buffer = "";
       let row = null;
+      let frameDepth = 0;
       const flush = () => { const t = norm(buffer); if (t) lines.push(t); buffer = ""; };
+      const NOT_CONTENT = /(^|[^a-z])(ads?|advert\w*|sponsored|doubleclick|googlesyndication|adservice|recaptcha|captcha)([^a-z]|$)|3rd party ad/i;
+      const frameText = (el) => {
+        const box = el.getBoundingClientRect();
+        if (box.width < 120 || box.height < 80) return;
+        const title = norm(el.getAttribute("title") || el.getAttribute("name") || "") || "frame";
+        const src = el.getAttribute("src") || "";
+        if (NOT_CONTENT.test(`${title} ${el.id || ""} ${typeof el.className === "string" ? el.className : ""} ${src}`)) return;
+        let doc = null;
+        try { doc = el.contentDocument; } catch (error) { doc = null; }
+        const body = doc && (doc.body || doc.documentElement);
+        if (body && frameDepth < 3) {
+          if (!norm(body.innerText || "")) return;
+          flush();
+          lines.push("");
+          lines.push(`[frame "${title}"]`);
+          frameDepth++;
+          try { walk(body); } finally { frameDepth--; }
+          flush();
+          lines.push(`[end of frame "${title}"]`);
+          lines.push("");
+          return;
+        }
+        if (!doc && /^https?:/.test(el.src || "") && box.width >= Math.max(400, innerWidth / 2) && box.height >= 400) {
+          flush();
+          lines.push(`[frame "${title}" from another site, not read here: read ${el.src}]`);
+        }
+      };
       const walk = (node) => {
         if (node.nodeType === 3) { buffer += node.nodeValue; return; }
         if (node.nodeType !== 1) return;
+        if (node.tagName === "SVG" || node.tagName === "svg") {
+          const label = iconLabel(node);
+          if (label) buffer += " [" + label + "] ";
+          return;
+        }
         if (SKIP.has(node.tagName)) return;
         const style = getComputedStyle(node);
         if (style.display === "none" || style.visibility === "hidden") return;
         const tag = node.tagName;
+        if (tag === "IFRAME" || tag === "FRAME") { frameText(node); return; }
+        if (!/^(INPUT|SELECT|TEXTAREA|IMG|A|BUTTON)$/.test(tag) && node.hasAttribute("aria-label") && !norm(node.textContent || "")) {
+          const label = iconLabel(node);
+          if (label) buffer += " [" + label + "] ";
+          return;
+        }
         if (row) {
           if (isCell(node)) {
             if (row.cells++) buffer += " | ";
@@ -303,6 +494,25 @@ LIBRARY = r"""
           }
           flush();
           return;
+        }
+        if (!insideAside && node !== root && /^(NAV|ASIDE|SECTION|DIV|UL)$/.test(tag)) {
+          const label = asideLabel(node);
+          if (label) {
+            flush();
+            lines.push("");
+            lines.push(`[${label}: not the main content]`);
+            insideAside = true;
+            try {
+              for (const child of node.childNodes) walk(child);
+              if (node.shadowRoot) for (const child of node.shadowRoot.childNodes) walk(child);
+            } finally {
+              insideAside = false;
+            }
+            flush();
+            lines.push(`[end of ${label}]`);
+            lines.push("");
+            return;
+          }
         }
         const h = /^H([1-6])$/.exec(tag);
         if (h) { flush(); const t = norm(node.innerText); if (t) { lines.push(""); lines.push("#".repeat(Number(h[1])) + " " + t); lines.push(""); } return; }
@@ -662,16 +872,22 @@ LIBRARY = r"""
       const drags = globalThis.ardiaBrowseDragStarts;
       drags.accepted += drags.dispatched.filter((event) => !event.defaultPrevented).length;
       drags.dispatched.length = 0;
-      const active = document.activeElement;
-      return Object.assign({ activeFrame: !!active && (active.tagName === "IFRAME" || active.tagName === "FRAME") }, globalThis.ardiaBrowseInput, {
+      let active = document.activeElement;
+      while (active && active.shadowRoot && active.shadowRoot.activeElement) active = active.shadowRoot.activeElement;
+      return Object.assign({ activeFrame: !!active && ["IFRAME", "FRAME", "EMBED", "OBJECT"].includes(active.tagName) }, globalThis.ardiaBrowseInput, {
         dragstart: drags.accepted,
         dragend: drags.dragend,
         drop: drags.drop,
       });
     },
     overFrame(x, y) {
-      const hit = document.elementFromPoint(x, y);
-      return !!hit && (hit.tagName === "IFRAME" || hit.tagName === "FRAME");
+      let hit = document.elementFromPoint(x, y);
+      while (hit && hit.shadowRoot) {
+        const inner = hit.shadowRoot.elementFromPoint(x, y);
+        if (!inner || inner === hit) break;
+        hit = inner;
+      }
+      return !!hit && ["IFRAME", "FRAME", "EMBED", "OBJECT"].includes(hit.tagName);
     },
     pushState(url) {
       history.pushState({}, "", url);

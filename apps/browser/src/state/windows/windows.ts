@@ -14,22 +14,25 @@ import {
   viewTabIds,
   without,
 } from "../browser/model";
-import { restoringGroup } from "../pins/closedTabs";
+import { MAX_CLOSED_WINDOWS, restoringGroup } from "../pins/closedTabs";
 import { markPinned } from "../pins/pinChoices";
 import { hasLoadedPage, hasPage, IDLE, isAsleep, loadedPage, withWake } from "../tabs/pageSession";
 import { adoptParkedPins, parkWindowPins } from "../pins/parkedPins";
 import { settleMovedPins } from "../pins/pinMirror";
 import { holderOf, returnSharedPages, swapPinPage } from "../pins/pinShare";
 import { isTopApp, topAppsShared } from "../pins/topApps";
-import { MAX_CLOSED_WINDOWS } from "../pins/closedTabs";
 import { joinedWithCurrent, newTabPlacement } from "../tabs/openers";
 import { handOverTabs, tabsClosedWithWindow } from "../tabs/sharedWindowClose";
 import { isLastRegularWindow, isOpenRegularWindow, isRegularWindow, isSmall, isSmallWindow, lastActiveProfile, linkProfileOf, mainWindowFor } from "./small";
 import { activated, apply, removeTabs, withNewTab } from "../tabs/tabs";
 import type { AdoptId, BrowserWindow, ClosedWindow, Frame, ParkedPins, Tab, WindowKind } from "../browser/types";
 import { emptyWindow, smallWindow, withWindow } from "./newWindow";
-import { noteAutoHideTabsChosen } from "../telemetry/autoHideTabsChoices";
-import { lastClosedEntry, lastClosedTab, restoreTab, restoreWindow } from "./reopenClosed";
+import { withWindowFrame, withWindowMaximized } from "./windowPlacement";
+import { withFullScreen } from "./fullScreenDisplay";
+import { newTabHome } from "../tabs/newTabHome";
+import { noteAutoHideTabsChosen, noteTornOffWindowKeptAutoHide } from "../telemetry/autoHideTabsChoices";
+import { lastClosedEntry, lastClosedTab, restoreTab, restoreWindow, withoutRecentlyClosed } from "./reopenClosed";
+import { noteRecentlyClosedCleared } from "../telemetry/recentlyClosedCounts";
 import { groupTree, regrouped, splitsWithin, withSplitsBack } from "./groupMoves";
 import { commonGroup, orderSections } from "../groups/groups";
 import { groupOf } from "../pins/tabGrouping";
@@ -44,8 +47,9 @@ export type CreateWindowOptions = {
   tabIds?: string[];
   frame?: Frame | null;
   linkPointer?: [number, number];
+  linkApp?: string;
   background?: boolean;
-  chromeWindow?: string;
+  chromeWindow?: string; opensBehind?: string;
 };
 
 export type CloseWindowOptions = { keepsLastWindow?: boolean };
@@ -60,8 +64,9 @@ export type WindowsSlice = {
 
   createWindow(options?: CreateWindowOptions): string;
   closeWindow(id: string, options?: CloseWindowOptions): void;
-  setWindowFrame(id: string, frame: Frame): void;
-  setWindowFullScreen(id: string, on: boolean): void;
+  setWindowFrame(id: string, frame: Frame, restored?: Frame, fitted?: boolean): void;
+  setWindowMaximized(id: string, on: boolean): void;
+  setWindowFullScreen(id: string, on: boolean, display?: string): void;
   toggleSidebar(windowId: string): void;
   switchProfile(windowId: string, profileId: string): void;
   moveTabsToWindow(tabIds: string[], windowId: string | null, options?: MoveOptions): string | undefined;
@@ -74,6 +79,7 @@ export type WindowsSlice = {
   reopenClosedTab(windowId?: string | null): void;
   reopenClosedWindow(): void;
   restoreClosed(entryId: string, windowId?: string | null): void;
+  clearRecentlyClosed(windowId?: string | null): void;
 };
 
 function lastProfileAfterClosing(s: BrowserState, id: string): string | null {
@@ -179,11 +185,17 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       : (known ?? (small ? lastActiveProfile(s) : s.settings.defaultProfileId));
     const w: BrowserWindow =
       kind === "small"
-        ? { ...smallWindow(id, profileId, o.frame ?? null), ...(o.linkPointer ? { linkPointer: o.linkPointer } : {}) }
-        : { ...emptyWindow(id, profileId, kind, o.frame ?? null), ...(o.chromeWindow ? { chromeWindow: o.chromeWindow } : {}) };
+        ? { ...smallWindow(id, profileId, o.frame ?? null), ...(o.linkPointer ? { linkPointer: o.linkPointer } : {}), ...(o.linkApp ? { linkApp: o.linkApp } : {}) }
+        : { ...emptyWindow(id, profileId, kind, o.frame ?? null), ...(o.chromeWindow ? { chromeWindow: o.chromeWindow } : {}), ...(o.opensBehind && kind === "main" ? { opensBehind: o.opensBehind } : {}) };
+    const from = o.tabIds?.length && !small ? s.windows[s.tabs[o.tabIds[0]!]?.windowId ?? ""] : undefined;
+    if (from?.autoHideTabs !== undefined && !isSmallWindow(from)) {
+      w.autoHideTabs = from.autoHideTabs;
+      noteTornOffWindowKeptAutoHide();
+    }
     let next = withWindow(s, w);
     if (o.tabIds?.length && !small) next = moveTabsInto(next, o.tabIds, id);
-    if (!next.windows[id]!.tabIds.length) next = withNewTab(next, id, { url: o.url, adoptId: o.adoptId })[0];
+    const home = !next.windows[id]!.tabIds.length && o.url === undefined && !small && !o.adoptId ? newTabHome(s, id, profileId) : undefined;
+    if (!next.windows[id]!.tabIds.length) next = withNewTab(next, id, { url: o.url ?? home?.url, replaced: home?.replaced, adoptId: o.adoptId })[0];
     const first = next.windows[id]!.tabIds[0]!;
     const shown = next.windows[id]!.activeTabIds[next.tabs[first]!.profileId] ?? first;
     if (!small) next = adoptParkedPins(next, id, next.tabs[shown]!.profileId);
@@ -195,7 +207,8 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
         ui: { ...next.ui, focusOrder: [focused, id, ...s.ui.focusOrder.filter((w) => w !== focused)], lastProfileId: s.ui.lastProfileId },
       };
     }
-    set(next);
+    set(o.opensBehind && kind === "main" ? { ...next, ui: { ...next.ui, focusOrder: s.ui.focusOrder, lastProfileId: s.ui.lastProfileId } } : next);
+    home?.settle(first, get, () => {});
     return id;
   },
 
@@ -227,24 +240,19 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     });
   },
 
-  setWindowFrame(id, frame) {
-    set((s) => {
-      const w = s.windows[id];
-      if (!w || (w.frame && w.frame.every((v, i) => v === frame[i]))) return {};
-      const windows = { ...s.windows, [id]: { ...w, frame } };
-      if (!isSmallWindow(w)) return { windows };
-      const size: [number, number] = [Math.round(frame[2]), Math.round(frame[3])];
-      const [width, height] = s.settings.littleArdiaSize;
-      return size[0] === width && size[1] === height ? { windows } : { windows, settings: { ...s.settings, littleArdiaSize: size } };
-    });
+  setWindowFrame(id, frame, restored, fitted) {
+    set((s) => withWindowFrame(s, id, frame, restored, fitted));
   },
 
-  setWindowFullScreen(id, on) {
+  setWindowMaximized(id, on) {
+    set((s) => withWindowMaximized(s, id, on));
+  },
+
+  setWindowFullScreen(id, on, display) {
     set((s) => {
       const w = s.windows[id];
-      if (!w || !!w.fullScreen === on) return {};
-      const { fullScreen: _, ...rest } = w;
-      return { windows: { ...s.windows, [id]: on ? { ...rest, fullScreen: Date.now() } : rest } };
+      const next = w && withFullScreen(w, on, display);
+      return next ? { windows: { ...s.windows, [id]: next } } : {};
     });
   },
 
@@ -378,5 +386,13 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     if (closedWindow) return set(restoreWindow(s, closedWindow));
     const closedGroup = s.closedGroups.find((c) => c.id === entryId) ?? s.deletedGroups.find((c) => c.id === entryId);
     if (closedGroup) set(restoringGroup(s, closedGroup, windowId));
+  },
+
+  clearRecentlyClosed(windowId) {
+    const s = get();
+    const cleared = withoutRecentlyClosed(s, resolveWindowId(s, windowId));
+    if (!cleared) return;
+    noteRecentlyClosedCleared(cleared.cleared);
+    set(cleared.next);
   },
 });

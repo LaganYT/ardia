@@ -72,14 +72,14 @@ final class SearchSuggestionsModel {
       let row = Self.row(for: suggestion, devices: devices)
       guard !seen.contains(row.id) else { continue }
       if !isCurrent, !Self.row(row, stillMatches: trimmed) { continue }
-      if !isCurrent, row.kind == .query, row.url == nil || row.title.caseInsensitiveCompare(trimmed) != .orderedSame { continue }
+      if !isCurrent, row.kind == .query, row.title.caseInsensitiveCompare(trimmed) != .orderedSame { continue }
       seen.insert(row.id)
       rows.append(row)
       if rows.count == Self.rowLimit { break }
     }
     if !rows.contains(where: { $0.kind == .query && $0.title.caseInsensitiveCompare(trimmed) == .orderedSame }) {
       rows.removeAll { $0.id == SearchSuggestion.query(trimmed).id }
-      rows.insert(.query(trimmed), at: min(isCurrent ? 1 : 0, rows.count))
+      rows.insert(.query(trimmed), at: min(1, rows.count))
       if rows.count > Self.rowLimit { rows.removeLast() }
     }
     return rows

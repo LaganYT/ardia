@@ -1,5 +1,5 @@
 import { canonical, type Adapter } from "../../platform/sync";
-import { loadBoosts, setBoostList } from "../boosts/store";
+import { loadBoosts, setBoostList, useBoostStore } from "../boosts/store";
 import { validBoost, withoutId } from "../boosts/valid";
 import { BOOST } from "./records";
 
@@ -27,3 +27,5 @@ export function boostsAdapter(profileId: string): Adapter {
     },
   };
 }
+
+export const watchBoosts = (onChange: () => void) => useBoostStore.subscribe(onChange);

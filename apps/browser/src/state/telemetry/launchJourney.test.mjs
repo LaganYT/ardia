@@ -15,11 +15,14 @@ Object.assign(stub.appInfo, {
     mainStarted: processStart + 40,
     startupPrepared: processStart + 700,
     chromiumEntered: processStart + 720,
+    appKitWillFinish: processStart + 5200,
+    appKitDidFinish: processStart + 6100,
     engineStarted: processStart + 6400,
     earlyWindowShown: processStart + 6600,
     reactNativeStarted: processStart + 6900,
   },
   launchedHidden: true,
+  launchSource: "login_item",
   loadAverage1m: 7.126,
 });
 stub.docs.set("telemetry.json", JSON.stringify({ version: 1, sharing: true, installId: "install", decidedAt: 1, askDoneAt: 1, crashCursor: 0, lastVersion: "0.3.0", sessionOpen: false }));
@@ -29,6 +32,10 @@ globalThis.fetch = async () => ({ status: 200 });
 const client = await import("./client.ts");
 const journeys = await import("./journeys.ts");
 const track = await import("./track.ts");
+const { useBrowser } = await import("../browser/store.ts");
+const DAY = 86_400_000;
+const page = (url, daysAgo) => ({ url, title: url, favicon: null, visits: 1, lastVisit: Date.now() - daysAgo * DAY });
+useBrowser.setState({ history: { "": { list: [page("https://a.com/", 1), page("https://b.com/", 200), page("https://arc-import.com/", 2 * 365)], floor: -Infinity, ready: true } } });
 after(() => client.setSharing(false, "settings"));
 
 test("a launch with sharing on at start sends one perf_launch with launch_ms, however many windows open", async () => {
@@ -63,4 +70,18 @@ test("perf_launch carries the early launch marks in order from process start, th
   assert.deepEqual([main_ms, startup_ms, chromium_ms, engine_ms, early_window_ms, rn_ms], [40, 700, 720, 6400, 6600, 6900]);
   assert.equal(load_1m, 7.13);
   assert.equal(launched_hidden, true);
+});
+
+test("perf_launch says in ranges how much history there is and how old its oldest page is, so imported history past 90 days shows", () => {
+  const saved = JSON.parse(stub.docs.get("telemetry-queue.json"));
+  const { history, history_oldest } = saved.events.find((e) => e.event === "perf_launch").properties;
+  assert.equal(history, "<100");
+  assert.equal(history_oldest, "<3y");
+});
+
+test("perf_launch says whether a login item, another app's link or file, or the user started the launch, and when AppKit finished launching", () => {
+  const saved = JSON.parse(stub.docs.get("telemetry-queue.json"));
+  const { launch_source, appkit_will_finish_ms, appkit_did_finish_ms } = saved.events.find((e) => e.event === "perf_launch").properties;
+  assert.equal(launch_source, "login_item");
+  assert.deepEqual([appkit_will_finish_ms, appkit_did_finish_ms], [5200, 6100]);
 });

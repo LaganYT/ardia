@@ -8,7 +8,7 @@ import { forgetOpeners, joinedWithCurrent, newTabPlacement, switchKeepsOpeners }
 import { onUrlChange } from "../pins/organize";
 import { groupWithOpener } from "../pins/tabGrouping";
 import { stepDrop } from "../drag/drops";
-import { resolveTyped } from "../settings/settings";
+import { customNewTabUrl, resolveTyped } from "../settings/settings";
 import { openSettings } from "../settings/settingsWindows";
 import { showImportBoost } from "../boosts/importSheet";
 import { appUrlAction } from "../pages/appUrls";
@@ -56,7 +56,7 @@ function openOutsideTab(s: BrowserState, url: string, windowId: string): boolean
   if (action.kind === "newTab") s.newTab(windowId);
   else if (action.kind === "boost") {
     showImportBoost(action.code);
-    openSettings("boosts", s.windows[windowId]?.profileId);
+    openSettings("profiles", s.windows[windowId]?.profileId);
   }
   else openSettings(action.pane);
   return true;
@@ -68,6 +68,8 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
   closedTabs: [],
 
   newTab(windowId, options) {
+    const home = options?.newTabCommand && !options.url && !options.adoptId && !options.gated ? customNewTabUrl(get().settings) : undefined;
+    if (home) return get().newTab(windowId, { ...options, url: home });
     const small = get().windows[windowId];
     if (small?.kind === "small" && small.tabIds.length) {
       const profileId = options?.profileId ?? small.profileId;
@@ -78,7 +80,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
       }
       return get().newTab(main, { ...options, profileId, index: undefined });
     }
-    if (options?.url && !options.adoptId && openOutsideTab(get(), resolveTyped(get().settings, options.url), windowId)) return "";
+    if (options?.url && !options.adoptId && !options.enginePage && openOutsideTab(get(), resolveTyped(get().settings, options.url), windowId)) return "";
     if (options?.url && !options.adoptId && !options.gated && isGatedUrl(options.url)) {
       const profileId = options.profileId ?? get().windows[windowId]?.profileId ?? null;
       const gated = gateOpening(options.url, { tabId: null, windowId, profileId, via: "newTab" }, null);

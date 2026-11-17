@@ -6,6 +6,7 @@ import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId, engineProfile, incognitoOriginal, isIncognitoProfile, privateSession } from "../browser/model";
 import { shownPageId } from "../peek/peek";
 import { isTabReady } from "../tabs/pageState";
+import type { ToolbarDrag } from "./toolbarOrder";
 
 export type { ActionState, InstalledExtension } from "../../platform/extensions";
 
@@ -26,7 +27,9 @@ type ExtensionsStore = {
   install: InstallRequest | null;
   pinDialog: { windowId: string } | null;
   sidePanels: Record<string, SidePanel>;
+  sidePanelCards: Record<string, SidePanelCard[]>;
   sidePanelLookups: Record<string, number>;
+  toolbarDrag: (ToolbarDrag & { windowId: string }) | null;
 };
 
 export type SidePanel = {
@@ -35,9 +38,13 @@ export type SidePanel = {
   pageProfile: string;
   url: string;
   opened: number;
+  tabId?: string;
+  hidden?: boolean;
 };
 
-export const useExtensions = create<ExtensionsStore>()(() => ({ lists: {}, actions: {}, popup: null, install: null, pinDialog: null, sidePanels: {}, sidePanelLookups: {} }));
+export type SidePanelCard = SidePanel & { owners: string[] };
+
+export const useExtensions = create<ExtensionsStore>()(() => ({ lists: {}, actions: {}, popup: null, install: null, pinDialog: null, sidePanels: {}, sidePanelCards: {}, sidePanelLookups: {}, toolbarDrag: null }));
 
 const EMPTY: InstalledExtension[] = [];
 
@@ -61,7 +68,7 @@ export function extensionsProfileId(profileId?: string | null, windowId?: string
 }
 
 export const settingsProfileFor = (pane: SettingsPane, current: SettingsPlace): string | null =>
-  pane === "extensions" ? extensionsProfileId(current.pane === "extensions" ? current.profileId : null) : null;
+  pane === "profiles" ? extensionsProfileId(current.pane === "profiles" ? current.profileId : null) : null;
 
 export const isPrivate = (s: BrowserState, windowId: string) => s.windows[windowId]?.kind === "private";
 
@@ -77,6 +84,12 @@ export function useWindowExtensions(windowId: string): InstalledExtension[] {
   return useMemo(() => list.filter((x) => showsExtension(priv, x)), [list, priv]);
 }
 
+export const useToolbarReorderable = (windowId: string) => !useBrowser((s) => isPrivate(s, windowId));
+
+export const useToolbarDrag = (windowId: string) => useExtensions((e) => (e.toolbarDrag?.windowId === windowId ? e.toolbarDrag : null));
+
+export const useFieldExtensionsHeld = (windowId: string) => useExtensions((e) => e.popup?.windowId === windowId || e.toolbarDrag?.windowId === windowId);
+
 export function windowExtensions(s: BrowserState, windowId: string | undefined): InstalledExtension[] {
   if (!windowId) return EMPTY;
   const priv = isPrivate(s, windowId);
@@ -88,6 +101,12 @@ export const shownIn = (windowId: string, extensionId: string) => windowExtensio
 export function useExtensionList(profile: string): InstalledExtension[] {
   return useExtensions((e) => e.lists[profile] ?? EMPTY);
 }
+
+export const tabProfile = (tabId: string) => {
+  const s = useBrowser.getState();
+  const tab = s.tabs[tabId];
+  return tab ? engineProfile(s, tab.profileId) : "";
+};
 
 export const readyTabOf = (tabId: string | undefined): string | undefined => (isTabReady(tabId) ? tabId : undefined);
 

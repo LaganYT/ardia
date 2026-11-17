@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { goToSettingsPane, useSettingsNav, type SettingsPane } from "./settingsWindows";
+import { goToSettingsPane, type SettingsPane, useSettingsNav } from "./settingsWindows";
 import { settingsProfileFor } from "../extensions/store";
 import { noteSettingsSearch, noteSettingsSearchReveal } from "../telemetry/usage";
 
@@ -61,8 +61,8 @@ export const selectSettingsResult = (index: number) => useSettingsSearch.setStat
 
 export const clearSettingsReveal = () => useSettingsSearch.setState({ reveal: null });
 
-export function revealSetting({ id, pane, section }: Target, via: "keyboard" | "click", rank: number) {
-  noteSettingsSearchReveal(via, rank);
+export function revealSetting({ id, pane, section }: Target, via: "keyboard" | "click", rank: number, unshown = false) {
+  noteSettingsSearchReveal(via, rank, unshown);
   const key = settingsSectionKey(pane, section);
   useSettingsSearch.setState((s) => (s.revealedSections.includes(key) ? {} : { revealedSections: [...s.revealedSections, key] }));
   if (!useSettingsSearch.getState().previewing) goToSettingsPane(pane, settingsProfileFor(pane, useSettingsNav.getState()));

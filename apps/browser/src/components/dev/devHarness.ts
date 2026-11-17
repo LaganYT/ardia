@@ -35,6 +35,9 @@ export function startDevHarness() {
   const ac = {
     store: useBrowser, actions, runCommand, webviews, shell, engine: { call, on }, omnibox: omniboxDrivers, pages: pagesDrivers,
     pageState: usePages,
+    get downloads(): typeof import("../../state/downloads/progress") {
+      return require("../../state/downloads/progress");
+    },
     openSettings,
     favicons,
     get bookmarks(): typeof import("../../state/bookmarks/bookmarks") {
@@ -51,6 +54,10 @@ export function startDevHarness() {
     },
     get onboarding(): typeof import("../../state/onboarding/onboarding") {
       return require("../../state/onboarding/onboarding");
+    },
+    get interfaceScale(): typeof import("../../state/settings/interfaceScale") & { pixelRatio: number; hairline: number } {
+      const rn: typeof import("react-native") = require("react-native");
+      return { ...require("../../state/settings/interfaceScale"), pixelRatio: rn.PixelRatio.get(), hairline: rn.StyleSheet.hairlineWidth };
     },
     get media(): typeof import("../../state/media/media").useMedia {
       return require("../../state/media/media").useMedia;
@@ -71,7 +78,7 @@ export function startDevHarness() {
       return require("../../state/app/toasts").useToasts;
     },
     get extensions(): typeof import("../../state/extensions/actions") {
-      return require("../../state/extensions/actions");
+      return { ...require("../../state/extensions/actions"), ...require("../../state/extensions/toolbarAnchors"), ...require("../../state/extensions/toolbarOrder") };
     },
     get themes(): typeof import("../../state/import/apply") & typeof import("../settings/ThemeEditor") {
       return { ...require("../../state/import/apply"), ...require("../settings/ThemeEditor") };
@@ -87,6 +94,12 @@ export function startDevHarness() {
     },
     get switcher(): typeof import("../../state/sidebar/switcher") {
       return require("../../state/sidebar/switcher");
+    },
+    get reveal(): typeof import("../../state/sidebar/reveal") {
+      return require("../../state/sidebar/reveal");
+    },
+    get tileFolders(): typeof import("../../state/pins/tileFolders") & typeof import("../../state/sidebar/tileFolderUi") {
+      return { ...require("../../state/pins/tileFolders"), ...require("../../state/sidebar/tileFolderUi") };
     },
     get sidebarRows(): typeof import("../../state/sidebar/sidebarUi") {
       return require("../../state/sidebar/sidebarUi");
@@ -131,6 +144,7 @@ export function startDevHarness() {
       return require("../settings/panes/SyncSheets");
     },
     get menus(): typeof import("../../state/sidebar/menus") &
+      typeof import("../../state/sidebar/liveMenus") &
       typeof import("../../state/site/reloadMenu") &
       typeof import("../profiles/profileMenu") &
       typeof import("../../state/bookmarks/bookmarkMenus") &
@@ -141,6 +155,7 @@ export function startDevHarness() {
       return {
         useBookmarkDialog: require("../../state/bookmarks/actions").useBookmarkDialog,
         ...require("../../state/sidebar/menus"),
+        ...require("../../state/sidebar/liveMenus"),
         ...require("../../state/site/reloadMenu"),
         ...require("../profiles/profileMenu"),
         ...require("../../state/bookmarks/bookmarkMenus"),
@@ -155,6 +170,11 @@ export function startDevHarness() {
       const { WhatsSentSheet } = require("../settings/panes/ShareDiagnostics") as typeof import("../settings/panes/ShareDiagnostics");
       showSettingsSheet(createElement(WhatsSentSheet));
     },
+    showFilterLists: () => {
+      const { showSettingsSheet } = require("../../state/settings/sheet") as typeof import("../../state/settings/sheet");
+      const { FilterListsSheet } = require("../settings/panes/FilterListsSheet") as typeof import("../settings/panes/FilterListsSheet");
+      showSettingsSheet(createElement(FilterListsSheet));
+    },
     get config(): typeof import("../../state/config/basePalette") & typeof import("../../state/config/configFiles") & typeof import("../../state/app/toasts") {
       return { ...require("../../state/config/basePalette"), ...require("../../state/config/configFiles"), ...require("../../state/app/toasts") };
     },
@@ -166,6 +186,9 @@ export function startDevHarness() {
     },
     get automation(): typeof import("../../state/automation/approvals") & typeof import("../../state/automation/hookRules") & typeof import("../../state/automation/hookPolicy") & typeof import("../../state/automation/decideSocket") {
       return { ...require("../../state/automation/approvals"), ...require("../../state/automation/hookRules"), ...require("../../state/automation/hookPolicy"), ...require("../../state/automation/decideSocket") };
+    },
+    get airTraffic(): typeof import("../../state/airTraffic/store") & typeof import("../../state/airTraffic/preview") & typeof import("../../state/littleArdia/actions") {
+      return { ...require("../../state/airTraffic/store"), ...require("../../state/airTraffic/preview"), ...require("../../state/littleArdia/actions") };
     },
   };
   (globalThis as { ac?: typeof ac }).ac = ac;

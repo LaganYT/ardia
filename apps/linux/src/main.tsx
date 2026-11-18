@@ -38,7 +38,7 @@ import { colorRoles } from "../../browser/src/components/ui/tokens";
 import { startHostConfig } from "./hostConfig";
 import { COMMANDS } from "../../browser/src/state/commands/commandCatalog";
 import { opensOnCommandBar } from "./hostSmallWindows";
-import { linuxSessionShape, startHostPersistence } from "./hostSession";
+import { hydrateLaunchSession, linuxSessionShape, startHostPersistence } from "./hostSession";
 import { startHostData } from "./hostData";
 import { startHostDownloads } from "./hostDownloads";
 import { startHostTabLifecycle } from "./hostTabLifecycle";
@@ -106,7 +106,7 @@ async function start() {
   const launch = ardiaHost.bootstrap.startup !== false;
   const restoreSession = launch ? configRestoreSession() : undefined;
   setStoreBatching(unstable_batchedUpdates);
-  useBrowser.getState().hydrate(initialLinuxSession(ardiaHost, saved?.settings && restoreSession !== undefined ? { ...saved, settings: { ...saved.settings, restoreSession } } : saved));
+  hydrateLaunchSession(saved, initialLinuxSession(ardiaHost, saved?.settings && restoreSession !== undefined ? { ...saved, settings: { ...saved.settings, restoreSession } } : saved));
   followWindowMaximized(ardiaHost, windowId);
   startConfigFiles(colorRoles, launch);
   startHostTelemetry({ host: ardiaHost, candidate: !utility, locks: navigator.locks as unknown as LeaderLocks });

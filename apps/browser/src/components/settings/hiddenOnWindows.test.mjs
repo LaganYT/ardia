@@ -6,7 +6,7 @@ test("Windows hides the settings whose only effect is an engine call it doesn't 
   const windowsFeatures = source("../../lib/platformFeatures.windows.ts");
   const macFeatures = source("../../lib/platformFeatures.ts");
   const missing = JSON.parse(source("../../../../../packages/expo-windows/src/engine/domains/forwarded.json")).missing;
-  const flags = { passwordAutofillSwitch: [false, true], answersPermissionRequests: [false, true], ardiaCommand: [false, true] };
+  const flags = { passwordAutofillSwitch: [false, true], answersPermissionRequests: [false, true], ardiaCommand: [false, true], preloadPages: [false, true] };
   for (const [flag, [onWindows, onMac]] of Object.entries(flags)) {
     assert.match(windowsFeatures, new RegExp(`${flag}: ${onWindows}\\b`), `Windows ${flag}`);
     assert.match(macFeatures, new RegExp(`${flag}: ${onMac}\\b`), `Mac ${flag}`);
@@ -18,6 +18,9 @@ test("Windows hides the settings whose only effect is an engine call it doesn't 
   rowShownBy("./rows/profileRows.ts", "offerToSavePasswords", "passwordAutofillSwitch");
   rowShownBy("./rows/advancedRows.ts", "ardiaCommand", "ardiaCommand");
   rowShownBy("./rows/advancedRows.ts", "compactCliPill", "ardiaCommand");
+  rowShownBy("./rows/profileRows.ts", "preloadPages", "preloadPages");
+  assert.ok(missing.sites.includes("preloadPages") && missing.sites.includes("setPreloadPages"), "Windows has no preload pages call yet");
+  assert.match(source("./panes/Profiles.tsx"), /\{PLATFORM_FEATURES\.preloadPages \? <PreloadPagesRow profileId=\{profileId\} \/> : null\}/);
   assert.match(source("../../state/site/siteControls.ts"), /offersSiteSetting = \(type: SiteSettingType\) => type !== "autoplay" \|\| PLATFORM_FEATURES\.blocksAutoplay;/);
   const sites = source("./panes/SiteSettings.tsx");
   assert.match(sites, /\{\(PLATFORM_FEATURES\.blocksAutoplay \|\| PLATFORM_FEATURES\.answersPermissionRequests\) && \(\s*<>\s*<SectionHeader title="All sites"/);

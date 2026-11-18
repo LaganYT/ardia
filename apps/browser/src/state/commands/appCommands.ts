@@ -46,5 +46,6 @@ export async function diagnostics(): Promise<string> {
         : `Updates: automatic checks ${updates.automaticChecks ? "on" : "off"}, feed ${updates.feedURL ?? "none"}`,
     webKitMediaFaultsLine(),
     ...(engine?.focus ? [`Focus: ${engine.focus.replace(/\n/g, "\n  ")}`] : []),
+    ...(engine?.pictureInPictureCloses ? [`Picture in Picture closes: ${engine.pictureInPictureCloses.replace(/ \| /g, "\n  ")}`] : []),
   ].join("\n");
 }

@@ -27,4 +27,11 @@ export type TelemetryRelay = {
 let relay: TelemetryRelay | null = null;
 
 export const telemetryRelay = () => relay;
-export const setTelemetryRelay = (next: TelemetryRelay | null) => void (relay = next);
+const relayReady = new Set<() => void>();
+
+export const onTelemetryRelay = (listener: () => void) => void relayReady.add(listener);
+
+export function setTelemetryRelay(next: TelemetryRelay | null) {
+  relay = next;
+  if (next) for (const listener of relayReady) listener();
+}

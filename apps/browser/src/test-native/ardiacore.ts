@@ -43,6 +43,7 @@ const testGlobals = globalThis as {
   acTestCliOwns?: (tabId: string) => { owned: boolean; shown: boolean };
   acTestCliMoveOffscreen?: (tabId: string) => { ok: boolean; reason?: string };
   acTestTasks?: () => EngineTask[];
+  acTestEngineInfo?: () => CallResult<"engine.info">;
   acTestUserScripts?: { engine: ExtensionEngine };
   acTestSuggest?: (args: { url: string; id: number; profile: string }) => CallResult<"search.suggest"> | undefined;
 };
@@ -334,6 +335,11 @@ const fakeModules = {
     {
       components: () => [],
       tasks: () => testGlobals.acTestTasks?.() ?? [],
+      info: () => {
+        const info = testGlobals.acTestEngineInfo?.();
+        if (!info) throw Object.assign(new Error("engine.info has no test fake yet"), { code: "ERR_UNKNOWN_CALL" });
+        return info;
+      },
       beginTracing: () => false,
       endTracing: () => null,
       isTracing: () => false,
@@ -406,6 +412,8 @@ const fakeModules = {
     clearData: () => ({ cookies: 0, storage: true }),
     zoomLevels: () => ({}),
     setZoom: () => null,
+    preloadPages: () => false,
+    setPreloadPages: () => null,
   }),
   ArdiaPasswords: domain(
     "passwords",

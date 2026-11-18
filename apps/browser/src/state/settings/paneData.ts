@@ -19,7 +19,7 @@ import { setAsDefaultBrowser } from "../app/appSettings";
 import { getAutofillSettings, listAddresses, listCards, setAutofillSettings, type AutofillToggle, type SavedAddress, type SavedCard } from "../../platform/autofill";
 import { getContentBlocker } from "../../platform/contentBlocker";
 import { getDownloadSettings, setDownloadSettings, type DownloadSettings } from "../../platform/downloads";
-import { getExternalAppAllowances, getSiteSettingsOrigins, getZoomLevels } from "../../platform/siteSettings";
+import { getExternalAppAllowances, getPreloadPages, getSiteSettingsOrigins, getZoomLevels, setPreloadPages } from "../../platform/siteSettings";
 import { getPasswordAutofill, setPasswordAutofill } from "../../platform/passwords";
 import { orWarn } from "../../lib/fallback";
 import { menuShortcuts } from "../../platform/commands";
@@ -33,6 +33,7 @@ import { cached, load, loadAll, need, resource, store, useAllLoaded, type Needed
 import type { SettingsPane } from "./settingsWindows";
 import { FOLLOW_EVERY_MS, FOLLOW_FOR_MS, switchOutcome, updaterBusy } from "./updateStatus";
 import { noteUpdateChannelSwitch } from "../telemetry/usage";
+import { notePreloadPagesTurned } from "../telemetry/preloadPagesCounts";
 import { trackAutofillToggleKept } from "../telemetry/track";
 import { askedValue, rememberAsked } from "./autofillAsked";
 
@@ -49,6 +50,7 @@ export const contentBlocker = resource("contentBlocker", () => getContentBlocker
 export const siteOrigins = resource("siteOrigins", (profile: string) => getSiteSettingsOrigins(profile).catch((): string[] => []));
 export const appLinks = resource("appLinks", (profile: string) => getExternalAppAllowances(profile).catch(() => []));
 export const zoomLevels = resource("zoomLevels", (profile: string) => getZoomLevels(profile).catch((): Record<string, number> => ({})));
+export const preloadPages = resource("preloadPages", (profile: string) => getPreloadPages(profile).catch(() => false));
 export const passwordAutofill = resource("passwordAutofill", (profile: string) => getPasswordAutofill(profile).catch(() => true));
 export const addresses = resource("addresses", (profile: string) => listAddresses(profile).catch(orWarn<SavedAddress[]>([])));
 export const cards = resource("cards", (profile: string) => listCards(profile).catch(orWarn<SavedCard[]>([])));
@@ -82,6 +84,7 @@ export function paneNeeds(pane: SettingsPane, profileId: string | null): Needed[
     case "profiles":
       return [
         need(downloadSettings, profile),
+        need(preloadPages, profile),
         need(passwordAutofill, profile),
         need(autofillToggleAsked, profile, "passwords"),
         need(addresses, profile),
@@ -113,6 +116,12 @@ function noteAsked(profile: string, toggle: AutofillToggle, asked: boolean, now:
 }
 
 const written = (write: Promise<unknown>) => write.then(() => true, orWarn(false));
+
+export async function setPreloadPagesFor(profile: string, on: boolean) {
+  if (!(await written(setPreloadPages(profile, on)))) return;
+  store(preloadPages, [profile], on);
+  notePreloadPagesTurned(on);
+}
 
 export async function setPasswordAutofillFor(profile: string, on: boolean) {
   if (!(await written(setPasswordAutofill(on, profile)))) return;

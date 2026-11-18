@@ -60,6 +60,13 @@ export const profileRows = {
           shown: (s) => s.separateDownloadFolders,
           needs: "Turn on Separate folder for each profile in General",
         },
+        preloadPages: {
+          title: "Preload pages",
+          explained: true,
+          description: "Links open faster, but pages you may never visit are fetched too.",
+          keywords: ["preload", "prerender", "preconnect", "prefetch", "speed", "faster", "slow connection", "latency", "network predictions"],
+          shown: () => PLATFORM_FEATURES.preloadPages,
+        },
         siteSettings: {
           title: "Site settings",
           description: "Permissions, autoplay, notifications and zoom.",

@@ -10,11 +10,11 @@ import { reportLocalStore, startLocalStore } from "./localStoreReport";
 import { startWatchChecks } from "./watch";
 import { appIconSetting, currentThemeFileSnapshot, customColorProfiles, narrowWindows, openTabSyncProfiles, SETTINGS_SNAPSHOT_EVENT, settingsSnapshot } from "./settingsSnapshot";
 import { utcDay } from "./daily";
-import { appInfo, percentile } from "./transport";
+import { percentile } from "./transport";
 import { reportNativeCrashes } from "./errors";
 import { emitJourneys, journeysEnding, startJourneys } from "./journeys";
 import { commandBarPlacementLabel, takeExternalAppRequests, takeNotificationRequestCounts, takeRecentlyClosedCounts, takeHistoryRemovalCounts, takeOmniboxLatency, takePopupTabCounts, takeSearchSuggests } from "./track";
-import { contextProperties, contextSamples, hardwareProperties, launchGuardProperties, noteAppMemory, recordContext, takeMainProcessWork, takeContentDriftCounts, takeColdTabHoldCounts, startContextSamples, stopContextSamples, watchEngineReports } from "./diagnostics";
+import { contextSamples, noteAppMemory, recordContext, takeMainProcessWork, takeContentDriftCounts, takeColdTabHoldCounts, startContextSamples, stopContextSamples, watchEngineReports } from "./diagnostics";
 import { emitTabPresses } from "./tabPresses";
 import { switcherSwitchProperties } from "./switcherPresses";
 import { profileSwitched } from "./profileSwap";
@@ -50,6 +50,8 @@ import { takeWindowPlacementCounts } from "./windowPlacementCounts";
 import { takeSidebarResizeCounts } from "./sidebarResizeCounts";
 import { takeBookmarkletCounts } from "./bookmarkletCounts";
 import { takeWorkCounts } from "./workCounts";
+import { launchEvents } from "./launchEvents";
+import { releaseTopAppsSharing } from "./topAppsSharing";
 import { watchPopupProtectedMedia } from "./popupProtectedMedia";
 
 const HOUR_MS = 60 * 60_000;
@@ -341,21 +343,10 @@ function hourly() {
   void reportLocalStore();
 }
 
-const rebootedSince = (lastLaunchAt: number | null) => {
-  const boot = appInfo().bootTime;
-  return lastLaunchAt != null && boot != null ? boot > lastLaunchAt : null;
-};
-
-async function launchEvents(session: ReturnType<typeof startClient>) {
-  const hardware = await hardwareProperties();
-  const previous = session.previous === "unclean" ? { ...contextProperties(session.context, "prev_", Date.now()), rebooted_since: rebootedSince(session.lastLaunchAt) } : {};
-  capture("app_launched", { previous_session: session.previous, ...hardware, ...previous, ...launchGuardProperties() });
-  if (session.updatedFrom) capture("app_updated", { from_version: session.updatedFrom });
-}
-
 export function startUsage(continuing = false) {
   const session = startClient(continuing);
   previousContext = session.context;
+  releaseTopAppsSharing();
   if (!continuing) void launchEvents(session);
   if (!continuing) launchCrashRead = setTimeout(() => void reportNativeCrashes([previousContext]), session.previous === "unclean" ? 1000 : 5000);
   startWatchChecks();

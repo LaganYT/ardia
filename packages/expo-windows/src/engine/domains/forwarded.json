@@ -70,6 +70,7 @@
     "permissions": ["resolve", "devExternalLaunches"],
     "profiles": ["loaded", "unloadIdle"],
     "search": ["setEngineName"],
+    "sites": ["preloadPages", "setPreloadPages"],
     "tabs": [
       "routeLinkTabs",
       "stripCommand",

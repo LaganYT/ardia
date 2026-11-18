@@ -19,12 +19,14 @@ import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/s
 import { ThemeSection } from "../ThemeEditor";
 import { detailValue, goToSettingsPane, replaceSettingsPlace, SETTINGS_DETAIL, SETTINGS_WINDOW_ID, type SettingsPlace } from "../../../state/settings/settingsWindows";
 import { setOpenTabsSynced, setProfileSynced, useSync } from "../../../state/sync/engine";
+import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { PLATFORM_TERMS } from "../../../lib/platformTerms";
 import { pickFolder } from "../../../state/app/system";
 import { downloadSettings, setDownloadsFor } from "../../../state/settings/paneData";
 import { useResource } from "../../../state/settings/resources";
 import { findSetting, setting } from "../settingsIndex";
 import { ExportBookmarksRow } from "./ExportBookmarksRow";
+import { PreloadPagesRow } from "./PreloadPagesRow";
 import { listOf, ProfileBar, useSharedWith } from "./ProfileSwitcher";
 import { useSelectedProfile } from "./ProfileSubPage";
 import { OtherEnginesPage, SearchSection } from "./ProfileSearch";
@@ -238,6 +240,7 @@ function ThisProfileSection({ profileId }: { profileId: string }) {
         >
           <Button title="Change…" disabled={!downloads || downloads.managed} onPress={() => void changeDownloads()} />
         </Row>
+        {PLATFORM_FEATURES.preloadPages ? <PreloadPagesRow profileId={profileId} /> : null}
         <Row anchor="profiles.siteSettings" onPress={() => goToSettingsPane("profiles", profileId, SETTINGS_DETAIL.sites)} />
       </Group>
 

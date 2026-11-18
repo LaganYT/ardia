@@ -91,6 +91,8 @@ export type EngineCalls = {
   "sites.clearData": [Profile & { origin: string; engine: PageEngine }, ClearSiteDataResult];
   "sites.zoomLevels": [Profile, Record<string, number>];
   "sites.setZoom": [Profile & { host: string; zoom: number }, null];
+  "sites.preloadPages": [Profile, boolean];
+  "sites.setPreloadPages": [Profile & { on: boolean }, null];
 
   "boosts.setProfileBoosts": [Profile & { json: string }, null];
   "boosts.previewBoost": [{ tabId: string; json: string }, null];

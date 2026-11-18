@@ -12,6 +12,7 @@ import { closeFind } from "../find/actions";
 import { hostOf } from "@ardia/core";
 import { linkDestination } from "../../lib/linkWrappers";
 import { navigationOf } from "../tabs/pageSession";
+import { liveOf, onLiveChange } from "../tabs/tabLive";
 import { notePageOverlay } from "../telemetry/usage";
 
 const store = () => useBrowser.getState();
@@ -119,9 +120,17 @@ export function startPeeks() {
   };
   sync();
   useBrowser.subscribe(sync);
-  useBrowser.subscribe(bumpOnFirstLoad);
+  useBrowser.subscribe((s, prev) => {
+    if (s.peeks !== prev.peeks) bumpOnFirstLoad(s);
+    if (s.tabs !== prev.tabs || s.peeks !== prev.peeks) landBackOnSite(s);
+  });
+  onLiveChange((id) => {
+    const s = useBrowser.getState();
+    if (!peekTabIds(s.peeks).has(id)) return;
+    bumpOnFirstLoad(s);
+    landBackOnSite(s);
+  });
   useBrowser.subscribe(refocusAfterClose);
-  useBrowser.subscribe(landBackOnSite);
   useBrowser.subscribe(countPeeksShownAgain);
 }
 
@@ -137,8 +146,7 @@ type LandingWatch = { nav: number | null; judged: boolean };
 const landings = new Map<string, LandingWatch>();
 const isLinkWrapper = (url: string) => linkDestination(url) !== url;
 
-function landBackOnSite(s: BrowserState, prev: BrowserState) {
-  if (s.tabs === prev.tabs && s.peeks === prev.peeks && s.live === prev.live) return;
+function landBackOnSite(s: BrowserState) {
   const shown = peekTabIds(s.peeks);
   for (const id of landings.keys()) if (!shown.has(id)) landings.delete(id);
   for (const [sourceId, peek] of Object.entries(s.peeks)) {
@@ -153,8 +161,8 @@ function landBackOnSite(s: BrowserState, prev: BrowserState) {
       watch.judged = true;
       continue;
     }
-    const live = s.live[peek.tabId];
-    if (!live || live === IDLE_LIVE || live.isLoading || !/^https?:/i.test(tab.url) || isLinkWrapper(tab.url)) continue;
+    const live = liveOf(peek.tabId);
+    if (live === IDLE_LIVE || live.isLoading || !/^https?:/i.test(tab.url) || isLinkWrapper(tab.url)) continue;
     watch.judged = true;
     if (hostOf(tab.url) !== landing.host) continue;
     const url = tab.url;
@@ -182,13 +190,12 @@ function refocusAfterClose(s: BrowserState, prev: BrowserState) {
 const loading = new Set<string>();
 const loaded = new Set<string>();
 
-function bumpOnFirstLoad(s: BrowserState, prev: BrowserState) {
-  if (s.peeks === prev.peeks && s.live === prev.live) return;
+function bumpOnFirstLoad(s: BrowserState) {
   const shown = peekTabIds(s.peeks);
   for (const id of [...loading, ...loaded]) if (!shown.has(id)) (loading.delete(id), loaded.delete(id));
   for (const id of shown) {
     if (loaded.has(id)) continue;
-    if (s.live[id]?.isLoading) loading.add(id);
+    if (liveOf(id).isLoading) loading.add(id);
     else if (loading.has(id)) {
       loading.delete(id);
       loaded.add(id);

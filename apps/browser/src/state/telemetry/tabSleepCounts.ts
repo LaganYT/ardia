@@ -1,4 +1,6 @@
 import { takeCleanUpCounts } from "./cleanUpCounts";
+import type { ConsentToken } from "./choice";
+import { countFor } from "./countFor";
 
 const none = () => ({ captureIndicatorsCleared: 0, mediaCardsCleared: 0, pinnedTabsSleptByMemorySaver: 0, tabsSleptOverBudget: 0, tabsSleptOverBudgetReopened: 0, tabsOverBudgetSkippedLoading: 0, tabsOverBudgetAsksPassedOn: 0, topAppsKeptRunning: 0, topAppsUnloadedFromMenu: 0, tabsSleptFromMenu: 0, groupsSleptFromMenu: 0, menuSleepsKeptAwake: 0 });
 
@@ -16,8 +18,8 @@ export function noteTabSlept(pinned: boolean, reason: string | null) {
   if (pinned && reason === "proactive") pending.pinnedTabsSleptByMemorySaver++;
 }
 
-export function noteTabSleptOverBudget() {
-  pending.tabsSleptOverBudget++;
+export function noteTabSleptOverBudget(consent?: ConsentToken | null) {
+  countFor(consent, () => void pending.tabsSleptOverBudget++, { tabs_slept_over_budget: 1 });
 }
 
 export function noteTabSleptOverBudgetReopened() {
@@ -55,10 +57,8 @@ export function noteTopAppUnloadedFromMenu() {
   pending.topAppsUnloadedFromMenu++;
 }
 
-export function noteTabsSleptFromMenu(from: "tab" | "group", keptAwake: number) {
-  if (from === "tab") pending.tabsSleptFromMenu++;
-  else pending.groupsSleptFromMenu++;
-  pending.menuSleepsKeptAwake += keptAwake;
+export function noteTabsSleptFromMenu(from: "tab" | "group", keptAwake: number, consent?: ConsentToken | null) {
+  countFor(consent, () => void (pending[from === "tab" ? "tabsSleptFromMenu" : "groupsSleptFromMenu"]++, (pending.menuSleepsKeptAwake += keptAwake)), { [from === "tab" ? "tabs_slept_from_menu" : "groups_slept_from_menu"]: 1, menu_sleeps_kept_awake: keptAwake });
 }
 
 export function takeTabSleepCounts() {

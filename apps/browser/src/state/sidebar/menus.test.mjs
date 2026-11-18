@@ -17,6 +17,8 @@ const { useMedia } = await import("../media/media.ts");
 const { webviews } = await import("../../platform/webviews.ts");
 const lifecycle = await import("../tabs/tabLifecycle.ts");
 const { takeTabSleepCounts } = await import("../telemetry/tabSleepCounts.ts");
+const { setConsentPeriod } = await import("../telemetry/consentPeriod.ts");
+setConsentPeriod(true, "menus-test");
 
 const S = () => useBrowser.getState();
 const MODS = [
@@ -474,7 +476,7 @@ test("Sleep Tabs on a group asks Chrome about its hidden loaded tabs, nested gro
   S().moveGroup(inner, { pinned: false, parentId: outer });
   S().activate(e);
   const asked = sleepableViews([a, b, c, d, e], [c]);
-  useBrowser.setState((s) => ({ live: { ...s.live, [b]: { ...s.live[b], playingAudio: true } } }));
+  S().updateLive(b, { playingAudio: true });
   assert.ok(top(groupMenuItems(S(), w, outer)).includes("Sleep Tabs [moon.zzz]"));
   takeTabSleepCounts();
   await whileMenuIsUp(() => openGroupMenu(w, outer), () => {}, "sleep");
@@ -484,7 +486,7 @@ test("Sleep Tabs on a group asks Chrome about its hidden loaded tabs, nested gro
   const counts = takeTabSleepCounts();
   assert.equal(counts.groups_slept_from_menu, 1);
   assert.equal(counts.menu_sleeps_kept_awake, 2, "Ardia kept b and Chrome kept c");
-  useBrowser.setState((s) => ({ live: { ...s.live, [b]: { ...s.live[b], playingAudio: false } } }));
+  S().updateLive(b, { playingAudio: false });
   for (const id of [a, b, c]) lifecycle.noteDiscarded(id);
   assert.ok(top(groupMenuItems(S(), w, inner)).includes("Sleep Tabs [moon.zzz] (off)"), "nothing left to sleep");
   for (const id of [a, b, c]) lifecycle.noteReady(id);

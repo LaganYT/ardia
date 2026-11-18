@@ -16,6 +16,7 @@ import { isSilenced } from "../tabs/mute";
 import { noteNotificationShown } from "../automation/notificationEvents";
 import { noteWebNotificationFromShim } from "../telemetry/webNotificationCounts";
 import { recordWebNotificationPost } from "../telemetry/webNotificationFailures";
+import { consentToken } from "../telemetry/choice";
 import { noteWebNotificationClicked } from "../telemetry/notificationRequestCounts";
 
 const shown = new Map<string, string>();
@@ -36,6 +37,7 @@ function noteReceived(n: WebNotification) {
 }
 
 export function showWebNotification(tabId: string, n: WebNotification) {
+  const consent = consentToken();
   if (__DEV__) noteReceived(n);
   noteWebNotificationFromShim();
   const s = useBrowser.getState();
@@ -70,6 +72,7 @@ export function showWebNotification(tabId: string, n: WebNotification) {
         data: { engineId: n.id },
       }),
       { titleLength: n.title.length, bodyLength: n.body.length, iconRequested: !!n.icon, iconSent: !!icon },
+      consent,
     );
   });
 }

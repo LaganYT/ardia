@@ -17,6 +17,7 @@ import {
   restoreArchived,
   runAutoArchive,
   selectTab,
+  tabBefore,
   updateTab,
   withArchive,
   type TabsData,
@@ -75,6 +76,33 @@ test("closing the selected tab archives it and selects its neighbour", () => {
   assert.equal(change.data.archivedCount, 1);
   assert.equal(change.put.find((t) => t.id === b.id)!.archivedAt, 5);
   assert.equal(change.data.undo.length, 1);
+});
+
+test("a back swipe past the history lands on the tab used before the one it closes, of the same kind first", () => {
+  const { data, a, b, c } = threeTabs();
+  const viewedA = selectTab(data, a.id, 4).data;
+  const viewedC = selectTab(viewedA, c.id, 5).data;
+  assert.equal(tabBefore(viewedC, c.id)?.id, a.id);
+  const priv = opened(viewedC, "https://p.example/", 6, { isPrivate: true });
+  assert.equal(tabBefore(priv.change.data, priv.tab.id)?.id, c.id);
+  const backToC = selectTab(priv.change.data, c.id, 7).data;
+  assert.equal(tabBefore(backToC, c.id)?.id, a.id);
+  assert.notEqual(tabBefore(backToC, c.id)?.id, b.id);
+  const only = opened(emptyTabs(), "https://solo.example/", 1);
+  assert.equal(tabBefore(only.change.data, only.tab.id), null);
+});
+
+test("closing back through swipes walks the tabs in the order they were used, never through a neighbour", () => {
+  let { data, a, b, c } = threeTabs();
+  const d = opened(data, "https://d.example/", 4);
+  data = selectTab(d.change.data, a.id, 5).data;
+  data = selectTab(data, b.id, 6).data;
+  const first = tabBefore(data, b.id)!;
+  assert.equal(first.id, a.id);
+  data = closeTab(selectTab(data, first.id, 7).data, b.id, 7).data;
+  assert.equal(data.selectedId, a.id);
+  assert.equal(tabBefore(data, a.id)?.id, d.tab.id);
+  assert.notEqual(tabBefore(data, a.id)?.id, c.id);
 });
 
 test("closing the last tab leaves nothing selected", () => {

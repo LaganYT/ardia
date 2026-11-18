@@ -1,4 +1,5 @@
-import { isSharing, useTelemetry } from "./choice";
+import { isSharing, onConsentPeriodChange, type ConsentToken } from "./choice";
+import { countFor } from "./countFor";
 
 let inWebKit = 0;
 
@@ -14,8 +15,8 @@ export function takeTabSwitcherOpensInWebKit(): number {
 
 let rowCloses = 0;
 
-export function noteTabSwitcherRowClosed() {
-  rowCloses++;
+export function noteTabSwitcherRowClosed(consent?: ConsentToken | null) {
+  countFor(consent, () => void rowCloses++, { tab_switcher_row_closes: 1 });
 }
 
 export function takeTabSwitcherRowCloses(): number {
@@ -26,9 +27,7 @@ export function takeTabSwitcherRowCloses(): number {
 
 let menuReleases = 0;
 
-useTelemetry.subscribe((state) => {
-  if (!state.sharing) menuReleases = 0;
-});
+onConsentPeriodChange(() => (menuReleases = 0));
 
 export function noteTabSwitcherReleasedInMenu() {
   if (isSharing()) menuReleases++;

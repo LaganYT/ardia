@@ -5,6 +5,7 @@ import { useBrowser, type BrowserState } from "../browser/store";
 import { incognitoOriginal, isIncognitoProfile } from "../browser/model";
 import type { Boost } from "./types";
 import { validBoost } from "./valid";
+import { logConsent, warnFor } from "../telemetry/logs";
 
 export const BOOSTS_VERSION = 1;
 export const BOOSTS_MIGRATIONS: Migrations = { 0: unchanged };
@@ -38,7 +39,7 @@ export function loadBoosts(key: string): Boost[] {
       });
     }
   } catch (error) {
-    console.warn(`[boosts] couldn't read ${boostsDocument(key)}`, error);
+    warnFor(logConsent(), `[boosts] couldn't read ${boostsDocument(key)}`, error);
   }
   setBoostList(key, boosts);
   return boosts;

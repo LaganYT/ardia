@@ -4,6 +4,7 @@ import { inPinnedContainer } from "../browser/model";
 import { tabEngine } from "../engines/engines";
 import { withSharedFamily } from "../pins/pinShare";
 import { noteTabsSleptFromMenu } from "../telemetry/tabSleepCounts";
+import { consentToken } from "../telemetry/client";
 import { splitOf, splitTabIdsOf, withPinnedPanes } from "../splits/splits";
 import { inUse } from "./loadedTabBudget";
 import { hasLoadedPage } from "./pageSession";
@@ -41,6 +42,7 @@ export async function sleepTab(id: string, { keepProtected = false } = {}): Prom
 }
 
 export async function sleepTabsFromMenu(ids: string[], from: "tab" | "group") {
+  const consent = consentToken();
   const outcomes = await Promise.all(ids.map((id) => sleepTab(id, { keepProtected: true })));
-  noteTabsSleptFromMenu(from, outcomes.filter((outcome) => outcome === "kept").length);
+  noteTabsSleptFromMenu(from, outcomes.filter((outcome) => outcome === "kept").length, consent);
 }

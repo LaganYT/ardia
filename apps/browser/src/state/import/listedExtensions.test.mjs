@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { test } from "node:test";
+import { after, test } from "node:test";
 globalThis.require = createRequire(import.meta.url);
 
 const id = (c) => c.repeat(32);
@@ -20,11 +20,11 @@ globalThis.acTestNativeModules = {
     cancelImport() {},
     listExtensions: async (_browserId, profileId) => JSON.stringify(SOURCE_EXTENSIONS[profileId] ?? []),
     importData: async (_job, browserId, profileId) =>
-      JSON.stringify({
+      (globalThis.duringImport?.(), JSON.stringify({
         browserId, profileId, history: [], historyCount: 0, tabs: [], tabGroups: [], credentials: [], cookieCount: 0, addressCount: 0, cardCount: 0,
         spaces: [], favorites: [], favicons: [], failed: [], warnings: [],
         profile: { name: profileId === "Default" ? "Personal" : "Work" },
-      }),
+      })),
   },
   ArdiaExtensions: {
     addListener: () => ({ remove() {} }),
@@ -41,6 +41,11 @@ const { useImportFlow } = await import("./flow.ts");
 const { runImport } = await import("./runImport.ts");
 const { openListedExtensionsInStore, openExtensionStorePage } = await import("./listedExtensions.ts");
 const { takeImportRuns } = await import("../telemetry/importRuns.ts");
+const telemetry = await import("../telemetry/client.ts");
+globalThis.fetch = async () => ({ status: 503 });
+telemetry.loadChoice();
+telemetry.setSharing(true, "onboarding");
+after(() => telemetry.setSharing(false, "settings"));
 
 const S = () => useBrowser.getState();
 const step = () => useImportFlow.getState().step;
@@ -91,4 +96,17 @@ test("only the source profiles picked for the import are listed: the default pic
   const listing = step().extensions.listing;
   assert.deepEqual(listing.targets.map((t) => [t.profileName, t.extensions.map((e) => e.name)]), [["Personal", ["Clip Saver", "Tab Notes"]]]);
   assert.ok(!Object.values(S().profiles).some((p) => p.name === "Work"), "Work wasn't imported, so nothing is listed for it");
+});
+
+test("an import begun while sharing was off doesn't count its extension listing when sharing is turned on before the listing", async () => {
+  telemetry.setSharing(false, "settings");
+  takeImportRuns();
+  globalThis.duringImport = () => telemetry.setSharing(true, "settings");
+  try {
+    await importChrome();
+  } finally {
+    globalThis.duringImport = undefined;
+  }
+  const runs = takeImportRuns();
+  assert.deepEqual([runs.import_extensions_listed, runs.import_extensions_skipped_installed], [0, 0]);
 });

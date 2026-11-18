@@ -100,6 +100,7 @@ export const AUTOMATION: Readonly<Record<BrowserCommand, AutomationDecision>> = 
   reportProblem: "run",
   keyboardShortcuts: "run",
   copyDiagnostics: "run",
+  copyLastFreeze: "run",
   toolTour: "run",
   videoTour: "run",
   releaseNotes: "run",

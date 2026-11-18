@@ -373,7 +373,7 @@ test("a page process that goes away sends its reason, exit code, visibility and 
 });
 
 test("a lost-hover episode sends only its enums, flags and duration, capped per session", async () => {
-  const episode = { reason: "halfActive", halfActive: true, appActive: false, runningActive: true, frontmost: true, menuActive: true, trigger: "click", keyWindow: "blockerPage", mainWindow: "none", preventKey: true, canKey: false, windowMain: true, overPage: true, cover: "none", coverClear: false, healed: true, healWorked: true, endedBy: "heal", seconds: 3.4, episode: 1 };
+  const episode = { reason: "halfActive", halfActive: true, appActive: false, runningActive: true, frontmost: true, menuActive: true, trigger: "click", keyWindow: "blockerPage", mainWindow: "none", preventKey: true, canKey: false, windowMain: true, overPage: true, cover: "none", coverClear: false, healed: true, healWorked: true, endedBy: "heal", seconds: 3.4, episode: 1, epoch: client.consentEpoch() };
   diagnostics.trackHoverLost(episode);
   diagnostics.trackHoverLost({ ...episode, reason: "https://private.example", keyWindow: "Title of a page", endedBy: 7, healWorked: null, seconds: -5, trigger: "drag" });
   await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -421,11 +421,11 @@ test("a lost-hover episode sends only its enums, flags and duration, capped per 
 test("an unpainted window sends its enums, flags, counts and reason bits, capped per session", async () => {
   const { useBrowser } = await import("../browser/store.ts");
   const record = { window: "private", trigger: "seen", seen: true, occlusion: "visible", overruled: false, appActive: true, windows: 2, views: 3, unpainted: 2, reasons: (1 << 0) | (1 << 4) | (1 << 7) };
-  diagnostics.trackWindowUnpainted(record);
-  diagnostics.trackWindowUnpainted({ window: "https://private.example", trigger: "Title of a page", seen: 1, occlusion: 7, overruled: "yes", appActive: "yes", windows: 1e9, views: -4, unpainted: 1e9, reasons: "all", url: "https://private.example", title: "Inbox", profile: "Work" });
+  diagnostics.trackWindowUnpainted({ ...record, epoch: client.consentEpoch() });
+  diagnostics.trackWindowUnpainted({ epoch: client.consentEpoch(), window: "https://private.example", trigger: "Title of a page", seen: 1, occlusion: 7, overruled: "yes", appActive: "yes", windows: 1e9, views: -4, unpainted: 1e9, reasons: "all", url: "https://private.example", title: "Inbox", profile: "Work" });
   const settings = useBrowser.getState().settings;
   useBrowser.setState({ settings: { ...settings, shareTabsAcrossWindows: true } });
-  diagnostics.trackWindowUnpainted(record);
+  diagnostics.trackWindowUnpainted({ ...record, epoch: client.consentEpoch() });
   useBrowser.setState({ settings });
   await new Promise((resolve) => setTimeout(resolve, 1100));
   await client.saveQueueNow();
@@ -463,7 +463,7 @@ test("an unpainted window sends its enums, flags, counts and reason bits, capped
   assert.equal(JSON.stringify(odd).includes("private.example"), false);
   assert.equal(JSON.stringify(odd).includes("Inbox"), false);
   assert.equal(JSON.stringify(odd).includes("Work"), false);
-  for (let i = 0; i < 30; i++) diagnostics.trackWindowUnpainted(record);
+  for (let i = 0; i < 30; i++) diagnostics.trackWindowUnpainted({ ...record, epoch: client.consentEpoch() });
   await new Promise((resolve) => setTimeout(resolve, 1100));
   await client.saveQueueNow();
   assert.equal(events("window_unpainted").length, 20);
@@ -491,7 +491,7 @@ test("tab presses count clicks, drags turned into clicks, drags and presses that
   presses.noteRangeSelect(false);
   presses.notePagePressRefused();
   presses.noteDragWithoutDrop();
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   const props = events("tab_presses").at(-1).properties;
   assert.equal(props.drags_without_drop, 1);
@@ -509,16 +509,16 @@ test("tab presses count clicks, drags turned into clicks, drags and presses that
   assert.equal(props.page_refused, 1);
   assert.equal(props.page_click_n, 1);
   assert.ok(props.page_click_ms_p50 >= 0 && props.page_click_ms_p50 < 1000);
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   assert.equal(events("tab_presses").length, 1);
   stub.pressesWithoutRelease.count = 3;
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   assert.equal(events("tab_presses").length, 2);
   assert.deepEqual([events("tab_presses").at(-1).properties.lost_releases, events("tab_presses").at(-1).properties.presses], [1, 0]);
   presses.noteRangeSelect(true);
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   assert.equal(events("tab_presses").length, 3, "a ⇧-click whose press went out in the previous hour still sends its range");
   assert.deepEqual([events("tab_presses").at(-1).properties.range_selects, events("tab_presses").at(-1).properties.presses], [1, 0]);
@@ -527,7 +527,7 @@ test("tab presses count clicks, drags turned into clicks, drags and presses that
 test("an hour with only refused page presses still sends them", async () => {
   presses.notePagePressRefused();
   presses.notePagePressRefused();
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   assert.equal(events("tab_presses").length, 4);
   const props = events("tab_presses").at(-1).properties;
@@ -544,7 +544,7 @@ test("an hour with only refused page presses still sends them", async () => {
 
 test("an hour with only a drag let go with no place to drop still sends it", async () => {
   presses.noteDragWithoutDrop();
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   assert.equal(events("tab_presses").length, 5);
   const props = events("tab_presses").at(-1).properties;
@@ -553,7 +553,7 @@ test("an hour with only a drag let go with no place to drop still sends it", asy
 
 const touch = (x, y, startTimeStamp) => ({ nativeEvent: { identifier: "0", pageX: x, pageY: y }, touchHistory: { touchBank: [{ startTimeStamp }] } });
 const sent = async () => {
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   return events("tab_presses").at(-1).properties;
 };
@@ -682,7 +682,7 @@ test("turning sharing off forgets pending presses and samples, so they never go 
   assert.equal(diagnostics.contextSamples().length, 0);
   presses.notePagePress("t9");
   presses.notePressEnded("click", "t9");
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   await client.saveQueueNow();
   assert.equal(events("tab_presses").length, 0);
   assert.deepEqual(Object.values(presses.devTabPresses()).filter((n) => n !== 0 && n !== false), []);
@@ -695,7 +695,7 @@ test("with sharing off no context is saved, and tab presses stay in the local co
   assert.equal(JSON.parse(stub.docs.get("telemetry.json")).context, null);
   presses.notePressStarted();
   presses.notePressEnded("click", "t1");
-  presses.emitTabPresses();
+  presses.emitTabPresses(client.consentToken());
   const { flushLocal } = await import("./localStore.ts");
   flushLocal();
   const local = stub.telemetryLocal.records().filter((r) => r.event === "tab_presses");

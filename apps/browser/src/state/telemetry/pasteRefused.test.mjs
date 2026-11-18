@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
 
 globalThis.__DEV__ = false;
 const stub = await import("../../test-native/index.ts");
 Object.assign(stub.appInfo, { appVersion: "0.3.0", appBuild: "300", osVersion: "26.1.0", arch: "arm64", isolatedInstance: false });
 stub.docs.set("telemetry.json", JSON.stringify({ version: 99, sharing: true, installId: "paste", decidedAt: 1, askDoneAt: 1, crashCursor: 0, lastVersion: null, sessionOpen: false }));
-globalThis.fetch = async () => ({ status: 200 });
+globalThis.fetch = async () => ({ status: 503 });
 
 const client = await import("./client.ts");
 client.loadChoice();
+after(() => client.setSharing(false, "settings"));
 const { flushLocal } = await import("./localStore.ts");
 const { watchPasteRefused } = await import("./pasteRefused.ts");
 watchPasteRefused();
@@ -34,7 +35,7 @@ const KNOWN_TYPES = [
 ];
 
 test("a paste that finds no text records its reason, the pasteboard's type names, the OS, the layout and the gate flag", () => {
-  stub.emitAppEvent({ type: "pasteRefused", reason: "no_text", gateOpen: true, layout: "com.apple.keylayout.US", types: ["public.rtf", "NeXT TIFF v4.0 pasteboard type", "public.png"] });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "no_text", gateOpen: true, layout: "com.apple.keylayout.US", types: ["public.rtf", "NeXT TIFF v4.0 pasteboard type", "public.png"] });
   const [event] = queued();
   assert.equal(queued().length, 1);
   assert.equal(event.properties.reason, "no_text");
@@ -47,7 +48,7 @@ test("a paste that finds no text records its reason, the pasteboard's type names
 });
 
 test("a keystroke the focus gate dropped records the reason and what was dropped, without type names", () => {
-  stub.emitAppEvent({ type: "pasteRefused", reason: "deadline", gateOpen: false, layout: "com.apple.keylayout.German", dropped: 2 });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "deadline", gateOpen: false, layout: "com.apple.keylayout.German", dropped: 2 });
   const event = queued().at(-1);
   assert.equal(event.properties.reason, "deadline");
   assert.equal(event.properties.gate_open, false);
@@ -58,20 +59,20 @@ test("a keystroke the focus gate dropped records the reason and what was dropped
 });
 
 test("a refused menu Paste records the first responder's class", () => {
-  stub.emitAppEvent({ type: "pasteRefused", reason: "refused", gateOpen: true, responder: "NSTextView" });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "refused", gateOpen: true, responder: "NSTextView" });
   const event = queued().at(-1);
   assert.equal(event.properties.reason, "refused");
   assert.equal(event.properties.responder, "NSTextView");
 });
 
 test("a deferred menu Paste records its reason, and a later one without a responder is still recorded", () => {
-  stub.emitAppEvent({ type: "pasteRefused", reason: "deferred", gateOpen: false, responder: "RCTUIPlainPasteFieldEditor" });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "deferred", gateOpen: false, responder: "RCTUIPlainPasteFieldEditor" });
   const first = queued().at(-1);
   assert.equal(first.properties.reason, "deferred");
   assert.equal(first.properties.gate_open, false);
   assert.equal(first.properties.responder, "RCTUIPlainPasteFieldEditor");
   const before = queued().length;
-  stub.emitAppEvent({ type: "pasteRefused", reason: "deferred", gateOpen: false });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "deferred", gateOpen: false });
   assert.equal(queued().length, before + 1);
   assert.equal("responder" in queued().at(-1).properties, false);
 });
@@ -79,6 +80,7 @@ test("a deferred menu Paste records its reason, and a later one without a respon
 test("only names are kept: anything that is not a recognised type identifier becomes other, dynamic types are collapsed", () => {
   stub.emitAppEvent({
     type: "pasteRefused",
+    epoch: client.consentEpoch(),
     reason: "no_text",
     gateOpen: true,
     layout: "/Users/someone/layout",
@@ -94,7 +96,7 @@ test("only names are kept: anything that is not a recognised type identifier bec
 });
 
 test("an unknown reason is recorded as unknown and the type list is capped", () => {
-  stub.emitAppEvent({ type: "pasteRefused", reason: "something else", gateOpen: false, types: KNOWN_TYPES.slice(0, 30) });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "something else", gateOpen: false, types: KNOWN_TYPES.slice(0, 30) });
   const event = queued().at(-1);
   assert.equal(event.properties.reason, "unknown");
   assert.equal(event.properties.type_ids, KNOWN_TYPES.slice(0, 24).join(","));
@@ -108,12 +110,12 @@ test("other app events record nothing", () => {
 
 test("only standard pasteboard type names are sent: an app's own type is just other, dynamic ones are dyn whatever their length, and the offered count tells them apart from an empty pasteboard", () => {
   const longDynamic = `dyn.${"ah62d4rv4gu8y".repeat(10)}`;
-  stub.emitAppEvent({ type: "pasteRefused", reason: "no_text", gateOpen: false, types: ["com.acme.invoice.8f3e2a1c", "com.apple.webarchive", longDynamic, "application/x-acme-account-42", "text/html", "org.chromium.web-custom-data"] });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "no_text", gateOpen: false, types: ["com.acme.invoice.8f3e2a1c", "com.apple.webarchive", longDynamic, "application/x-acme-account-42", "text/html", "org.chromium.web-custom-data"] });
   const event = queued().at(-1);
   assert.equal(event.properties.type_ids, "other,com.apple.webarchive,dyn,text/html,org.chromium.web-custom-data");
   assert.equal(event.properties.type_count, 6);
   assert.equal(JSON.stringify(event).includes("acme"), false);
-  stub.emitAppEvent({ type: "pasteRefused", reason: "no_text", gateOpen: false, types: [] });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "no_text", gateOpen: false, types: [] });
   const empty = queued().at(-1);
   assert.equal(empty.properties.type_ids, "");
   assert.equal(empty.properties.type_count, 0);
@@ -122,7 +124,7 @@ test("only standard pasteboard type names are sent: an app's own type is just ot
 test("every well-known pasteboard and MIME type on the list goes out under its own name", () => {
   for (let i = 0; i < KNOWN_TYPES.length; i += 20) {
     const types = KNOWN_TYPES.slice(i, i + 20);
-    stub.emitAppEvent({ type: "pasteRefused", reason: "no_text", gateOpen: true, types });
+    stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "no_text", gateOpen: true, types });
     assert.equal(queued().at(-1).properties.type_ids, types.join(","));
   }
 });
@@ -141,7 +143,7 @@ test("a name an app made up goes out as other, even when it looks like a standar
     "application/vnd.acme.account+json",
   ];
   for (const type of invented) {
-    stub.emitAppEvent({ type: "pasteRefused", reason: "no_text", gateOpen: true, types: ["public.html", type] });
+    stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "no_text", gateOpen: true, types: ["public.html", type] });
     const event = queued().at(-1);
     assert.equal(event.properties.type_ids, "public.html,other", type);
     assert.equal(event.properties.type_count, 2, type);
@@ -151,7 +153,7 @@ test("a name an app made up goes out as other, even when it looks like a standar
 
 test("Apple's keyboard layouts and input methods go out by name, and any other layout as other, its name never sent", () => {
   for (const layout of ["com.apple.keylayout.US", "com.apple.keylayout.ABC", "com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese", "com.apple.inputmethod.SCIM.ITABC"]) {
-    stub.emitAppEvent({ type: "pasteRefused", reason: "deadline", gateOpen: false, layout });
+    stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "deadline", gateOpen: false, layout });
     assert.equal(queued().at(-1).properties.keyboard_layout, layout);
   }
   const outside = [
@@ -165,20 +167,36 @@ test("Apple's keyboard layouts and input methods go out by name, and any other l
     "com.apple.inputmethod.Kotoeri/../../alice",
   ];
   for (const layout of outside) {
-    stub.emitAppEvent({ type: "pasteRefused", reason: "deadline", gateOpen: false, layout });
+    stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "deadline", gateOpen: false, layout });
     const event = queued().at(-1);
     assert.equal(event.properties.keyboard_layout, "other", layout);
     assert.equal(JSON.stringify(event).includes(layout), false, layout);
   }
-  stub.emitAppEvent({ type: "pasteRefused", reason: "deadline", gateOpen: false, layout: 42 });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "deadline", gateOpen: false, layout: 42 });
   assert.equal("keyboard_layout" in queued().at(-1).properties, false);
 });
 
 test("nothing is sent while sharing is off", () => {
   client.setSharing(false, "settings");
   const recorded = local().length;
-  stub.emitAppEvent({ type: "pasteRefused", reason: "no_text", gateOpen: true, types: ["public.rtf"] });
+  stub.emitAppEvent({ type: "pasteRefused", epoch: client.consentEpoch(), reason: "no_text", gateOpen: true, types: ["public.rtf"] });
   assert.equal(queued().length, 0);
   assert.equal(local().length, recorded + 1);
   assert.equal(local().at(-1).sent, false);
+});
+
+test("a refused paste stamped with an earlier consent period, or with no epoch, stays in the local copy and isn't sent", () => {
+  client.setSharing(true, "settings");
+  const earlier = client.consentEpoch();
+  client.setSharing(false, "settings");
+  client.setSharing(true, "settings");
+  assert.ok(earlier);
+  assert.notEqual(earlier, client.consentEpoch());
+  const before = queued().length;
+  stub.emitAppEvent({ type: "pasteRefused", reason: "deadline", gateOpen: true, epoch: earlier });
+  stub.emitAppEvent({ type: "pasteRefused", reason: "focus_lost", gateOpen: true });
+  assert.equal(queued().length, before);
+  assert.deepEqual(local().slice(-2).map((r) => [r.properties.reason, r.sent]), [["deadline", false], ["focus_lost", false]]);
+  stub.emitAppEvent({ type: "pasteRefused", reason: "mouse_down", gateOpen: false, epoch: client.consentEpoch() });
+  assert.equal(queued().length, before + 1);
 });

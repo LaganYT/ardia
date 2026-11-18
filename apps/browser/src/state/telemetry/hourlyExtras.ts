@@ -1,4 +1,4 @@
-import { capture as send } from "./client";
+import { capture as send, stillValid } from "./client";
 import { takeDownloadsPanelCauses } from "./downloadsPanelCauses";
 import { takeSessionWrites } from "./sessionWrites";
 import { takeEditKeyAckCounts } from "./editKeyAcks";
@@ -30,18 +30,24 @@ type Send = typeof send;
 
 export function usageWithExtras(sendEvent: Send, takeExtras: () => Record<string, number | undefined>, now: () => number = Date.now) {
   let sentWithCounts = false;
+  let draining = false;
   let since = now();
-  const capture: Send = (event, props = {}, options = {}) => {
-    if (event !== USAGE_COUNTS_EVENT) return sendEvent(event, props, options);
+  const capture: Send = (event, props, consent, options = {}) => {
+    if (event !== USAGE_COUNTS_EVENT || !(draining || stillValid(consent))) return sendEvent(event, props, consent, options);
     sentWithCounts = true;
-    sendEvent(event, { ...takeExtras(), ...props }, options);
+    sendEvent(event, { ...takeExtras(), ...props }, consent, options);
   };
-  const withHourlyExtras = (emitCounts: () => void) => {
+  const withHourlyExtras = (emitCounts: () => void, consent: Parameters<Send>[2]) => {
     sentWithCounts = false;
-    emitCounts();
+    draining = true;
+    try {
+      emitCounts();
+    } finally {
+      draining = false;
+    }
     if (!sentWithCounts) {
       const extras = takeExtras();
-      if (Object.values(extras).some(Boolean)) sendEvent(USAGE_COUNTS_EVENT, { ...extras, period_minutes: Math.round((now() - since) / 60_000) });
+      if (Object.values(extras).some(Boolean)) sendEvent(USAGE_COUNTS_EVENT, { ...extras, period_minutes: Math.round((now() - since) / 60_000) }, consent);
     }
     since = now();
   };

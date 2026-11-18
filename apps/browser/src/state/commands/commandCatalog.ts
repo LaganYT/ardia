@@ -144,6 +144,7 @@ export const COMMANDS = {
   reportProblem: { title: "Report a Problem…", keys: ["⌥⇧⌘I"], ...appWide },
   keyboardShortcuts: { title: "Keyboard Shortcuts", symbol: "keyboard" },
   copyDiagnostics: { title: "Copy Diagnostics", ...appWide },
+  copyLastFreeze: { title: "Copy Last Freeze", ...appWide },
   toolTour: { title: "Tool Tour", ...appWide },
   videoTour: { title: "Video Tour", ...appWide },
   releaseNotes: { title: "Release Notes", ...appWide },

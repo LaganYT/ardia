@@ -1,4 +1,6 @@
 import { takeLiveGithubCounts } from "./liveGithub";
+import type { ConsentToken } from "./choice";
+import { countFor } from "./countFor";
 
 let rowHides = 0;
 let stackHides = 0;
@@ -22,8 +24,8 @@ export function noteLiveRepoMenuPick(choice: string, showNewRepos: boolean) {
 
 let folderColorPicks = 0;
 
-export function noteLiveFolderColorPick() {
-  folderColorPicks++;
+export function noteLiveFolderColorPick(consent?: ConsentToken | null) {
+  countFor(consent, () => void folderColorPicks++, { live_folder_color_picks: 1 });
 }
 
 export function takeLiveHideCounts() {

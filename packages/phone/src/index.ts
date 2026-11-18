@@ -127,6 +127,7 @@ export type {
   ReadableContent,
   SitePermission,
   SwipeNavigation,
+  PageSwipeDirection,
   Subscription,
   VisitKind,
   WebsiteDataKind,

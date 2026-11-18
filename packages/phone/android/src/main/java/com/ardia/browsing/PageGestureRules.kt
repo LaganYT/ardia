@@ -25,6 +25,8 @@ object PageSwipe {
         canGoForward: Boolean,
         canScrollLeft: Boolean,
         canScrollRight: Boolean,
+        closesPastBack: Boolean = false,
+        reopensPastForward: Boolean = false,
     ): SwipeDirection? {
         if (abs(dx) <= abs(dy) * DOMINANCE) return null
         val wanted = if (dx > 0) SwipeDirection.Back else SwipeDirection.Forward
@@ -33,10 +35,13 @@ object PageSwipe {
             if (!fromEdge) return null
         }
         return when (wanted) {
-            SwipeDirection.Back -> SwipeDirection.Back.takeIf { canGoBack && !canScrollLeft }
-            SwipeDirection.Forward -> SwipeDirection.Forward.takeIf { canGoForward && !canScrollRight }
+            SwipeDirection.Back -> SwipeDirection.Back.takeIf { (canGoBack || closesPastBack) && !canScrollLeft }
+            SwipeDirection.Forward -> SwipeDirection.Forward.takeIf { (canGoForward || reopensPastForward) && !canScrollRight }
         }
     }
+
+    fun isPastHistory(direction: SwipeDirection, canGoBack: Boolean, canGoForward: Boolean): Boolean =
+        if (direction == SwipeDirection.Back) !canGoBack else !canGoForward
 
     fun signed(translation: Float, direction: SwipeDirection): Float = if (direction == SwipeDirection.Back) translation else -translation
 

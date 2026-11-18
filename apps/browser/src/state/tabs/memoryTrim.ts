@@ -4,6 +4,7 @@ import { inputIdleSeconds, trimEngineMemory } from "../../platform/performance";
 import { useBrowser } from "../browser/store";
 import { isQuitting } from "../app/quit";
 import { noteHeapCollection, noteMemoryTrim, noteMemoryTrimFailure, noteMemoryTrimGivenUp } from "../telemetry/memoryTrimCounts";
+import { during } from "../app/jobActivity";
 
 const QUIET_MS = 5000;
 const MIN_GAP_MS = 30000;
@@ -59,7 +60,7 @@ export function startMemoryTrim() {
       return;
     }
     const collectedFrom = Date.now();
-    runtime.gc!();
+    during("memoryTrim", () => runtime.gc!());
     const collectionMs = Date.now() - collectedFrom;
     const slow = collectionMs > SLOW_COLLECTION_MS;
     collectionsSlow ||= slow;

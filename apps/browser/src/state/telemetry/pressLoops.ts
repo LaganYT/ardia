@@ -1,5 +1,6 @@
 import { onPressLoopLong, type PressLoopLongReport } from "../../platform/performance";
-import { capture } from "./client";
+import { capture, stillValid } from "./client";
+import { nativeConsent } from "./nativeConsent";
 
 const LOOPS = new Set(["windowDragRegion", "windowMove"]);
 const MAX_EVENTS = 10;
@@ -14,9 +15,10 @@ export function pressLoopLongProperties(r: PressLoopLongReport) {
 }
 
 export function trackPressLoopLong(r: PressLoopLongReport) {
+  const consent = nativeConsent(r);
   if (sent >= MAX_EVENTS) return;
-  sent++;
-  capture("press_loop_long", pressLoopLongProperties(r));
+  if (stillValid(consent)) sent++;
+  capture("press_loop_long", pressLoopLongProperties(r), consent);
 }
 
 export function watchPressLoops() {

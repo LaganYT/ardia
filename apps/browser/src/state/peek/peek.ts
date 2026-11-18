@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { AdoptId } from "../browser/types";
 import type { BrowserState } from "../browser/store";
-import { activeTabId, IDLE_LIVE, makeTab, navigationTo, without } from "../browser/model";
+import { activeTabId, makeTab, navigationTo, without } from "../browser/model";
 import { forgetOpeners, insertionIndex } from "../tabs/openers";
 import { groupWithOpener } from "../pins/tabGrouping";
 import { adoptedPage, hasNavigatedPage, isAsleep, loadedPage, renavigated } from "../tabs/pageSession";
@@ -107,7 +107,6 @@ export const createPeekSlice: StateCreator<BrowserState, [], [], PeekSlice> = (s
     set({
       ...s,
       tabs: { ...s.tabs, [tab.id]: tab },
-      live: { ...s.live, [tab.id]: IDLE_LIVE },
       peeks: { ...s.peeks, [sourceTabId]: peek },
     });
     return tab.id;

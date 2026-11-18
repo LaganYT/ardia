@@ -47,6 +47,8 @@ export type PageError = { code: string; message: string };
 
 export type SwipeNavigation = "anywhere" | "edges" | "off";
 
+export type PageSwipeDirection = "back" | "forward";
+
 export type PageViewProps = ViewProps & {
   pageId: string;
   initialUrl?: string;
@@ -59,8 +61,11 @@ export type PageViewProps = ViewProps & {
   topClearance?: number;
   obscuresSafeTop?: boolean;
   swipeNavigation?: SwipeNavigation;
+  closesOnSwipeBack?: boolean;
+  reopensOnSwipeForward?: boolean;
   pullToRefresh?: boolean;
   surfaceColor?: ColorValue;
+  onSwipedPastHistory?: (direction: PageSwipeDirection) => void;
   onPageState?: (state: PageState) => void;
   onPageTone?: (tone: PageTone) => void;
   onPageError?: (error: PageError) => void;
@@ -195,6 +200,7 @@ export type PageEventPayload =
   | { name: "tone"; top?: string; bottom?: string }
   | { name: "drawn" }
   | { name: "coverHidden"; reason: "drawn" | "cap"; found: boolean }
+  | { name: "swipedPastHistory"; direction: PageSwipeDirection }
   | ({ name: "error" } & PageError);
 
 export type DownloadProgress = {

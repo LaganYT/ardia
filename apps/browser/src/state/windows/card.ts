@@ -18,6 +18,7 @@ import { isWebPageUrl } from "../../lib/url";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { webviews } from "../../platform/webviews";
 import { notePageOverlay } from "../telemetry/usage";
+import { liveOf } from "../tabs/tabLive";
 
 export const useSplitOf = (tabId: string | undefined) => useBrowser((s) => splitOf(s, tabId));
 
@@ -140,7 +141,7 @@ export function downloadNavigated(tabId: string, committedUrl: string | null | u
   }
   const others = s.windows[t.windowId]?.tabIds.some((id) => id !== tabId && s.tabs[id]?.profileId === t.profileId);
   const opened = !!(t.openerId || adoptOf(t)) && !pageOf(tabId).wasNewTab;
-  if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return useBrowser.getState().closeTab(tabId);
+  if (!skipped && opened && !liveOf(tabId).canGoBack && others) return useBrowser.getState().closeTab(tabId);
   patchPage(tabId, { backToNewTab: false, newTabShown: null });
   useBrowser.getState().updateTab(tabId, { url: "", title: "", favicon: null });
 }

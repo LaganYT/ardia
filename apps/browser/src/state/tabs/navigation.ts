@@ -14,6 +14,7 @@ import { historyOf } from "../history/history";
 import { adoptedPage, IDLE } from "./pageSession";
 import { isPeekTab } from "../peek/peek";
 import { dismissPeek } from "../peek/actions";
+import { liveOf } from "./tabLive";
 
 const store = () => useBrowser.getState();
 
@@ -47,9 +48,8 @@ export function useHistoryAvailability(tabId: string) {
 
 export function goBack(tabId: string): void {
   if (livePageId(tabId) !== tabId) return void withLivePage(tabId, (_, id) => goBack(id));
-  const live = store().live[tabId];
   if (pageOf(tabId).newTabShown) return;
-  if (live?.canGoBack) return void webviews.get(tabId)?.goBack();
+  if (liveOf(tabId).canGoBack) return void webviews.get(tabId)?.goBack();
   if (pageOf(tabId).engineBack) return void goBackAcrossEngines(tabId);
   if (pageOf(tabId).backToNewTab) return showNewTab(tabId);
   if (backClosesTab(store(), tabId)) {

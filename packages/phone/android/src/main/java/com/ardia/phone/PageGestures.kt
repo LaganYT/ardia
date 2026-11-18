@@ -77,9 +77,11 @@ internal object PageDragDecision {
         canScrollRight: Boolean,
         canScrollUp: Boolean,
         isLoading: Boolean,
+        closesPastBack: Boolean = false,
+        reopensPastForward: Boolean = false,
     ): Decided? {
         if (mode != SwipeMode.Off) {
-            val direction = PageSwipe.direction(mode == SwipeMode.Edges, dx, dy, startX, width, edge, canGoBack, canGoForward, canScrollLeft, canScrollRight)
+            val direction = PageSwipe.direction(mode == SwipeMode.Edges, dx, dy, startX, width, edge, canGoBack, canGoForward, canScrollLeft, canScrollRight, closesPastBack, reopensPastForward)
             if (direction != null) return Decided(Drag.Swipe, direction)
         }
         if (pullToRefresh && !isLoading && PullToRefreshRules.begins(dx, dy, canScrollUp)) return Decided(Drag.Pull, null)
@@ -100,6 +102,9 @@ internal class PageGestures(private val owner: ViewGroup, private val host: View
     var mode: SwipeMode = SwipeMode.Off
     var pullToRefresh: Boolean = false
     var page: Page? = null
+    var closesPastBack: Boolean = false
+    var reopensPastForward: Boolean = false
+    var onSwipedPastHistory: ((SwipeDirection) -> Unit)? = null
 
     private var downX = 0f
     private var downY = 0f
@@ -213,6 +218,8 @@ internal class PageGestures(private val owner: ViewGroup, private val host: View
                     canScrollRight = web?.canScrollHorizontally(1) == true,
                     canScrollUp = web?.canScrollVertically(-1) == true || !state.isScrolledToTop,
                     isLoading = state.isLoading,
+                    closesPastBack = closesPastBack,
+                    reopensPastForward = reopensPastForward,
                 )
                 lab {
                     val canScroll = "page scroll ${if (web?.canScrollHorizontally(-1) == true) "L" else "-"}${if (web?.canScrollHorizontally(1) == true) "R" else "-"}"
@@ -336,6 +343,16 @@ internal class PageGestures(private val owner: ViewGroup, private val host: View
         animate(progress, if (commit) 1f else 0f, SWIPE_MILLIS, ::pose) {
             if (!commit || current == null) {
                 reset()
+                return@animate
+            }
+            owner.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            val now = current.state.value
+            if (PageSwipe.isPastHistory(swiped, now.canGoBack, now.canGoForward)) {
+                onSwipedPastHistory?.invoke(swiped)
+                settle = scope.launch {
+                    delay(PAST_HISTORY_HOLD_MILLIS)
+                    reset()
+                }
                 return@animate
             }
             if (swiped == SwipeDirection.Back) current.goBack() else current.goForward()
@@ -531,6 +548,7 @@ internal class PageGestures(private val owner: ViewGroup, private val host: View
         const val SWIPE_MILLIS = 220L
         const val SETTLE_DELAY_MILLIS = 250L
         const val FADE_MILLIS = 200L
+        const val PAST_HISTORY_HOLD_MILLIS = 700L
         val ACCENT_LIGHT = 0xFF6395FC.toInt()
         val ACCENT_DARK = 0xFF4A77D4.toInt()
     }

@@ -1,5 +1,5 @@
 import type { NotificationPostResult } from "../../platform/notifications";
-import { isSharing, useTelemetry } from "./choice";
+import type { ConsentToken } from "./choice";
 import { capture } from "./client";
 import { errorType } from "./sanitize";
 
@@ -12,38 +12,33 @@ export type SentWebNotification = {
   iconSent: boolean;
 };
 
+const ICON_STATUSES = new Set(["none", "invalid_url", "attached", "attachment_rejected", "empty", "download_failed", "write_failed"]);
+const ERROR_DOMAINS = new Set(["UNErrorDomain", "NSCocoaErrorDomain", "NSPOSIXErrorDomain", "NSOSStatusErrorDomain"]);
+const known = (names: Set<string>, value: unknown) => (typeof value === "string" && names.has(value) ? value : "other");
+
 export function webNotificationFailureProperties(sent: SentWebNotification, result: NotificationPostResult | null | undefined, thrown?: { error: unknown }) {
   return {
     title_length: sent.titleLength,
     body_length: sent.bodyLength,
     icon_requested: sent.iconRequested,
     icon_sent: sent.iconSent,
-    icon_status: result?.icon ?? "unknown",
+    icon_status: result ? known(ICON_STATUSES, result.icon) : "unknown",
     via_shim: true,
     threw: !!thrown,
     ...(thrown ? { error_type: errorType(thrown.error) } : {}),
     ...(typeof result?.errorCode === "number" ? { error_code: result.errorCode } : {}),
-    ...(result?.errorDomain ? { error_domain: result.errorDomain } : {}),
+    ...(result?.errorDomain ? { error_domain: known(ERROR_DOMAINS, result.errorDomain) } : {}),
     ...(typeof result?.iconErrorCode === "number" ? { icon_error_code: result.iconErrorCode } : {}),
   };
 }
 
-let consentGeneration = 0;
-
-useTelemetry.subscribe((current, previous) => {
-  if (current.sharing !== previous.sharing) consentGeneration++;
-});
-
-export function recordWebNotificationPost(posted: Promise<NotificationPostResult | string | null | undefined>, sent: SentWebNotification): Promise<void> {
-  const sharedAtStart = isSharing();
-  const generation = consentGeneration;
-  const consented = () => sharedAtStart && isSharing() && generation === consentGeneration;
+export function recordWebNotificationPost(posted: Promise<NotificationPostResult | string | null | undefined>, sent: SentWebNotification, token: ConsentToken | null): Promise<void> {
   return posted.then(
     (result) => {
-      if (consented() && result && typeof result === "object" && !result.id) capture(WEB_NOTIFICATION_FAILED, webNotificationFailureProperties(sent, result));
+      if (result && typeof result === "object" && !result.id) capture(WEB_NOTIFICATION_FAILED, webNotificationFailureProperties(sent, result), token);
     },
     (error: unknown) => {
-      if (consented()) capture(WEB_NOTIFICATION_FAILED, webNotificationFailureProperties(sent, null, { error }));
+      capture(WEB_NOTIFICATION_FAILED, webNotificationFailureProperties(sent, null, { error }), token);
       throw error;
     },
   );

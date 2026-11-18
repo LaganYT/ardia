@@ -97,6 +97,7 @@ enum CommandTable {
     case reportProblem
     case keyboardShortcuts
     case copyDiagnostics
+    case copyLastFreeze
     case toolTour
     case videoTour
     case releaseNotes
@@ -220,6 +221,7 @@ enum CommandTable {
     "reportProblem": "Report a Problem…",
     "keyboardShortcuts": "Keyboard Shortcuts",
     "copyDiagnostics": "Copy Diagnostics",
+    "copyLastFreeze": "Copy Last Freeze",
     "toolTour": "Tool Tour",
     "videoTour": "Video Tour",
     "releaseNotes": "Release Notes",

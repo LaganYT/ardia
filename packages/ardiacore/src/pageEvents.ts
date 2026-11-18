@@ -25,6 +25,7 @@ import type {
   PasswordPrompt,
   PictureInPictureState,
   PictureInPictureDrag,
+  PictureInPictureSkip,
   ProtectedMediaRequest,
   ScrollState,
   SecurityInfo,
@@ -57,9 +58,9 @@ type NativeEvents = {
   onNotification: WebNotification;
   onNotificationClose: { id: string };
   onPictureInPicture: PictureInPictureState;
-  onAutoPictureInPictureKept: { appSwitch?: boolean; reason?: string };
+  onAutoPictureInPictureKept: { appSwitch?: boolean; reason?: string; epoch?: string };
   onPictureInPictureDragged: PictureInPictureDrag;
-  onPictureInPictureSkip: { seconds: number };
+  onPictureInPictureSkip: PictureInPictureSkip;
   onMediaFault: MediaFault;
   onActivateRequest: ActivateRequest;
   onDisplayMediaRequest: DisplayMediaRequest;
@@ -163,9 +164,9 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onNotification: (e) => [e],
   onNotificationClose: (e) => [e.id],
   onPictureInPicture: (e) => [e],
-  onAutoPictureInPictureKept: (e) => [e.reason === "nothingPlaying" ? "nothingPlaying" : e.appSwitch ? "appSwitch" : "onScreen"],
-  onPictureInPictureDragged: (e) => [{ offCursor: !!e.offCursor, slowMove: !!e.slowMove }],
-  onPictureInPictureSkip: (e) => [e.seconds],
+  onAutoPictureInPictureKept: (e) => [e.reason === "nothingPlaying" ? "nothingPlaying" : e.appSwitch ? "appSwitch" : "onScreen", typeof e.epoch === "string" ? e.epoch : ""],
+  onPictureInPictureDragged: (e) => [{ offCursor: !!e.offCursor, slowMove: !!e.slowMove, epoch: e.epoch }],
+  onPictureInPictureSkip: (e) => [{ seconds: e.seconds, epoch: e.epoch }],
   onMediaFault: (e) => [e],
   onActivateRequest: (e) => [e],
   onDisplayMediaRequest: (e) => [e],

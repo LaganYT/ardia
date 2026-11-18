@@ -67,7 +67,7 @@ test("Swift reaches the trace through ArdiaHost", () => {
 });
 
 test("a press loop that stays open or ends after five seconds is reported as an engine event", () => {
-  assert.match(focusState, /if \(PointerTrace\(\)\.TakeLongLoop\(generation, Uptime\(\), &open\)\) ReportLongPressLoop\(open, true\);/);
-  assert.match(focusState, /if \(PointerTrace\(\)\.EndLoop\(Uptime\(\), &ended\)\) ReportLongPressLoop\(ended, false\);/);
+  assert.match(focusState, /if \(PointerTrace\(\)\.TakeLongLoop\(generation, Uptime\(\), &open, &epoch\)\) ReportLongPressLoop\(open, true, epoch\);/);
+  assert.match(focusState, /if \(PointerTrace\(\)\.EndLoop\(Uptime\(\), &ended, &epoch\)\) ReportLongPressLoop\(ended, false, epoch\);/);
   assert.match(focusState, /dispatch_async\(dispatch_get_main_queue\(\), \^\{ \[ArdiaEvents emit:@"engine\.pressLoopLong" data:payload\]; \}\);/);
 });

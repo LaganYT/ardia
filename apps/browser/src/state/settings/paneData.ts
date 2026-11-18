@@ -33,6 +33,7 @@ import { cached, load, loadAll, need, resource, store, useAllLoaded, type Needed
 import type { SettingsPane } from "./settingsWindows";
 import { FOLLOW_EVERY_MS, FOLLOW_FOR_MS, switchOutcome, updaterBusy } from "./updateStatus";
 import { noteUpdateChannelSwitch } from "../telemetry/usage";
+import { consentToken } from "../telemetry/client";
 import { notePreloadPagesTurned } from "../telemetry/preloadPagesCounts";
 import { trackAutofillToggleKept } from "../telemetry/track";
 import { askedValue, rememberAsked } from "./autofillAsked";
@@ -118,9 +119,10 @@ function noteAsked(profile: string, toggle: AutofillToggle, asked: boolean, now:
 const written = (write: Promise<unknown>) => write.then(() => true, orWarn(false));
 
 export async function setPreloadPagesFor(profile: string, on: boolean) {
+  const consent = consentToken();
   if (!(await written(setPreloadPages(profile, on)))) return;
   store(preloadPages, [profile], on);
-  notePreloadPagesTurned(on);
+  notePreloadPagesTurned(on, consent);
 }
 
 export async function setPasswordAutofillFor(profile: string, on: boolean) {
@@ -148,9 +150,10 @@ export function setUpdaterPrefs(patch: { automaticChecks?: boolean; automaticDow
   const state = cached(updater, []);
   if (state) store(updater, [], { ...state, ...patch });
   const reload = () => void load(updater, [], { fresh: true }).catch(() => {});
+  const consent = consentToken();
   if (patch.automaticChecks !== undefined) void setAutomaticUpdateChecks(patch.automaticChecks).finally(reload);
   if (patch.automaticDownloads !== undefined) void setAutomaticUpdateDownloads(patch.automaticDownloads).finally(reload);
-  if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(() => followUpdater((s) => noteUpdateChannelSwitch(s.available ? switchOutcome(s.switchCheck) : null)));
+  if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(() => followUpdater((s) => noteUpdateChannelSwitch(s.available ? switchOutcome(s.switchCheck) : null, consent)));
 }
 
 let following = 0;

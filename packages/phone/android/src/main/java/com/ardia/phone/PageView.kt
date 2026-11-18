@@ -14,6 +14,7 @@ import com.ardia.browser.PageColors
 import com.ardia.browser.PageState
 import com.ardia.browser.ErrorPages
 import com.ardia.browser.PageTone
+import com.ardia.browsing.SwipeDirection
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.viewevent.EventDispatcher
@@ -61,12 +62,26 @@ class PageView(context: Context, appContext: AppContext) : ExpoView(context, app
     var page: Page? = null
         private set
 
-    private val gestures = PageGestures(this, host)
+    private val gestures = PageGestures(this, host).apply {
+        onSwipedPastHistory = { direction -> onPageEvent(mapOf("name" to "swipedPastHistory", "direction" to if (direction == SwipeDirection.Back) "back" else "forward")) }
+    }
 
     var swipeMode: SwipeMode
         get() = gestures.mode
         set(value) {
             gestures.mode = value
+        }
+
+    var closesOnSwipeBack: Boolean
+        get() = gestures.closesPastBack
+        set(value) {
+            gestures.closesPastBack = value
+        }
+
+    var reopensOnSwipeForward: Boolean
+        get() = gestures.reopensPastForward
+        set(value) {
+            gestures.reopensPastForward = value
         }
 
     var pullToRefresh: Boolean

@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
   s.frameworks     = 'WebKit'
-  s.source_files   = '*.{h,mm,swift}'
+  s.source_files   = '*.{h,c,mm,swift}'
   s.public_header_files = 'ArdiaHost.h', 'ArdiaWebView.h', 'ArdiaTabStrip.h', 'ArdiaEngineBridge.h', 'ArdiaServices.h', 'ArdiaContentBlocker.h', 'ArdiaFavicons.h', 'ArdiaSwipe.h', 'ArdiaChromeWindowHost.h', 'ArdiaInterfaceScale.h', 'ArdiaLaunchConfig.h', 'ArdiaEvents.h', 'ArdiaNowPlaying.h', 'ArdiaTransferLedger.h', 'ArdiaDownloadMover.h', 'ArdiaDisplayIdentity.h'
   s.resources      = 'page_script.js'
   s.pod_target_xcconfig = {

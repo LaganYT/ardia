@@ -20,11 +20,11 @@ import type { ClosedTab, Tab, TabLive } from "../browser/types";
 import { activated, apply, closingTabs, withNewTab, type CloseOptions, type NewTabOptions } from "./tabs";
 import { hasPage, loadedPage, navigationOf, renavigated, wakeOf, withWake } from "./pageSession";
 import { cancelOpening, gateOpening, isGatedUrl, settleOpening } from "./openingGate";
+import { drainLive, setLive, stageLive } from "./tabLive";
 
 
 export type TabsSlice = {
   tabs: Record<string, Tab>;
-  live: Record<string, TabLive>;
   closedTabs: ClosedTab[];
 
   newTab(windowId: string, options?: NewTabOptions): string;
@@ -64,7 +64,6 @@ function openOutsideTab(s: BrowserState, url: string, windowId: string): boolean
 
 export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (set, get) => ({
   tabs: {},
-  live: {},
   closedTabs: [],
 
   newTab(windowId, options) {
@@ -205,20 +204,16 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const supersedes = !!wakeOf(tab) && !("page" in patch) && url !== undefined && url !== tab.url;
     const change = supersedes ? { ...patch, page: withWake(tab.page, undefined) } : patch;
     const next = merge(tab, url !== undefined && url !== tab.url ? { ...onUrlChange(s, tab, url), ...change } : change);
-    const live = livePatch ? s.live[id] : undefined;
-    const nextLive = live && livePatch ? merge(live, livePatch) : live;
-    if (next === tab && nextLive === live) return;
-    set((s) => ({
-      ...(next !== tab ? { tabs: { ...s.tabs, [id]: next } } : {}),
-      ...(nextLive !== live ? { live: { ...s.live, [id]: nextLive! } } : {}),
-    }));
+    if (livePatch) stageLive(id, livePatch);
+    try {
+      if (next !== tab) set((s) => ({ tabs: { ...s.tabs, [id]: next } }));
+    } finally {
+      drainLive();
+    }
   },
 
   updateLive(id, patch) {
-    const live = get().live[id];
-    if (!live) return;
-    const next = merge(live, patch);
-    if (next !== live) set((s) => ({ live: { ...s.live, [id]: next } }));
+    setLive(id, patch);
   },
 
   duplicateTab(id) {

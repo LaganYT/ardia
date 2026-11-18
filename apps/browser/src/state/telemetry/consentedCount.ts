@@ -1,10 +1,8 @@
-import { isSharing, useTelemetry } from "./choice";
+import { isSharing, onConsentPeriodChange } from "./choice";
 
 export function consentedCount() {
   let count = 0;
-  useTelemetry.subscribe((s, prev) => {
-    if (s.sharing !== prev.sharing) count = 0;
-  });
+  onConsentPeriodChange(() => (count = 0));
   return {
     note: () => void (isSharing() && count++),
     take: () => {

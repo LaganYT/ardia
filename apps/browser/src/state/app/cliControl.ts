@@ -25,6 +25,7 @@ import { errorText } from "../../lib/errors";
 import { focusedWindowOf } from "../windows/ui";
 import { noteCliAutoEnabled, noteCliInstall, noteCliPillShown, type CliInstallReason } from "../telemetry/cliCounts";
 import { noteDragsEnded } from "../telemetry/stuckDrags";
+import { consentToken } from "../telemetry/client";
 import type { CliCaller } from "./cliCaller";
 import { noteCliConnections } from "../automation/offscreen";
 
@@ -139,6 +140,7 @@ let running: Promise<CliInstallResult> | null = null;
 
 export function installCliInBackground(reason: CliInstallReason): Promise<CliInstallResult> {
   if (running) return running;
+  const consent = consentToken();
   useCli.setState({ installing: reason, step: null });
   const lines = onCliInstallLine((line) => {
     const step = /^step (\S+)/.exec(line)?.[1];
@@ -150,7 +152,7 @@ export function installCliInBackground(reason: CliInstallReason): Promise<CliIns
     .then((result) => {
       lines.remove();
       running = null;
-      noteCliInstall(reason, result.ok);
+      noteCliInstall(reason, result.ok, consent);
       const installedVersion = installedCliVersion();
       if (result.ok) {
         save({ binPath: result.binPath ?? null, version: result.version ?? installedVersion, error: null });
@@ -191,7 +193,8 @@ function pushActiveTab() {
   const active = shownReadyTab(useBrowser.getState());
   if (active === sentActive) return;
   sentActive = active;
-  void setCliActiveTab(active).then((status) => noteDragsEnded(status.dragsEnded), () => {});
+  const consent = consentToken();
+  void setCliActiveTab(active).then((status) => noteDragsEnded(status.dragsEnded, consent), () => {});
 }
 
 export function noteTabReady(tabId: string) {

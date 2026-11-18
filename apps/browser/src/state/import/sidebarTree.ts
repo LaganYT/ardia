@@ -9,6 +9,7 @@ import { live } from "../live/store";
 import type { LiveSourceId } from "../live/types";
 import { setProfileTheme } from "../profiles/themeActions";
 import { noteImportedPins } from "../telemetry/usage";
+import type { ConsentToken } from "../telemetry/client";
 import { isRegularWindow, mainWindowFor } from "../windows/small";
 import { parseArcTheme } from "./arcTheme";
 import { importFavicons, importTabs, importTabsWithSplits, linksOf, windowFor, type ImportedTabs, type IncomingTab } from "./tabImport";
@@ -149,7 +150,7 @@ function placeInSourceOrder(windowId: string, blocks: Map<number, string[]>) {
   useBrowser.setState({ windows: { ...s.windows, [windowId]: window }, groups: syncGroupOrder(s.groups, window) });
 }
 
-export function importArcSpace(profileId: string, space: SpaceSuggestion, favicons?: ImportedFavicon[]): { tabs: number; bookmarks: number; skipped: number } {
+export function importArcSpace(profileId: string, space: SpaceSuggestion, favicons?: ImportedFavicon[], consent?: ConsentToken | null): { tabs: number; bookmarks: number; skipped: number } {
   importFavicons(profileId, favicons, [...linksOf(space.pinned), ...space.tabs.map((t) => t.url)]);
   const windowId = sidebarWindowFor(profileId);
   const rows = importPinnedRows(profileId, windowId, space.pinned);
@@ -157,13 +158,13 @@ export function importArcSpace(profileId: string, space: SpaceSuggestion, favico
   const pinned = importPinnedFolders(profileId, windowId, space.pinned, rows);
   const theme = space.theme ? parseArcTheme(space.theme) : null;
   if (theme) setProfileTheme(profileId, theme);
-  noteImportedPins({ rows: pinned.rows, splits: pinned.splits + today.splits });
+  noteImportedPins({ rows: pinned.rows, splits: pinned.splits + today.splits }, consent);
   return { tabs: pinned.tabs + today.tabs, bookmarks: 0, skipped: pinned.skipped };
 }
 
 export type ImportedDiaSpace = { tabs: number; skipped: number; groups: number; splits: number };
 
-export function importDiaSpace(profileId: string, space: SpaceSuggestion, favicons?: ImportedFavicon[]): ImportedDiaSpace {
+export function importDiaSpace(profileId: string, space: SpaceSuggestion, favicons?: ImportedFavicon[], consent?: ConsentToken | null): ImportedDiaSpace {
   const favorites = space.favorites ?? [];
   const openGroups = space.openGroups ?? [];
   importFavicons(profileId, favicons, [...favorites.map((t) => t.url), ...linksOf(space.pinned), ...space.tabs.map((t) => t.url), ...linksOf(openGroups)]);
@@ -173,6 +174,6 @@ export function importDiaSpace(profileId: string, space: SpaceSuggestion, favico
   const groups = importFolders(profileId, windowId, openGroups.filter((n) => n.type === "folder" && !isSplitNode(n)), false);
   const loose = importTabsWithSplits(profileId, space.tabs.map((t) => ({ ...t, pinned: false })), "Imported", "anyPin", windowId);
   const open = sumSections(groups, sectionOf(loose));
-  noteImportedPins({ rows: pinned.rows, splits: pinned.splits + open.splits });
+  noteImportedPins({ rows: pinned.rows, splits: pinned.splits + open.splits }, consent);
   return { tabs: tiles + pinned.tabs + open.tabs, skipped: pinned.skipped + open.skipped, groups: pinned.groups + open.groups, splits: pinned.splits + open.splits };
 }

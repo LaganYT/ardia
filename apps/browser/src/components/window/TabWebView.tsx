@@ -5,6 +5,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import { StyleSheet } from "react-native";
 import { focus, switchToTab } from "../../state/browser/actions";
 import { notePictureInPictureBackToTab, notePictureInPictureClickSkip, notePictureInPictureDragged } from "../../state/telemetry/pictureInPictureCounts";
+import { noteRendererResponsive, noteRendererUnresponsive } from "../../state/telemetry/freezes";
 import { noteFavicon } from "../../state/favicons/favicons";
 import { adoptIconPage, dropOutlivedFavicon, noteIconPage } from "../../state/favicons/iconPage";
 import { restoredThemeColor } from "../../state/windows/launchLook";
@@ -257,8 +258,14 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
         }
         noteUnreadPageEnded(tabId);
       }}
-      onUnresponsive={() => patchPage(tabId, { unresponsive: true })}
-      onResponsive={() => patchPage(tabId, { unresponsive: false })}
+      onUnresponsive={() => {
+        noteRendererUnresponsive(tabId);
+        patchPage(tabId, { unresponsive: true });
+      }}
+      onResponsive={() => {
+        noteRendererResponsive(tabId, false);
+        patchPage(tabId, { unresponsive: false });
+      }}
       onFullscreen={(fullscreen) => patchPage(tabId, { fullscreen })}
       onMediaAccess={(mediaAccess) => patchPage(tabId, { mediaAccess: mediaAccess.camera || mediaAccess.microphone || mediaAccess.screen ? mediaAccess : null })}
       onSecurity={(security) => !prewarmOnly() && patchPage(tabId, { security })}

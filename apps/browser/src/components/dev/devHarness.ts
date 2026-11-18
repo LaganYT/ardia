@@ -43,6 +43,9 @@ export function startDevHarness() {
     get bookmarks(): typeof import("../../state/bookmarks/bookmarks") {
       return require("../../state/bookmarks/bookmarks");
     },
+    get tabLive(): typeof import("../../state/tabs/tabLive") {
+      return require("../../state/tabs/tabLive");
+    },
     get history(): typeof import("../../state/history/history") {
       return require("../../state/history/history");
     },
@@ -189,6 +192,21 @@ export function startDevHarness() {
     },
     get airTraffic(): typeof import("../../state/airTraffic/store") & typeof import("../../state/airTraffic/preview") & typeof import("../../state/littleArdia/actions") {
       return { ...require("../../state/airTraffic/store"), ...require("../../state/airTraffic/preview"), ...require("../../state/littleArdia/actions") };
+    },
+    blockJs(ms: number, garbage = false) {
+      setTimeout(() => {
+        const until = Date.now() + ms;
+        let kept: number[][] = [];
+        while (Date.now() < until) {
+          if (!garbage) continue;
+          kept.push(new Array(256).fill(kept.length));
+          if (kept.length > 4000) kept = [];
+        }
+      }, 0);
+      return ms;
+    },
+    get freezes(): typeof import("../../state/telemetry/freezes") & typeof import("../../state/telemetry/freezeRecords") {
+      return { ...require("../../state/telemetry/freezes"), ...require("../../state/telemetry/freezeRecords") };
     },
   };
   (globalThis as { ac?: typeof ac }).ac = ac;

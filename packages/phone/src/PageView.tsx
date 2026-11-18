@@ -40,7 +40,7 @@ export const pageObscuresInsets = () => obscuresInsets;
 export const pageReportsDrawn = () => reportsDrawn;
 
 export const PageView = forwardRef<PageViewHandle, PageViewProps>(function PageView(props, ref) {
-  const { onPageState, onPageTone, onPageError, onPageDrawn, onPageCoverHidden, coverNativeId, toneInsets, obscuredInsets, obscuredColors, surfaceColor, ...rest } = props;
+  const { onPageState, onPageTone, onPageError, onPageDrawn, onPageCoverHidden, onSwipedPastHistory, coverNativeId, toneInsets, obscuredInsets, obscuredColors, surfaceColor, ...rest } = props;
   const native = useRef<NativeHandle>(null);
   useImperativeHandle(
     ref,
@@ -63,6 +63,8 @@ export const PageView = forwardRef<PageViewHandle, PageViewProps>(function PageV
       onPageDrawn?.();
     } else if (nativeEvent.name === "coverHidden") {
       onPageCoverHidden?.(nativeEvent.reason, nativeEvent.found);
+    } else if (nativeEvent.name === "swipedPastHistory") {
+      onSwipedPastHistory?.(nativeEvent.direction);
     } else {
       onPageError?.({ code: nativeEvent.code, message: nativeEvent.message });
     }

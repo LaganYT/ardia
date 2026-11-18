@@ -19,7 +19,8 @@ const HELP = `App Store Connect, for the iPhone app's TestFlight builds.
 Reads the API key from ASC_KEY (path to AuthKey_<id>.p8), ASC_KEY_ID and ASC_ISSUER.
 status lists what the key can see: the app record, the App IDs and their capabilities,
 registered devices, certificates, profiles, builds and tester groups. A section the key
-has no access to prints "forbidden". next-build prints the build number after the highest
+has no access to prints "forbidden". A read Apple answers with a server error is asked
+again, up to three more times; a write never is. next-build prints the build number after the highest
 one uploaded. wait blocks until a build finishes processing, and stops with Apple's reasons
 when the delivery was refused. certificates --save records
 the team's certificate ids; --new-since fails when a development certificate was made since
@@ -76,6 +77,23 @@ async function fail(response) {
   throw new ApiError(response.status, detail);
 }
 
+const RETRY_AFTER_MS = [1000, 3000, 9000];
+
+async function read(url) {
+  for (let attempt = 0; ; attempt++) {
+    const last = attempt === RETRY_AFTER_MS.length;
+    let response;
+    try {
+      response = await fetch(url, { headers: { Authorization: `Bearer ${bearer}` } });
+    } catch (error) {
+      if (last) throw error;
+    }
+    if (response && (last || (response.status < 500 && response.status !== 429))) return response;
+    console.error(`asc: App Store Connect ${response ? `answered ${response.status}` : "didn't answer"}, asking again`);
+    await new Promise((resolve) => setTimeout(resolve, RETRY_AFTER_MS[attempt]));
+  }
+}
+
 async function send(method, path, body) {
   bearer ??= token();
   const response = await fetch(new URL(path, API), {
@@ -98,7 +116,7 @@ async function get(path, params = {}) {
   const included = [];
   let next = url.toString();
   while (next) {
-    const response = await fetch(next, { headers: { Authorization: `Bearer ${bearer}` } });
+    const response = await read(next);
     if (!response.ok) await fail(response);
     const page = await response.json();
     rows.push(...(Array.isArray(page.data) ? page.data : [page.data]));
@@ -361,7 +379,7 @@ async function uploadedBuildNumbers(appId) {
     const { rows } = await get(`/v1/apps/${appId}/buildUploads`, { limit: "200" });
     return rows.map((row) => row.attributes?.cfBundleVersion);
   } catch (error) {
-    if (error instanceof ApiError) return [];
+    if (error instanceof ApiError && error.status < 500 && error.status !== 429) return [];
     throw error;
   }
 }

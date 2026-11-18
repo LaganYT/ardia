@@ -60,76 +60,100 @@ int main() {
   }
   {
     Trace trace;
-    const unsigned long first = trace.BeginLoop("windowDragRegion", 100);
+    const unsigned long first = trace.BeginLoop("windowDragRegion", 100, "e");
     CHECK(trace.LoopLine(102.5) == "press loop open windowDragRegion for 2.5s");
     std::string name;
-    CHECK(!trace.TakeLongLoop(first, 104.9, &name));
-    CHECK(trace.TakeLongLoop(first, 105.0, &name));
+    CHECK(!trace.TakeLongLoop(first, 104.9, &name, nullptr));
+    CHECK(trace.TakeLongLoop(first, 105.0, &name, nullptr));
     CHECK(name == "windowDragRegion");
-    CHECK(!trace.TakeLongLoop(first, 106, &name));
+    CHECK(!trace.TakeLongLoop(first, 106, &name, nullptr));
     CHECK(trace.LoopLine(106) == "press loop open windowDragRegion for 6.0s (logged)");
-    trace.EndLoop(107, nullptr);
+    trace.EndLoop(107, nullptr, nullptr);
     CHECK(trace.LoopLine(108) == "press loop none, finished 1, longest windowDragRegion 7.0s");
-    CHECK(!trace.TakeLongLoop(first, 200, &name));
+    CHECK(!trace.TakeLongLoop(first, 200, &name, nullptr));
   }
   {
     Trace trace;
-    const unsigned long outer = trace.BeginLoop("windowMove", 10);
-    const unsigned long inner = trace.BeginLoop("windowDragRegion", 11);
+    const unsigned long outer = trace.BeginLoop("windowMove", 10, "e");
+    const unsigned long inner = trace.BeginLoop("windowDragRegion", 11, "e");
     CHECK(outer == inner);
-    trace.EndLoop(12, nullptr);
+    trace.EndLoop(12, nullptr, nullptr);
     CHECK(Contains(trace.LoopLine(13), "press loop open windowMove for 3.0s"));
-    trace.EndLoop(14, nullptr);
+    trace.EndLoop(14, nullptr, nullptr);
     CHECK(Contains(trace.LoopLine(15), "press loop none, finished 1, longest windowMove 4.0s"));
-    trace.EndLoop(16, nullptr);
+    trace.EndLoop(16, nullptr, nullptr);
     CHECK(Contains(trace.LoopLine(17), "finished 1"));
   }
   {
     Trace trace;
-    const unsigned long first = trace.BeginLoop("windowMove", 0);
-    trace.EndLoop(1, nullptr);
-    const unsigned long second = trace.BeginLoop("windowMove", 50);
+    const unsigned long first = trace.BeginLoop("windowMove", 0, "e");
+    trace.EndLoop(1, nullptr, nullptr);
+    const unsigned long second = trace.BeginLoop("windowMove", 50, "e");
     CHECK(second != first);
-    CHECK(!trace.TakeLongLoop(first, 51, nullptr));
-    CHECK(!trace.TakeLongLoop(first, 60, nullptr));
-    CHECK(trace.TakeLongLoop(second, 60, nullptr));
+    CHECK(!trace.TakeLongLoop(first, 51, nullptr, nullptr));
+    CHECK(!trace.TakeLongLoop(first, 60, nullptr, nullptr));
+    CHECK(trace.TakeLongLoop(second, 60, nullptr, nullptr));
   }
   {
     Trace trace;
-    trace.BeginLoop("windowMove", 0);
-    trace.EndLoop(0.3, nullptr);
-    trace.BeginLoop("windowDragRegion", 10);
-    trace.EndLoop(18, nullptr);
-    trace.BeginLoop("windowMove", 20);
-    trace.EndLoop(20.3, nullptr);
+    trace.BeginLoop("windowMove", 0, "e");
+    trace.EndLoop(0.3, nullptr, nullptr);
+    trace.BeginLoop("windowDragRegion", 10, "e");
+    trace.EndLoop(18, nullptr, nullptr);
+    trace.BeginLoop("windowMove", 20, "e");
+    trace.EndLoop(20.3, nullptr, nullptr);
     CHECK(trace.LoopLine(30) == "press loop none, finished 3, longest windowDragRegion 8.0s");
   }
 
   {
     Trace trace;
-    const unsigned long outer = trace.BeginLoop("windowDragRegion", 0);
-    trace.BeginLoop("windowMove", 1);
+    const unsigned long outer = trace.BeginLoop("windowDragRegion", 0, "e");
+    trace.BeginLoop("windowMove", 1, "e");
     CHECK(trace.LoopLine(2) == "press loop open windowDragRegion>windowMove for 2.0s");
     std::string name;
-    CHECK(trace.TakeLongLoop(outer, 6, &name));
+    CHECK(trace.TakeLongLoop(outer, 6, &name, nullptr));
     CHECK(name == "windowDragRegion>windowMove");
-    CHECK(!trace.EndLoop(7, &name));
-    CHECK(!trace.EndLoop(8, &name));
+    CHECK(!trace.EndLoop(7, &name, nullptr));
+    CHECK(!trace.EndLoop(8, &name, nullptr));
     CHECK(trace.LoopLine(9) == "press loop none, finished 1, longest windowDragRegion 8.0s");
   }
   {
     Trace trace;
-    trace.BeginLoop("windowMove", 100);
+    trace.BeginLoop("windowMove", 100, "e");
     std::string name;
-    CHECK(trace.EndLoop(105.05, &name));
+    CHECK(trace.EndLoop(105.05, &name, nullptr));
     CHECK(name == "windowMove");
-    trace.BeginLoop("windowMove", 200);
-    CHECK(!trace.EndLoop(204.9, &name));
+    trace.BeginLoop("windowMove", 200, "e");
+    CHECK(!trace.EndLoop(204.9, &name, nullptr));
   }
   {
     Trace trace;
-    trace.BeginLoop("pipDrag", 3);
-    trace.EndLoop(3, nullptr);
+    const unsigned long open = trace.BeginLoop("windowMove", 10, "before");
+    std::string epoch = "unset";
+    CHECK(trace.TakeLongLoop(open, 15.5, nullptr, &epoch));
+    CHECK(epoch == "before");
+    trace.EndLoop(16, nullptr, nullptr);
+    trace.BeginLoop("windowDragRegion", 20, "after");
+    CHECK(trace.EndLoop(27.25, nullptr, &epoch));
+    CHECK(epoch == "after");
+  }
+  {
+    Trace trace;
+    const unsigned long outer = trace.BeginLoop("windowDragRegion", 0, "outer");
+    trace.BeginLoop("windowMove", 1, "inner");
+    std::string epoch;
+    CHECK(trace.TakeLongLoop(outer, 6, nullptr, &epoch));
+    CHECK(epoch == "outer");
+    trace.EndLoop(7, nullptr, nullptr);
+    trace.EndLoop(8, nullptr, nullptr);
+    trace.BeginLoop("windowMove", 10, "");
+    CHECK(trace.EndLoop(16, nullptr, &epoch));
+    CHECK(epoch.empty());
+  }
+  {
+    Trace trace;
+    trace.BeginLoop("pipDrag", 3, "e");
+    trace.EndLoop(3, nullptr, nullptr);
     CHECK(trace.LoopLine(4) == "press loop none, finished 1, longest pipDrag 0.0s");
   }
 

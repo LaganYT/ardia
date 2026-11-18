@@ -14,6 +14,8 @@ public class DevModule: Module {
       DispatchQueue.main.async { CrashReports.crashForTesting(kind) }
     }
 
+    AsyncFunction("devBlockMain") { (ms: Double) -> Double in DevFreeze.blockMain(ms: ms) }
+
     AsyncFunction("devNotificationCenter") { (actAsEngine: Bool, promise: Promise) in
       let center = UNUserNotificationCenter.current()
       if actAsEngine {

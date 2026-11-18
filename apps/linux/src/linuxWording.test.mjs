@@ -175,3 +175,10 @@ test("the Linux platform layer finds browsers through the import list and says c
   const vite = readFileSync(new URL("../vite.shared.ts", import.meta.url), "utf8");
   assert.match(vite, /extensions: \["\.linux\.tsx", "\.linux\.ts", "\.web\.tsx"/);
 });
+
+test("Linux's What's Sent, after its source wording, says nothing about freezes", () => {
+  const said = strings(linuxCopy("state/telemetry/copy.ts")).join("\n");
+  for (const freeze of ["stopped responding for a quarter of a second", "freezes for 0.4 seconds or more", "program addresses", "the last 20 times Ardia froze", "Copy Last Freeze"]) assert.ok(!said.includes(freeze), freeze);
+  assert.ok(said.includes("How many times a page stopped responding"), "page hangs are counted on Linux too");
+  assert.equal(LINUX_FEATURES.freezeWatch, false);
+});

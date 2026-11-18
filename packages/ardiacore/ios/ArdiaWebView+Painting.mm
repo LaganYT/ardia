@@ -324,7 +324,7 @@ BOOL Above(NSView *a, NSView *b) {
   } else if (!_reports.keptByWindowServer && self.playsForAutoPictureInPicture) {
     _reports.keptByWindowServer = YES;
     [self traceAutoPictureInPicture:@"app: the window server still shows the tab, AppKit's occlusion overruled"];
-    [self emit:@"autoPictureInPictureKept" payload:@{@"appSwitch" : @NO}];
+    [self emit:@"autoPictureInPictureKept" payload:[ArdiaConsentStamp.begin onto:@{@"appSwitch" : @NO}]];
   }
   if (seen == _reports.seenByUser) return;
   _reports.seenByUser = seen;

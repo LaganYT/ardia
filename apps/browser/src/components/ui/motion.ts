@@ -37,6 +37,29 @@ export const duration = {
 
 export const period = { spinner: 900, pulse: 1100 } as const;
 
+export type LoopLeg = { to: number; ms: number; easing?: EasingFunction };
+
+export function legsEasing(legs: readonly LoopLeg[]): { duration: number; easing: EasingFunction } {
+  const total = legs.reduce((sum, leg) => sum + leg.ms, 0);
+  const easing = (t: number) => {
+    let at = t * total;
+    let from = 0;
+    for (const [i, leg] of legs.entries()) {
+      if (at < leg.ms || i === legs.length - 1) return from + (leg.to - from) * (leg.easing ?? curve.linear)(leg.ms > 0 ? Math.min(1, at / leg.ms) : 1);
+      at -= leg.ms;
+      from = leg.to;
+    }
+    return from;
+  };
+  return { duration: total, easing };
+}
+
+export function nativeLoop(value: Animated.Value, legs: readonly LoopLeg[], iterations = -1): Animated.CompositeAnimation {
+  const { duration, easing } = legsEasing(legs);
+  value.setValue(0);
+  return Animated.loop(Animated.timing(value, { toValue: 1, duration, easing, useNativeDriver: true, isInteraction: false }), { iterations });
+}
+
 export const buttonMotion = { iconPressScale: 0.96, controlPressScale: 0.985 } as const;
 
 export type Fade = { duration: number; easing: EasingFunction; delay?: number };

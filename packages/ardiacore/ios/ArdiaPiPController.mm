@@ -113,6 +113,7 @@ NSInteger gActivations = 0;
 void ActivateApp(NSString *why) {
   gActivations++;
   if (ardia_host::Background()) return ardia_host::LogActivation([@"activate (skipped in a test instance): " stringByAppendingString:why]);
+  MarkBackToTabActivation();
   [NSApp activate];
 }
 

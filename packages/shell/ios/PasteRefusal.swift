@@ -1,4 +1,5 @@
 import AppKit
+import ArdiaCore
 import Carbon.HIToolbox
 
 enum Refusal: String {
@@ -45,9 +46,9 @@ enum PasteRefusal {
     report(reason, ["responder": responder.map { String(describing: type(of: $0)) } ?? "nil"])
   }
 
-  static func report(_ reason: Refusal, _ details: [String: Any] = [:]) {
+  static func report(_ reason: Refusal, _ details: [String: Any] = [:], stamp: ArdiaConsentStamp = ArdiaConsentStamp.begin()) {
     guard Thread.isMainThread else {
-      DispatchQueue.main.async { report(reason, details) }
+      DispatchQueue.main.async { report(reason, details, stamp: stamp) }
       return
     }
     guard reported < sessionLimit else { return }
@@ -57,7 +58,7 @@ enum PasteRefusal {
     body["reason"] = reason.rawValue
     body["gateOpen"] = FocusHandoff.shared.gatesKeyWindow
     if let layout = keyboardLayoutID { body["layout"] = layout }
-    ShellEvents.send(.app, body)
+    ShellEvents.send(.app, stamp.onto(body))
   }
 
   private static var keyboardLayoutID: String? {

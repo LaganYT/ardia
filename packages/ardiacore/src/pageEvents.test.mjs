@@ -47,7 +47,7 @@ test("a popup window receives page messages and records only a protected-media r
   assert.match(popupWindow, /- \(void\)tab:\(ArdiaCoreTab \*\)tab\s+didReceivePageMessage:\(NSString \*\)kind\s+json:\(NSString \*\)json\s+frame:\(NSString \*\)frameId\s+main:\(BOOL\)main\s+origin:\(NSString \*\)verifiedOrigin \{/);
   assert.match(popupReceiverBody, /if \(!\[kind isEqualToString:@"drm"\]\) return;/);
   assert.deepEqual(sorted(collect([popupReceiverBody], /kind isEqualToString:@"([A-Za-z]+)"/g)), ["drm"]);
-  assert.match(popupReceiverBody, /\[ArdiaEvents emit:@"engine\.popupProtectedMedia" data:@\{@"family" : family, @"listed" : @\(OnProtectedVideoSite\(tab\.url\)\)\}\]/);
+  assert.match(popupReceiverBody, /\[ArdiaEvents emit:@"engine\.popupProtectedMedia" data:\[ArdiaConsentStamp\.begin onto:@\{@"family" : family, @"listed" : @\(OnProtectedVideoSite\(tab\.url\)\)\}\]\]/);
 });
 
 test("the popup's log line names the key-system family and nothing else, and nothing is forwarded", () => {

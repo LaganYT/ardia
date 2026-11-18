@@ -1,5 +1,5 @@
 import { takeFocusHandoffCounts as takeNativeCounts } from "../../platform/focus";
-import { isSharing } from "./choice";
+import { capture, stillValid, type ConsentToken } from "./client";
 
 const FIELDS = {
   delivered: "focus_handoffs_delivered",
@@ -13,13 +13,21 @@ const FIELDS = {
 
 type Field = (typeof FIELDS)[keyof typeof FIELDS];
 
-export function takeFocusHandoffCounts(): Record<Field, number> {
-  const raw = takeNativeCounts();
-  const shared = isSharing();
+function fields(raw: Record<string, number>): Record<Field, number> {
   const counts = {} as Record<Field, number>;
   for (const [key, field] of Object.entries(FIELDS) as [keyof typeof FIELDS, Field][]) {
     const n = raw[key] ?? 0;
-    counts[field] = shared && Number.isSafeInteger(n) && n > 0 ? n : 0;
+    counts[field] = Number.isSafeInteger(n) && n > 0 ? n : 0;
   }
   return counts;
+}
+
+export function takeFocusHandoffCounts(): Record<Field, number> {
+  const sent = fields({});
+  for (const [epoch, raw] of Object.entries(takeNativeCounts())) {
+    const counts = fields(raw ?? {});
+    if (stillValid(epoch as ConsentToken)) for (const field of Object.keys(counts) as Field[]) sent[field] += counts[field];
+    else if (Object.values(counts).some(Boolean)) capture("usage_counts", counts, null);
+  }
+  return sent;
 }

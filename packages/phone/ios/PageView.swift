@@ -23,6 +23,8 @@ final class PageView: ExpoView {
     didSet { if obscuresSafeTop != oldValue { applyObscuredInsets() } }
   }
   var swipeNavigation: PageGestures.Swipe = .anywhere
+  var closesOnSwipeBack = false
+  var reopensOnSwipeForward = false
   var pullToRefresh = true
   private(set) var page: WebTab?
 
@@ -42,6 +44,9 @@ final class PageView: ExpoView {
   private var gestures: PageGestures {
     if let madeGestures { return madeGestures }
     let made = PageGestures(container: self)
+    made.onSwipedPastHistory = { [weak self] direction in
+      self?.onPageEvent(["name": "swipedPastHistory", "direction": direction == .back ? "back" : "forward"])
+    }
     madeGestures = made
     return made
   }
@@ -54,6 +59,8 @@ final class PageView: ExpoView {
   @MainActor
   func bind() {
     gestures.swipe = swipeNavigation
+    gestures.closesPastBack = closesOnSwipeBack
+    gestures.reopensPastForward = reopensOnSwipeForward
     gestures.pulls = pullToRefresh
     guard let pageID, failedID != pageID else { return }
     if let page, PhonePages.shared.page(pageID) === page { return }

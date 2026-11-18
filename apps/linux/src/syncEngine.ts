@@ -4,6 +4,8 @@ import type { DataType, SendTarget, SyncUi } from "../../browser/src/state/sync/
 import type { FolderInfo, PhraseResult } from "../../browser/src/platform/sync";
 import { SyncNative } from "../../browser/src/platform/sync";
 import { ardiaHost, type ArdiaHost } from "./host";
+import { consentToken } from "../../browser/src/state/telemetry/client";
+import { warnFor } from "../../browser/src/state/telemetry/logs";
 import {
   claimSyncAuthority,
   configureHeldLogins,
@@ -93,8 +95,9 @@ function dropDeletedProfiles() {
     last = state.profiles;
     const live = new Set(Object.keys(last).map((id) => engineProfile({ profiles: last }, id)));
     if (live.size) {
+      const consent = consentToken();
       void heldLogins?.dropProfiles([...seen].filter((profile) => !live.has(profile))).catch((error: unknown) =>
-        console.warn("[ardia linux] sync", error instanceof Error ? error.message : error),
+        warnFor(consent, "[ardia linux] sync", error instanceof Error ? error.message : error),
       );
     }
     seen = live;
@@ -226,7 +229,10 @@ function forward<T>(method: RemoteMethod, args: unknown[], timeoutMs?: number): 
   return authority.call(method, args, timeoutMs) as Promise<T>;
 }
 
-const quietly = (promise: Promise<unknown>) => void promise.catch((error: unknown) => console.warn("[ardia linux] sync", error));
+const quietly = (promise: Promise<unknown>) => {
+  const consent = consentToken();
+  void promise.catch((error: unknown) => warnFor(consent, "[ardia linux] sync", error));
+};
 
 export const currentSyncFolder = () => useSync.getState().folder;
 export const deviceName = () => syncDeviceName();
@@ -260,10 +266,11 @@ export async function turnOnSync(folder: string): Promise<{ ok: true } | { error
 
 export async function enterRecoveryPhrase(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" }> {
   if (!SyncNative) return { error: "unavailable" };
+  const consent = consentToken();
   try {
     return await forward("enterRecoveryPhrase", [folder, text], INTERACTIVE_CALL_TIMEOUT_MS);
   } catch (error) {
-    console.warn("[ardia linux] sync", error instanceof Error ? error.message : error);
+    warnFor(consent, "[ardia linux] sync", error instanceof Error ? error.message : error);
     return { error: "unavailable" };
   }
 }

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { readDocument, writeDocument } from "../../platform/documents";
 import { base64Url } from "../../lib/sha256";
 import { BOOST_FONTS, type Boost } from "./types";
+import { logConsent, warnFor } from "../telemetry/logs";
 
 export type FontFace = { weight: string; data: string };
 type Status = "downloading" | "ready" | "failed";
@@ -87,6 +88,7 @@ async function downloadFace(url: string): Promise<string> {
 
 export async function downloadGoogleFont(family: string) {
   if (!isGoogleFamily(family) || googleFontFaces(family).length || useGoogleFonts.getState().status[family] === "downloading") return;
+  const consent = logConsent();
   setStatus(family, "downloading");
   try {
     const css = (await get(`${CSS_URL}${family.replace(/ /g, "+")}:wght@400;700`, CSS_URL, (response) => response.text())) as string;
@@ -98,7 +100,7 @@ export async function downloadGoogleFont(family: string) {
     cached.set(family, faces);
     setStatus(family, "ready");
   } catch (error) {
-    console.warn(`[boosts] couldn't download a Google font`, error);
+    warnFor(consent, `[boosts] couldn't download a Google font`, error);
     setStatus(family, "failed");
   }
 }

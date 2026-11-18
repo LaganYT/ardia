@@ -434,15 +434,29 @@ test("a binding to a group the sidebar removed is dropped, and a closed strip le
   await settle(win);
   assert.deepEqual(Object.keys(S().groups), []);
   assert.equal(chromeTabsBookkeeping().groups, 0);
+  const other = anotherWindow("x", "y");
+  await settle(other);
+  const sent = chrome.sent;
+  const notShown = (w) => S().windows[w].tabIds.find((t) => t !== model.activeTabId(S(), w));
+  S().activate(notShown(win.w));
+  S().activate(notShown(other.w));
+  await settle(win);
+  await settle(other);
+  assert.ok(chrome.sent >= sent + 2, "each strip was sent a command, so each has a signature");
+  const close = async (strip) => {
+    chrome.outbox.push({ rev: ++chrome.rev, cmd: null, strips: [{ ...chrome.state(strip), closed: true }] });
+    chrome.strips.delete(strip);
+    chrome.deliver();
+    await tick();
+    return chromeTabsBookkeeping();
+  };
   const open = chromeTabsBookkeeping();
   assert.ok(open.changedAt >= 1);
-  chrome.outbox.push({ rev: ++chrome.rev, cmd: null, strips: [{ ...chrome.state(win.strip), closed: true }] });
-  chrome.strips.delete(win.strip);
-  chrome.deliver();
-  await tick();
-  const closed = chromeTabsBookkeeping();
-  assert.equal(closed.changedAt, open.changedAt - 1);
-  assert.ok(closed.tried <= open.tried);
+  const firstClosed = await close(win.strip);
+  assert.equal(firstClosed.changedAt, open.changedAt - 1);
+  assert.ok(firstClosed.tried < open.tried, "the closed strip's signatures are gone");
+  const bothClosed = await close(other.strip);
+  assert.ok(bothClosed.tried < firstClosed.tried, "the other strip's signatures were kept until its own close");
 });
 
 test("an extension that closes the shown tab and shows another in one go is obeyed", async () => {

@@ -1,3 +1,6 @@
+import type { ConsentToken } from "./choice";
+import { countFor } from "./countFor";
+
 export type CliInstallReason = "auto" | "settings" | "upgrade";
 
 const NONE = {
@@ -23,7 +26,7 @@ const FIELDS = {
 let counts = { ...NONE };
 let windowlessSeen = { given: 0, missed: 0 };
 
-export const noteCliInstall = (reason: CliInstallReason, ok: boolean) => void counts[FIELDS[reason][ok ? 0 : 1]]++;
+export const noteCliInstall = (reason: CliInstallReason, ok: boolean, consent?: ConsentToken | null) => countFor(consent, () => void counts[FIELDS[reason][ok ? 0 : 1]]++, { [FIELDS[reason][ok ? 0 : 1]]: 1 });
 export function noteCliPillShown(compact: boolean) {
   counts.cli_pill_shows++;
   if (compact) counts.cli_pill_compact_shows++;

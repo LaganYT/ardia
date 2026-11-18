@@ -3,6 +3,7 @@ import { setProfileBoosts } from "../../platform/boosts";
 import { versionedJson } from "../../lib/savedDocument";
 import { orWarn } from "../../lib/fallback";
 import { useBrowser } from "../browser/store";
+import { logConsent, warnFor } from "../telemetry/logs";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import { compileBoost, fitEngineList, fitsEngine } from "./compile";
 import { ensureGoogleFonts, googleFontFaces, useGoogleFonts } from "./googleFonts";
@@ -35,7 +36,7 @@ function save(key: string, boosts: Boost[]) {
   try {
     writeDocument(boostsDocument(key), versionedJson({ boosts }, BOOSTS_VERSION));
   } catch (error) {
-    console.warn(`[boosts] couldn't save ${boostsDocument(key)}`, error);
+    warnFor(logConsent(), `[boosts] couldn't save ${boostsDocument(key)}`, error);
   }
 }
 

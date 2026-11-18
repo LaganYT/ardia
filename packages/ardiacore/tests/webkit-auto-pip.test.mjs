@@ -78,7 +78,7 @@ test("WebKit tabs follow the user's sight of their window the way Chromium views
 });
 
 test("leaving opens picture in picture and returning closes it through the page's own player call", () => {
-  assert.match(sight, /case \.open: setPictureInPicture\(true, automatic: true\) \{ \[weak self\] answer in if answer == \.nothingPlaying \{ self\?\.emit\("autoPictureInPictureKept", \["reason": "nothingPlaying"\]\) \} \}/);
+  assert.match(sight, /case \.open:\s*let stamp = ArdiaConsentStamp\.begin\(\)\s*setPictureInPicture\(true, automatic: true\) \{ \[weak self\] answer in if answer == \.nothingPlaying \{ self\?\.emit\("autoPictureInPictureKept", stamp\.onto\(\["reason": "nothingPlaying"\]\)\) \} \}/);
   assert.match(sight, /case \.close: setPictureInPicture\(false\) \{ _ in \}/);
   assert.match(sight, /autoPictureInPictureRule\.sight\(seen, enabled: autoPictureInPicture, playing: !playingFrames\.isEmpty \|\| activeCapture\)/);
 });

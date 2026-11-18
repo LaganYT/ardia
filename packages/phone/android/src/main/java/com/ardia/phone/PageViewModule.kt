@@ -359,6 +359,10 @@ class PageViewModule : Module() {
 
             Prop("swipeNavigation") { view: PageView, mode: String? -> view.swipeMode = SwipeMode.of(mode) }
 
+            Prop("closesOnSwipeBack") { view: PageView, closes: Boolean? -> view.closesOnSwipeBack = closes == true }
+
+            Prop("reopensOnSwipeForward") { view: PageView, reopens: Boolean? -> view.reopensOnSwipeForward = reopens == true }
+
             Prop("pullToRefresh") { view: PageView, enabled: Boolean? -> view.pullToRefresh = enabled == true }
 
             Prop("surfaceColor") { view: PageView, colour: Int? -> view.surfaceColor = colour }

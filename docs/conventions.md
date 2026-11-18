@@ -205,7 +205,7 @@ writeDocument(DOC, versionedJson(data, VERSION));
 - Covered: `session.json` (10), `downloads.json` (3), `launch-look.json` (2), `air-traffic.json` (2), `bookmarks-cache.json`, `telemetry.json`,
   `telemetry-queue.json`, `telemetry-daily.json`, `release-notes.json`, `onboarding.json`,
   `default-browser-offer.json`, `sync.json`, `sync-extensions.json`, `live.json`, `shared-folders.json`, `ardia-cli.json`,
-  `bangs-state.json`, `Scripts/status.json` and `link-sources.json` (all 1).
+  `bangs-state.json`, `Scripts/status.json`, `link-sources.json` and `freeze-sends.json` (all 1).
 - Native code reads through `ArdiaSavedDocument` (packages/ardiacore/ios), with the same rules: `session.json` and
   `onboarding.json` (any version up to the one JS writes; a test pins each) and `launch-layout.json` (5, written and
   read by native code only, so any other version reads as nothing).
@@ -330,6 +330,7 @@ still counts:
 | `set-state` | `.setState(` in `components/` |
 | `store-reads` | `useBrowser(` in `components/` (read through `state/<domain>/hooks.ts`) |
 | `store-shape` | a zustand store not created as `create<T>()(() => init)` (a `set`/`get` creator, or the uncurried form) |
+| `native-loops` | `Animated.loop(` around `Animated.sequence(`, `parallel(` or `stagger(`: React Native can't run those as a native loop, so JS restarts every leg and macOS starts a new display link each time. Use `nativeLoop(value, legs)` from `components/ui/motion.ts` |
 | `size` | a file over its line cap |
 | `env` | an environment read outside the launch config and the three exempt engine lines |
 | `naming` | a `Cef`, `AC*`/app-side `ArdiaCore*`, `Netnyahoo` or `NN*` name |

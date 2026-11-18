@@ -347,6 +347,7 @@ enum MainMenu {
       releaseNotesItem(),
       .separator(),
       CommandItem(.copyDiagnostics),
+      CommandItem(.copyLastFreeze),
     ]
     #if DEBUG
     items += [.separator(), CommandItem(.showOnboarding)]

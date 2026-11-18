@@ -461,6 +461,102 @@ build the same return took 0.93 to 1.14 s in three rounds, 0.8 to 1.0 s of it th
 uBlock Origin rulesets are ready; the page came back at its URL, scroll position and back/forward list, with its
 cookies (session cookies too) and local storage.
 
+## Freeze monitoring (#2479)
+
+Every copy watches two threads for stalls: the app's main thread (AppKit, our native code and Chromium's browser UI
+thread, which are one thread: `ChromeMain` runs in our process) and the Hermes JS thread that runs the interface.
+`ArdiaFreezeWatch.mm` (packages/ardiacore) adds two `CFRunLoopObserver`s to each run loop in the common modes: one at
+the lowest order for after-waiting (a busy stretch starts) and one at the highest for before-waiting (it ends). A
+stretch of 250 ms or more is a stall. There is no timer: the observers run only when the loop wakes, so a sleeping app
+pays nothing. On the JS thread the watch also reads Hermes's cumulative GC time (`HermesInternal.getInstrumentedStats()`
+`js_gcTime`, through JSI, on the JS thread itself and only at its run loop's top level: as each busy stretch starts, and
+again when a stall ends; a read costs about 0.6 µs) to say how much of each stall was collection. Each bridge owns its
+JS-thread observers and its runtime pointer, so a reload's new bridge never reads the old runtime or the reverse. The release Hermes framework gives counts and totals only
+(`js_numGCs`, `js_gcTime`, `js_gcCPUTime`, `js_heapSize`): no per-collection pause and no GC callback, so the longest
+single pause isn't available; `js_stall_gc_longest_ms` is the most GC inside one stall.
+
+Sent hourly in `perf_memory`, sharing on only (`state/telemetry/freezes.ts`), per thread (`main_` and `js_`):
+`*_stall_250_500ms`, `_500ms_1s`, `_1_2s`, `_2_5s`, `_5_10s`, `_over_10s`, `*_stall_longest_ms`, `*_stall_input_waits`
+and `*_stall_input_wait_max_ms` (a click or key that waited 50 ms or more behind the stall; main thread: an event handled
+in the stalled stretch, JS thread: an event that arrived during it; measured from the input monitor that runs only while
+sharing is on); for the JS thread `js_stall_gc_measured`, `js_stall_gc_ms`, `js_stall_gc_longest_ms` and
+`js_stall_gc_bound` (stalls at least half GC); `js_gc_count` and `js_gc_ms` (all collections in the hour) and
+`js_heap_mb_floor` (0, 64, 128, 256, 512, 1024 or 2048). Pages: `renderer_unresponsive` (Chrome's "Page Unresponsive",
+counted when it ends), `renderer_unresponsive_exited` (Exit Page), and by how long it lasted `_under_5s`, `_5_30s`,
+`_30s_2m`, `_over_2m`.
+
+Consent: JS hands the native watch a random epoch for each sharing period (0 while off); a stall is tallied only when
+the epoch at its start is still the current one, a new epoch empties the tallies, and `take(epoch)` answers only for the
+current epoch, so nothing from while sharing was off is sent later. When #2455 lands, the epoch is its consent epoch.
+The `freezeWatchOff` experiment (`ARDIA_SWITCHES=freezeWatchOff=on`) turns the watch off.
+
+Dev commands: `expo.modules.ArdiaDev.devBlockMain(ms)` (Debug builds) spins the main thread and `ac.blockJs(ms, garbage)`
+the JS thread (with `garbage`, allocating, so Hermes collects). `node apps/browser/scripts/freeze-watch-test.mjs <Debug
+app> [--metro=<port>]` blocks each thread for 300 ms, 1.2 s and 6 s and checks each bucket, the GC share, that sharing
+off counts nothing, and a page hung 22 s after a real click (Chrome ignores a hang while DevTools is attached to the
+page, so the test clicks through AppKit).
+
+Idle cost, 2026-11-17: native-bench `--only idle` on a Release build of this change against the same app with
+`ARDIA_SWITCHES=freezeWatchOff=on`, interleaved run by run, 4 runs a side, 60 s idles, engine 2ebf9722fefc. Other agents'
+builds kept the 1-minute load at 89–153, so the CPU rows are indicative only; wakeups are counts and hold up. The
+browser-process wakeups row is the same rusage `perf_memory.browser_wakeups_per_s` reports.
+
+| Idle, median (range) | Watch off | Watch on |
+|---|---:|---:|
+| Wakeups/s, browser process, 1 tab | 2.1 (1.9–2.8) | 1.9 (1.8–2.1) |
+| Wakeups/s, browser process, 20 tabs | 3.2 (3.1–3.5) | 3.2 (3.2–3.4) |
+| Wakeups/s, all processes, 1 tab | 7.2 (7.0–8.8) | 6.5 (6.3–6.9) |
+| Wakeups/s, all processes, 20 tabs | 15.8 (13.3–19.9) | 16.0 (15.7–16.4) |
+| CPU, browser process, 1 tab (load 89–153) | 0.46 % (0.33–0.62) | 0.31 % (0.28–0.33) |
+| CPU, browser process, 20 tabs (load 89–153) | 0.34 % (0.26–0.49) | 0.26 % (0.25–0.37) |
+
+### What caused a freeze (#2479 part 2)
+
+When a busy stretch passes 400 ms while the app is active, a one-shot watchdog on a utility queue
+(`ArdiaFreezeCapture.mm`) samples the stuck thread: up to 3 samples 100 ms apart, 24 frames each
+(`ArdiaStackSample.c`: `thread_info` first and no sample if someone else holds the thread suspended,
+`thread_suspend`, `thread_get_state`, a frame-pointer walk bounded to the thread's own stack, 16-byte aligned, strictly
+upward, read with `mach_vm_read_overwrite` so a bad pointer fails instead of faulting, then `thread_resume`; nothing
+between suspend and resume allocates, locks, logs or calls Objective-C, and a sample whose stretch ended meanwhile is
+dropped). Never with a debugger attached (`P_TRACED`). The watchdog is armed at a loop's after-waiting (when no
+earlier deadline is pending) and disarmed at before-waiting once neither loop is busy and no capture is running, so a
+short stretch costs two timer updates and no wakeup (a wake's deadline check and arming take the same lock as idle
+cancellation, so a loop that wakes while the other is being disarmed always ends up armed: `ArdiaFreezeArming.h`,
+`tests/freeze-arming.test.cc` under ThreadSanitizer); it re-arms only for a stretch still running. Sampling and the
+2-second write run on their own queue, apart from the queue that allocates (recovery, the JS event, annotations), so a
+thread frozen holding the malloc lock can't stop the write; registration takes a small lock, never a queue.
+
+Frames are resolved without `dladdr`: a table of our own images' `__TEXT` ranges and UUIDs (Ardia, Chromium Framework,
+hermes) is built at start, the dyld shared cache's range is "system", anything else "other" with no offset. Two seconds
+into a freeze the watchdog writes the record into one of 20 fixed 4 KB slots (frames stop short of the slot's last 640 bytes, so the images and end marker always fit) of `freezes.txt` in the data folder,
+preformatted into a static buffer with `pwrite` to a file opened at start, so a force quit still leaves it; the frozen
+thread's recovery rewrites the slot with its length, and JS adds the job that was running. Help › Copy Last Freeze
+copies the latest; Copy Diagnostics carries one line (count today, longest, last cause). Hermes's offsets name GC
+(`HadesGC::*`) or the interpreter (`Interpreter::interpretFunction`) from the release framework's own local symbols.
+
+Idle cost of the watchdog, 2026-11-17: native-bench `--only idle` on a Release build with `ARDIA_TEST=freezeWatchActive=1`
+on both sides (hidden instances are never active, so without it the watchdog never arms), against the same app with
+`ARDIA_SWITCHES=freezeWatchOff=on`, interleaved, 4 runs a side, 60 s idles. Load ran from 38 to 730 during the run, so
+only the wakeup counts mean anything.
+
+| Idle, median (range) | Watch off | Watch and watchdog on |
+|---|---:|---:|
+| Wakeups/s, browser process, 1 tab | 2.1 (1.8–2.3) | 1.9 (1.8–2.0) |
+| Wakeups/s, browser process, 20 tabs | 3.2 (2.9–7.4) | 2.8 (2.6–3.0) |
+| Wakeups/s, all processes, 1 tab | 6.5 (6.5–7.0) | 6.8 (6.0–11.2) |
+| Wakeups/s, all processes, 20 tabs | 15.0 (10.2–65.5) | 14.8 (9.2–19.0) |
+
+The job: our own JS jobs mark what they run (`state/app/jobActivity.ts`: `sync`, `sessionSave`, `memoryTrim` (its forced
+`gc()`), `omniboxSuggest`, `liveFolders`, `historyApply`, `import`), and a freeze is given the one it overlapped most.
+
+`app_freeze` (sharing on, and only for a freeze whose consent epoch at its start is still current): `freeze_thread`,
+`freeze_duration` (400ms_1s … over_30s), `freeze_ms`, `input_wait_ms`, `gc_ms`, `gc_count`, `heap_mb_floor`,
+`activity`, `tabs_floor`, `windows`, `sync_on`, `layout`, `action_in_flight` (the journeys' pending new tab, switch,
+navigation or launch), `memory_pressure`, `thermal`, `on_battery`, `uptime`, `signature` (`sig_` and the FNV-1a, in hex, of the top three frames
+from our own images), `samples`, and `freeze_frames`/`freeze_images` in the crash reports' shape. At most 5 a session and
+20 a UTC day, one per signature a day, counted in `freeze-sends.json` (the day, its send count and its signatures; apart from the 20-slot local ring, which wraps). The dashboard's Performance › Freezes card
+ranks signatures over 7 days by people affected, then total time frozen.
+
 ## Rows that don't compare with CEF-era numbers (0.2.21 and older)
 
 | Row | Why | Compare instead |

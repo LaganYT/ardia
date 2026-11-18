@@ -26,6 +26,7 @@ import { PLATFORM_TERMS } from "../../lib/platformTerms";
 import { splitOf } from "../splits/splits";
 import { closeKind } from "../tabs/tabs";
 import { noteSplit } from "../telemetry/usage";
+import { consentToken } from "../telemetry/client";
 import { isPeekTab } from "../peek/peek";
 import { noteTabClosedByUser } from "../sync/openTabCloses";
 
@@ -46,6 +47,7 @@ export function switchToTab(tabId: string) {
 }
 
 export async function closeTab(tabId: string) {
+  const consent = consentToken();
   const s = store();
   const tab = s.tabs[tabId];
   const w = tab && s.windows[tab.windowId];
@@ -64,7 +66,7 @@ export async function closeTab(tabId: string) {
     noteTabClosedByUser(tabId);
     return closeWindowAnimated(w.id);
   }
-  if (splitOf(now, tabId) && closeKind(now, tabId) === "close") noteSplit("splitPaneCloses");
+  if (splitOf(now, tabId) && closeKind(now, tabId) === "close") noteSplit("splitPaneCloses", consent);
   store().closeTab(tabId);
 }
 

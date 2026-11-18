@@ -1,7 +1,7 @@
 import type { BrowserState } from "../browser/store";
 import { leaveGroups } from "../groups/groups";
 import { withShownTab } from "../groups/shownTabs";
-import { byRecentUse, IDLE_LIVE, inPinnedContainer, makeTab, navigationTo, TILE_PIN, viewTabIds, without } from "../browser/model";
+import { byRecentUse, inPinnedContainer, makeTab, navigationTo, TILE_PIN, viewTabIds, without } from "../browser/model";
 import { closeSuccessor, forgetOpeners, insertionIndex } from "./openers";
 import { onUrlChange, pruneSelection } from "../pins/organize";
 import { isClosedPin } from "../pins/tabCleanup";
@@ -170,7 +170,6 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
     windows,
     windowOrder: removedWindows.length ? s.windowOrder.filter((id) => !removedWindows.includes(id)) : s.windowOrder,
     windowUi: removedWindows.length ? without(s.windowUi, removedWindows) : s.windowUi,
-    live: without(s.live, gone),
     find: without(s.find, gone),
     groups: leaveGroups(s.groups, gone),
     splits: removeFromSplits(s.splits, gone),
@@ -216,7 +215,6 @@ export function unloadPinnedTabs(s: BrowserState, requested: string[], keepTopAp
   const runningInFront = (id: string) => withPinnedPanes(s, [id]).some((pane) => isTopApp(s.tabs[pane]) && hasPage(s.tabs[pane]!));
   const now = Date.now();
   const tabs = { ...s.tabs };
-  const live = { ...s.live };
   const closed: ClosedTab[] = [];
   for (const id of unloading) {
     const t = s.tabs[id]!;
@@ -228,12 +226,10 @@ export function unloadPinnedTabs(s: BrowserState, requested: string[], keepTopAp
     const back = backToPin(s, t);
     const pending = !back.url && pendingRestore(t) ? restoreId(pendingRestore(t)!) : undefined;
     tabs[id] = { ...t, ...back, page: withWake(ASLEEP, pending) };
-    live[id] = IDLE_LIVE;
   }
   let next: BrowserState = {
     ...s,
     tabs,
-    live,
     find: without(s.find, unloaded),
     splits: removeFromSplits(s.splits, new Set([...gone].filter((id) => !splitTabIdsOf(splitOf(s, id))?.every((pane) => gone.has(pane))))),
     selection: pruneSelection(s.selection, gone),
@@ -306,7 +302,6 @@ export function withNewTab(s: BrowserState, windowId: string, o: NewTabOptions =
   let next: BrowserState = {
     ...s,
     tabs,
-    live: { ...s.live, [tab.id]: IDLE_LIVE },
     windows: { ...s.windows, [windowId]: window },
   };
   if (!o.background) next = apply(next, activated(next, tab.id));

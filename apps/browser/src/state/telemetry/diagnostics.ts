@@ -6,7 +6,8 @@ import { withDeadline } from "../../lib/deadline";
 import { hermesHeapMegabytes } from "../../lib/hermesHeap";
 import { activeTab } from "../browser/model";
 import { useBrowser } from "../browser/store";
-import { capture, isSharing, saveContext, useTelemetry } from "./client";
+import { capture, consentNow, consentToken, counted, isSharing, saveContext, stillValid, onConsentPeriodChange } from "./client";
+import { nativeConsent } from "./nativeConsent";
 import { formatRecentPages, readRecentPages, type RecentPage, type SavedContext } from "./savedContext";
 import { noteDragsEnded } from "./stuckDrags";
 import { noteWindowlessPages } from "./cliCounts";
@@ -81,14 +82,15 @@ function noteWebuiPage(page: string, at: number) {
 export const noteAppMemory = (totalMb: number) => (appMemoryMb = totalMb);
 
 export async function recordContext(): Promise<SavedContext | null> {
-  if (!isSharing()) return null;
-  void cliControlStatus().then((status) => {
+  const consent = consentToken();
+  if (!consent) return null;
+  void cliControlStatus().then((status) => counted(consent, () => {
     noteDragsEnded(status.dragsEnded);
     noteWindowlessPages(status.windowlessPages);
-  }, () => {});
+  }), () => {});
   const epoch = contextEpoch;
   const [sample, pressure] = await Promise.all([diagnosticsSample().catch(() => ({ footprintMB: undefined, freeDiskGB: undefined })), memoryPressure()]);
-  if (!isSharing() || epoch !== contextEpoch) return null;
+  if (!stillValid(consent) || epoch !== contextEpoch) return null;
   const now = Date.now();
   const page = activeWebuiPage();
   if (page) noteWebuiPage(page, now);
@@ -116,26 +118,36 @@ function keepRecent(list: SavedContext[], now: number): SavedContext[] {
   return (recent.length >= MIN_SAMPLES ? recent : list.slice(-MIN_SAMPLES)).slice(-MAX_SAMPLES);
 }
 
-export const takeMainProcessWork = async () => mainProcessWork(await diagnosticsSample().catch(() => ({})), Date.now());
+let reads: Promise<unknown> = Promise.resolve();
 
-export async function takeContentDriftCounts(): Promise<Record<string, number>> {
-  const drift = await call("webView.takeContentDrift", {}).catch(() => null);
-  if (!drift) return {};
-  return { content_layer_layouts: drift.layouts, content_layer_refits: drift.fits, content_layer_drift_max_pt: drift.maxPoints };
+function inTurn<T>(read: () => Promise<T>): Promise<T> {
+  const next = reads.then(read, read);
+  reads = next.catch(() => null);
+  return next;
 }
 
-export async function takeColdTabHoldCounts(): Promise<Record<string, number>> {
-  const holds = await call("webView.takeFirstPaintHolds", {}).catch(() => null);
-  if (!holds) return {};
-  return {
-    cold_tab_holds: holds.held,
-    cold_tab_holds_painted: holds.painted,
-    cold_tab_holds_loaded: holds.loaded,
-    cold_tab_holds_pressed: holds.pressed,
-    cold_tab_holds_timed_out: holds.timedOut,
-    cold_tab_hold_ms: holds.heldMs,
-  };
-}
+export const takeMainProcessWork = () => inTurn(async () => mainProcessWork(await diagnosticsSample().catch(() => ({})), Date.now()));
+
+export const takeContentDriftCounts = (): Promise<Record<string, number>> =>
+  inTurn(async (): Promise<Record<string, number>> => {
+    const drift = await call("webView.takeContentDrift", {}).catch(() => null);
+    if (!drift) return {};
+    return { content_layer_layouts: drift.layouts, content_layer_refits: drift.fits, content_layer_drift_max_pt: drift.maxPoints };
+  });
+
+export const takeColdTabHoldCounts = (): Promise<Record<string, number>> =>
+  inTurn(async (): Promise<Record<string, number>> => {
+    const holds = await call("webView.takeFirstPaintHolds", {}).catch(() => null);
+    if (!holds) return {};
+    return {
+      cold_tab_holds: holds.held,
+      cold_tab_holds_painted: holds.painted,
+      cold_tab_holds_loaded: holds.loaded,
+      cold_tab_holds_pressed: holds.pressed,
+      cold_tab_holds_timed_out: holds.timedOut,
+      cold_tab_hold_ms: holds.heldMs,
+    };
+  });
 
 export const contextSamples = () => samples;
 
@@ -148,7 +160,10 @@ function forgetContext() {
   pageProcessesGone = 0;
 }
 
-useTelemetry.subscribe((s, prev) => prev.sharing !== s.sharing && forgetContext());
+onConsentPeriodChange(() => {
+  forgetContext();
+  hoverLostEvents = windowUnpaintedEvents = 0;
+});
 
 useBrowser.subscribe((s, prev) => {
   if (s.profiles === prev.profiles || size(s.profiles) >= size(prev.profiles)) return;
@@ -248,6 +263,7 @@ const GONE_REASONS = new Set(["abnormal", "killed", "crashed", "oom", "launchFai
 export type PageTranslateContext = { translate: string; translate_stage: string | null; translating_tabs: number; translated_tabs: number };
 
 export function trackPageProcessGone(info: { reason: string; code: number }, visible: boolean, translate?: PageTranslateContext) {
+  const consent = consentNow();
   pageProcessesGone++;
   if (pageProcessEvents >= MAX_PAGE_PROCESS_EVENTS) return;
   pageProcessEvents++;
@@ -262,7 +278,7 @@ export function trackPageProcessGone(info: { reason: string; code: number }, vis
     session_min: sessionMinutes(),
     gone_this_session: pageProcessesGone,
   };
-  void memoryPressure().then((memory_pressure) => capture("page_process_gone", { ...props, memory_pressure }));
+  void memoryPressure().then((memory_pressure) => capture("page_process_gone", { ...props, memory_pressure }, consent));
 }
 
 const HOVER_REASONS = new Set(["halfActive", "staleMenu", "notKeyOrMain", "coveredByView", "responderLost", "coveredByWindow"]);
@@ -296,15 +312,16 @@ export function hoverLostProperties(e: HoverLostEpisode) {
     heal_worked: typeof e.healWorked === "boolean" ? e.healWorked : null,
     ended_by: oneOf(HOVER_ENDINGS, e.endedBy),
     lost_seconds: Number.isFinite(e.seconds) ? Math.min(Math.max(0, Math.round(e.seconds)), MAX_HOVER_LOST_SECONDS) : null,
-    episode: Number.isSafeInteger(e.episode) ? e.episode : null,
     session_min: sessionMinutes(),
   };
 }
 
 export function trackHoverLost(e: HoverLostEpisode) {
+  const consent = nativeConsent(e);
   if (hoverLostEvents >= MAX_HOVER_LOST_EVENTS) return;
-  hoverLostEvents++;
-  capture("page_hover_lost", hoverLostProperties(e));
+  const valid = stillValid(consent);
+  if (valid) hoverLostEvents++;
+  capture("page_hover_lost", { ...hoverLostProperties(e), episode: valid ? hoverLostEvents : null }, consent);
 }
 
 const UNPAINTED_WINDOWS = new Set(["regular", "private"]);
@@ -339,9 +356,10 @@ export function windowUnpaintedProperties(r: WindowUnpaintedRecord) {
 }
 
 export function trackWindowUnpainted(r: WindowUnpaintedRecord) {
+  const consent = nativeConsent(r);
   if (windowUnpaintedEvents >= MAX_WINDOW_UNPAINTED_EVENTS) return;
-  windowUnpaintedEvents++;
-  capture("window_unpainted", windowUnpaintedProperties(r));
+  if (stillValid(consent)) windowUnpaintedEvents++;
+  capture("window_unpainted", windowUnpaintedProperties(r), consent);
 }
 
 export function watchEngineReports() {

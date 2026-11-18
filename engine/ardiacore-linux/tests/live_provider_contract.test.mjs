@@ -184,14 +184,14 @@ test("GitHub: a token connects from the documented viewer reply and a folder map
 test("GitHub: bad credentials, the primary and secondary rate limits and SAML enforcement keep their meaning", async () => {
   serve("api.github.com /graphql", "badCredentials");
   await rejectsWith(SOURCES.github.fetch(prFolder), "signedOut");
+  serve("api.github.com /graphql", "ssoRequired");
+  await rejectsWith(SOURCES.github.fetch(prFolder), "sso");
   serve("api.github.com /graphql", "primaryRateLimit");
   await rejectsWith(SOURCES.github.fetch(prFolder), "rateLimited", /^Rate Limit Exceeded$/);
   serve("api.github.com /graphql", "secondaryRateLimit");
   await rejectsWith(SOURCES.github.fetch(prFolder), "rateLimited");
   serve("api.github.com /graphql", "secondaryRateLimitNoRetryAfter");
   await rejectsWith(SOURCES.github.fetch(prFolder), "rateLimited");
-  serve("api.github.com /graphql", "ssoRequired");
-  await rejectsWith(SOURCES.github.fetch(prFolder), "sso");
   assert.ok(live().accounts.github, "a refresh failure never drops the account");
 });
 

@@ -94,6 +94,7 @@ export type BrowserCommand =
   | "reportProblem"
   | "keyboardShortcuts"
   | "copyDiagnostics"
+  | "copyLastFreeze"
   | "toolTour"
   | "videoTour"
   | "releaseNotes"

@@ -2,7 +2,6 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import {
   findLast,
-  IDLE_LIVE,
   incognitoProfileId,
   inPinnedContainer,
   isIncognitoProfile,
@@ -101,14 +100,12 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
   const joinable = new Set(moving.filter((t) => !groupOf(s, t.id) && !inPinnedContainer(s, t.id)).map((t) => t.id));
   let next = removeTabs(s, moving.map((t) => t.id), false);
   const tabs = { ...next.tabs };
-  const live = { ...next.live };
   for (const tab of moving) {
     const t = tab;
     const loaded = hasLoadedPage(tab);
     tabs[t.id] = { ...t, windowId: targetId, page: loaded ? loadedPage(navigationTo(t.url)) : hasPage(tab) ? IDLE : tab.page };
-    live[t.id] = IDLE_LIVE;
   }
-  next = { ...next, tabs, live };
+  next = { ...next, tabs };
   for (const profileId of new Set(moving.map((t) => t.profileId))) {
     next = placeMovedTabs(next, targetId, moving.filter((t) => t.profileId === profileId).map((t) => t.id), joinable);
   }
@@ -161,7 +158,6 @@ function intoProfile(s: BrowserState, tabId: string, profileId: string): Browser
     ...next,
     tabs,
     pinChoices,
-    live: { ...next.live, [tabId]: IDLE_LIVE },
     windows: { ...next.windows, [w.id]: { ...base, tabIds: orderSections(tabIds, tabs, next.groups) } },
     windowOrder: next.windowOrder.includes(w.id) ? next.windowOrder : s.windowOrder,
   };

@@ -43,11 +43,28 @@ test("asking only for the group that changed keeps no earlier groups record aliv
   assert.ok(newest.A && newest.B);
 });
 
-test("a group's entries come from its memo while the groups record, splits and tab places are the same", () => {
-  const groups = { A: group("A", 0, ["a1", "a2"]) };
+function countingGroup(id, tabIds) {
+  const g = { id, name: id, parentId: null, pinned: false, reads: 0 };
+  Object.defineProperty(g, "tabIds", { enumerable: true, get: () => (g.reads++, tabIds) });
+  return g;
+}
+
+test("a group's entries come from its memo, without deriving them again, while the groups record, splits and tab places are the same", () => {
+  const a = countingGroup("A", ["a1", "a2"]);
+  const groups = { A: a };
   const first = groupEntries({ tabs, splits, groups }, "A");
+  assert.deepEqual(first, rows("a1", "a2"));
+  const derived = a.reads;
+  assert.ok(derived > 0);
   assert.equal(groupEntries({ tabs, splits, groups }, "A"), first);
   assert.equal(groupEntries({ tabs: { ...tabs }, splits, groups }, "A"), first);
-  const regrouped = { ...groups, C: group("C", 0, []) };
-  assert.deepEqual(groupEntries({ tabs, splits, groups: regrouped }, "A"), first);
+  assert.equal(a.reads, derived, "a memo hit reads nothing of the group");
+});
+
+test("a new groups record with a child holding one of the group's tabs derives the entries again", () => {
+  const a = group("A", 0, ["a1", "a2"]);
+  const groups = { A: a };
+  assert.deepEqual(groupEntries({ tabs, splits, groups }, "A"), rows("a1", "a2"));
+  const nested = { A: a, C: { id: "C", name: "C", tabIds: ["a1"], parentId: "A", pinned: false } };
+  assert.deepEqual(groupEntries({ tabs, splits, groups: nested }, "A"), [entryKey("group", "C"), entryKey("tab", "a2")]);
 });

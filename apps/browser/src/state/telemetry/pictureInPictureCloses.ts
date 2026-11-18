@@ -1,5 +1,5 @@
 import type { PictureInPictureState } from "../../platform/media";
-import { isSharing, useTelemetry } from "./choice";
+import { isSharing, onConsentPeriodChange } from "./choice";
 
 export type PictureInPictureCloser = NonNullable<PictureInPictureState["closedBy"]>;
 
@@ -7,9 +7,7 @@ const none = () => ({ app: { auto: 0, manual: 0 }, chrome: { auto: 0, manual: 0 
 
 let closed = none();
 
-useTelemetry.subscribe((current, previous) => {
-  if (current.sharing !== previous.sharing) closed = none();
-});
+onConsentPeriodChange(() => (closed = none()));
 
 export function notePictureInPictureClosed(closedBy: PictureInPictureCloser, auto: boolean) {
   if (!isSharing() || !(closedBy in closed)) return;

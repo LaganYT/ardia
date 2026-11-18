@@ -414,6 +414,14 @@ public final class PageViewModule: Module {
         view.swipeNavigation = mode.flatMap(PageGestures.Swipe.init(rawValue:)) ?? .anywhere
       }
 
+      Prop("closesOnSwipeBack") { (view: PageView, closes: Bool?) in
+        view.closesOnSwipeBack = closes == true
+      }
+
+      Prop("reopensOnSwipeForward") { (view: PageView, reopens: Bool?) in
+        view.reopensOnSwipeForward = reopens == true
+      }
+
       Prop("pullToRefresh") { (view: PageView, pulls: Bool?) in
         view.pullToRefresh = pulls ?? true
       }

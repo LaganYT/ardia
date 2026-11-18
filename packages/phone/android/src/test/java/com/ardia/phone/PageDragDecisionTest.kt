@@ -19,7 +19,9 @@ class PageDragDecisionTest {
         canScrollRight: Boolean = false,
         canScrollUp: Boolean = false,
         isLoading: Boolean = false,
-    ) = PageDragDecision.decide(mode, pull, dx, dy, startX, 1080f, 72f, canGoBack, canGoForward, canScrollLeft, canScrollRight, canScrollUp, isLoading)
+        closesPastBack: Boolean = false,
+        reopensPastForward: Boolean = false,
+    ) = PageDragDecision.decide(mode, pull, dx, dy, startX, 1080f, 72f, canGoBack, canGoForward, canScrollLeft, canScrollRight, canScrollUp, isLoading, closesPastBack, reopensPastForward)
 
     @Test
     fun aSidewaysDragGoesBackOrForwardOnlyWhenThePageCannotScrollThatWay() {
@@ -39,6 +41,19 @@ class PageDragDecisionTest {
         assertNull(decide(mode = SwipeMode.Off, dx = 60f))
         assertEquals(SwipeMode.Off, SwipeMode.of("unknown"))
         assertEquals(SwipeMode.Edges, SwipeMode.of("edges"))
+    }
+
+    @Test
+    fun aSwipePastTheHistoryRunsOnlyWhenItCanCloseOrReopenATab() {
+        assertEquals(SwipeDirection.Back, decide(dx = 60f, dy = 5f, canGoBack = false, closesPastBack = true)?.direction)
+        assertEquals(SwipeDirection.Forward, decide(dx = -60f, dy = 5f, canGoForward = false, reopensPastForward = true)?.direction)
+        assertNull(decide(dx = -60f, dy = 5f, canGoForward = false, closesPastBack = true))
+        assertNull(decide(dx = 60f, dy = 5f, canGoBack = false, closesPastBack = true, canScrollLeft = true))
+        assertNull(decide(mode = SwipeMode.Edges, dx = 60f, startX = 500f, canGoBack = false, closesPastBack = true))
+        assertEquals(SwipeDirection.Back, decide(mode = SwipeMode.Edges, dx = 60f, startX = 20f, canGoBack = false, closesPastBack = true)?.direction)
+        assertNull(decide(mode = SwipeMode.Off, dx = 60f, canGoBack = false, closesPastBack = true, pull = false))
+        assertEquals(true, com.ardia.browsing.PageSwipe.isPastHistory(SwipeDirection.Back, canGoBack = false, canGoForward = true))
+        assertEquals(false, com.ardia.browsing.PageSwipe.isPastHistory(SwipeDirection.Forward, canGoBack = false, canGoForward = true))
     }
 
     @Test

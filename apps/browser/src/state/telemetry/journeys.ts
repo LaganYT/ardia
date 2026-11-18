@@ -1,6 +1,6 @@
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId } from "../browser/model";
-import { capture, isSharing, useTelemetry } from "./client";
+import { capture, consentNow, isSharing, onConsentPeriodChange } from "./client";
 import { appInfo, percentile } from "./transport";
 import { jsStartedAt } from "./jsStart";
 import { fieldTiming } from "../../platform/fieldTiming";
@@ -41,7 +41,7 @@ export function emitJourneys(final = false) {
   props.tabs = Object.keys(useBrowser.getState().tabs).length;
   samples.clear();
   counts.clear();
-  if (on && isSharing()) capture("perf_journeys", props);
+  if (on && isSharing()) capture("perf_journeys", props, consentNow());
 }
 
 function lastInput(now = Date.now()): number | null {
@@ -79,6 +79,9 @@ type Pending = NewTab | Switch | Navigate | Launch;
 
 const MAX_PENDING = 50;
 let pending: Pending[] = [];
+const JOURNEY_ACTIONS = { j1: "launch", j2: "newTab", j3: "switchTab", j4: "navigate" } as const;
+export const journeyInFlight = (end: number): (typeof JOURNEY_ACTIONS)[Pending["journey"]] | "none" =>
+  JOURNEY_ACTIONS[pending.filter((p) => p.t0 <= end).at(-1)?.journey as Pending["journey"]] ?? "none";
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 function begin(p: Pending) {
@@ -280,7 +283,7 @@ function sendLaunch(l: Launch, content: number | null, paints: number[]) {
     launched_hidden: typeof launchedHidden === "boolean" ? launchedHidden : null,
     launch_source: typeof launchSource === "string" && LAUNCH_SOURCES.has(launchSource) ? launchSource : null,
     since_boot: bootTime ? bucket(l.t0 - bootTime, [[2 * MINUTE, "<2m"], [10 * MINUTE, "<10m"], [HOUR, "<1h"], [DAY, "<1d"]], "1d+") : "unknown",
-  });
+  }, consentNow());
 }
 
 function watchStore(s: BrowserState, prev: BrowserState) {
@@ -367,7 +370,10 @@ function setOn(next: boolean, initial = false) {
 export function startJourneys(previous: PreviousLaunch | null) {
   if (previous) previousLaunch = previous;
   setOn(isSharing(), true);
-  useTelemetry.subscribe((t) => setOn(t.sharing));
+  onConsentPeriodChange(() => {
+    setOn(false);
+    setOn(isSharing());
+  });
 }
 
 export function journeysEnding() {

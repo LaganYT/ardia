@@ -366,7 +366,7 @@ NSImage *_Nullable PermissionIcon(NSDictionary *request) {
   id keySystem = ((NSDictionary *)data)[@"keySystem"];
   NSString *family = KeySystemFamily([keySystem isKindOfClass:NSString.class] ? keySystem : nil);
   NSLog(@"[ardiacore] popup protected media %@: %@", [family isEqualToString:@"none"] ? @"stalled" : @"refused", family);
-  [ArdiaEvents emit:@"engine.popupProtectedMedia" data:@{@"family" : family, @"listed" : @(OnProtectedVideoSite(tab.url))}];
+  [ArdiaEvents emit:@"engine.popupProtectedMedia" data:[ArdiaConsentStamp.begin onto:@{@"family" : family, @"listed" : @(OnProtectedVideoSite(tab.url))}]];
 }
 
 - (ArdiaWebView *)promptHost {

@@ -14,6 +14,7 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
 
   private struct SwipeState {
     var direction: SwipeNavigationDirection
+    var isPastHistory: Bool
     var target: UIView
     var shade: UIView
     var isPastCommit = false
@@ -24,6 +25,7 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
   static let commitHysteresis: CGFloat = 12
   static let parallax = -Layout.swipeParallax
   static let refreshDeadline: Duration = .seconds(8)
+  static let edgeWidth: CGFloat = 24
 
   var swipe: Swipe = .anywhere {
     didSet { if swipe != oldValue { apply() } }
@@ -32,6 +34,16 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
   var pulls = true {
     didSet { if pulls != oldValue { apply() } }
   }
+
+  var closesPastBack = false {
+    didSet { if closesPastBack != oldValue { apply() } }
+  }
+
+  var reopensPastForward = false {
+    didSet { if reopensPastForward != oldValue { apply() } }
+  }
+
+  var onSwipedPastHistory: ((SwipeNavigationDirection) -> Void)?
 
   var isSwiping: Bool { state != nil }
 
@@ -81,7 +93,7 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
   private func apply() {
     guard let webView else { return }
     webView.allowsBackForwardNavigationGestures = swipe == .edges
-    pan.isEnabled = swipe == .anywhere
+    pan.isEnabled = swipe == .anywhere || swipe == .edges && (closesPastBack || reopensPastForward)
     if pulls {
       if webView.scrollView.refreshControl !== refreshControl { webView.scrollView.refreshControl = refreshControl }
     } else if webView.scrollView.refreshControl === refreshControl {
@@ -109,13 +121,19 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
   }
 
   func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-    guard recognizer === pan, swipe == .anywhere, let container, let page, let webView, webView.superview === container else { return false }
+    guard recognizer === pan, swipe != .off, let container, let page, let webView, webView.superview === container else { return false }
     let velocity = pan.velocity(in: container)
     guard abs(velocity.x) > abs(velocity.y) * 1.6, abs(velocity.x) > 120 else { return false }
     let back = velocity.x > 0
-    guard back ? page.canGoBack : page.canGoForward else { return false }
-    let start = pan.location(in: webView)
-    return !Self.scrollerUnder(start, in: webView, canScrollBack: back)
+    let hasHistory = back ? page.canGoBack : page.canGoForward
+    let passesHistory = !hasHistory && (back ? closesPastBack : reopensPastForward)
+    if swipe == .edges {
+      guard passesHistory else { return false }
+      let startX = pan.location(in: container).x - pan.translation(in: container).x
+      return back ? startX <= Self.edgeWidth : startX >= container.bounds.width - Self.edgeWidth
+    }
+    guard hasHistory || passesHistory else { return false }
+    return !Self.scrollerUnder(pan.location(in: webView), in: webView, canScrollBack: back)
   }
 
   static func scrollerUnder(_ point: CGPoint, in webView: WKWebView, canScrollBack back: Bool) -> Bool {
@@ -140,11 +158,12 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
     switch recognizer.state {
     case .began:
       let direction: SwipeNavigationDirection = recognizer.velocity(in: container).x > 0 ? .back : .forward
+      let isPastHistory = direction == .back ? !page.canGoBack : !page.canGoForward
       let scrollPan = webView.scrollView.panGestureRecognizer
       scrollPan.isEnabled = false
       scrollPan.isEnabled = true
       let target: UIView
-      if let image = page.snapshotForSwipe(direction) {
+      if !isPastHistory, let image = page.snapshotForSwipe(direction) {
         let imageView = UIImageView(image: image)
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
@@ -175,7 +194,7 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
       webView.layer.shadowOpacity = direction == .back ? 0.18 : 0
       webView.layer.shadowRadius = 12
       webView.layer.shadowPath = UIBezierPath(rect: webView.bounds).cgPath
-      state = SwipeState(direction: direction, target: target, shade: shade)
+      state = SwipeState(direction: direction, isPastHistory: isPastHistory, target: target, shade: shade)
       swipeFeedback.prepare()
     case .changed:
       guard var state else { return }
@@ -240,7 +259,13 @@ final class PageGestures: NSObject, UIGestureRecognizerDelegate {
       container.bringSubviewToFront(state.target)
       state.target.transform = .identity
       state.target.layer.shadowOpacity = 0
-      if state.direction == .back { page.goBack() } else { page.goForward() }
+      if state.direction == .back ? !page.canGoBack : !page.canGoForward {
+        self.onSwipedPastHistory?(state.direction)
+      } else if state.direction == .back {
+        page.goBack()
+      } else {
+        page.goForward()
+      }
       UIView.animate(withDuration: 0.2, delay: 0.25, options: [.curveEaseOut, .allowUserInteraction]) {
         state.target.alpha = 0
       } completion: { _ in

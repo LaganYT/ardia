@@ -1,4 +1,5 @@
 #import "ArdiaFieldTiming.h"
+#import "ArdiaFreezeWatch.h"
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -40,6 +41,7 @@ void SetEnabled(bool enabled) {
                                                             handler:^NSEvent *(NSEvent *event) {
         gLastInputAt = EventTime(event);
         gLastInputKind = event.type == NSEventTypeKeyDown ? 1 : 2;
+        ArdiaFreezeNoteInput(event.timestamp);
         return event;
       }];
     } else if (!enabled && gInputMonitor) {

@@ -36,6 +36,7 @@ final class FocusHandoff {
     weak var resigned: NSView?
     var restoresSource = true
     var deadline: CFTimeInterval = 0
+    var epoch = ""
     var timer: DispatchWorkItem?
     var generations: [Generation] = []
     var held: [Held] = []
@@ -50,6 +51,7 @@ final class FocusHandoff {
   private var begun: Int?
   private var monitor: Any?
   private let editKeys = NSMapTable<NSEvent, NSArray>(keyOptions: .weakMemory, valueOptions: .strongMemory)
+  private let editKeyConsent = NSMapTable<NSEvent, NSString>(keyOptions: .weakMemory, valueOptions: .strongMemory)
   private var keyEpochs = KeyEpochs()
   private let ackLock = NSLock()
   private var editKeyAcks: [String: Int] = [:]
@@ -81,7 +83,7 @@ final class FocusHandoff {
     let gate = existing ?? open(in: window)
     if existing != nil {
       setDeadline(of: gate, after: Self.pickupLimit)
-      outcomes.add("superseded")
+      outcomes.add("superseded", since: gate.epoch)
     }
     if let page = focused as? NSView, Self.isPage(page) {
       ArdiaWebView.keepOutgoingFocus(from: page)
@@ -90,6 +92,7 @@ final class FocusHandoff {
     }
     generations += 1
     drop(in: gate, because: .superseded) { _ in true }
+    gate.epoch = outcomes.epoch
     gate.generations = [Generation(generations)]
     begun = generations
     note("begin \(generations)")
@@ -130,8 +133,12 @@ final class FocusHandoff {
     guard let window, let event = acknowledged, let closed = closedAt[window.windowNumber], event.timestamp < closed,
       let typed = typedAfterGate[window.windowNumber], typed > event.timestamp else { return false }
     note("drop \(action): acknowledged after later keys were replayed")
-    refuse(.lateAcknowledgement, [.action(action)])
+    refuse(.lateAcknowledgement, [.action(action)], since: consentAtArrival(of: event))
     return true
+  }
+
+  private func consentAtArrival(of event: NSEvent) -> String {
+    editKeyConsent.object(forKey: event) as String? ?? ""
   }
 
   private static func origin(of event: NSEvent?) -> TimeInterval? {
@@ -176,7 +183,7 @@ final class FocusHandoff {
       return false
     }
     countEditKeyAck(afterHandback ? "afterHandbackRefused" : "refused")
-    refuse(.staleEpoch, [.key(event, up: nil)])
+    refuse(.staleEpoch, [.key(event, up: nil)], since: consentAtArrival(of: event))
     return true
   }
 
@@ -207,6 +214,7 @@ final class FocusHandoff {
       }
       if event.type == .keyDown, Self.isEditKey(event) {
         self.editKeys.setObject([window.windowNumber, self.keyEpochs.epoch(of: window.windowNumber)] as NSArray, forKey: event)
+        self.editKeyConsent.setObject(ArdiaConsentStamp.begin().epoch as NSString, forKey: event)
       }
       if event.type == .keyUp { return self.releases(event, in: gate) ? nil : event }
       if gate == nil, !event.modifierFlags.contains(.command) { self.noteTyped(event, in: window) }
@@ -235,7 +243,9 @@ final class FocusHandoff {
 
   func noteForwarded(_ action: Selector) { note("forward \(action)") }
 
-  func takeOutcomes() -> [String: Int] { outcomes.take() }
+  func takeOutcomes() -> [String: [String: Int]] { outcomes.take() }
+
+  func setConsentEpoch(_ epoch: String) { outcomes.epoch = epoch }
 
   private func releases(_ up: NSEvent, in gate: Gate?) -> Bool {
     guard let release = releases.removeValue(forKey: up.keyCode) else { return false }
@@ -282,7 +292,7 @@ final class FocusHandoff {
     let timer = DispatchWorkItem { [weak self, weak gate] in
       guard let self, let gate, let window = gate.window, self.gates[ObjectIdentifier(window)] === gate else { return }
       self.note("deadline")
-      self.outcomes.add("timedOut")
+      self.outcomes.add("timedOut", since: gate.epoch)
       self.end(gate, restoring: true, because: .deadline)
     }
     gate.timer = timer
@@ -297,7 +307,7 @@ final class FocusHandoff {
   private func live(_ gate: Gate) -> Bool {
     if CACurrentMediaTime() < gate.deadline { return true }
     note("expired")
-    outcomes.add("timedOut")
+    outcomes.add("timedOut", since: gate.epoch)
     end(gate, restoring: true, because: .deadline)
     return false
   }
@@ -315,8 +325,8 @@ final class FocusHandoff {
       self.drop(in: gate, because: .superseded) { $0.generation != newest.id }
       gate.held = []
       self.close(gate)
-      self.outcomes.delivered(after: CACurrentMediaTime() - newest.began)
-      if let destination = newest.destination { self.replay(mine, into: destination, in: window) }
+      self.outcomes.delivered(after: CACurrentMediaTime() - newest.began, since: gate.epoch)
+      if let destination = newest.destination { self.replay(mine, into: destination, in: window, since: gate.epoch) }
     }
   }
 
@@ -359,14 +369,14 @@ final class FocusHandoff {
     gates.values.first { $0.generations.contains { $0.id == id } }
   }
 
-  private func replay(_ held: [Held], into destination: NSView, in window: NSWindow) {
+  private func replay(_ held: [Held], into destination: NSView, in window: NSWindow, since epoch: String) {
     guard !held.isEmpty else { return }
     note("replay \(held.count) into \(type(of: destination))")
     for entry in held { if case .key(let down, _) = entry.input { noteTyped(down, in: window) } }
     for (index, entry) in held.enumerated() {
       guard let responder = window.firstResponder as? NSView, responder === destination || responder.isDescendant(of: destination) else {
-        outcomes.add("dropped", held.count - index)
-        return refuse(.focusLost, held[index...].map(\.input))
+        outcomes.add("dropped", held.count - index, since: epoch)
+        return refuse(.focusLost, held[index...].map(\.input), since: epoch)
       }
       switch entry.input {
       case .key(let down, let up):
@@ -390,14 +400,14 @@ final class FocusHandoff {
     let gone = gate.held.filter(dropped)
     guard !gone.isEmpty else { return }
     gate.held.removeAll(where: dropped)
-    outcomes.add("dropped", gone.count)
-    refuse(reason, gone.map(\.input))
+    outcomes.add("dropped", gone.count, since: gate.epoch)
+    refuse(reason, gone.map(\.input), since: gate.epoch)
   }
 
-  private func refuse(_ reason: Refusal, _ inputs: [Input]) {
+  private func refuse(_ reason: Refusal, _ inputs: [Input], since epoch: String? = nil) {
     note("drop \(inputs.count) \(reason.rawValue)")
     NSSound.beep()
-    if inputs.contains(where: Self.isPaste) { PasteRefusal.report(reason, ["dropped": inputs.count]) }
+    if inputs.contains(where: Self.isPaste) { PasteRefusal.report(reason, ["dropped": inputs.count], stamp: epoch.map(ArdiaConsentStamp.init(epoch:)) ?? ArdiaConsentStamp.begin()) }
   }
 
   private static func isPaste(_ input: Input) -> Bool {
@@ -431,20 +441,26 @@ final class FocusHandoff {
 
 final class HandoffOutcomes {
   private let lock = NSLock()
-  private var counts: [String: Int] = [:]
+  private var counts: [String: [String: Int]] = [:]
+  private var current = ""
 
-  func add(_ outcome: String, _ by: Int = 1) {
+  var epoch: String {
+    get { lock.lock(); defer { lock.unlock() }; return current }
+    set { lock.lock(); current = newValue; counts = [:]; lock.unlock() }
+  }
+
+  func add(_ outcome: String, _ by: Int = 1, since epoch: String) {
     lock.lock()
-    counts[outcome, default: 0] += by
+    counts[epoch, default: [:]][outcome, default: 0] += by
     lock.unlock()
   }
 
-  func delivered(after seconds: CFTimeInterval) {
-    add("delivered")
-    add(seconds < 0.4 ? "pickupUnder400ms" : seconds < 1 ? "pickup400To1000ms" : "pickupOver1s")
+  func delivered(after seconds: CFTimeInterval, since epoch: String) {
+    add("delivered", since: epoch)
+    add(seconds < 0.4 ? "pickupUnder400ms" : seconds < 1 ? "pickup400To1000ms" : "pickupOver1s", since: epoch)
   }
 
-  func take() -> [String: Int] {
+  func take() -> [String: [String: Int]] {
     lock.lock()
     defer {
       counts = [:]

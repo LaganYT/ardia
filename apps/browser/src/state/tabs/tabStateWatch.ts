@@ -1,10 +1,11 @@
 import { changedIds } from "../browser/changes";
-import { keyedWatch, useKeyed } from "../browser/keyedWatch";
+import { keyedWatch, useKeyed, type KeyedWatch } from "../browser/keyedWatch";
 import { useBrowser, type BrowserState } from "../browser/store";
 import type { Tab } from "../browser/types";
 import { tabEngine } from "../engines/engines";
 import { shares } from "../pins/pinShare";
 import { navigationOf } from "./pageSession";
+import { watchLive } from "./tabLive";
 
 const wakeIds = (ids: Iterable<string> | undefined, wake: (id: string) => void) => {
   if (ids) for (const id of ids) wake(id);
@@ -50,7 +51,6 @@ export function tabStateChanges(s: BrowserState, prev: BrowserState, wake: (id: 
       if (reachesOtherTabs(s, prev, id)) return true;
       wake(id);
     }
-  if (s.live !== prev.live) wakeIds(changedIds(s.live, prev.live), wake);
   if (s.selection !== prev.selection)
     for (const id of changedIds(s.selection, prev.selection)) {
       wakeIds(s.selection[id], wake);
@@ -58,7 +58,16 @@ export function tabStateChanges(s: BrowserState, prev: BrowserState, wake: (id: 
     }
 }
 
-export const watchTabState = keyedWatch<BrowserState>(() => useBrowser, tabStateChanges);
+const watchStoreTabState = keyedWatch<BrowserState>(() => useBrowser, tabStateChanges);
+
+export const watchTabState: KeyedWatch = (tabId, listener) => {
+  const offStore = watchStoreTabState(tabId, listener);
+  const offLive = watchLive(tabId, listener);
+  return () => {
+    offStore();
+    offLive();
+  };
+};
 
 export const useTabState = <T,>(tabId: string | null | undefined, read: (s: BrowserState) => T): T =>
   useKeyed(watchTabState, tabId, () => read(useBrowser.getState()));

@@ -3,6 +3,7 @@ import { activeTabId } from "../browser/model";
 import { shownPageId } from "../peek/peek";
 import type { Anchor } from "./store";
 import { noteToolbarAnchor } from "../telemetry/usage";
+import { consentToken } from "../telemetry/client";
 
 type AnchorEntry = { windowId: string; tabId: string; anchor: Anchor; measure: () => Promise<Anchor> };
 const toolbarAnchors = new Map<string, AnchorEntry>();
@@ -38,11 +39,12 @@ export async function toolbarAnchor(windowId: string, extensionId: string, tabId
   const entry = anchorEntry(windowId, extensionId, tabId);
   if (!entry) return OFF_TOOLBAR;
   const cached = entry.anchor;
+  const consent = consentToken();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), MEASURE_WAIT_MS)));
   const fresh = await Promise.race([entry.measure(), timedOut]);
   clearTimeout(timer);
-  if (!fresh) noteToolbarAnchor("missed");
-  else if (fresh.x !== cached.x || fresh.y !== cached.y) noteToolbarAnchor("moved");
+  if (!fresh) noteToolbarAnchor("missed", consent);
+  else if (fresh.x !== cached.x || fresh.y !== cached.y) noteToolbarAnchor("moved", consent);
   return fresh ?? cached;
 }

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
-import { OPENING_COVER_ID, pageCoverHidden, pageDrawn, pageStateChanged, pageToneChanged } from "../../state/browse/store";
+import { OPENING_COVER_ID, pageCoverHidden, pageDrawn, pageStateChanged, pageToneChanged, swipedPastHistory } from "../../state/browse/store";
 import { useNavigation, usePageCovered, usePageTone, usePageVeiled } from "../../state/browse/hooks";
 import { shownTone } from "../../lib/pageTone";
 import { registerPageHandle } from "../../state/pages/store";
 import { tabSavedState } from "../../state/tabs/store";
+import { useCanReopen } from "../../state/tabs/hooks";
 import type { BrowserTab } from "../../state/tabs/tabModels";
 import { usePreferences } from "../../state/settings/hooks";
 import { pageSwipe } from "../../state/settings/settingsRules";
@@ -15,6 +16,7 @@ export function PageSurface({ tab, toneBottom, obscured, topClearance, testID }:
   const theme = useTheme();
   const id = tab.id;
   const swipe = usePreferences((p) => p.swipeNavigation);
+  const canReopen = useCanReopen();
   const veiled = usePageVeiled(id);
   const covered = usePageCovered(id);
   const tone = usePageTone(id);
@@ -41,6 +43,9 @@ export function PageSurface({ tab, toneBottom, obscured, topClearance, testID }:
       obscuredColors={obscuredColors}
       topClearance={topClearance}
       swipeNavigation={pageSwipe(swipe)}
+      closesOnSwipeBack
+      reopensOnSwipeForward={canReopen}
+      onSwipedPastHistory={(direction) => swipedPastHistory(id, direction)}
       pullToRefresh
       surfaceColor={theme.surface}
       onPageState={(state) => pageStateChanged(id, state)}

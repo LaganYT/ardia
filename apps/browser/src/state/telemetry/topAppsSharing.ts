@@ -1,5 +1,6 @@
 import type { BrowserState } from "../browser/store";
-import { capture } from "./client";
+import { capture, consentNow, consentToken, type ConsentToken } from "./client";
+import { choiceLoaded, consentAtLaunch } from "./choice";
 import { onTelemetryRelay } from "./relay";
 
 type Counts = Record<string, number | boolean | string | null>;
@@ -7,22 +8,26 @@ type Counts = Record<string, number | boolean | string | null>;
 export type TopAppsSharingPath = "synced_record" | "link_profiles" | "linked_profile_created";
 
 const MAX_HELD = 16;
-const held: [string, Counts][] = [];
-let dropped = 0;
+const BEFORE_LOAD = "beforeLoad";
+type HeldConsent = ConsentToken | null | typeof BEFORE_LOAD;
+const held: [string, Counts, HeldConsent][] = [];
+const dropped = new Map<HeldConsent, number>();
+const heldConsent = (): HeldConsent => (choiceLoaded() ? consentToken() : BEFORE_LOAD);
+const releasedConsent = (consent: HeldConsent) => (consent === BEFORE_LOAD ? consentAtLaunch() : consent);
 let released = false;
 let savedMerged: string | null = null;
 
 export function noteTopAppsSharing(event: string, counts: Counts) {
-  if (released) capture(event, counts);
-  else if (held.length < MAX_HELD) held.push([event, counts]);
-  else dropped++;
+  if (released) capture(event, counts, consentNow());
+  else if (held.length < MAX_HELD) held.push([event, counts, heldConsent()]);
+  else dropped.set(heldConsent(), (dropped.get(heldConsent()) ?? 0) + 1);
 }
 
 export function releaseTopAppsSharing() {
   released = true;
-  for (const [event, counts] of held.splice(0)) capture(event, counts);
-  if (dropped) capture("top_apps_sharing_dropped", { dropped });
-  dropped = 0;
+  for (const [event, counts, consent] of held.splice(0)) capture(event, counts, releasedConsent(consent));
+  for (const [consent, count] of dropped) capture("top_apps_sharing_dropped", { dropped: count }, releasedConsent(consent));
+  dropped.clear();
 }
 
 onTelemetryRelay(releaseTopAppsSharing);

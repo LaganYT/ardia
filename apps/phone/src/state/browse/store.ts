@@ -46,7 +46,7 @@ import {
 } from "../tabs/store";
 import { labTrace } from "../../platform/lab";
 import { pictureCaptured, pictureLanded } from "../tabs/pictures";
-import { deckOrder, findTab, isPrivateOnScreen, isPrivateTab, selectedTab } from "../tabs/tabsState";
+import { deckOrder, findTab, isPrivateOnScreen, isPrivateTab, selectedTab, tabBefore } from "../tabs/tabsState";
 import { setHidesFromRecents } from "../../platform/links";
 import { copyText, pasteText } from "../../platform/system";
 import { noteSnapshotPageTop, noteSnapshotShown } from "../../lib/shownSnapshots";
@@ -384,6 +384,24 @@ export const leaveIncognito = () => closePrivateTabs();
 export function reopenLastClosed() {
   const tab = reopenClosedTab();
   if (tab) openTab(tab.id);
+}
+
+export function swipedPastHistory(id: string, direction: "back" | "forward") {
+  if (useBrowse.getState().surface !== "browsing" || currentTabs().selectedId !== id) return;
+  if (direction === "forward") {
+    const tab = reopenClosedTab();
+    if (!tab) return;
+    if (!tab.isPrivate) countUsage("tabs_swiped_reopened");
+    openTab(tab.id);
+    return;
+  }
+  const closing = findTab(currentTabs(), id);
+  const previous = tabBefore(currentTabs(), id);
+  if (previous) selectTabById(previous.id);
+  closeTabById(id);
+  if (closing && !closing.isPrivate) countUsage("tabs_swiped_closed");
+  if (previous) openTab(previous.id);
+  else show("start");
 }
 
 export const openArchive = () => useBrowse.setState({ sheet: "archive" });

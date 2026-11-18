@@ -8,7 +8,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     let id: String
     var options: OpenWindowOptions
   }
-
   private var managed: [String: ManagedWindow] = [:]
   private var pending: [PendingOpen] = []
   private var lightsCenters: [String: (center: NSPoint, trailing: Bool)] = [:]
@@ -16,6 +15,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private var landingFits: [String: LittleLandingFit] = [:]
   private var unreportedFrames = Set<ObjectIdentifier>()
   private weak var lastPlaced: NSWindow?
+  private weak var lastKeyBrowser: NSWindow?
   private static let lastFrameKey = "ArdiaLastWindowFrame"
   private var lastFrame = UserDefaults.standard.string(forKey: WindowManager.lastFrameKey) ?? UserDefaults.standard.string(forKey: "NSWindow Frame BrowserWindow")
   private static let behindTimeout = 1.5
@@ -24,11 +24,17 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private let linkActivation = LinkActivationOrder()
   private(set) lazy var fullScreen = FullScreenRestore(windows: self)
 
+  private override init() {
+    super.init()
+    NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive(_:)), name: NSApplication.didBecomeActiveNotification, object: nil)
+  }
   func window(_ id: String) -> NSWindow? { managed[id]?.window }
 
   var windowIds: [String] { Array(managed.keys) }
 
   func isFullScreen(_ id: String) -> Bool { managed[id]?.isFullScreen == true }
+
+  func linkArrivedFromOtherApp(_ urls: [URL]) { linkActivation.linkArrived(urls) }
 
   private func kind(of window: NSWindow?) -> WindowKind? { id(of: window).flatMap { managed[$0]?.kind } }
 
@@ -42,7 +48,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     guard let window else { return nil }
     return managed.first { $0.value.window === window }?.key
   }
-
   var keyWindowId: String? { id(of: NSApp.keyWindow) ?? id(of: NSApp.mainWindow) }
 
   func closeForeignKeyWindow() -> Bool {
@@ -51,31 +56,27 @@ final class WindowManager: NSObject, NSWindowDelegate {
     key.performClose(nil)
     return true
   }
-
   var keyBrowserWindow: NSWindow? { keyWindowId.flatMap { window($0) } }
 
   var closableWindow: NSWindow? {
     [NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 }.first { $0.styleMask.contains(.closable) }
   }
-
   func toggleKeepOnTop() {
     guard let window = keyBrowserWindow else { return }
     window.level = window.level == .floating ? .normal : .floating
   }
-
   func reopenFromDock() {
     let shown = NSApp.orderedWindows.filter { $0.isVisible && !$0.isMiniaturized && $0.isOnActiveSpace }
     let browserShown = shown.contains { isBrowserWindow($0) }
     let floatingShown = shown.contains { id(of: $0) == nil && !($0 is NSPanel) }
+    linkActivation.reopened()
     if browserShown { return }
     ShellEvents.send(.app, ["type": "reopen", "pastFloating": floatingShown])
   }
-
   func runtimeGone() {
     pending = []
     QuitFlow.shared.replyToTerminate(false)
   }
-
   func open(id: String, _ options: OpenWindowOptions, focus: Bool) {
     if let existing = window(id) {
       managed[id]?.display = options.display
@@ -134,7 +135,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     }
     show(ManagedWindow(id: id, kind: kind, window: window), frame: frame, title: title, focus: focus, small: small, smallSize: options.size, smallPointer: options.pointer, display: options.display)
   }
-
   private func show(
     _ entry: ManagedWindow, frame: CGRect?, title: String, focus: Bool, small: Bool, smallSize: CGSize?, smallPointer: NSPoint?,
     behind: String? = nil, display: String? = nil
@@ -148,6 +148,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     relayoutRoot(window)
     managed[id] = entry
     if !small { lastPlaced = window }
+    if !small && window.isKeyWindow { lastKeyBrowser = window }
     if window.isMiniaturized {
       observeFrame(window)
       return reportFrame(window)
@@ -180,7 +181,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     if small { fitToLanding(entry) }
     fullScreen.windowShown(id)
   }
-
   private func fitToLanding(_ entry: ManagedWindow) {
     let id = entry.id
     landingFits[id]?.stop()
@@ -194,7 +194,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     landing.start()
     if entry.isWaitingToReveal { entry.whenRevealed { [weak landing] in landing?.fit() } }
   }
-
   private func reveal(_ entry: ManagedWindow) {
     guard let (waiting, entrance) = entry.takeReveal() else { return }
     if let entrance {
@@ -205,7 +204,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     CATransaction.flush()
     waiting.forEach { $0() }
   }
-
   private func contentAppeared(_ entry: ManagedWindow, root: NSView) {
     reveal(entry)
     if !entry.contentShown, managed[entry.id] === entry {
@@ -217,7 +215,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     }
     entry.keepContentSized(in: root)
   }
-
   private func openPending(behind: String) {
     for id in pending.filter({ $0.options.behind == behind }).map(\.id) {
       guard let index = pending.firstIndex(where: { $0.id == id }) else { continue }
@@ -226,12 +223,10 @@ final class WindowManager: NSObject, NSWindowDelegate {
       open(id: id, options, focus: false)
     }
   }
-
   func whenRevealed(_ id: String, _ then: @escaping () -> Void) {
     guard let entry = managed[id] else { return then() }
     entry.whenRevealed(then)
   }
-
   private func observeFrame(_ window: NSWindow) {
     for name in [NSWindow.didMoveNotification, NSWindow.didEndLiveResizeNotification] {
       NotificationCenter.default.addObserver(self, selector: #selector(frameChanged(_:)), name: name, object: window)
@@ -245,7 +240,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
       NotificationCenter.default.addObserver(self, selector: #selector(fullScreenWillChange(_:)), name: name, object: window)
     }
   }
-
   private func observeDelegateNotifications(_ window: NSWindow) {
     for (name, selector) in [
       (NSWindow.didBecomeKeyNotification, #selector(windowDidBecomeKey(_:))),
@@ -254,13 +248,11 @@ final class WindowManager: NSObject, NSWindowDelegate {
       NotificationCenter.default.addObserver(self, selector: selector, name: name, object: window)
     }
   }
-
   func setTrafficLightsCenter(id: String, center: NSPoint?, trailing: Bool) {
     lightsCenters[id] = center.map { ($0, trailing) }
     guard let window = window(id) else { return }
     ChromeWindows.setTrafficLightsCenter(center, trailing: trailing, in: window)
   }
-
   private func adopt(from: NSWindow, to: NSWindow) {
     guard let id = id(of: from), let entry = managed[id] else { return }
     NotificationCenter.default.removeObserver(self, name: nil, object: from)
@@ -269,11 +261,11 @@ final class WindowManager: NSObject, NSWindowDelegate {
     if entry.kind == .small { configureSmall(to) }
     Self.identify(to, id: id, kind: entry.kind)
     if lastPlaced === from { lastPlaced = to }
+    if lastKeyBrowser === from { lastKeyBrowser = to }
     observeDelegateNotifications(to)
     observeFrame(to)
     reportFrame(to)
   }
-
   private func openAux(id: String, kind: WindowKind, title: String) {
     guard let makeContentView = WindowHost.makeContentView else { return }
     let settings = kind == .settings
@@ -316,7 +308,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     relayoutRoot(window)
     window.makeKeyAndOrderFront(nil)
   }
-
   private static let auxFrameSaveDelay: TimeInterval = 0.3
 
   private static func auxFrameName(_ kind: WindowKind) -> String { "Ardia\(kind.rawValue.capitalized)" }
@@ -326,12 +317,10 @@ final class WindowManager: NSObject, NSWindowDelegate {
     NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(saveAuxFrame(_:)), object: window)
     perform(#selector(saveAuxFrame(_:)), with: window, afterDelay: Self.auxFrameSaveDelay)
   }
-
   @objc private func saveAuxFrame(_ window: NSWindow) {
     guard let kind = kind(of: window), !kind.isBrowser else { return }
     window.saveFrame(usingName: Self.auxFrameName(kind))
   }
-
   private func configureSmall(_ window: NSWindow) {
     window.identifier = NSUserInterfaceItemIdentifier("ardia.window.small")
     ArdiaChromeWindowHost.float(forWindowManagers: window)
@@ -341,13 +330,11 @@ final class WindowManager: NSObject, NSWindowDelegate {
     let fullScreenRoles: NSWindow.CollectionBehavior = [.fullScreenPrimary, .fullScreenNone]
     window.collectionBehavior = window.collectionBehavior.subtracting(fullScreenRoles).union([.moveToActiveSpace, .fullScreenAuxiliary])
   }
-
   private func bringForwardOverActiveApp(_ window: NSWindow) {
     linkActivation.openedFromLink(window)
     window.orderFrontRegardless()
     window.makeKey()
   }
-
   private func placeSmall(_ window: NSWindow, id: String, size: CGSize?, pointer: NSPoint?) {
     let mouse = pointer ?? NSEvent.mouseLocation
     let screen = (pointer == nil && NSApp.isActive ? NSApp.keyWindow?.screen : nil)
@@ -359,14 +346,12 @@ final class WindowManager: NSObject, NSWindowDelegate {
     window.setFrame(NSRect(origin: origin, size: NSSize(width: width.rounded(), height: height.rounded())), display: false)
     hostFitSizes[id] = window.frame.size
   }
-
   func moveToSavedDisplay(_ id: String) {
     guard let entry = managed[id], !entry.window.styleMask.contains(.fullScreen),
           let screen = ArdiaDisplayIdentity.screen(withIdentifier: entry.display), entry.window.screen !== screen
     else { return }
     entry.window.setFrame(ArdiaDisplayIdentity.frame(entry.window.frame, on: screen), display: false)
   }
-
   private func place(_ window: NSWindow, frame: CGRect?, display: String? = nil) {
     if let frame {
       let saved = ArdiaDisplayIdentity.screen(withIdentifier: display)
@@ -385,7 +370,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
       window.center()
     }
   }
-
   func animateClose(id: String, after replacement: String?, done: @escaping () -> Void) {
     guard let entry = managed[id] else { return done() }
     flushFrameReport(entry.window)
@@ -409,7 +393,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     }
     WindowMotion.exit(window, style: motionStyle(entry.kind), then: finish)
   }
-
   private func motionStyle(_ kind: WindowKind) -> WindowMotion.Style { kind == .small ? .little : .main }
 
   private func nextKeyWindow(after closing: NSWindow) -> NSWindow? {
@@ -417,7 +400,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
       $0 !== closing && $0.isVisible && !$0.isMiniaturized && $0.canBecomeKey && isBrowserWindow($0) && id(of: $0).flatMap { managed[$0]?.exit } == nil
     }
   }
-
   func close(id: String) {
     if let index = pending.firstIndex(where: { $0.id == id }) {
       pending.remove(at: index)
@@ -439,7 +421,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     ArdiaChromeWindowHost.close(window)
     DispatchQueue.main.async { ArdiaChromeWindowHost.removeRootView(of: window) }
   }
-
   private func forget(_ entry: ManagedWindow) {
     LittleArdiaHandoff.shared.forget(entry.id)
     hostFitSizes[entry.id] = nil
@@ -475,8 +456,30 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   func windowDidBecomeKey(_ notification: Notification) {
     guard let window = notification.object as? NSWindow, let id = id(of: window) else { return }
-    if isMainWindow(window) { lastPlaced = window }
+    if isMainWindow(window) {
+      lastPlaced = window
+      lastKeyBrowser = window
+    }
     ShellEvents.send(.window, ["type": "focus", "id": id])
+  }
+
+  @objc private func appDidBecomeActive(_ notification: Notification) {
+    if ArdiaChromeWindowHost.consumePictureInPictureActivation() { return }
+    DispatchQueue.main.async { [weak self] in self?.focusBrowserPastPiP() }
+  }
+
+  private func focusBrowserPastPiP() {
+    let isPiP = { (window: NSWindow) in ArdiaChromeWindowHost.isVideoPicture(inPictureWindow: window) }
+    guard !LaunchConfig.shared.background, NSApp.isActive, NSApp.modalWindow == nil, NSApp.keyWindow.map({ isPiP($0) || !$0.isOnActiveSpace }) ?? true,
+      NSApp.orderedWindows.contains(where: { $0.isVisible && $0.isOnActiveSpace && isPiP($0) }) else { return }
+    let browsers = NSApp.orderedWindows.filter { $0.isVisible && !$0.isMiniaturized && isBrowserWindow($0) }
+    guard let browser = browsers.first(where: \.isOnActiveSpace) ?? browsers.first(where: { $0 === lastKeyBrowser }) ?? browsers.first else { return }
+    let stamp = ArdiaConsentStamp.begin()
+    browser.makeKeyAndOrderFront(nil)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak browser] in
+      guard NSApp.isActive, let browser else { return }
+      ShellEvents.send(.app, stamp.onto(["type": "pipActivationReturn", "success": browser.isOnActiveSpace && browser.isKeyWindow]))
+    }
   }
 
   func windowWillClose(_ notification: Notification) {

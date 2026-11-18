@@ -30,7 +30,7 @@ test("notifications counted while sharing is off never reach usage_counts once s
   noteAll();
   client.setSharing(true, "onboarding");
   noteAll();
-  usage.emitWindowUsage();
+  usage.emitWindowUsage(client.consentToken());
   assert.deepEqual(await lastCounts(), { fromShim: 1, clicks: 1, workers: 1 });
 });
 
@@ -41,6 +41,6 @@ test("counts pending when sharing is turned off are dropped, not sent after it's
   client.setSharing(true, "onboarding");
   noteAll();
   noteAll();
-  usage.emitWindowUsage();
+  usage.emitWindowUsage(client.consentToken());
   assert.deepEqual(await lastCounts(), { fromShim: 2, clicks: 2, workers: 2 });
 });

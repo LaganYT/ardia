@@ -35,16 +35,17 @@ class Trace {
     return true;
   }
 
-  unsigned long BeginLoop(const std::string &name, double now) {
+  unsigned long BeginLoop(const std::string &name, double now, const std::string &epoch) {
     std::lock_guard<std::mutex> lock(mutex_);
     names_.push_back(name);
     if (names_.size() > 1) return generation_;
     startedAt_ = now;
+    epoch_ = epoch;
     logged_ = false;
     return ++generation_;
   }
 
-  bool EndLoop(double now, std::string *longName) {
+  bool EndLoop(double now, std::string *longName, std::string *epoch) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (names_.empty()) return false;
     const std::string name = Joined();
@@ -59,14 +60,16 @@ class Trace {
     if (logged_ || length < kLongLoopSeconds) return false;
     logged_ = true;
     if (longName) *longName = name;
+    if (epoch) *epoch = epoch_;
     return true;
   }
 
-  bool TakeLongLoop(unsigned long generation, double now, std::string *name) {
+  bool TakeLongLoop(unsigned long generation, double now, std::string *name, std::string *epoch) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (names_.empty() || generation != generation_ || logged_ || now - startedAt_ < kLongLoopSeconds) return false;
     logged_ = true;
     if (name) *name = Joined();
+    if (epoch) *epoch = epoch_;
     return true;
   }
 
@@ -110,6 +113,7 @@ class Trace {
   std::vector<std::string> names_;
   unsigned long generation_ = 0;
   double startedAt_ = 0;
+  std::string epoch_;
   bool logged_ = false;
   unsigned long finished_ = 0;
   double longest_ = 0;

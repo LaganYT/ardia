@@ -131,7 +131,7 @@ enum WindowMove {
     following = true
     moving = window
     ArdiaHost.beginPressLoop("windowMove")
-    ShellEvents.send(.app, ["type": "windowDragLoop"])
+    ShellEvents.send(.app, ArdiaConsentStamp.begin().onto(["type": "windowDragLoop"]))
     if holdsPlacement { placements.setObject(Placements(), forKey: window) }
     defer {
       ArdiaHost.endPressLoop()

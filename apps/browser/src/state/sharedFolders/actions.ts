@@ -3,7 +3,7 @@ import { sharePage } from "../../platform/share";
 import { createSharedFolder, revealSharedFolder, sharedFoldersAvailable, sharedLocation } from "../../platform/sharedFolders";
 import { useBrowser, type BrowserState } from "../browser/store";
 import type { Tab } from "../browser/types";
-import { IDLE_LIVE, isIncognitoProfile, makeTab, newId, pinKeyOf } from "../browser/model";
+import { isIncognitoProfile, makeTab, newId, pinKeyOf } from "../browser/model";
 import { pinnedGroupMembers } from "../browser/structure";
 import { insertAll, nestGroups, orderSections, syncGroupOrder } from "../groups/groups";
 import { markPinned } from "../pins/pinChoices";
@@ -50,7 +50,7 @@ export function withSharedGroup(s: BrowserState, windowId: string, name: string)
   insertAll(ids, w.tabIds.reduce((last, t, i) => (s.tabs[t]?.pin || pinnedArea.has(t) ? i + 1 : last), 0), [tab.id]);
   const window = { ...w, tabIds: orderSections(ids, tabs, groups) };
   const pinChoices = markPinned(s.pinChoices, profileId, { groups: [id], placed: [tab.id] });
-  return [{ ...s, tabs, live: { ...s.live, [tab.id]: IDLE_LIVE }, pinChoices, groups: syncGroupOrder(groups, window), windows: { ...s.windows, [windowId]: window } }, id];
+  return [{ ...s, tabs, pinChoices, groups: syncGroupOrder(groups, window), windows: { ...s.windows, [windowId]: window } }, id];
 }
 
 export async function addSharedFolder(windowId: string) {

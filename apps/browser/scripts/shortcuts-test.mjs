@@ -800,10 +800,10 @@ await sleep(1000);
   let loaded = false;
   for (let i = 0; i < 80 && !loaded; i++) {
     await sleep(250);
-    loaded = await ac(`const s = ac.store.getState(), id = globalThis.wkTab; return s.tabs[id]?.title === "wk" && !s.live[id]?.isLoading && !!ac.webviews.get(id);`);
+    loaded = await ac(`const s = ac.store.getState(), id = globalThis.wkTab; return s.tabs[id]?.title === "wk" && !ac.tabLive.liveOf(id).isLoading && !!ac.webviews.get(id);`);
   }
   if (!loaded) {
-    const seenAs = await ac(`const s = ac.store.getState(), id = globalThis.wkTab; return JSON.stringify({ title: s.tabs[id]?.title, loading: s.live[id]?.isLoading, view: !!ac.webviews.get(id) });`);
+    const seenAs = await ac(`const s = ac.store.getState(), id = globalThis.wkTab; return JSON.stringify({ title: s.tabs[id]?.title, loading: ac.tabLive.liveOf(id).isLoading, view: !!ac.webviews.get(id) });`);
     check("the WebKit tab for the WebKit checks loads", false, `${wkUrl} never finished loading in 20 s: ${seenAs}`);
   } else {
     await sleep(500);

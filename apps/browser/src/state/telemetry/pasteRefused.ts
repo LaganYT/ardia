@@ -1,5 +1,6 @@
 import { onAppEvent, type AppEvent } from "../../platform/app";
 import { capture } from "./client";
+import { nativeConsent } from "./nativeConsent";
 
 export type PasteRefusedEvent = Extract<AppEvent, { type: "pasteRefused" }>;
 
@@ -120,6 +121,7 @@ function capturePasteRefused(e: PasteRefusedEvent) {
       gate_open: e.gateOpen === true,
       ...(Number.isSafeInteger(e.dropped) && e.dropped! >= 0 ? { dropped: Math.min(e.dropped!, MAX_DROPPED) } : {}),
     },
+    nativeConsent(e),
     { raw },
   );
 }

@@ -1,7 +1,7 @@
 import type { BrowserState } from "../browser/store";
 import { insertAll, nestGroups, orderSections, syncGroupOrder } from "./groups";
 import { markPinned } from "../pins/pinChoices";
-import { IDLE_LIVE, isIncognitoProfile, makeTab, newId } from "../browser/model";
+import { isIncognitoProfile, makeTab, newId } from "../browser/model";
 import { openPages, pageKey, pinnedPages } from "../tabs/pageKeys";
 import type { BookmarkFolder, Bookmarks, GroupColor, TabGroup } from "../browser/types";
 import { isWebPageUrl } from "../../lib/url";
@@ -48,7 +48,6 @@ export function withDraftGroups(s: BrowserState, windowId: string, profileId: st
   if (!w || w.kind === "private") return [s, { made: [], carried, skipped: 0, splits: 0 }];
   const seen = pinned ? pinnedPages(s, profileId) : openPages(s, profileId);
   const tabs = { ...s.tabs };
-  const live = { ...s.live };
   let groups = { ...s.groups };
   const order: string[] = [];
   const made: string[] = [];
@@ -66,7 +65,6 @@ export function withDraftGroups(s: BrowserState, windowId: string, profileId: st
     taken++;
     const t = { ...makeTab(windowId, profileId, c.url, { title: c.title, customTitle: c.customTitle ?? null }), page: pinned ? ASLEEP : IDLE };
     tabs[t.id] = t;
-    live[t.id] = IDLE_LIVE;
     order.push(t.id);
     if (c.id) carried.add(c.id);
     return t.id;
@@ -126,7 +124,7 @@ export function withDraftGroups(s: BrowserState, windowId: string, profileId: st
     splits[split.id] = split;
   }
   return [
-    { ...s, tabs, live, pinChoices, splits, groups: syncGroupOrder(groups, window), windows: { ...s.windows, [windowId]: window } },
+    { ...s, tabs, pinChoices, splits, groups: syncGroupOrder(groups, window), windows: { ...s.windows, [windowId]: window } },
     { made, carried, skipped, splits: panes.length },
   ];
 }

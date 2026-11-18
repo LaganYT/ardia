@@ -149,7 +149,7 @@ NSString *HoverProbeDev(NSWindow *window, NSString *argument) {
     if (gHoverWatchInBackground) StartHoverWatch();
     else if (Background()) StopHoverWatch();
   } else if ([command isEqualToString:@"check"]) {
-    HandleHoverCheck(window, TopLeftPoint(window, rest), [rest hasSuffix:@",click"] ? HoverTrigger::click : HoverTrigger::move);
+    HandleHoverCheck(window, TopLeftPoint(window, rest), [rest hasSuffix:@",click"] ? HoverTrigger::click : HoverTrigger::move, [ArdiaConsentStamp begin]);
   } else if ([command isEqualToString:@"preventKey"]) {
     [window setValue:@([rest isEqualToString:@"1"]) forKey:@"preventKeyWindow"];
     return DescribeFocusWindow(window);

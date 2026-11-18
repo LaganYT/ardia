@@ -10,6 +10,8 @@ import { refreshActionStates } from "./actionStates";
 import { focusedWindowOf } from "../windows/ui";
 import { onProfilesUnloaded } from "../profiles/profileLoading";
 import { noteExtensionActionTabChangeSkipped } from "../telemetry/workCounts";
+import { consentToken } from "../telemetry/client";
+import { warnFor } from "../telemetry/logs";
 
 const ACTION_EVENT_COALESCE_MS = 150;
 
@@ -18,7 +20,8 @@ const loadedProfiles = new Set<string>();
 export function watchActionsOf(profile: string): boolean {
   if (loadedProfiles.has(profile)) return false;
   loadedProfiles.add(profile);
-  watchExtensionActions(profile).catch((error: unknown) => console.warn(`[extensions] couldn't watch the toolbar actions of ${profile}`, error));
+  const consent = consentToken();
+  watchExtensionActions(profile).catch((error: unknown) => warnFor(consent, `[extensions] couldn't watch the toolbar actions of ${profile}`, error));
   return true;
 }
 

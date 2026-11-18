@@ -53,6 +53,7 @@ enum PressRelease {
     let landedOn: String
   }
 
+  private static let pressLock = NSLock()
   private static var presses: (earlier: Press?, latest: Press?) = (nil, nil)
 
   static let watchingPresses: Void = {
@@ -63,13 +64,25 @@ enum PressRelease {
         classes.append(String(describing: type(of: v)))
         view = v.superview
       }
-      presses = (presses.latest, Press(at: event.timestamp, place: event.locationInWindow, window: event.windowNumber, landedOn: classes.joined(separator: "<")))
+      let press = Press(at: event.timestamp, place: event.locationInWindow, window: event.windowNumber, landedOn: classes.joined(separator: "<"))
+      pressLock.lock()
+      presses = (presses.latest, press)
+      pressLock.unlock()
       return event
     }
   }()
 
+  static func forgetPresses() {
+    pressLock.lock()
+    presses = (nil, nil)
+    pressLock.unlock()
+  }
+
   static var pressRepeated: [String: Any]? {
-    guard let earlier = presses.earlier, let latest = presses.latest, earlier.window == latest.window,
+    pressLock.lock()
+    let recent = presses
+    pressLock.unlock()
+    guard let earlier = recent.earlier, let latest = recent.latest, earlier.window == latest.window,
           latest.at - earlier.at < repeatWithin, hypot(latest.place.x - earlier.place.x, latest.place.y - earlier.place.y) < repeatDistance
     else { return nil }
     return ["landedOn": earlier.landedOn, "ms": Int((latest.at - earlier.at) * 1000)]

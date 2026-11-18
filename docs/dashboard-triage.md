@@ -119,3 +119,11 @@ The phone app (`apps/phone`) sends to the same pipeline with service `ardia-phon
 ## Site downloads
 
 The Site page's **Where they clicked Download** panel splits `download_clicked` two ways: by platform first, then by the button's place on the page (`location`). The platform comes from the event's `platform` and `arch` properties, which the site sends from 0.2.47-nightly.3 on: `windows x64`, `windows arm64` or `linux x64`. Clicks without a `platform` count as Mac, because before Windows and Linux builds the site offered only the Mac download; older ranges therefore show Mac only. People is distinct visitors, Clicks is raw clicks. The Mac funnel stays on Funnels.
+
+## Freezes
+
+Performance › Freezes reads `app_freeze` over the last 7 days, grouped by `signature`: people (`uniqExact(distinct_id)`),
+freezes (`count()`), time frozen (`sum(freeze_ms)`), the most common thread and job, the latest version, and the top
+three frames from Ardia's own images (hover the place). Offsets symbolicate with the engine's uploaded symbols
+(`scripts/symbolicate-crash.sh`) and Hermes's with the release framework's local symbols.
+

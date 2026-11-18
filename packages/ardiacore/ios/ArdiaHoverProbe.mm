@@ -329,13 +329,14 @@ void CloseEpisode(NSString *endedBy) {
     @"seconds" : @(lround(MAX(0, Uptime() - gEpisode.startedAt))),
     @"episode" : @(gEpisodeCount),
   };
+  ArdiaConsentStamp *stamp = gEpisode.stamp;
   gEpisode = HoverEpisode{};
   gPendingReason = HoverReason::fine;
   NoteFocusChange([@"hover episode ended by " stringByAppendingString:endedBy], nil);
   if (!gDevHoverEvents) gDevHoverEvents = [NSMutableArray array];
   [gDevHoverEvents addObject:payload];
   if (gDevHoverEvents.count > kDevHoverEventsKept) [gDevHoverEvents removeObjectAtIndex:0];
-  [ArdiaEvents emit:@"engine.hoverLost" data:payload];
+  [ArdiaEvents emit:@"engine.hoverLost" data:[stamp onto:payload]];
 }
 
 bool Recovered(const HoverCheck &check, HoverReason healed) {
@@ -405,7 +406,7 @@ bool EndsEpisode(const HoverCheck &check) {
   }
 }
 
-void OpenEpisode(NSWindow *window, const HoverCheck &check, HoverTrigger trigger) {
+void OpenEpisode(NSWindow *window, const HoverCheck &check, HoverTrigger trigger, ArdiaConsentStamp *stamp) {
   gEpisode = HoverEpisode{};
   gEpisode.open = true;
   gEpisode.owner = window;
@@ -413,10 +414,11 @@ void OpenEpisode(NSWindow *window, const HoverCheck &check, HoverTrigger trigger
   gEpisode.first = check;
   gEpisode.trigger = trigger;
   gEpisode.startedAt = Uptime();
+  gEpisode.stamp = stamp;
   NoteFocusChange([@"hover lost: " stringByAppendingString:ReasonName(check.reason)], window);
 }
 
-void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger) {
+void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, ArdiaConsentStamp *stamp) {
   if (gEpisode.open && !gEpisode.owner) CloseEpisode(@"windowClosed");
   if (!window || (gEpisode.open && gEpisode.owner != window)) return;
   const HoverCheck check = Probe(window, point, trigger == HoverTrigger::click);
@@ -433,12 +435,12 @@ void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger) {
       gPendingWindow = window;
       return;
     }
-    OpenEpisode(window, check, trigger);
+    OpenEpisode(window, check, trigger, stamp);
   }
   if (!gEpisode.healed && SafeToHeal(window, check, trigger)) Heal(window, point, check.reason);
 }
 
-void HandleCoveredClick(NSWindow *browser, NSWindow *cover, NSPoint point) {
+void HandleCoveredClick(NSWindow *browser, NSWindow *cover, NSPoint point, ArdiaConsentStamp *stamp) {
   if (gEpisode.open && !gEpisode.owner) CloseEpisode(@"windowClosed");
   if (!browser || !cover || !Invisible(cover) || !cover.isVisible) return;
   if (gEpisode.open) {
@@ -454,7 +456,7 @@ void HandleCoveredClick(NSWindow *browser, NSWindow *cover, NSPoint point) {
   check.coverWindow = KindOf(cover, true);
   gLastHoverVerdict = DescribeCheck(check, HoverTrigger::click);
   gInvisibleCover = cover;
-  OpenEpisode(browser, check, HoverTrigger::click);
+  OpenEpisode(browser, check, HoverTrigger::click, stamp);
 }
 
 NSWindow *BrowserWindowBelow(NSWindow *cover, NSPoint screenPoint) {
@@ -506,6 +508,7 @@ void StartHoverWatch() {
     if (move) gLastMoveCheck = Uptime();
     if (!move && (event.modifierFlags & NSEventModifierFlagCommand)) return event;
     if (!CurrentActivation().inFront()) return event;
+    ArdiaConsentStamp *stamp = [ArdiaConsentStamp begin];
     NSWindow *window = BrowserWindowFor(event);
     if (!window && !move) {
       NSWindow *cover = InvisibleCoverFor(event);
@@ -513,13 +516,13 @@ void StartHoverWatch() {
       if (!browser) return event;
       const NSPoint point = [browser convertPointFromScreen:ScreenPoint(event)];
       __weak NSWindow *weakBrowser = browser, *weakCover = cover;
-      dispatch_async(dispatch_get_main_queue(), ^{ HandleCoveredClick(weakBrowser, weakCover, point); });
+      dispatch_async(dispatch_get_main_queue(), ^{ HandleCoveredClick(weakBrowser, weakCover, point, stamp); });
       return event;
     }
     if (!window) return event;
     const NSPoint point = PointIn(window, event);
     __weak NSWindow *weakWindow = window;
-    dispatch_async(dispatch_get_main_queue(), ^{ HandleHoverCheck(weakWindow, point, move ? HoverTrigger::move : HoverTrigger::click); });
+    dispatch_async(dispatch_get_main_queue(), ^{ HandleHoverCheck(weakWindow, point, move ? HoverTrigger::move : HoverTrigger::click, stamp); });
     return event;
   }];
 }

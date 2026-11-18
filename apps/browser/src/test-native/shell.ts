@@ -127,7 +127,7 @@ const windowsModule: Modules["ArdiaAppWindows"] & { requestClose(id: string): Pr
 
 export const pressesWithoutRelease = { count: 0 };
 export const focusHandoffCounts = {
-  pending: {} as Record<string, number>,
+  pending: {} as Record<string, Record<string, number>>,
   take() {
     const taken = this.pending;
     this.pending = {};
@@ -251,6 +251,7 @@ const scripting: Modules["ArdiaScripting"] = {
 
 const dev: Modules["ArdiaDev"] = {
   devCrash: () => Promise.resolve(),
+  devBlockMain: (ms) => Promise.resolve(ms),
   devRenderIntroMusic: () => Promise.resolve(null),
   devRunAppleScript: () => Promise.resolve({ ok: false, error: "no AppleScript in tests" }),
   devSnapshotWindow: () => Promise.resolve(false),

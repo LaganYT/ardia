@@ -110,6 +110,8 @@ struct ArdiaPageFocusState {
   __weak NSWindow *activatedIn;
 };
 
+@class ArdiaConsentStamp;
+
 @interface ArdiaWebView () <ArdiaCoreTabDelegate> {
   __weak id<ArdiaWebViewDelegate> _delegate;
   ArdiaTabLifecycle _life;
@@ -141,6 +143,7 @@ struct ArdiaPageFocusState {
   BOOL _warm;
   BOOL _neighbour;
   BOOL _autoPictureInPicture;
+  ArdiaConsentStamp *_pictureInPictureRequestStamp;
   BOOL _frozen;
   ArdiaCoreTab *_tab;
   BOOL _muted;

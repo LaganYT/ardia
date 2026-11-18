@@ -161,15 +161,22 @@ BOOL TracingPictureInPicture() {
   const NSTimeInterval clickAt = TakeControlPress(clickMs, target, self.window);
   [self traceManualPictureInPicture:[NSString stringWithFormat:@"%@ %@ (control %ld)", clickMs > 0 ? @"click" : @"key or accessibility press", clickAt > 0 ? @"verified" : @"not verified", (long)target]];
   if (clickAt <= 0) return completion(NO);
+  ArdiaConsentStamp *stamp = ArdiaConsentStamp.begin;
+  _pictureInPictureRequestStamp = stamp;
   [self thawHiddenPage];
   __weak ArdiaWebView *weakSelf = self;
+  void (^finish)(BOOL) = ^(BOOL entered) {
+    ArdiaWebView *view = weakSelf;
+    if (view && (!entered || view->_reports.inPictureInPicture) && view->_pictureInPictureRequestStamp == stamp) view->_pictureInPictureRequestStamp = nil;
+    completion(entered);
+  };
   [_tab enterPictureInPictureForClickAt:clickAt
                              completion:^(NSString *route, BOOL opened) {
                                ArdiaWebView *view = weakSelf;
-                               if (!view) return completion(NO);
+                               if (!view) return finish(NO);
                                [view traceManualPictureInPicture:[NSString stringWithFormat:@"route %@ opened=%d", route, opened]];
-                               if (![route isEqualToString:@"session"]) return completion(opened || view->_reports.inPictureInPicture);
-                               [view awaitPictureInPicture:8 completion:completion];
+                               if (![route isEqualToString:@"session"]) return finish(opened || view->_reports.inPictureInPicture);
+                               [view awaitPictureInPicture:8 completion:finish];
                              }];
 }
 
@@ -210,7 +217,7 @@ BOOL TracingPictureInPicture() {
 - (void)noteStayedOnAppSwitch {
   if (!_tab || !_visible || _reports.inPictureInPicture || !self.seenByUser || !self.playsForAutoPictureInPicture) return;
   [self traceAutoPictureInPicture:@"app: the user left Ardia, the window server still shows the tab"];
-  [self emit:@"autoPictureInPictureKept" payload:@{@"appSwitch" : @YES}];
+  [self emit:@"autoPictureInPictureKept" payload:[ArdiaConsentStamp.begin onto:@{@"appSwitch" : @YES}]];
 }
 
 - (void)updateAutoPictureInPicture {
@@ -229,6 +236,8 @@ BOOL TracingPictureInPicture() {
 }
 
 - (void)tab:(ArdiaCoreTab *)tab didChangePictureInPicture:(NSDictionary<NSString *, id> *)state {
+  ArdiaConsentStamp *stamp = _pictureInPictureRequestStamp ?: ArdiaConsentStamp.begin;
+  if ([state[@"active"] boolValue]) _pictureInPictureRequestStamp = nil;
   const BOOL active = [state[@"active"] boolValue];
   NSMutableDictionary *payload = [@{@"kind" : [state[@"kind"] isEqual:@"document"] ? @"document" : @"video", @"active" : @(active)} mutableCopy];
   if (!active && state[@"closedBy"]) {
@@ -241,12 +250,12 @@ BOOL TracingPictureInPicture() {
     [self emit:@"pictureInPicture" payload:payload];
     if (!active) return;
     ardia_pip::WatchZoom();
-    ardia_pip::VideoEntered(self, [NSURL URLWithString:tab.url ?: @""].host ?: @"");
+    ardia_pip::VideoEntered(self, [NSURL URLWithString:tab.url ?: @""].host ?: @"", stamp);
     return;
   }
   _reports.inPictureInPicture = active;
   [self emit:@"pictureInPicture" payload:payload];
-  if (_reports.inPictureInPicture) ardia_pip::DocumentEntered(self);
+  if (_reports.inPictureInPicture) ardia_pip::DocumentEntered(self, stamp);
 }
 
 - (void)tab:(ArdiaCoreTab *)tab requestsActivation:(NSString *)reason {

@@ -68,6 +68,11 @@ export const SWITCHES = {
 } as const satisfies Record<string, SwitchDef>;
 
 export const EXPERIMENTS = {
+  freezeWatchOff: {
+    about: "Turns off the freeze watch: the run-loop observers on the main and JavaScript threads that count stalls for perf_memory (packages/ardiacore ArdiaFreezeWatch.mm, state/telemetry/freezes.ts).",
+    owner: "perf",
+    removeBy: "2027-02-28",
+  },
   serverWindowDragAllOpen: {
     about: "With serverWindowDrag, every view in the titlebar band is also left open to window moves (a probe for the geometry work).",
     owner: "window",

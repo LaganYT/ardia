@@ -70,6 +70,13 @@ export const spaceTabs = (data: Pick<TabsData, "open" | "spaces">): readonly Bro
 
 export const deckOrder = (data: TabsData): BrowserTab[] => recencyOrder([...spaceTabs(data), ...data.privates], data.selectedId);
 
+export function tabBefore(data: TabsData, id: string): BrowserTab | null {
+  const closing = findTab(data, id);
+  const others = deckOrder(data).filter((t) => t.id !== id);
+  const sameKind = others.filter((t) => t.isPrivate === (closing?.isPrivate ?? false));
+  return sameKind[sameKind.length - 1] ?? others[others.length - 1] ?? null;
+}
+
 const mostRecent = (tabs: readonly BrowserTab[]) => tabs.reduce<BrowserTab | null>((best, tab) => (best === null || tab.lastActive > best.lastActive ? tab : best), null);
 
 function reselectForSpace(data: TabsData): TabsData {

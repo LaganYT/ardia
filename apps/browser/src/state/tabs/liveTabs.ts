@@ -259,7 +259,6 @@ function placeLike(
 
 function intoWindow(s: BrowserState, key: string, to: string): BrowserState {
   const tab = s.tabs[key]!;
-  const live = s.live[key];
   if (!s.windows[to] || tab.windowId === to) return s;
   let next = removeTabs(s, [key], false);
   const w = next.windows[to];
@@ -268,7 +267,6 @@ function intoWindow(s: BrowserState, key: string, to: string): BrowserState {
   next = {
     ...next,
     tabs,
-    live: live ? { ...next.live, [key]: live } : next.live,
     windows: { ...next.windows, [to]: { ...w, tabIds: orderSections([...w.tabIds, key], tabs, next.groups) } },
   };
   return settleMovedPins(s, next, [key], to);

@@ -79,6 +79,7 @@ typedef NS_ENUM(NSInteger, ArdiaPiPEdge) { ArdiaPiPEdgeNone = 0, ArdiaPiPEdgeLef
   NSPoint _dragGrab;
   NSPoint _dragFrom;
   NSTimeInterval _dragBeganAt;
+  ArdiaConsentStamp *_dragStamp;
   NSInteger _dragOffCursor;
   double _dragMaxOff;
   double _dragSlowestMove;
@@ -138,6 +139,8 @@ typedef NS_ENUM(NSInteger, ArdiaPiPEdge) { ArdiaPiPEdgeNone = 0, ArdiaPiPEdgeLef
 
 @interface ArdiaPiPController (Skip)
 - (BOOL)skipBy:(double)seconds at:(NSPoint)point clickCount:(NSInteger)clickCount;
+- (BOOL)skipDraggedBy:(double)seconds at:(NSPoint)point clickCount:(NSInteger)clickCount;
+- (BOOL)skipBy:(double)seconds at:(NSPoint)point clickCount:(NSInteger)clickCount stamp:(ArdiaConsentStamp *)stamp;
 - (NSDictionary *)skipInfo;
 @end
 
@@ -167,6 +170,8 @@ NSScreen *ScreenFor(NSRect frame);
 void PreventActivation(NSWindow *window);
 BOOL PreventsActivation(NSWindow *window);
 extern NSInteger gActivations;
+void MarkBackToTabActivation();
+BOOL ConsumeBackToTabActivation();
 void ActivateApp(NSString *why);
 BOOL ThrowEnabled();
 NSPoint PointerOf(NSEvent *event);

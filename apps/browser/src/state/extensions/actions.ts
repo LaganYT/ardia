@@ -32,6 +32,8 @@ import { notePrivateWindowExtensionOpen, noteExtensionInstallPromptStale, noteEx
 import { extensionPageUrl, extensionProfile, extensionsProfileId, isPrivate, pageProfile, shownIn, useExtensions, windowExtensions, readyTabOf, tabProfile, type Anchor } from "./store";
 import { errorText } from "../../lib/errors";
 import { noteUnpackedInstall } from "../telemetry/exportCounts";
+import { consentToken } from "../telemetry/client";
+import { warnFor } from "../telemetry/logs";
 import { PLATFORM_TERMS } from "../../lib/platformTerms";
 import { movedToolbarOrder, toolbarOrder, type ToolbarDrag } from "./toolbarOrder";
 
@@ -47,6 +49,7 @@ export function refreshExtensions(profile: string): Promise<InstalledExtension[]
   if (!engineProfiles(useBrowser.getState()).includes(profile)) return Promise.resolve(useExtensions.getState().lists[profile] ?? EMPTY);
   const running = loading.get(profile);
   if (running) return running;
+  const consent = consentToken();
   const job = listExtensions(profile)
     .then((list) => {
       list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
@@ -54,7 +57,7 @@ export function refreshExtensions(profile: string): Promise<InstalledExtension[]
       return list;
     })
     .catch((error) => {
-      console.warn("[extensions] list failed", error);
+      warnFor(consent, "[extensions] list failed", error);
       return useExtensions.getState().lists[profile] ?? EMPTY;
     })
     .finally(() => loading.delete(profile));
@@ -127,6 +130,7 @@ export function showInstallPrompt(windowId: string, prompt: ExtensionInstallProm
 }
 
 export async function confirmInstall() {
+  const consent = consentToken();
   const request = useExtensions.getState().install;
   if (request?.status === "prompt") {
     useExtensions.setState({ install: null });
@@ -134,7 +138,7 @@ export async function confirmInstall() {
       await resolveExtensionInstallPrompt(request.prompt, true);
     } catch (error) {
       const stale = (error as { code?: unknown } | null)?.code === "ERR_EXTENSION_PROMPT_STALE";
-      if (stale) noteExtensionInstallPromptStale();
+      if (stale) noteExtensionInstallPromptStale(consent);
       if (useExtensions.getState().install) return;
       useExtensions.setState({ install: { windowId: request.windowId, profile: request.profile, source: request.source, status: "error", error: stale ? STALE_PROMPT : errorText(error) } });
       return;
@@ -146,7 +150,7 @@ export async function confirmInstall() {
   useExtensions.setState({ install: { ...request, status: "installing" } });
   try {
     await installExtension(request.pkg, request.profile);
-    if (request.source === "unpacked") noteUnpackedInstall();
+    if (request.source === "unpacked") noteUnpackedInstall(consent);
     useExtensions.setState({ install: null });
     await refreshExtensions(request.profile);
   } catch (error) {
@@ -217,11 +221,12 @@ export async function reload(profile: string, id: string) {
 }
 
 async function changed(what: string, change: () => Promise<void>): Promise<boolean> {
+  const consent = consentToken();
   try {
     await change();
     return true;
   } catch (error) {
-    console.warn(`[extensions] ${what} failed`, error);
+    warnFor(consent, `[extensions] ${what} failed`, error);
     return false;
   }
 }
@@ -289,11 +294,12 @@ let popupRequests = 0;
 
 export async function openActionPopup(windowId: string, extensionId: string, anchor: Anchor, sourceTabId: string) {
   const request = ++popupRequests;
+  const consent = consentToken();
   const tabId = shownPageId(useBrowser.getState(), windowId);
   const url = (await extensionActionStates(sourceTabId, [extensionId], tabProfile(sourceTabId)))[extensionId]?.popup ?? "";
   if (request !== popupRequests || shownPageId(useBrowser.getState(), windowId) !== tabId)
-    return console.warn(`action.openPopup for ${extensionId}: the tab changed or another call came first`);
-  if (!url) return console.warn(`action.openPopup for ${extensionId}: no popup for the tab`);
+    return warnFor(consent, `action.openPopup for ${extensionId}: the tab changed or another call came first`);
+  if (!url) return warnFor(consent, `action.openPopup for ${extensionId}: no popup for the tab`);
   useExtensions.setState({ popup: { windowId, pageProfile: pageProfile(useBrowser.getState(), windowId), extensionId, url, anchor, opened: request } });
 }
 

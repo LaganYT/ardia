@@ -18,6 +18,8 @@ import { parseCliCaller, type CliCaller } from "../app/cliCaller";
 import { errorText } from "../../lib/errors";
 import { minimizedUrl } from "../../lib/urlParts";
 import { automationWindows, type AutomationWindow } from "./automationWindows";
+import { consentToken, type ConsentToken } from "../telemetry/client";
+import { warnFor } from "../telemetry/logs";
 import { cliTabTargets } from "../../platform/cli";
 import { TAB_IDLE_EVENTS, USER_IDLE_EVENTS, type AutomationEventName } from "./eventNames";
 import { commands, failure, hello, parseRequest, parseSubscription, planRun, type RequestId, type Subscription } from "./automationMethods";
@@ -211,13 +213,13 @@ function listen() {
   onControlWritten(({ tickets }) => runWritten(tickets));
 }
 
-async function start() {
+async function start(consent: ConsentToken | null) {
   listen();
   const status = await startControlSocket();
   useControlSocket.setState({ status });
   generation = status.state === "on" ? status.generation : null;
   noteSocketServing(generation !== null && controlOn());
-  if (status.state !== "on") console.warn(`[automation] the control socket is off: ${status.reason ?? "unknown"}`);
+  if (status.state !== "on") warnFor(consent, `[automation] the control socket is off: ${status.reason ?? "unknown"}`);
 }
 
 async function stop() {
@@ -236,6 +238,7 @@ function sync() {
   const on = controlOn();
   if (on === applied) return;
   applied = on;
+  const consent = consentToken();
   if (!on) {
     generation = null;
     noteSocketServing(false);
@@ -243,10 +246,10 @@ function sync() {
     runWritten([...unwrittenRuns]);
   }
   chain = chain
-    .then(() => (on ? start() : stop()))
+    .then(() => (on ? start(consent) : stop()))
     .catch((error: unknown) => {
       useControlSocket.setState({ status: { state: "off", generation: 0, path: "", reason: errorText(error) } });
-      console.warn("[automation] the control socket failed", error);
+      warnFor(consent, "[automation] the control socket failed", error);
     });
 }
 

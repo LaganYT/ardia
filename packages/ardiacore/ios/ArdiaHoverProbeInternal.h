@@ -2,6 +2,8 @@
 
 #import <AppKit/AppKit.h>
 
+#import "ArdiaEvents.h"
+
 namespace ardia_host::hover_probe {
 
 enum class HoverReason { fine, halfActive, staleMenu, notKeyOrMain, coveredByView, responderLost, coveredByWindow };
@@ -44,6 +46,7 @@ struct HoverEpisode {
   double startedAt = 0;
   bool healed = false;
   int healWorked = -1;
+  ArdiaConsentStamp *stamp = nil;
 };
 
 extern bool gDevHalfActive;
@@ -66,7 +69,7 @@ NSView *HitAt(NSWindow *window, NSPoint point);
 bool SeeThrough(NSView *hit);
 FocusHolder HolderOf(NSWindow *window);
 bool ResponderLost(FocusHolder holder, bool clickedPage);
-void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger);
+void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, ArdiaConsentStamp *stamp);
 void StartHoverWatch();
 void StopHoverWatch();
 

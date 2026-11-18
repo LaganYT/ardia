@@ -1,5 +1,5 @@
 import { Profiler } from "react";
-import { BackHandler, StyleSheet } from "react-native";
+import { BackHandler, Platform, StyleSheet } from "react-native";
 import { getAnimatedStyle } from "react-native-reanimated";
 import { act, type ReactTestInstance } from "react-test-renderer";
 import { Surfaces } from "../App";
@@ -9,6 +9,7 @@ import { pages } from "../platform/pages";
 import * as system from "../platform/system";
 import * as perf from "../state/app/interactionPerf";
 import { handleSystemBack } from "../state/page/actions";
+import { deckPull, PULL_STAGE } from "../state/browse/deckPull";
 import { openTab, pageStateChanged, showDeck, useBrowse } from "../state/browse/store";
 import { registerPageHandle, storeNavigation, storeTone, type PageState } from "../state/pages/store";
 import { presentSearch, dismissSearch } from "../state/search/store";
@@ -62,12 +63,17 @@ const settle = () => act(() => jest.advanceTimersByTime(tabsMotion.deckStandby +
 
 const loading = (progress: number) => ({ url: "https://slow.example/", title: "Slow", isLive: true, isLoading: true, progress, failure: null, canGoBack: false, canGoForward: false }) as unknown as PageState;
 
-async function openFromPage() {
+const pulls = (design: Design) => Platform.OS === "ios" && design === "redesigned";
+const PARKED = 100_000;
+const parkedAt = (node: ReactTestInstance) => ((getAnimatedStyle(node).transform ?? []) as { translateX?: number }[]).find((move) => move.translateX !== undefined)?.translateX;
+
+async function openFromPage(design: Design) {
   await act(async () => {
     const opening = showDeck();
     jest.advanceTimersByTime(16);
     await opening;
   });
+  if (pulls(design)) framesUntil(() => useBrowse.getState().surface === "deck", 240);
   expect(useBrowse.getState().surface).toBe("deck");
 }
 
@@ -79,7 +85,8 @@ for (const design of DESIGNS) {
     settle();
     const hidden = deck(root)!;
     expect(hidden).not.toBeNull();
-    expect(StyleSheet.flatten(hidden.props.style).display).toBe("none");
+    if (pulls(design)) expect(parkedAt(hidden)).toBe(PARKED);
+    else expect(StyleSheet.flatten(hidden.props.style).display).toBe("none");
     expect(hidden.props.pointerEvents).toBe("none");
     expect(hidden.props.importantForAccessibility).toBe("no-hide-descendants");
     expect(hidden.props.accessibilityElementsHidden).toBe(true);
@@ -111,7 +118,43 @@ for (const design of DESIGNS) {
     settle();
     const before = new Set(deckCards(root));
     renders = [];
-    await openFromPage();
+    if (pulls(design)) {
+      await act(async () => {
+        void showDeck();
+        jest.advanceTimersByTime(16);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      act(() => jest.advanceTimersByTime(16));
+      expect(useBrowse.getState().surface).toBe("browsing");
+      expect(parkedAt(deck(root)!)).toBe(0);
+      expect(deckCards(root).every((card) => before.has(card))).toBe(true);
+      framesUntil(() => deckPull.stage.value === PULL_STAGE.landed, 240);
+      await act(async () => {
+        jest.advanceTimersByTime(16);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      act(() => jest.advanceTimersByTime(16));
+      const landing = deckCards(root).find((card) => card.findAll((node) => node.props.source?.uri === FRESH && typeof node.type === "string").length > 0)!;
+      expect(landing).toBeDefined();
+      expect(textOf({ root: landing } as never)).not.toContain("Kernel Archives");
+      expect(deckCards(root).every((card) => before.has(card))).toBe(true);
+      expect(useBrowse.getState().surface).toBe("browsing");
+      expect(page(root)).toHaveLength(1);
+      const fresh = cardsLayer(root).findAll((node) => node.props.source?.uri === FRESH && typeof node.props.onLoad === "function" && typeof node.type !== "string")[0]!;
+      act(() => fresh.props.onLoad({ nativeEvent: { source: { width: 600, height: 1157 } } }));
+      framesUntil(() => useBrowse.getState().surface === "deck", 12);
+      expect(useBrowse.getState().surface).toBe("deck");
+      act(() => jest.advanceTimersByTime(32));
+      expect(page(root)).toHaveLength(0);
+      expect(deck(root)!.props.pointerEvents).toBe("auto");
+      expect(opacity(cardsLayer(root))).toBe(1);
+      expect(count("DeckCard")).toBeLessThanOrEqual(1);
+      unmount(root);
+      return;
+    }
+    await openFromPage(design);
     expect(StyleSheet.flatten(deck(root)!.props.style).display).toBeUndefined();
     expect(deck(root)!.props.pointerEvents).toBe("auto");
     expect(deckCards(root).every((card) => before.has(card))).toBe(true);
@@ -136,8 +179,9 @@ async function deckOpenRenders(premounted: boolean) {
   const root = app("redesigned");
   if (premounted) settle();
   renders = [];
-  await openFromPage();
+  await openFromPage("redesigned");
   framesUntil(() => useBrowse.getState().leaving === null, 150);
+  act(() => jest.advanceTimersByTime(32));
   const counted = { deck: count("TabDeck"), cards: count("DeckCard"), mounted: deckCards(root).length };
   unmount(root);
   return counted;
@@ -171,6 +215,7 @@ for (const design of DESIGNS) {
       act(() => storeNavigation(selected, loading(Math.min(0.95, 0.1 + frame * 0.02))));
       act(() => jest.advanceTimersByTime(16));
     }
+    expect(renders).toEqual([]);
     expect(commits).toBe(0);
     act(() => storeTone(selected, { top: "#203040", bottom: "#203040" }));
     act(() => updateTabById(selected, { title: "Slow Otters" }));
@@ -178,6 +223,7 @@ for (const design of DESIGNS) {
     expect(count("DeckCard")).toBe(0);
     act(() => void showDeck());
     act(() => jest.advanceTimersByTime(16));
+    if (pulls(design)) framesUntil(() => useBrowse.getState().surface === "deck", 240);
     expect(textOf(root)).toContain("Slow Otters");
     unmount(root);
   });
@@ -200,6 +246,7 @@ for (const design of DESIGNS) {
     expect(useBrowse.getState().surface).toBe("browsing");
     act(() => storeNavigation(selected, { ...loading(1), isLoading: false, canGoBack: false }));
     act(() => void handleSystemBack());
+    if (pulls(design)) framesUntil(() => useBrowse.getState().surface === "deck", 240);
     expect(useBrowse.getState().surface).toBe("deck");
     unmount(root);
   });
@@ -208,7 +255,7 @@ for (const design of DESIGNS) {
 test("Search Tabs starts empty each time the deck is shown: the query and its filtered cards are gone once the deck hides", async () => {
   const root = app("redesigned");
   settle();
-  await openFromPage();
+  await openFromPage("redesigned");
   framesUntil(() => useBrowse.getState().leaving === null, 150);
   const field = () => root.root.findAll((node) => node.props.testID === "deckSearchField" && typeof node.props.onChangeText === "function")[0]!;
   const all = deckCards(root).length;
@@ -221,7 +268,7 @@ test("Search Tabs starts empty each time the deck is shown: the query and its fi
   expect(deck(root)).not.toBeNull();
   expect(field().props.value).toBe("");
   settle();
-  await openFromPage();
+  await openFromPage("redesigned");
   framesUntil(() => useBrowse.getState().leaving === null, 150);
   expect(field().props.value).toBe("");
   expect(deckCards(root).length).toBe(all);
@@ -231,7 +278,7 @@ test("Search Tabs starts empty each time the deck is shown: the query and its fi
 test("after a card opens, the deck goes back to waiting hidden instead of unmounting, and the next open mounts no card", async () => {
   const root = app("original");
   settle();
-  await openFromPage();
+  await openFromPage("original");
   framesUntil(() => useBrowse.getState().leaving === null, 150);
   const before = new Set(deckCards(root));
   const other = useTabs.getState().open.find((tab) => tab.id !== currentTabs().selectedId)!;
@@ -240,7 +287,7 @@ test("after a card opens, the deck goes back to waiting hidden instead of unmoun
   expect(useBrowse.getState().surface).toBe("browsing");
   expect(StyleSheet.flatten(deck(root)!.props.style).display).toBe("none");
   settle();
-  await openFromPage();
+  await openFromPage("original");
   expect(deckCards(root).every((card) => before.has(card))).toBe(true);
   expect(useBrowse.getState().deckEntrance).toBeNull();
   framesUntil(() => useBrowse.getState().leaving === null, 150);

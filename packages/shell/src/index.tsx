@@ -15,6 +15,7 @@ export * from "./lifecycle";
 export * from "./live";
 export * from "./menus";
 export * from "./notifications";
+export * from "./plugins";
 export * from "./location";
 export * from "./dialogPages";
 export * from "./keptFollows";

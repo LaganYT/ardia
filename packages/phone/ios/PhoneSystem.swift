@@ -142,6 +142,10 @@ public final class SystemModule: Module {
       onMain { PhoneSystemLinks.shared.sink = nil }
     }
 
+    Function("labLog") { (line: String) in
+      if PhoneTestBuild.isOn { NSLog("%@", line) }
+    }
+
     Function("setWidgetColorChoice") { (choice: String?) in
       DispatchQueue.main.async { MainActor.assumeIsolated { PhoneSyncHost.shared.widgetColorChoice = choice } }
     }

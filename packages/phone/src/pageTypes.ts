@@ -60,6 +60,7 @@ export type PageViewProps = ViewProps & {
   obscuredColors?: PageObscuredColors;
   topClearance?: number;
   obscuresSafeTop?: boolean;
+  pinsSafeArea?: boolean;
   swipeNavigation?: SwipeNavigation;
   closesOnSwipeBack?: boolean;
   reopensOnSwipeForward?: boolean;

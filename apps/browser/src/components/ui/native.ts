@@ -9,6 +9,7 @@ export {
   MouseArea,
   OutsidePressArea,
   PageCoverGate,
+  PluginPageView,
   PopoverBubble,
   ReportVideo,
   Surface,

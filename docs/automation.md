@@ -72,9 +72,10 @@ bookmark searches) and their fixed page title.
 
 ### Methods
 
-- `hello` `{"caller"?: {"name", "app"?}}` → `{"app": "Ardia", "version": "0.2.44", "protocol": 3}`. Protocol 2 added
+- `hello` `{"caller"?: {"name", "app"?}}` → `{"app": "Ardia", "version": "0.2.44", "protocol": 4}`. Protocol 2 added
   `subscribe`'s options, `run`'s `tab`, `answer` and decide requests; protocol 3 added `workspace` and `apply`
-  (Tabs and groups, below); older clients keep working. `caller` names
+  (Tabs and groups, below); protocol 4 added the plugin methods (`plugins`, `plugins.enable`, `plugins.disable`,
+  `plugins.remove`, `plugins.call`, `docs/plugins.md`); older clients keep working. `caller` names
   who runs the client for the pill (The pill), display only.
 - `caller` → `{"ok": true}` puts the connection's `hello` caller on the pill now (`ok` is false without one). The
   `browse` daemon and `scripts test` call it, since their CDP connections carry no name.

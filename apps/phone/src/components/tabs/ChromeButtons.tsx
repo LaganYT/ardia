@@ -30,9 +30,11 @@ export function plusMenuItems(incognito: boolean, canReopen: boolean): MenuItem[
 
 type Look = { dark: boolean; incognito?: boolean };
 
-export type ChromeFade = { glassShown?: boolean; glassShownMs?: number; glyphFade?: SharedValue<number> };
+export type GlyphFade = { readonly value: number };
 
-export function FadingGlyphs({ fade, style, ...rest }: ViewProps & { fade?: SharedValue<number> }) {
+export type ChromeFade = { glassShown?: boolean; glassShownMs?: number; glyphFade?: GlyphFade };
+
+export function FadingGlyphs({ fade, style, ...rest }: ViewProps & { fade?: GlyphFade }) {
   const faded = useAnimatedStyle(() => (fade ? { opacity: fade.value } : {}));
   return <Animated.View {...rest} style={fade ? [style, faded] : style} />;
 }

@@ -1,5 +1,8 @@
 import { shownPageTone, usePages, type PageState, type PageTone } from "../pages/store";
+import { usePullBar } from "./deckPull";
 import { useBrowse } from "./store";
+
+export const useDeckOwnsBar = () => usePullBar((s) => s.deckOwns);
 
 export const useSurface = () => useBrowse((s) => s.surface);
 

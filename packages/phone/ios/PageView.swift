@@ -22,6 +22,9 @@ final class PageView: ExpoView {
   var obscuresSafeTop = false {
     didSet { if obscuresSafeTop != oldValue { applyObscuredInsets() } }
   }
+  var pinsSafeArea = false {
+    didSet { if pinsSafeArea != oldValue { applyObscuredInsets() } }
+  }
   var swipeNavigation: PageGestures.Swipe = .anywhere
   var closesOnSwipeBack = false
   var reopensOnSwipeForward = false
@@ -211,16 +214,32 @@ final class PageView: ExpoView {
       if let pageID, page != nil { _ = PhonePages.shared.activate(pageID) }
       scheduleToneSample(after: .milliseconds(120))
     }
+    if pinsSafeArea { applyObscuredInsets() }
   }
 
   override func layoutSubviews() {
     super.layoutSubviews()
     if let hostedWebView, hostedWebView.superview === self { hostedWebView.frame = bounds }
+    if pinsSafeArea { applyObscuredInsets() }
   }
 
   override func safeAreaInsetsDidChange() {
     super.safeAreaInsetsDidChange()
-    if obscuresSafeTop { applyObscuredInsets() }
+    if obscuresSafeTop || pinsSafeArea { applyObscuredInsets() }
+  }
+
+  private var restingSafeArea: UIEdgeInsets {
+    guard let window else { return .zero }
+    var origin = CGPoint.zero
+    var view: UIView = self
+    while let parent = view.superview {
+      origin.x += view.center.x - view.bounds.width * view.layer.anchorPoint.x - parent.bounds.origin.x
+      origin.y += view.center.y - view.bounds.height * view.layer.anchorPoint.y - parent.bounds.origin.y
+      if parent === window { break }
+      view = parent
+    }
+    let safe = window.safeAreaInsets
+    return UIEdgeInsets(top: max(safe.top - origin.y, 0), left: 0, bottom: max(origin.y + bounds.height - window.bounds.height + safe.bottom, 0), right: 0)
   }
 
   var effectiveObscuredInsets: UIEdgeInsets {
@@ -233,9 +252,14 @@ final class PageView: ExpoView {
     let insets = effectiveObscuredInsets
     if hostedWebView.obscuredContentInsets != insets { hostedWebView.obscuredContentInsets = insets }
     let scrollView = hostedWebView.scrollView
-    if scrollView.contentInset.top != topClearance {
+    let pinned = pinsSafeArea ? restingSafeArea : .zero
+    let adjustment: UIScrollView.ContentInsetAdjustmentBehavior = pinsSafeArea && window != nil ? .never : .automatic
+    let top = topClearance + pinned.top
+    if scrollView.contentInset.top != top || scrollView.contentInset.bottom != pinned.bottom || scrollView.contentInsetAdjustmentBehavior != adjustment {
       let restsAtTop = scrollView.contentOffset.y <= -scrollView.adjustedContentInset.top + 0.5
-      scrollView.contentInset.top = topClearance
+      scrollView.contentInsetAdjustmentBehavior = adjustment
+      scrollView.contentInset.top = top
+      scrollView.contentInset.bottom = pinned.bottom
       scrollView.verticalScrollIndicatorInsets.top = topClearance
       if restsAtTop { scrollView.contentOffset.y = -scrollView.adjustedContentInset.top }
     }

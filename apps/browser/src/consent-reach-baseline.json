@@ -151,6 +151,7 @@
     "apps/browser/src/state/live/engine.ts": 1,
     "apps/browser/src/state/live/githubClient.ts": 1,
     "apps/browser/src/state/pins/tabCleanup.ts": 1,
+    "apps/browser/src/state/plugins/tools.ts": 1,
     "apps/browser/src/state/reader/reader.ts": 1,
     "apps/browser/src/state/report/actions.ts": 1,
     "apps/browser/src/state/settings/interfaceScaleSync.ts": 1,

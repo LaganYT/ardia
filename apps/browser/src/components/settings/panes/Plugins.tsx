@@ -1,0 +1,242 @@
+import { useEffect, useRef, useState } from "react";
+import { View } from "react-native";
+import type { PluginManifest, RowSpec } from "../../../lib/pluginManifest";
+import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
+import { PLATFORM_TERMS } from "../../../lib/platformTerms";
+import type { ProcessState } from "../../../state/plugins/store";
+import {
+  consentLines,
+  disablePlugin,
+  dismissPluginConsent,
+  enablePlugin,
+  pluginsFolderPath,
+  removePlugin,
+  requestPluginConsent,
+  restartPlugin,
+  setPluginValue,
+  showPluginLog,
+  showPluginsFolder,
+} from "../../../state/plugins/actions";
+import { usePluginActive, usePluginConsent, usePluginListing, usePluginNeedsReview, usePluginOrder, usePluginProcess, usePluginRecord, usePluginValues } from "../../../state/plugins/hooks";
+import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
+import { goToSettingsPane, SETTINGS_WINDOW_ID, type SettingsPlace } from "../../../state/settings/settingsWindows";
+import { confirm } from "../../../state/app/system";
+import { Box, Button, DialogActions, DialogTitle, PopUp, Sheet, Symbol, Text, TextField, Toggle } from "../../ui";
+import { Group, Row, SectionHeader } from "../Form";
+import { useTheme } from "../../ui/theme";
+import { PaneSubPage } from "./PaneSubPage";
+
+export function PluginsPane({ detail }: SettingsPlace) {
+  const consent = usePluginConsent();
+  const showing = useRef(false);
+  useEffect(() => {
+    if (consent) {
+      showing.current = true;
+      showSettingsSheet(<ConsentSheet name={consent.name} hash={consent.hash} />);
+    } else if (showing.current) {
+      showing.current = false;
+      closeSettingsSheet();
+    }
+  }, [consent?.name, consent?.hash]);
+  if (!PLATFORM_FEATURES.plugins) return <UnavailablePage />;
+  return detail ? <PluginPage name={detail} /> : <PluginList />;
+}
+
+function UnavailablePage() {
+  return (
+    <View>
+      <SectionHeader anchor="plugins.plugins" />
+      <Group>
+        <Row title="Plugins aren't here yet" description={`Plugins aren't available on ${PLATFORM_TERMS.os} yet.`} />
+      </Group>
+    </View>
+  );
+}
+
+function PluginList() {
+  const order = usePluginOrder();
+  return (
+    <View>
+      <SectionHeader anchor="plugins.plugins" action={<Button title={`Show in ${PLATFORM_TERMS.fileManager}`} onPress={showPluginsFolder} />} />
+      <Group of="plugins.plugins">
+        {order.length ? (
+          order.map((name) => <PluginRow key={name} name={name} />)
+        ) : (
+          <Row title="No plugins installed" description={`Put a plugin's folder in ${pluginsFolderPath()}, or run ardia plugins install <folder>.`} />
+        )}
+      </Group>
+    </View>
+  );
+}
+
+function processText(p: ProcessState | undefined): string | null {
+  if (!p) return null;
+  if (p.state === "running") return "Running";
+  if (p.state === "starting") return "Starting…";
+  if (p.state === "waiting") return `Restarting after ${p.failures === 1 ? "a crash" : `${p.failures} crashes`}…`;
+  if (p.state === "crashed") return `Its program crashed (${p.reason}) and was stopped`;
+  if (p.state === "failed") return `Its program couldn't start: ${p.reason}`;
+  return "Its program finished";
+}
+
+function statusOf(m: PluginManifest | null, problems: string[], active: boolean, review: boolean, p: ProcessState | undefined): string {
+  if (!m) return problems.slice(0, 2).join("; ") || "This plugin can't load";
+  if (review) return "Its plugin.json changed. Review it to turn it back on.";
+  const running = active ? processText(p) : null;
+  return [m.description, running].filter(Boolean).join(" · ");
+}
+
+function setOn(name: string, on: boolean) {
+  if (on) requestPluginConsent(name);
+  else disablePlugin(name);
+}
+
+function PluginRow({ name }: { name: string }) {
+  const theme = useTheme();
+  const listing = usePluginListing(name);
+  const record = usePluginRecord(name);
+  const active = usePluginActive(name);
+  const review = usePluginNeedsReview(name);
+  const process = usePluginProcess(name);
+  const m = listing?.manifest ?? null;
+  return (
+    <Row
+      title={m ? `${m.title}${m.version ? ` ${m.version}` : ""}` : name}
+      description={statusOf(m, listing?.problems ?? [], active, review, process)}
+      icon={<Symbol name={m?.page?.icon ?? "puzzlepiece"} size={14} color={theme.icon} style={ICON} />}
+      onPress={() => goToSettingsPane("plugins", null, name)}
+    >
+      <Toggle value={active} disabled={!m} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on || (record.enabled && review))} />
+    </Row>
+  );
+}
+
+function ValueRow({ name, row, value }: { name: string; row: RowSpec; value: string | boolean }) {
+  const [draft, setDraft] = useState(typeof value === "string" ? value : "");
+  useEffect(() => setDraft(typeof value === "string" ? value : ""), [value]);
+  if (row.type === "toggle") return <Row title={row.title} description={row.description}><Toggle value={value === true} accessibilityLabel={row.title} onChange={(on) => setPluginValue(name, row.key, on)} /></Row>;
+  if (row.type === "choice")
+    return (
+      <Row title={row.title} description={row.description}>
+        <PopUp value={String(value)} options={row.choices.map((c) => ({ value: c.value, title: c.title }))} accessibilityLabel={row.title} onChange={(v) => setPluginValue(name, row.key, v)} />
+      </Row>
+    );
+  return (
+    <Row title={row.title} description={row.description}>
+      <TextField value={draft} width={200} onChangeText={setDraft} onSubmit={() => setPluginValue(name, row.key, draft)} onBlur={() => setPluginValue(name, row.key, draft)} />
+    </Row>
+  );
+}
+
+async function confirmRemove(name: string, title: string) {
+  const ok = await confirm({ title: `Remove ${title}?`, message: `Its folder moves to the ${PLATFORM_TERMS.trash}, and its data and its panel's website data are deleted.`, confirmTitle: "Remove", destructive: true, windowId: SETTINGS_WINDOW_ID });
+  if (!ok) return;
+  const removed = await removePlugin(name);
+  if (removed.ok || removed.removed) goToSettingsPane("plugins");
+}
+
+function PluginPage({ name }: { name: string }) {
+  const theme = useTheme();
+  const listing = usePluginListing(name);
+  const active = usePluginActive(name);
+  const review = usePluginNeedsReview(name);
+  const process = usePluginProcess(name);
+  const values = usePluginValues(name);
+  const m = listing?.manifest ?? null;
+  if (!listing) return <PaneSubPage intro="This plugin isn't installed any more.">{null}</PaneSubPage>;
+  return (
+    <PaneSubPage intro={m?.description || undefined}>
+      <SectionHeader title={m?.title ?? name} />
+      <Group>
+        <Row title={active ? "On" : review ? "Changed since you turned it on" : "Off"} description={statusOf(m, listing.problems, active, review, process)}>
+          <Toggle value={active} disabled={!m} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on)} />
+        </Row>
+        {m?.process && active ? (
+          <Row title="Its program" description={m.process.run.join(" ")}>
+            <Button title="Show Log" onPress={() => showPluginLog(name)} />
+            <Button title="Restart" onPress={() => restartPlugin(name)} />
+          </Row>
+        ) : null}
+      </Group>
+      {m && active && m.settings.rows.length ? (
+        <>
+          <SectionHeader title="Settings" />
+          <Group>
+            {m.settings.rows.map((row) => (
+              <ValueRow key={row.key} name={name} row={row} value={values[row.key] ?? row.default} />
+            ))}
+          </Group>
+        </>
+      ) : null}
+      {m ? (
+        <>
+          <SectionHeader title="What it gets" />
+          <Group>
+            {consentLines(m).map((line) => (
+              <Row key={line.text} title={line.text} icon={<Symbol name={line.icon} size={13} color={theme.icon} style={ICON} />} />
+            ))}
+          </Group>
+        </>
+      ) : (
+        <>
+          <SectionHeader title="Problems" />
+          <Group>
+            {listing.problems.map((p) => (
+              <Row key={p} title={p} />
+            ))}
+          </Group>
+        </>
+      )}
+      <Group>
+        <Row title="Remove" description={`Moves the plugin to the ${PLATFORM_TERMS.trash}.`}>
+          <Button title="Remove…" kind="destructive" onPress={() => void confirmRemove(name, m?.title ?? name)} />
+        </Row>
+      </Group>
+    </PaneSubPage>
+  );
+}
+
+function ConsentSheet({ name, hash }: { name: string; hash: string }) {
+  const theme = useTheme();
+  const listing = usePluginListing(name);
+  const m = listing?.manifest;
+  const close = () => {
+    dismissPluginConsent();
+    closeSettingsSheet();
+  };
+  const changed = !m || listing?.hash !== hash;
+  return (
+    <Sheet onClose={close}>
+      <DialogTitle icon={<Symbol name="puzzlepiece.fill" size={22} color={theme.icon} style={TITLE_ICON} />} subtitle={m?.description || undefined}>
+        {`Turn on ${m?.title ?? name}?`}
+      </DialogTitle>
+      <Box gap="s" pad="m">
+        {changed ? (
+          <Text tone="textSecondary">The plugin changed while this was open. Close this and try again.</Text>
+        ) : (
+          consentLines(m).map((line) => (
+            <Box key={line.text} row gap="m">
+              <Symbol name={line.icon} size={13} color={theme.icon} style={ICON} />
+              <Text style={LINE}>{line.text}</Text>
+            </Box>
+          ))
+        )}
+      </Box>
+      <DialogActions>
+        <Button title="Cancel" onPress={close} />
+        <Button
+          title="Turn On"
+          kind="primary"
+          disabled={changed}
+          onPress={() => {
+            if (enablePlugin(name, hash)) closeSettingsSheet();
+          }}
+        />
+      </DialogActions>
+    </Sheet>
+  );
+}
+
+const LINE = { flex: 1 } as const;
+const ICON = { width: 18, height: 18 } as const;
+const TITLE_ICON = { width: 28, height: 28 } as const;

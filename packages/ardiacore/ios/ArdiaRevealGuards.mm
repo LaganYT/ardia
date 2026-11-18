@@ -51,6 +51,19 @@ NSUInteger GuardAccessibilityOf(Class cls) {
   return guarded;
 }
 
+NSArray<NSAccessibilityCustomAction *> *GuardedCustomActions(id element, NSArray<NSAccessibilityCustomAction *> *actions) {
+  __weak id vendor = element;
+  for (NSAccessibilityCustomAction *action in actions) {
+    BOOL (^perform)(void) = action.handler;
+    if (!perform) continue;
+    action.handler = ^BOOL {
+      id holder = vendor;
+      return holder && !Refused(holder) && perform();
+    };
+  }
+  return actions;
+}
+
 NSUInteger gGuardedAccessibility = 0;
 
 }
@@ -82,6 +95,13 @@ NSUInteger gGuardedAccessibility = 0;
           if (Refused(found)) return NO;
         }
         return ((BOOL (*)(id, SEL, SEL, id, id))original)(application, send, action, target, sender);
+      };
+    });
+    const SEL dispatch = @selector(sendEvent:);
+    ReplaceMethod(app, dispatch, ^id(IMP original) {
+      return ^(NSApplication *application, NSEvent *event) {
+        if ([ArdiaWebView skipsEventMonitors:event] && [ArdiaWebView swallowsAheadOfSwitch:event]) return;
+        ((void (*)(id, SEL, id))original)(application, dispatch, event);
       };
     });
     Class widget = NSClassFromString(@"RenderWidgetHostViewCocoa");
@@ -119,6 +139,21 @@ NSUInteger gGuardedAccessibility = 0;
       };
     });
     for (NSString *name in @[ @"BrowserAccessibilityCocoa", @"AXPlatformNodeCocoa" ]) gGuardedAccessibility += GuardAccessibilityOf(NSClassFromString(name));
+    const SEL customActions = @selector(accessibilityCustomActions);
+    for (NSString *name in @[ @"BrowserAccessibilityCocoa", @"AXPlatformNodeCocoa" ]) {
+      Class cls = NSClassFromString(name);
+      unsigned int count = 0;
+      Method *methods = cls ? class_copyMethodList(cls, &count) : nullptr;
+      for (unsigned int i = 0; i < count; i++) {
+        if (method_getName(methods[i]) != customActions) continue;
+        const IMP original = method_getImplementation(methods[i]);
+        method_setImplementation(methods[i], imp_implementationWithBlock(^NSArray *(id element) {
+          return GuardedCustomActions(element, ((NSArray * (*)(id, SEL))original)(element, customActions));
+        }));
+        gGuardedAccessibility++;
+      }
+      free(methods);
+    }
   });
 }
 

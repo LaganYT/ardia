@@ -34,6 +34,8 @@ export const AUTOMATION_EVENTS = [
 ] as const;
 export type AutomationEventName = (typeof AUTOMATION_EVENTS)[number];
 
+export const PLUGIN_EVENTS: readonly AutomationEventName[] = AUTOMATION_EVENTS.filter((name) => name !== "notification.shown");
+
 export const NAMED_ONLY_EVENTS: ReadonlySet<AutomationEventName> = new Set([
   "notification.shown",
   "app.activated",

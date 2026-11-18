@@ -138,6 +138,8 @@ function ContainedCards({ ids, geometry, motion, children }: ContainedCardsProps
         expanded: expandedIndex.value,
         scaleProgress: scaleProgress.value,
         positionProgress: positionProgress.value,
+        riseProgress: positionProgress.value,
+        revealProgress: 1,
         dragIndex: dragIndex.value,
         dragLift: dragLift.value,
         leaving: leaving.value,

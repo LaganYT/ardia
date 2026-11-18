@@ -1,16 +1,15 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
-import { create, type StoreApi } from "zustand";
+import type { StoreApi } from "zustand";
 import { useRootSize, type RootSize } from "../app/rootSize";
 import { shownPageTone, usePages, type PageTone } from "../pages/store";
 import { useSearch } from "../search/store";
 import { tabsInSpace } from "../tabs/spaces";
 import { useTabs } from "../tabs/store";
 import { recencyOrder, type BrowserTab } from "../tabs/tabModels";
+import { refreshHiddenDeck, useDeckStandby } from "./deckStandby";
 import { useBrowse } from "./store";
 
-const useDeckRefresh = create<{ round: number }>()(() => ({ round: 0 }));
-
-export const refreshHiddenDeck = () => useDeckRefresh.setState((state) => ({ round: state.round + 1 }));
+export { refreshHiddenDeck };
 
 export const deckIsShown = () => useBrowse.getState().surface === "deck";
 
@@ -20,13 +19,13 @@ export function useHeldWhileDeckHidden<S, T>(store: StoreApi<S>, select: (state:
   const held = useRef<{ value: T; round: number } | null>(null);
   const subscribe = useCallback(
     (changed: () => void) => {
-      const stops = [store.subscribe(changed), useBrowse.subscribe(changed), useDeckRefresh.subscribe(changed)];
+      const stops = [store.subscribe(changed), useBrowse.subscribe(changed), useDeckStandby.subscribe(changed)];
       return () => stops.forEach((stop) => stop());
     },
     [store],
   );
   const snapshot = () => {
-    const round = useDeckRefresh.getState().round;
+    const round = useDeckStandby.getState().round;
     const now = held.current;
     if (now && now.round === round && !deckIsShown()) return now.value;
     const value = select(store.getState());

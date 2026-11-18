@@ -15,6 +15,7 @@ import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";
 import { AutomationsPane } from "./panes/Automations";
 import { GeneralPane } from "./panes/General";
+import { PluginsPane } from "./panes/Plugins";
 import { ProfilesPane } from "./panes/Profiles";
 import { ShortcutsPane } from "./panes/Shortcuts";
 import { TabsPane } from "./panes/Tabs";
@@ -182,6 +183,7 @@ const PANE_VIEWS: Record<SettingsPane, (place: SettingsPlace) => ReactNode> = {
   tabs: (place) => <TabsPane {...place} />,
   appearance: (place) => <AppearancePane {...place} />,
   automations: (place) => <AutomationsPane {...place} />,
+  plugins: (place) => <PluginsPane {...place} />,
   shortcuts: (place) => <ShortcutsPane {...place} />,
   advanced: (place) => <AdvancedPane {...place} />,
 };

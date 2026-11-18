@@ -214,6 +214,10 @@ def build_parser():
 
     workspace_cli.add_parsers(commands, argparse.RawDescriptionHelpFormatter)
 
+    from ardia_cli import plugins_cli
+
+    plugins_cli.add_parsers(commands, argparse.RawDescriptionHelpFormatter)
+
     from ardia_cli import feedback, star
 
     feedback.add_parser(commands, argparse.RawDescriptionHelpFormatter)
@@ -338,6 +342,10 @@ def run(argv: list[str]) -> int:
         from ardia_cli import workspace_cli
 
         return workspace_cli.run(args, parser)
+    if args.command == "plugins":
+        from ardia_cli import plugins_cli
+
+        return plugins_cli.run(args, parser)
     if args.command in ("config", "theme"):
         from ardia_cli import config_cli
 

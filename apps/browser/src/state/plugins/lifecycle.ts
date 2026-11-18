@@ -1,0 +1,176 @@
+import { defaultValues, rowValue } from "../../lib/pluginManifest";
+import { listPluginFolders, removePluginFiles, type PluginFolderEntry } from "../../platform/plugins";
+import { systemInfo } from "../../platform/app";
+import { onConfigChange } from "../../platform/configFolder";
+import { useBrowser } from "../browser/store";
+import { notePlugin } from "../telemetry/pluginCounts";
+import { consentNow, consentToken, type ConsentToken } from "../telemetry/choice";
+import { warnFor } from "../telemetry/consoleConsent";
+import { listingOf } from "./appChecks";
+import { applySettingsPatch, planDisable, planEnable, spliceApplied } from "./defaults";
+import { pluginRecordsSaved, writePluginRecords } from "./savedState";
+import { activeManifest, currentPlugins, NO_RECORD, recordOf, usePlugins, type PluginListing, type PluginRecord } from "./store";
+import { stopProcess, superviseProcess, supervisedNames } from "./process";
+import { dropCalls } from "./tools";
+import { sendValues } from "./channel";
+
+export const MAX_PLUGINS = 64;
+
+const READ_PROBLEMS: Record<Exclude<PluginFolderEntry["status"], "ok">, string> = {
+  missing: "The folder has no plugin.json",
+  link: "plugin.json is a link; it must be a file in the plugin's folder",
+  notFile: "plugin.json isn't a file",
+  tooBig: "plugin.json is over 1 MB",
+  unreadable: "plugin.json couldn't be read",
+};
+
+export function listingsOf(entries: PluginFolderEntry[]): PluginListing[] {
+  const settings = useBrowser.getState().settings;
+  const version = systemInfo().appVersion;
+  return entries
+    .slice(0, MAX_PLUGINS)
+    .map((e) => listingOf(e.name, e.status === "ok" ? (e.text ?? "") : null, e.status === "ok" ? null : READ_PROBLEMS[e.status], settings, version, e.folderId ?? ""));
+}
+
+function saveRecords(records: Record<string, PluginRecord>, consent: ConsentToken | null): boolean {
+  if (!writePluginRecords(records, consent)) return false;
+  usePlugins.setState({ records });
+  return true;
+}
+
+function updateRecord(name: string, change: (r: PluginRecord) => PluginRecord | null, consent: ConsentToken | null): boolean {
+  const records = { ...currentPlugins().records };
+  const next = change(recordOf(currentPlugins(), name));
+  if (next) records[name] = next;
+  else delete records[name];
+  return saveRecords(records, consent);
+}
+
+export function reconcilePlugins(consent: ConsentToken | null) {
+  const s = currentPlugins();
+  const active = new Set<string>();
+  for (const name of s.order) {
+    const manifest = activeManifest(s, name);
+    if (!manifest) continue;
+    active.add(name);
+    if (manifest.process) superviseProcess(name, s.listings[name]!.hash!, manifest, s.listings[name]!.folderId, consent);
+    else stopProcess(name, consent);
+  }
+  for (const name of supervisedNames()) if (!active.has(name)) stopProcess(name, consent);
+}
+
+const toForget = new Set<string>();
+
+function forgetRemoved(consent: ConsentToken | null) {
+  for (const name of toForget) if (updateRecord(name, () => null, consent)) toForget.delete(name);
+}
+
+export function applyListings(listings: PluginListing[], consent: ConsentToken | null) {
+  const byName = Object.fromEntries(listings.map((l) => [l.name, l]));
+  usePlugins.setState({ listings: byName, order: listings.map((l) => l.name).sort() });
+  forgetRemoved(consent);
+  reconcilePlugins(consent);
+}
+
+let scanning: Promise<void> | null = null;
+let nextScan: { consent: ConsentToken | null } | null = null;
+
+export function rescanPlugins(consent: ConsentToken | null): Promise<void> {
+  if (scanning) {
+    nextScan = { consent };
+    return scanning;
+  }
+  scanning = (async () => {
+    let scan: { consent: ConsentToken | null } | null = { consent };
+    while (scan) {
+      const asked = scan.consent;
+      nextScan = null;
+      const entries = await listPluginFolders().catch((error: unknown) => {
+        warnFor(asked, "[plugins] couldn't list the plugins folder", error);
+        return null;
+      });
+      if (entries) applyListings(listingsOf(entries), asked);
+      scan = nextScan;
+    }
+  })().finally(() => {
+    scanning = null;
+  });
+  return scanning;
+}
+
+export function requestPluginConsent(name: string): boolean {
+  const listing = currentPlugins().listings[name];
+  if (!listing?.manifest || !listing.hash) return false;
+  usePlugins.setState({ consent: { name, hash: listing.hash } });
+  return true;
+}
+
+export const dismissPluginConsent = () => usePlugins.setState({ consent: null });
+
+export function enablePlugin(name: string, hash: string): boolean {
+  const listing = currentPlugins().listings[name];
+  if (!listing?.manifest || listing.hash !== hash || removing.has(name)) return false;
+  const manifest = listing.manifest;
+  const before = recordOf(currentPlugins(), name);
+  const values = { ...defaultValues(manifest), ...before.values };
+  const consent = consentNow();
+  const kept = before.enabled && before.approved === hash;
+  const records = kept || !before.enabled ? currentPlugins().records : spliceApplied(currentPlugins().records, name);
+  const plan = kept ? { patch: {}, applied: before.applied } : planEnable(manifest, records, name, before.applied);
+  if (!saveRecords({ ...records, [name]: { enabled: true, approved: hash, values, applied: plan.applied } }, consent)) return false;
+  applySettingsPatch(plan.patch);
+  usePlugins.setState({ consent: null });
+  notePlugin("plugin_enables", consent);
+  reconcilePlugins(consent);
+  return true;
+}
+
+export function disablePlugin(name: string, consent: ConsentToken | null): boolean {
+  const before = recordOf(currentPlugins(), name);
+  if (!before.enabled) return true;
+  const patch = planDisable(currentPlugins().records, name);
+  const records = spliceApplied(currentPlugins().records, name);
+  if (!saveRecords({ ...records, [name]: { ...before, enabled: false, applied: {} } }, consent)) return false;
+  applySettingsPatch(patch);
+  notePlugin("plugin_disables", consent);
+  reconcilePlugins(consent);
+  return true;
+}
+
+const removing = new Set<string>();
+
+export async function removePlugin(name: string): Promise<{ ok: boolean; removed?: boolean; reason?: string }> {
+  if (removing.has(name)) return { ok: false, reason: "It is already being removed." };
+  const consent = consentToken();
+  if (!disablePlugin(name, consent)) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
+  removing.add(name);
+  try {
+    if (!(await pluginRecordsSaved(consent))) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
+    const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
+    if (!removed.ok) return removed;
+    const forgotten = updateRecord(name, () => null, consent) && (await pluginRecordsSaved(consent));
+    if (!forgotten) toForget.add(name);
+    await rescanPlugins(consent);
+    if (!forgotten) return { ok: false, removed: true, reason: "Its files are removed, but plugins.json couldn't be updated; Ardia drops its record the next time it can save." };
+    return { ok: true };
+  } finally {
+    removing.delete(name);
+  }
+}
+
+export function setPluginValue(name: string, key: string, value: string | boolean) {
+  const row = currentPlugins().listings[name]?.manifest?.settings.rows.find((r) => r.key === key);
+  if (!row || rowValue(row, value) !== value) return;
+  if (!updateRecord(name, (r) => ({ ...(r === NO_RECORD ? { ...NO_RECORD } : r), values: { ...r.values, [key]: value } }), consentNow())) return;
+  if (activeManifest(currentPlugins(), name)) sendValues(name);
+}
+
+let started = false;
+
+export { loadPluginRecords } from "./records";
+
+export function watchPluginFolder() {
+  if (started) return;
+  started = true;
+  onConfigChange(() => void rescanPlugins(consentToken()));
+}

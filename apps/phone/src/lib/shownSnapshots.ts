@@ -20,6 +20,8 @@ export const pictureKey = (owner: string, uri: string) => `${owner}|${uri}`;
 
 const painted = new Set<string>();
 
+export const picturePainted = (key: string) => painted.has(key);
+
 export function forgetPicturePainted(key: string) {
   painted.delete(key);
 }

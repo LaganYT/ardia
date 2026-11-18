@@ -127,6 +127,9 @@ you bump a pin.
   prints it should escape control characters, as the CLI's own output does.
 - `ardia hooks run|install|uninstall|list` runs the hooks in `hooks.json`, at login through a LaunchAgent on macOS
   or a systemd user service on Linux (see Linux below and `docs/automation.md`).
+- `ardia plugins list|install|check|remove|enable|disable|call|path` installs and manages plugins in the config
+  folder's `plugins/`; `enable`, `disable` and `call` need Ardia running with control on, and `enable` only opens the
+  consent sheet in Ardia (see `docs/plugins.md`).
 - `ardia feedback --title TITLE [--kind bug|slow|idea|other] [--attach FILE]… [--command CMD] [--data-dir DIR] TEXT|-`
   reports a problem or an idea to the developer (see Feedback and the star nudge). Exit 0 sent (or the same report
   already went out today), 1 not sent and kept on the Mac (the line says why), 2 a missing or bad title, description

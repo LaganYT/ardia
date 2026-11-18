@@ -4,6 +4,7 @@ import { PixelRatio, Platform, StyleSheet, Text, View, type StyleProp, type View
 import Animated, { useAnimatedStyle, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { isUnseenReceived } from "../../lib/tabFace";
 import { DECK, DECK_HEADER, deckBarBand, deckFlyLift, deckHeaderIconReveal, deckLeaveFade, deckStatusStrip, deckHeaderLeading, deckHeaderPlacement, deckLeading, deckSlot, deckVisibleWidth, lerp, titleReveal, type DeckGeometry, type DeckLeaving, type DeckSlots } from "../../lib/deckGeometry";
+import { pullTuck } from "../../lib/deckPull";
 import { useHeldPageTone } from "../../state/browse/deckHold";
 import { display } from "../../state/search/omnibox";
 import type { BrowserTab } from "../../state/tabs/tabModels";
@@ -41,12 +42,13 @@ export function sameCard(a: Props, b: Props): boolean {
   return true;
 }
 
-export const DECK_PHASE = { settled: 0, opening: 1, closing: 2 } as const;
+export const DECK_PHASE = { settled: 0, opening: 1, closing: 2, pulling: 3 } as const;
 
 export function deckRole(phase: number, expanded: number, index: number): DeckRole {
   "worklet";
   if (phase === DECK_PHASE.settled || expanded < 0) return "stay";
   if (index === expanded) return "expanded";
+  if (phase === DECK_PHASE.pulling) return "stay";
   if (phase === DECK_PHASE.opening) return index < expanded ? "launcher" : "slideRight";
   return index < expanded ? "slideLeft" : "slideRight";
 }
@@ -60,21 +62,25 @@ export const leavingZ = (index: number) => {
   return Math.max(index, 0) * DECK_Z_STEP - DECK_Z_STEP / 2;
 };
 
+export type Reads<T> = { readonly value: T };
+
 export type DeckMotion = {
   orderIds: SharedValue<readonly string[]>;
   shiftBy: SharedValue<number>;
   fromSlots: SharedValue<DeckSlots>;
   gap: SharedValue<number>;
-  phase: SharedValue<number>;
-  expandedIndex: SharedValue<number>;
+  phase: Reads<number>;
+  expandedIndex: Reads<number>;
   scroll: SharedValue<number>;
-  scaleProgress: SharedValue<number>;
-  positionProgress: SharedValue<number>;
+  scaleProgress: Reads<number>;
+  positionProgress: Reads<number>;
+  riseProgress: Reads<number>;
+  revealProgress: Reads<number>;
   dragIndex: SharedValue<number>;
   dragLift: SharedValue<number>;
   leaving: SharedValue<DeckLeaving>;
   flyClock: SharedValue<number>;
-  covering: SharedValue<string>;
+  covering: Reads<string>;
 };
 
 export type DeckNow = {
@@ -84,6 +90,8 @@ export type DeckNow = {
   expanded: number;
   scaleProgress: number;
   positionProgress: number;
+  riseProgress: number;
+  revealProgress: number;
   dragIndex: number;
   dragLift: number;
   leaving: DeckLeaving;
@@ -103,6 +111,8 @@ export function deckNow(motion: DeckMotion): DeckNow {
     expanded: motion.expandedIndex.value,
     scaleProgress: motion.scaleProgress.value,
     positionProgress: motion.positionProgress.value,
+    riseProgress: motion.riseProgress.value,
+    revealProgress: motion.revealProgress.value,
     dragIndex: motion.dragIndex.value,
     dragLift: motion.dragLift.value,
     leaving: motion.leaving.value,
@@ -151,7 +161,7 @@ type Props = {
 
 type Pose = { x: number; y: number; scale: number; corner: number; opacity: number; header: number; visible: number; lift: number; fade: number };
 
-export function cardPose(g: DeckGeometry, role: DeckRole, relative: number, sp: number, pp: number, lift: number, fade: number, isLast: boolean): Pose {
+export function cardPose(g: DeckGeometry, role: DeckRole, relative: number, sp: number, pp: number, lift: number, fade: number, isLast: boolean, rise: number = pp): Pose {
   "worklet";
   const cx = deckLeading(g, relative) + g.cardWidth / 2;
   const cy = g.cardCenterY;
@@ -163,7 +173,7 @@ export function cardPose(g: DeckGeometry, role: DeckRole, relative: number, sp: 
   if (role === "expanded") {
     scale = lerp(g.width / Math.max(g.cardWidth, 1), 1, sp);
     x = lerp(g.width / 2, cx, pp);
-    y = lerp(g.height / 2, cy, pp);
+    y = lerp(g.height / 2, cy, rise);
     corner = lerp(g.screenCorner, DECK.cardRadius, sp);
   } else if (role === "launcher") {
     scale = lerp(DECK.launcherStartWidth / Math.max(g.cardWidth, 1), 1, sp);
@@ -197,15 +207,19 @@ export const DeckCard = memo(function DeckCard({ tab, index, geometry: g, motion
   const placed = useDerivedValue(() => {
     const now = deckNow(motion);
     const m = deckCardMotion(now, at.value, id);
-    const p = cardPose(g, m.role, m.relative, now.scaleProgress, now.positionProgress, m.lift, m.fade, m.isLast);
+    const slot = cardPose(g, m.role, m.relative, now.scaleProgress, now.positionProgress, m.lift, m.fade, m.isLast, now.riseProgress);
+    const pulled = now.phase === DECK_PHASE.pulling;
+    const revealed = pulled ? Math.min(Math.max(now.revealProgress, 0), 1) : 1;
+    const tucks = pulled && m.role !== "expanded" && now.expanded >= 0;
+    const p = tucks ? { ...slot, ...pullTuck(cardPose(g, "expanded", now.expanded - now.scroll, now.scaleProgress, now.positionProgress, 0, 0, false, now.riseProgress), slot, revealed) } : slot;
     const top = p.y - (g.cardHeight * p.scale) / 2 - tabsLayout.headerGap - tabsLayout.headerHeight;
-    return { pose: p, top, place: deckHeaderPlacement(p.x - (g.cardWidth * p.scale) / 2, p.visible), z: m.z, expanded: m.role === "expanded" };
+    return { pose: p, top, place: deckHeaderPlacement(p.x - (g.cardWidth * p.scale) / 2, p.visible), z: m.z, expanded: m.role === "expanded", shown: 1, headed: revealed };
   }, [g, id]);
   const cardStyle = useAnimatedStyle(() => {
     const p = placed.value.pose;
     return {
       zIndex: placed.value.z,
-      opacity: covering.value === id ? 0 : p.opacity,
+      opacity: covering.value === id ? 0 : p.opacity * placed.value.shown,
       borderRadius: p.corner / Math.max(p.scale, 0.01),
       transform: [{ translateX: p.x - g.cardWidth / 2 }, { translateY: p.y - g.cardHeight / 2 }, { scale: p.scale }],
     };
@@ -215,7 +229,7 @@ export const DeckCard = memo(function DeckCard({ tab, index, geometry: g, motion
     const { pose: p, top, place } = placed.value;
     return {
       zIndex: placed.value.z + 1,
-      opacity: p.header * deckHeaderIconReveal(place.available, tabsLayout.faviconSize),
+      opacity: p.header * placed.value.headed * deckHeaderIconReveal(place.available, tabsLayout.faviconSize),
       transform: [{ translateX: place.left + place.available - g.cardWidth }, { translateY: top }],
     };
   });
@@ -369,7 +383,7 @@ export function CardIcon({ tab }: { tab: BrowserTab }) {
   );
 }
 
-export type CardOpen = "openingCard" | "coveringCard" | "deckCard";
+export type CardOpen = "openingCard" | "coveringCard" | "deckCard" | "pulledCard";
 
 const androidCardOpen = (): CardOpen => (isLabBuild && launchArguments().openingCard ? "coveringCard" : "deckCard");
 

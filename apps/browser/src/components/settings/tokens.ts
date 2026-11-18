@@ -92,6 +92,7 @@ export const paneTints = {
   indigo: "#5856D6",
   purple: "#AF52DE",
   pink: "#FF2D55",
+  teal: "#30B0C7",
   ink: "#FFFFFF",
 } as const;
 

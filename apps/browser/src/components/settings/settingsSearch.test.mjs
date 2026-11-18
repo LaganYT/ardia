@@ -222,7 +222,7 @@ test("a long matching text shows the part around its match", () => {
 });
 
 test("every pane has settings", () => {
-  for (const pane of ["general", "profiles", "tabs", "appearance", "automations", "shortcuts", "advanced"]) assert.ok(SETTINGS.some((s) => s.pane === pane), pane);
+  for (const pane of ["general", "profiles", "tabs", "appearance", "automations", "plugins", "shortcuts", "advanced"]) assert.ok(SETTINGS.some((s) => s.pane === pane), pane);
 });
 
 test("search still finds a row hidden until something else is on, when the row says what it needs", async () => {

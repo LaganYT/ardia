@@ -1032,6 +1032,113 @@ Every interaction in a lab build prints one line, `PAGELAB perf <interaction> <w
 
 The render thread and the GPU don't appear there, so every run pairs the lines with gfxinfo over the same steps. The windows start at a deck pan (1.2 s), the deck's open (0.9 s), a card's open (0.9 s) and the tray's open (0.8 s).
 
+#### The swipe into the deck (iPhone, portrait)
+
+The owner's reference is Safari's swipe up on its bottom bar (#2607; the measurements are in
+`/tmp/ardia-b16/shots-before/REPORT.md` when that pass ran). What it does here:
+
+- **The live page moves, not a picture.** The Pan on the bar (`barSwipeUp`) writes two shared values on the UI thread,
+  `deckPull.shrink` and `deckPull.travel` (`state/browse/deckPull.ts`), and everything else derives from them in
+  worklets: the page's transform (`PagePull` in `components/browsing/PagePull.tsx`), the deck's cards, backdrop and
+  chrome (`useDeckPulled` in `components/tabs/deckPulled.ts`) and the bar's glyphs. No React render sits between a
+  touch move and its frame. The geometry is pure and tested in `lib/deckPull.ts`.
+- **The page is aimed at its own card.** `pullPagePose` takes the page from the full screen to the frame of its card in
+  the deck (its slot in the stack, or its tile in the grid): width, centre and corner together. The shrink is spread
+  over about a third of the screen's height of travel (`DECK_PULL.travelShare`, 325 pt on a Pro Max), so a flick lets
+  go while the page is still moving; past that the page only rises a little, with resistance, and never gets smaller
+  than the card, so the release finishes the same move and nothing turns round.
+- **The page eases to the finger.** Each touch move sets where the page is heading and a stiff critically damped
+  spring takes it there (`DECK_PULL.followResponse`, 0.12 s), so a fast flick, whose first touch move is already far
+  up, can't jump the page there in one frame. The landing spring takes over from that spring with the page's own
+  speed, whether or not the page had caught the finger up.
+- **It opens centred.** On iPhone the tab view opens with the current card centred and fully visible, from the swipe
+  and from every `showDeck()` caller (`openingDeckScroll(index, count, true)`). Android keeps the older rule, where
+  the newest tab opens one slot right of the focused card.
+- **The deck is already there.** On iPhone the deck waits under the page, laid out and parked off screen by a
+  transform (not `display: none`, and never by opacity, which glass can't sit under), with the page in a layer above
+  it (`PageLayer` in `App.tsx`). The waiting deck publishes the card's frame (`publishDeckStandby`); a swipe begins
+  only when that frame is for the page's tab, and otherwise falls back to the tap path below.
+- **Release.** `pullLands` commits on distance (90 pt past recognition, which is about Safari's 100 to 150 pt of whole
+  travel) or on a flick of 900 pt/s; a drag back down at 250 pt/s always returns. The landing is a critically damped
+  spring that carries on at the page's speed; the deck's header fades in on `deckPull.reveal` during it, as Safari's
+  does, and the other cards slide out from behind the page on the same value (`pullTuck`): they wait behind it at
+  80% size and full opacity, so nothing fades in and no frame carries a step. The deck is woken (unparked, cards
+  drawn under the page) when the finger touches the bar, before the swipe is recognised, so the first drawing of the
+  other cards is paid while nothing moves. Let go early and the page springs back; nothing was unmounted, so the page, its scroll
+  position and the bar are as they were.
+- **The handover.** The capture of the page starts when the pull starts. The waiting deck takes the fresh picture only
+  after the landing has ended (re-rendering its cards mid-pull stalled the UI thread for over 100 ms), and once that
+  picture has painted in the card the live page is hidden and the deck's own card shown in the same UI frame; the
+  surface changes to the deck one frame later. The wait is for the picture that is current when it ends: if a newer
+  capture lands while an older picture is awaited, the deck draws and awaits the newer one. If the picture has not
+  painted within 250 ms the live page keeps standing in the card for up to 1 s more (`DECK_PULL.paintLateCapMs`) and
+  the deck takes over the moment it paints. Only if it still hasn't is the page handed over anyway: that is counted
+  as `deck_pictures_late`, and the card then shows its background colour until the image loads. While a landed page
+  waits, a second request for the tabs for the same tab is ignored, and the wait gives up only its own capture. The live page and its picture agree to the point because the page
+  view pins its insets while it moves (`pinsSafeArea` on `ArdiaPageView`): a transformed view's safe area shrinks as
+  it leaves the status bar, and the web view's content used to slide inside the page by up to 60 pt during the pull.
+- **No second motion.** When the "Archive inactive tabs" capsule is due, the waiting deck lays its cards out for it
+  before the pull (`archivePlanned`), the page lands on the shifted card, and the capsule is offered at once at the
+  handover (`offerArchiveCardNow`) and fades in over cards that don't move. The capsule's behaviour at other times
+  is unchanged.
+- **One bar.** The two bars have the same three shapes (48 pt circle, capsule, 48 pt circle; the deck's sits 0.5 pt
+  lower). The browsing bar's glass stays for the whole pull and moves that 0.5 pt with it. Its glyphs fade out as the
+  page's bottom edge rises 8 to 44 pt and the tab view's glyphs (the Incognito eyes, Search Tabs, +) fade in on the
+  same glass from 36 to 66 pt (`PullGlyphs`, `PullGhost`). When the page's bottom edge has cleared the bar the deck's
+  own bar takes over in one React commit (`usePullBar`): its glass on, the browsing bar's glass and ghost glyphs off.
+  It gives the bar back the same way if the finger comes down again.
+- **The tap is the same motion.** `showDeck()` lands the page from rest through the same worklets
+  (`landDeckPullFromRest`) when a page is showing and the pull is armed; if the deck isn't waiting yet it is mounted
+  first. Only when that can't happen (the page is covered, or the deck doesn't report within 0.5 s) does the old
+  entrance run, with the page kept above the deck until the card's picture has painted.
+- **Opening a card is the reverse.** On iPhone in portrait the deck's own card grows from its place on the same
+  values (`growDeckPull`, response 0.18 s as before), the other cards tuck in behind it, the header's glyphs fade out, and
+  the live page is mounted only once the card has landed (mounting it mid-growth stalled the growth for over 100 ms)
+  and takes the card's place when it is laid out and its cover has painted. The bar then cross-fades back to the
+  page's in 150 ms. In Grid a tile still opens with the older cut. The separate opening card is now only used in the column layouts.
+- **Grid.** With Grid chosen the waiting deck holds the grid, centred on the page's tab, and the target is that tile.
+- **Reduce Motion.** Nothing tracks the finger, nothing moves and nothing waits (#2647). What the swipe and the tap
+  do depends on what the page's card can show at once:
+  - **Its picture is painted** (the usual case): the page cross-fades over the deck at rest in 150 ms, starting in
+    the frame the request is handled (`fadeDeckPullFromRest`, with `ReduceMotion.Never`, since Reanimated otherwise
+    skips the fade and cuts). When the fade ends the live page stands in its own card, as at the end of a pull, and
+    the usual handover follows under it: the fresh capture is painted in the card and the deck takes over. If the
+    painted picture was out of date (the page has scrolled since), the card's content corrects in that one frame.
+  - **It has no painted picture** (a page never captured, or a newer picture the waiting deck hasn't drawn): no
+    fade. The live page stands in its card in one frame, a cut as before the swipe followed the finger
+    (`cutDeckPullFromRest`), and the same handover follows. Through the entrance the card is never empty either
+    way, because what stands in it is the page itself; the one exception is the handover's last resort above, a
+    picture that has not painted 1.25 s after the page landed.
+  With Reduce Motion on, the waiting deck takes each new picture of the page in front as it lands
+  (`showFadingDeckThePicture`), so the first case is the common one; with normal motion it doesn't re-render for
+  that. A touch on the bar wakes the deck under the page and draws the page at 99% (`deckPull.primed`), which makes
+  the compositor draw both before the fade: without it the first fade after a launch stalled about 90 ms and
+  showed in two frames. The bar keeps the browsing glass through the fade, with the tab view's glyphs fading in on
+  it, and the deck's bar takes over after. Opening a card is a fade too (`growDeckPull(…, steady)`): the deck holds
+  still, can't be dragged or scrolled by an accessibility action, and stays the surface, the page is made under it unseen, fades in over it once it is laid
+  out and its cover has painted (five to seven frames after the tap on the simulator), and the deck lets go when
+  the fade has ended. Grid's tile open, and the old entrance when it runs (search, a menu or the reader open, or
+  the deck not ready within 0.5 s), are still cuts under Reduce Motion.
+- **A request that outlives its page is dropped.** If the tab in front changes, or the surface does, while a tap
+  is still waiting for the deck to report (at most 0.5 s), the request is cleared and nothing opens; with the same
+  page still in front it falls back to the old entrance as before.
+- **Android, landscape, Duo and iPad** keep the old tree and the old entrance. `useDeckPulled`, `PullGlyphs`,
+  `PullGhost`, `usePullBarShift` and the page layer are chosen once by platform (`iPhoneOr`), and `pulls` is false in
+  the column layouts.
+
+In a lab build every pull prints `PAGELAB perf deck pull <ms>` for the time under the finger, then
+`PAGELAB perf deck pull landing 900ms` (or `deck pull return`). A tap prints only the landing line. On iPhone `labLog`
+now goes to the unified log through `NSLog` in test builds (`ArdiaPhoneSystem.labLog`), so the lines can be read with
+`xcrun devicectl device process launch --console …` or
+`log stream --predicate 'eventMessage CONTAINS "PAGELAB"'`; before this they went to `console.log`, which a Release
+build drops.
+
+To measure without a finger, launch a lab build with `-BrowseDeckPull <n>`: once a page is showing and the deck is
+waiting, it replays a fixed finger path through the gesture's own worklets (`replayDeckPull`): n pulls of 220 pt in
+0.35 s released at 630 pt/s, each followed by opening the same card again, then one pull of 50 pt let go at rest,
+which returns. It ends with `PAGELAB deck pull script done: <committed> of <n> committed, <returned> returned`. It
+works on whatever tabs are open and leaves the same tab selected; with no page showing it only logs.
+
 #### Deck speed tester script (lab build)
 
 Run it once with the look off (lab › Look) and once with it on, at animator scale 1. `$P` is the package. Swipes are in pixels for a 1080-wide screen; scale them for others.
@@ -1225,7 +1332,7 @@ Events (service `ardia-phone`, `$lib` `ardia-phone-telemetry`, tags `app: phone`
 | `perf_launch` | `launch_ms`, `js_ms` | each launch, once the module gives the process start (`ArdiaPhoneSystem.processStartedAt()`, epoch ms) |
 | `perf_backdrop` | `backdrop_ms` | each launch on iPhone, once the native launch backdrop has shown (`system.launchBackdropShownAt()`, epoch ms on the process start's clock) |
 | `perf_launch_tray` | `tray_ms` | each launch with Auto-Open Keyboard on, once the launch tray is up (process start on `ArdiaPhoneSystem.processStartedAt()`'s clock) |
-| `usage_counts` | `tabs_opened`, `searches`, `pins_to_mac`, `tabs_sent`, `page_processes_gone`, `links_given_up` (a link whose handling passed its 8 s deadline), `pages_reloaded_online` (a failed page reloaded when the phone came back online), `find_opened_system` and `find_opened_bar` (Find on Page opened in WebKit's own panel, or in the app's find bar), `spaces_swiped` (a swipe in Spaces or on the start page that changed the profile), `tray_hidden_rows_opened` (a tray row opened while it peeked or sat under the keyboard), `deck_pictures_late` (a deck opened from a page whose picture hadn't painted within 250 ms, so it shrank without waiting), `search_tabs_opened` (the deck's Search Tabs field focused, in the redesign), `spaces_picked` (a space picked from the deck's switcher menu, or by a VoiceOver adjustment of the start page's dots, that changed the profile, in the redesign), `tabs_moved_to_space` (a tab moved to another space with the deck card menu's Move to Space, in the redesign), `pages_printed` (a page printed from the page menu's Print, counted when the print sheet opened, in the redesign), `pages_translated` (a page sent to Google Translate from the page menu's Translate, never from an Incognito tab), `pinned_tabs_refound` (a pinned site's tile or row switched to the tab it had opened after that tab had left the pinned address, where it used to open a second copy), `site_permissions_revoked` (a site's camera, microphone or location access revoked from Site Settings, by swipe or by its dialog, on iPhone's Expo UI Settings), `tray_back_swiped` (a search tray closed with Android's predictive back swipe), `card_opens_waited` (a card opened from the deck whose growth landed before its page had laid out and its picture painted, so the page waited up to 250 ms to take over), `native_menus_opened` (a menu opened as the system's own: a deck card's long press, the deck's ···, the space switchers, the + menus, Reader's Text Appearance, the page menu's Send to Device, the tabs button's recent tabs, on iPhone), `library_opened` (History, Bookmarks or Downloads opened in the system sheet from the page menu, on iPhone), `deck_grid_shown` (Grid picked for the deck in Settings › Appearance › Tabs, on iPhone), `landscape_shown` (a launch in which the phone was turned to landscape at least once, counted once a launch), `duo_layout_shown` (a launch that used the column, wide or split layout at least once, counted once a launch, on iPhone), `list_sheets_late` (an Archive or History sheet whose rows were drawn more than 400 ms after it was asked for, on iPhone), `list_pages_added` (Archive or History adding its next 200 rows as you scroll, on iPhone), `search_reveals_late` (a search panel opened whose content had not laid out within 250 ms, so the stage revealed it on its deadline, on iPhone), `address_field_scrolled` (a long address in the search field scrolled sideways with a swipe, on iPhone), `deck_bar_swipes` (the deck opened by swiping up on the browsing bar, the second way in beside the tabs button), `tabs_swiped_closed` and `tabs_swiped_reopened` (a back swipe on a page with no history that closed its tab, and a forward swipe with no forward history that reopened the last closed tab), `page_menu_tapped_away` (the page menu closed by a tap on the page above it, on iPhone), `new_tab_search_opened` (search opened on a new tab in the iPhone's full-height search panel), `deck_incognito_switches` (a tap on the deck bar's Incognito switch that went from the normal tabs to the Incognito tabs, on iPhone) | at most once a day, for the last UTC day the app was used before today, when anything was counted; private tabs are never counted |
+| `usage_counts` | `tabs_opened`, `searches`, `pins_to_mac`, `tabs_sent`, `page_processes_gone`, `links_given_up` (a link whose handling passed its 8 s deadline), `pages_reloaded_online` (a failed page reloaded when the phone came back online), `find_opened_system` and `find_opened_bar` (Find on Page opened in WebKit's own panel, or in the app's find bar), `spaces_swiped` (a swipe in Spaces or on the start page that changed the profile), `tray_hidden_rows_opened` (a tray row opened while it peeked or sat under the keyboard), `deck_pictures_late` (a deck opened from a page whose picture hadn't painted within 250 ms, so it shrank without waiting), `search_tabs_opened` (the deck's Search Tabs field focused, in the redesign), `spaces_picked` (a space picked from the deck's switcher menu, or by a VoiceOver adjustment of the start page's dots, that changed the profile, in the redesign), `tabs_moved_to_space` (a tab moved to another space with the deck card menu's Move to Space, in the redesign), `pages_printed` (a page printed from the page menu's Print, counted when the print sheet opened, in the redesign), `pages_translated` (a page sent to Google Translate from the page menu's Translate, never from an Incognito tab), `pinned_tabs_refound` (a pinned site's tile or row switched to the tab it had opened after that tab had left the pinned address, where it used to open a second copy), `site_permissions_revoked` (a site's camera, microphone or location access revoked from Site Settings, by swipe or by its dialog, on iPhone's Expo UI Settings), `tray_back_swiped` (a search tray closed with Android's predictive back swipe), `card_opens_waited` (a card opened from the deck whose growth landed before its page had laid out and its picture painted, so the page waited up to 250 ms to take over), `native_menus_opened` (a menu opened as the system's own: a deck card's long press, the deck's ···, the space switchers, the + menus, Reader's Text Appearance, the page menu's Send to Device, the tabs button's recent tabs, on iPhone), `library_opened` (History, Bookmarks or Downloads opened in the system sheet from the page menu, on iPhone), `deck_grid_shown` (Grid picked for the deck in Settings › Appearance › Tabs, on iPhone), `landscape_shown` (a launch in which the phone was turned to landscape at least once, counted once a launch), `duo_layout_shown` (a launch that used the column, wide or split layout at least once, counted once a launch, on iPhone), `list_sheets_late` (an Archive or History sheet whose rows were drawn more than 400 ms after it was asked for, on iPhone), `list_pages_added` (Archive or History adding its next 200 rows as you scroll, on iPhone), `search_reveals_late` (a search panel opened whose content had not laid out within 250 ms, so the stage revealed it on its deadline, on iPhone), `address_field_scrolled` (a long address in the search field scrolled sideways with a swipe, on iPhone), `deck_bar_swipes` (the deck opened by swiping up on the browsing bar, the second way in beside the tabs button), `tabs_swiped_closed` and `tabs_swiped_reopened` (a back swipe on a page with no history that closed its tab, and a forward swipe with no forward history that reopened the last closed tab), `page_menu_tapped_away` (the page menu closed by a tap on the page above it, on iPhone), `new_tab_search_opened` (search opened on a new tab in the iPhone's full-height search panel), `deck_incognito_switches` (a tap on the deck bar's Incognito switch that went from the normal tabs to the Incognito tabs, on iPhone), `deck_bar_swipes_returned` (a swipe up on the browsing bar let go before its commit point, so the page grew back, on iPhone), `deck_pulls_hitched` (a swipe up or a tabs tap during whose shrink into the deck two UI-thread frames were more than 50 ms apart, on iPhone) | at most once a day, for the last UTC day the app was used before today, when anything was counted; private tabs are never counted |
 
 On the dashboard they are kept out of every Mac section by source and lib (`PHONE_APP_SOURCE` in `apps/dashboard/src/server/sql.ts`).
 
@@ -1254,10 +1361,12 @@ Every count and timing the phone can send, for the owner to read as one set and 
 | `library_opened` | the Library sheets on Expo UI | Whether people reach History, Bookmarks and Downloads from the page menu on iPhone; zero across testers after a release means the rows or the sheet stopped opening |
 | `deck_grid_shown` | the deck's grid on iPhone, picked in Settings › Appearance › Tabs since the owner's tabs pass | Whether people use main's grid view now that it lives in Settings; zero across testers after a release means the Tabs rows stopped switching |
 | `deck_bar_swipes` | the owner's tabs pass (the swipe up on the bar, beside the tabs button) | Whether people use the swipe as well as the button; zero across testers after a release means the swipe stopped opening the deck |
+| `deck_bar_swipes_returned` | the swipe that follows the finger (#2607) | How often a swipe up is let go early. Read it against `deck_bar_swipes`: a share above about a third after a release means the commit point sits too far, or the swipe is caught by people who only meant to touch the bar |
+| `deck_pulls_hitched` | the swipe that follows the finger (#2607) | Whether the shrink into the deck drops frames in the field. Read it against `deck_bar_swipes` plus `deck_bar_swipes_returned`: it should stay near zero, and a share that grows after a release means something on the pull's path again blocks the UI thread. It sees only UI-thread gaps over 50 ms, not frames the GPU drops |
 | `duo_layout_shown` | the Duo layouts on iPhone | Whether anyone runs Ardia on a Duo; zero after a release reaching Duo owners means the layout probe stopped reporting |
 | `landscape_shown` | landscape on both phones | How often people turn the phone; zero across testers after a release that rotates means the orientation lock came back |
 | `card_opens_waited` | the card open's hand-over | Whether the page mounted at the start of a card's growth is ready when the card lands; a share of card opens that grows after a release means the open is again held at full size before the page takes over |
-| `deck_pictures_late` | the deck-entrance hold | Whether the leaving page's picture paints before the deck shrinks; a share of deck opens that grows after a release means a card may again open on a blank or placeholder face |
+| `deck_pictures_late` | the deck-entrance hold, and the pull's handover (#2651) | Whether the leaving page's picture paints before the deck shrinks, or within 1.25 s of a pulled page landing in its card; a share of deck opens that grows after a release means a card may again open on a blank or placeholder face |
 | `list_sheets_late` | the Archive and History opens on iPhone | Whether those sheets still mount their rows before they move; near zero is the goal, and a share that grows after a release means the open is again doing its work on the tap's path |
 | `list_pages_added` | the Archive and History pages on iPhone | How often people scroll past the first 200 rows; near zero would argue for a larger first page or none, a large share for a smaller one |
 | `search_reveals_late` | the search panel's open on iPhone | Whether the panel's field and rows lay out before the stage reveals them; zero across testers is good, and a share of `searches` that grows after a release means the panel's content mounts late |
@@ -1301,7 +1410,7 @@ iPhone follows the SwiftUI app on main since the merge of main (8203d0b3c, 2026-
 - Default Browser: Apple's web-browser entitlement is requested; the iPhone code stays ready to switch on when it is granted. On Android, Default Browser is offered by default (the role prompt), in onboarding and Settings.
 
 - The owner's tabs pass on a real iPhone (2026-11-17, first built on main's SwiftUI app in 24c1ade07 on `ios-browse-for-me`), in the Expo app:
-  - The browsing bar keeps its tabs button (the owner, 2026-11-18: "we should keep the left button coz it look weird"), with its tap and its recent-tabs menu. A swipe up on the bar, once it passes 22 points, is a second way into the deck, from the button, the address or the plus (`barSwipeUp` in `BrowsingScreen.tsx`, `deck_bar_swipes`). Android's original bar works the same way; the column layouts keep their tabs button and have no swipe.
+  - The browsing bar keeps its tabs button (the owner, 2026-11-18: "we should keep the left button coz it look weird"), with its tap and its recent-tabs menu. A swipe up on the bar, once it passes 22 points, is a second way into the deck, from the button, the address or the plus (`barSwipeUp` in `BrowsingScreen.tsx`, `deck_bar_swipes`). On iPhone in portrait the page follows the finger into its card ("The swipe into the deck" under Deck speed). Android's original bar opens the deck at once, as before; the column layouts keep their tabs button and have no swipe.
   - The deck's header shows a space with no icon by its name alone, with no initial in a circle; the space menus' fallback symbol is `<letter>.square.fill`, then `square.fill`.
   - The deck is the stack; Grid is a choice in Settings › Appearance › Tabs ("How your open tabs are laid out. Swipe up on the bottom bar to see them."), iPhone only. The deck's bars have no grid button.
   - The tabs button with one tab open draws its card upright-ish (−4°) in the same 20 × 26 tile box the pair uses, so it sits centred in the circle; it used to hang off the circle's centre because the lone card had no box around it in the glass button's glyph layer (build 16, the owner: "one tab looks bad in the left button"). Android's original bar centred the lone card already, and the box lands it on the same pixels (`render/tabStack.render.test.tsx`).
@@ -1765,6 +1874,15 @@ simulator, the list under "The iPhone redesign".
 Not audited at all: Compose's `SyncSetupContent` internals inside onboarding.
 
 ### Deliberately different
+
+- The swipe into the deck is aimed at the page's own card, where Safari's page stays centred (the owner's review of
+  the first build, 2026-11-18: the page must not shrink past its card and grow back).
+  - **Safari:** during the pull the page stays centred and shrinks to about 56% of the screen; on release it grows
+    into its tile and moves there.
+  - **Ardia:** the page's frame goes from the full screen toward its card's frame as the finger travels, so in the
+    stack it moves right as it shrinks, and it is never smaller than the card.
+  - **Kept from Safari:** only the page shows during the pull, over the deck's backdrop; the other cards and the tab
+    view's controls come in at release; the commit distance; the return.
 
 - A page that isn't secure shows a red open lock in the bar, not the words "Not Secure" (the owner's decision,
   16 Nov 2026: "we can show open lock with red i guess see the arc for that").
@@ -3283,7 +3401,9 @@ starts in that space. Captures without touch: `-BrowseQuery <text>`, `-BrowseSur
 `-BrowseOverlay <text>`, `-BrowseCollapsed`, `-BrowseOpen <url>`, `-ArdiaRestingStart`, `-ArdiaColor <name>`,
 `-ArdiaInterfaceStyle glass|classic`, `-ArdiaColorScheme light|dark`, `-ArdiaSettingsPage <route>`,
 `-ArdiaNoSitePermissions`, `-ArdiaDeckQuery <text>` and `-ArdiaDuoCanvas open|half`. Motion captures:
-`-BrowsePagerFreeze <fraction>`, `-BrowsePagerScript` and `-BrowseLoadFreeze <progress>`.
+`-BrowsePagerFreeze <fraction>`, `-BrowsePagerScript` and `-BrowseLoadFreeze <progress>`. `-BrowseDeckPull <n>`
+replays the swipe into the deck n times in a lab build ("The swipe into the deck" under Deck speed); it doesn't need
+`-ArdiaDemo`.
 
 #### Sync on iPhone
 

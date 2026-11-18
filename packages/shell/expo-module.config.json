@@ -42,6 +42,7 @@
       "UserScriptsModule",
       "ConfigModule",
       "AutomationModule",
+      "PluginsModule",
       "SystemSignalsModule",
       "ReportModule",
       "TelemetryLocalModule"

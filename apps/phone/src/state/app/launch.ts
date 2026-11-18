@@ -15,6 +15,8 @@ import { deckOrder } from "../tabs/tabsState";
 import { showToast } from "../toasts/store";
 import { pages } from "../../platform/pages";
 import { launchArguments } from "./launchFlags";
+import { isLabBuild } from "../../platform/lab";
+import { runDeckPullScript } from "../browse/deckPullScript";
 import { DEMO_PRIVATE_URLS, manyTabTitle, sampleToast } from "./launchRules";
 
 
@@ -38,6 +40,7 @@ export function runLaunchScenario() {
   if (args.isDemo) void runDemoScenario(args);
   void runLaunchHooks(args);
   if (args.deckScript) void runDeckScript(args.deckScript);
+  if (isLabBuild && args.browseDeckPull !== null) void runDeckPullScript(args.browseDeckPull);
 }
 
 let demoWarming: Promise<void> | null = null;

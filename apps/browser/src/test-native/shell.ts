@@ -31,7 +31,7 @@ const testGlobals = globalThis as { acTestUserScripts?: UserScriptsHost };
 
 export const docs = new Map<string, string>();
 export const heldSaves = { on: false, queue: [] as (() => void)[] };
-export const refusedWrites = { on: false, returnsFalse: false };
+export const refusedWrites = { on: false, returnsFalse: false, landingFails: false };
 export const bangListServer: { reply: ((etag: string | null) => Promise<BangListReply>) | null } = { reply: null };
 export const appInfo: Partial<SystemInfo> = { appVersion: "1.0" };
 export const interfaceScaleNative = { scale: 1, applied: [] as number[], refuses: false, asked: [] as number[] };
@@ -183,7 +183,7 @@ const documents: Modules["ArdiaDocuments"] = {
       if (heldSaves.on) heldSaves.queue.push(land);
       else land();
     }),
-  documentSaved: () => (refusedWrites.on ? Promise.reject(new Error("save refused")) : Promise.resolve()),
+  documentSaved: () => (refusedWrites.on || refusedWrites.landingFails ? Promise.reject(new Error("save refused")) : Promise.resolve()),
   removeDocument: (name) => void docs.delete(name),
 };
 
@@ -419,6 +419,49 @@ const systemSignalsModule: Modules["ArdiaSystemSignals"] = {
   addListener: systemSignalEvents.addListener,
 };
 
+export const pluginHost = {
+  folders: [] as { name: string; status: "ok" | "missing" | "link" | "notFile" | "tooBig" | "unreadable"; text?: string; folderId?: string }[],
+  starts: [] as { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean }[],
+  stops: [] as { name: string; run: number; graceMs: number }[],
+  replies: [] as { name: string; run: number; line: string }[],
+  events: [] as { name: string; run: number; line: string }[],
+  removed: [] as string[],
+  startResult: null as null | { ok: false; reason: string },
+  removeGate: null as null | Promise<void>,
+  stopGate: null as null | Promise<void>,
+  startGate: null as null | Promise<void>,
+  listGate: null as null | Promise<void>,
+  listFails: false,
+  nextRun: 0,
+};
+const pluginEvents = nativeEvents();
+export const emitPluginLine = (line: { name: string; run: number; line: string }) => pluginEvents.emit("onLine", line);
+export const emitPluginExit = (exit: { name: string; run: number; status: number | null; signal: number | null; overMemory: boolean }) => pluginEvents.emit("onExit", exit);
+const plugins: Modules["ArdiaPlugins"] = {
+  folder: () => "/config/plugins",
+  list: async () => {
+    await pluginHost.listGate;
+    if (pluginHost.listFails) throw new Error("the plugins folder couldn't be listed");
+    return pluginHost.folders.map((f) => ({ ...f }));
+  },
+  start: async (spec) => {
+    pluginHost.starts.push({ ...spec, run: [...spec.run] });
+    if (pluginHost.startResult) return pluginHost.startResult;
+    const run = ++pluginHost.nextRun;
+    await pluginHost.startGate;
+    return { ok: true, run, pid: 1000 + run };
+  },
+  stop: async (name, run, graceMs) => void (pluginHost.stops.push({ name, run, graceMs }), await pluginHost.stopGate),
+  reply: (name, run, line) => void pluginHost.replies.push({ name, run, line }),
+  event: (name, run, line) => void pluginHost.events.push({ name, run, line }),
+  call: (name, run, line) => void pluginHost.events.push({ name, run, line }),
+  remove: async (name) => (await pluginHost.removeGate, pluginHost.removed.push(name), (pluginHost.folders = pluginHost.folders.filter((f) => f.name !== name)), { ok: true }),
+  revealLog: () => {},
+  revealFolder: () => {},
+  devSnapshotPage: async () => false,
+  addListener: pluginEvents.addListener,
+};
+
 export const shellNativeModules: Modules = {
   ArdiaShell: shell,
   ArdiaAppWindows: windowsModule,
@@ -445,6 +488,7 @@ export const shellNativeModules: Modules = {
   ArdiaUserScripts: userScripts,
   ArdiaConfig: config,
   ArdiaAutomation: automation,
+  ArdiaPlugins: plugins,
   ArdiaSystemSignals: systemSignalsModule,
   ArdiaTelemetryLocal: telemetryLocalModule,
   ArdiaReport: reportModule,

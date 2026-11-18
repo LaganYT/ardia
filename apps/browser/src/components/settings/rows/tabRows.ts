@@ -95,6 +95,12 @@ export const tabRows = {
           description: "Videos and calls pop out when you switch tabs or leave the window.",
           keywords: ["pip", "video", "floating", "mini player"],
         },
+        playingNowAcrossProfiles: {
+          title: "Keep Playing now across profiles",
+          explained: true,
+          description: "Media playing in one profile stays in the sidebar of every profile, like Arc's spaces.",
+          keywords: ["playing now", "now playing", "media card", "media controls", "sidebar player", "music", "spotify", "youtube", "spaces", "swipe", "follow", "persist", "every space", "all spaces", "arc"],
+        },
         videoUpscaling: {
           title: "Video upscaling",
           description: "Sharpens low-resolution video in the tab you're watching, on Apple silicon.",
@@ -162,6 +168,12 @@ export const tabRows = {
           explained: true,
           description: "Pop-up windows from pages open as tabs instead.",
           keywords: ["popup", "pop-up", "pop up", "window.open", "new window", "outlook", "sign in", "oauth", "as tab", "links", "open pop-up windows as tabs"],
+        },
+        peekButtons: {
+          title: "Show Peek buttons",
+          explained: true,
+          description: "Close, Open as Tab and Split View sit in the Peek's title bar, or float beside it on the left or right.",
+          keywords: ["peek", "buttons", "close", "expand", "split view", "left", "right", "side", "position", "arc", "zen", "glance"],
         },
       },
     },

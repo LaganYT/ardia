@@ -14,7 +14,7 @@ export { FloatingMenu, Menu, type MenuAction, type MenuItem, type MenuSubmenu } 
 export { confirmInSheet, MenuTrigger, nativeMenus, onNativeMenuOpened, spaceSystemImage, type MenuHandlers } from "./MenuTrigger";
 export { Shade } from "./Shade";
 export { measureAnchor, OverlayHost, Portal } from "./Overlay";
-export { Sheet, usePresence } from "./Sheet";
+export { Sheet, SheetScrollView, sheetMaxHeight, usePresence } from "./Sheet";
 export { Toggle, ToggleTrack } from "./Toggle";
 export { screenReaderActions, type ScreenReaderAction } from "./screenReaderActions";
 export { PageView, type PageNavigationState, type PageTone, type PageViewHandle } from "./Page";

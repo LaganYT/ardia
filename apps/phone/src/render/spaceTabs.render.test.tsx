@@ -176,6 +176,9 @@ test("picking another space in the deck's switcher shows that space's tabs and c
   act(() => pressable(root, "Space, Personal").props.onPress());
   pickMenu(root, "Work");
   act(() => jest.advanceTimersByTime(400));
+  expect(cards(root)).toHaveLength(0);
+  act(() => useTabs.setState({ incognito: false }));
+  act(() => jest.advanceTimersByTime(400));
   expect(sorted(cards(root))).toEqual(WORK);
   expect(counted).not.toHaveBeenCalledWith("spaces_picked");
   unmount(root);

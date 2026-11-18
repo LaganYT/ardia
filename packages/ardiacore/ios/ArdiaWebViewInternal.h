@@ -72,6 +72,11 @@ struct ArdiaReveal {
   CGFloat loweredPaneZ{};
   __weak NSView *frontedPage;
   NSUInteger frontGeneration{};
+  BOOL native{};
+  BOOL onScreen{};
+  BOOL painted{};
+  NSUInteger press{};
+  __weak NSWindow *onScreenIn;
 };
 
 struct ArdiaPageReports {
@@ -85,6 +90,7 @@ struct ArdiaPageReports {
   double pinchScale{};
   BOOL capturing{};
   BOOL crashed{};
+  NSMutableSet<NSString *> *exclusiveFrames;
   BOOL seenByUser{YES};
   BOOL inPictureInPicture{};
   BOOL autoPictureInPictureActive{};
@@ -100,12 +106,19 @@ struct ArdiaCommits {
   int documents{};
 };
 
+struct ArdiaFocusAsk {
+  BOOL asked{};
+  BOOL onlyIfUnfocused{};
+  __weak ArdiaCoreTab *tab;
+};
+
 struct ArdiaPageFocusState {
   ArdiaPageFocus page{ArdiaPageFocus::Unknown};
   __weak NSView *devTools;
   __weak NSView *elsewhere;
   BOOL onActivate{};
   BOOL keepsOutgoing{};
+  ArdiaFocusAsk askedAheadOfSwitch;
   CFTimeInterval activatedAt{};
   __weak NSWindow *activatedIn;
 };
@@ -261,13 +274,37 @@ typedef NS_ENUM(NSInteger, ArdiaTransfer) {
 
 @interface ArdiaWebView (RevealsInternal)
 + (void)dropRevealsInWindow:(NSWindow *)window except:(ArdiaWebView *)keep;
++ (void)dropRevealsInWindow:(NSWindow *)window pressedBy:(NSUInteger)press;
++ (BOOL)replaceRevealsInWindow:(NSWindow *)window with:(ArdiaWebView *)pressed;
++ (void)takeBackPressesUnheardUpTo:(NSUInteger)press;
 - (BOOL)onlyShownInWindow;
 - (void)frontPage:(NSView *)page profile:(ArdiaCoreProfile *)profile;
 - (void)dropFront;
+- (BOOL)revealsFirst;
+- (ArdiaWebView *)revealableOver:(BOOL)pastOtherReveals;
++ (ArdiaWebView *)nativeRevealInWindow:(NSWindow *)window except:(ArdiaWebView *)skip;
+- (BOOL)stayOver:(ArdiaWebView *)shown;
 - (void)revealAhead;
 - (void)endReveal;
 - (void)dropReveal;
+- (void)paintAfterReveal:(BOOL)native;
 - (void)settleRevealsInWindow;
+@end
+
+@interface ArdiaWebView (RevealInput)
++ (ArdiaWebView *)onScreenAheadIn:(NSWindow *)window;
++ (BOOL)anyRevealGap;
++ (BOOL)swallowsAheadOfSwitch:(NSEvent *)event;
++ (void)revealGapChangedIn:(NSWindow *)window;
+- (void)noteOnScreenAhead:(BOOL)overAnother;
+- (void)settleOnScreenAhead;
+- (void)leaveScreenAheadOnceGone;
+- (void)leaveScreenAhead;
+- (void)acceptDropsIfShown;
+- (void)askFocusAheadOfSwitch:(BOOL)onlyIfUnfocused;
++ (void)focusPagesAskedAheadOfSwitch;
+- (void)hidePageIdentity;
+- (void)hidePageIdentityAfterMount;
 @end
 
 @interface ArdiaWebView (PageMessagesInternal)
@@ -336,6 +373,9 @@ void NoteEvent(int browserId, NSString *name, NSDictionary *payload);
 void AcceptDrops(NSView *root, BOOL accept);
 NSView *PaneUnder(NSView *view, NSView *ancestor);
 NSView *SharedAncestor(NSView *a, NSView *b);
+NSView *HitInWindow(NSEvent *event);
+extern const NSEventMask kRevealInputMask;
+NSString *ReactTagOf(NSView *view);
 NSView *RenderWidgetIn(NSView *page);
 NSArray *FrameMarkOf(NSView *widget);
 

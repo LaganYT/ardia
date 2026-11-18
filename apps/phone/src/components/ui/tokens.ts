@@ -120,6 +120,8 @@ export const menuLayout = {
   zoomButton: { width: 40, height: 34 },
   zoomReset: 48,
   sheetTopGap: Platform.OS === "ios" ? 0 : 24,
+  sheetMaxShare: Platform.OS === "ios" ? 0.9 : 1,
+  sheetGrabber: Platform.OS === "ios" ? { width: 36, height: 5, top: 6 } : null,
 } as const;
 
 export const pageMenuLayout = { actionGlyph: 24, barSpacing: 8, groupSpacing: 16, zoomHeight: 32, zoomButtonWidth: 40, zoomReset: 48, rowInset: 16, accessibilityBottom: 24, accessibilityTextScale: 1.6, pressedScale: 0.94 } as const;
@@ -315,6 +317,8 @@ export const deckChromeLayout = {
   searchTrailFilled: 8,
   searchSpacing: 8,
   searchGlyph: 16.8,
+  incognitoGlyph: 30,
+  incognitoOn: 38,
   clearGlyph: 22.8,
   clearHit: 32,
   archiveCenter: 78.5,

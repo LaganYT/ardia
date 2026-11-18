@@ -8,6 +8,7 @@ export { EmptyState } from "./EmptyState";
 export { Checkbox, PopUp, SearchField, TextField, type Option } from "./Field";
 export { GlassFill, GlassLookContext, liquidGlass, useGlass, useGlassLook, type GlassLook } from "./Glass";
 export { HoverCard, type HoverCardProps } from "./HoverCard";
+export { HoverFill, HoverSwap } from "./HoverFill";
 export { HoverSlot } from "./HoverSlot";
 export { IconTile } from "./IconTile";
 export { KeyCap } from "./KeyCap";

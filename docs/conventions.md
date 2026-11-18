@@ -96,6 +96,8 @@ lib/                    pure helpers: url, color, time, keys
 | `Easing.out(Easing.quad)`, `Easing.bezier(…)` | `curve.enter`, `curve.exit`, `curve.move`, `curve.pulse`, … from `motion.ts` |
 | a numeric `duration:` | `duration.fast`, `duration.base`, `duration.slow`, `duration.long`; a loop's period is `period.spinner` / `period.pulse` |
 | `stiffness: (2π/response)²` written by hand | `springs.snappy` / `smooth` / `bouncy`, or `spring({ response, damping })` for a measured spring |
+| a control that shrinks while pressed | `usePressScaleMotion(enabled, buttonMotion.…)` on its `onPressIn`/`onPressOut`: `springs.press` down, `springs.release` back with a small bounce, and a click shorter than the dip still shows it; a tab row or tile takes `squish` on `TabPressArea` |
+| a hover or pressed highlight behind a row or a button plate | `<HoverFill shown color radius>`: lights in `hoverFade.show`, fades in `hoverFade.hide`; `instant` when the thing becomes selected. Over a fill it has at rest: `<HoverSwap rest color radius>`, with `underBorder` when the control draws a border |
 | a `View` with `padding`/`gap`/`backgroundColor`/`borderRadius` from tokens | `<Box pad="m" gap="s" fill="panel" radius="tile" row>` |
 | `<Text style={{ fontSize: 13, fontWeight: "600", color: theme.textSecondary }}>` | `<Text size="body" weight="semibold" tone="textSecondary">` |
 | a pressable square with an SF Symbol and a hover plate | `<Button variant="icon" icon="…">` (add `toolbar` for toolbar buttons: modifier clicks, long press, context menu, no window drag; `palette` for site-coloured toolbars) |

@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { Animated, Pressable, View, type LayoutChangeEvent } from "react-native";
-import { Button, ContextMenuArea, perLook, radius, sidebarPoints, space, Symbol, Text, useHover, withAlpha } from "../ui";
+import { Button, ContextMenuArea, HoverFill, perLook, radius, sidebarPoints, space, Symbol, Text, useHover, withAlpha } from "../ui";
 import { hex, layout, useTheme } from "../ui/theme";
 import { HoverSlot } from "../ui/HoverSlot";
 import { newTab } from "../../state/tabs/actions";
@@ -34,8 +34,8 @@ export const NewTabRow = memo(function NewTabRow({ windowId, shift = null, clip 
   const quiet = useQuietRows();
   const { hovered, hoverProps } = useHover();
   const newTabHint = useShortcutHint("newTab");
-  const pressMotion = usePressScaleMotion(true, buttonMotion.iconPressScale);
-  const iconScale = pressMotion.scale ? { transform: [{ scale: pressMotion.scale }] } : undefined;
+  const pressMotion = usePressScaleMotion(true, buttonMotion.rowPressScale);
+  const rowScale = pressMotion.scale ? { transform: [{ scale: pressMotion.scale }] } : undefined;
   const [moved, movedRef] = useShift(shift);
   const [movedButtons, movedButtonsRef] = useShift(shift);
   const clipped = useClipped(clip);
@@ -73,6 +73,7 @@ export const NewTabRow = memo(function NewTabRow({ windowId, shift = null, clip 
           }}
         >
           {({ pressed }) => (
+            <Animated.View style={rowScale}>
             <View
               {...moved}
               ref={movedRef}
@@ -84,16 +85,15 @@ export const NewTabRow = memo(function NewTabRow({ windowId, shift = null, clip 
                   alignItems: "center",
                   paddingLeft: TAB_ROW.contentLeft,
                   paddingRight: BUTTONS_ROOM,
-                  backgroundColor: pressed ? (quiet ? tokens.quietPressed : theme.tabPressed) : hovered ? (quiet ? tokens.quietHover : theme.tabHover) : undefined,
                 },
                 moved.style as object,
               ]}
             >
-              <Animated.View pointerEvents="none" style={iconScale}>
-                <Symbol name="plus" size={quiet ? sidebarPoints(10) : ROW_GLYPH.plus} weight="medium" color={quiet ? quietInk : tokens.newTabIcon} style={{ width: ROW_GLYPH.box, height: ROW_GLYPH.box }} />
-              </Animated.View>
+              <HoverFill shown={hovered || pressed} color={pressed ? (quiet ? tokens.quietPressed : theme.tabPressed) : quiet ? tokens.quietHover : theme.tabHover} radius={radius.chrome} />
+              <Symbol name="plus" size={quiet ? sidebarPoints(10) : ROW_GLYPH.plus} weight="medium" color={quiet ? quietInk : tokens.newTabIcon} style={{ width: ROW_GLYPH.box, height: ROW_GLYPH.box }} />
               <SidebarRowLabel text="New Tab" color={quiet ? quietInk : tokens.newTabLabel} compact={quiet} />
             </View>
+            </Animated.View>
           )}
         </Pressable>
       </ContextMenuArea>

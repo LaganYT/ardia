@@ -1,5 +1,5 @@
 import { Children, type ReactNode } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { copy } from "../../lib/platformCopy";
 import {
@@ -31,7 +31,7 @@ import { useMenuTitle, useTitleFeedback } from "../../state/page/hooks";
 import { openLibrary, type LibrarySection } from "../../state/library/store";
 import { useIsPinned, useSendTargets } from "../../state/sync/hooks";
 import { useTab } from "../../state/tabs/hooks";
-import { capsule, ChromeSurface, font, menuLayout, pageMenuInk, pageMenuLayout, pageMenuMotion, PressScale, space, Symbol, Toggle, useTheme, type MenuItem, type SymbolName } from "../ui";
+import { capsule, ChromeSurface, font, menuLayout, pageMenuInk, pageMenuLayout, pageMenuMotion, PressScale, SheetScrollView, space, Symbol, Toggle, useTheme, type MenuItem, type SymbolName } from "../ui";
 import { MenuTrigger } from "../ui/MenuTrigger";
 import { syncOffered } from "../../state/sync/offer";
 
@@ -50,7 +50,7 @@ export function PageMenuWords({ tabId, model, onTranslate }: { tabId: string; mo
   const large = useAccessibilityText();
   const devices = useSendTargets(tabId);
   return (
-    <ScrollView testID="pageMenuWords" contentContainerStyle={[styles.column, large ? styles.largeBottom : null]} bounces={false}>
+    <SheetScrollView testID="pageMenuWords" contentContainerStyle={[styles.column, large ? styles.largeBottom : null]} bounces={false}>
       <View style={styles.bar}>
         <NavigationCapsule tabId={tabId} model={model} large={large} />
         <View style={styles.actions}>
@@ -88,7 +88,7 @@ export function PageMenuWords({ tabId, model, onTranslate }: { tabId: string; mo
           </Group>
         ) : null}
       </View>
-    </ScrollView>
+    </SheetScrollView>
   );
 }
 

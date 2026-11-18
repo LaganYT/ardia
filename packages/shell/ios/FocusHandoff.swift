@@ -196,6 +196,11 @@ final class FocusHandoff {
     return editKeyAcks
   }
 
+  func countPasteAndMatchStyleKey(_ event: NSEvent?) {
+    guard let event, event.type == .keyDown else { return }
+    countEditKeyAck(event.modifierFlags.contains(.option) ? "pasteMatchStyleOptionKeys" : "pasteMatchStyleKeys")
+  }
+
   private func countEditKeyAck(_ outcome: String) {
     ackLock.lock()
     editKeyAcks[outcome, default: 0] += 1

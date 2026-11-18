@@ -4,9 +4,9 @@ import { act } from "react-test-renderer";
 import { DeckBar } from "../components/tabs/DeckBar";
 import { IncognitoChip } from "../components/tabs/DeckChrome";
 import { TabDeck } from "../components/tabs/TabDeck";
-import { ConfirmDialog, DesignProvider } from "../components/ui";
+import { ConfirmDialog, DesignProvider, Symbol } from "../components/ui";
 import { deckGeometry } from "../lib/deckGeometry";
-import type { Design } from "../lib/design";
+import { designFor, type Design } from "../lib/design";
 import { haptics } from "../state/app/haptics";
 import { useArchiveCard } from "../state/browse/archiveCard";
 import * as browse from "../state/browse/store";
@@ -218,7 +218,7 @@ test("the Incognito pill shows only while there are private tabs, with their cou
   unmount(root);
 });
 
-test("the bottom bar is the Search Tabs capsule and a 48-point plus, with no grid button, 8 apart, 12 in from the sides, centred 11 points above the safe bottom", () => {
+test("the bottom bar is the Incognito switch, the Search Tabs capsule and a 48-point plus, with no grid button, 8 apart, 12 in from the sides, centred 11 points above the safe bottom", () => {
   const { height } = Dimensions.get("window");
   const root = deck();
   const bar = style(root, "deckBottomBar");
@@ -227,9 +227,115 @@ test("the bottom bar is the Search Tabs capsule and a 48-point plus, with no gri
   while (place && StyleSheet.flatten(place.props.style)?.position !== "absolute") place = place.parent;
   expect((StyleSheet.flatten(place!.props.style).top as number) + 24).toBe(height - Math.max(SAFE_BOTTOM, 20) - 11);
   expect(host(root, "deckBarGrid")).toBeUndefined();
+  expect(style(root, "deckBarIncognito")).toMatchObject({ width: 48, height: 48, borderRadius: 24 });
   expect(style(root, "deckBarPlus")).toMatchObject({ width: 48, height: 48, borderRadius: 24 });
   expect(style(root, "deckSearchTabs")).toMatchObject({ borderRadius: 24, paddingLeft: 13, paddingRight: 16 });
+  const pieces = ["deckBarIncognito", "deckSearchTabs", "deckBarPlus"];
+  const shown = host(root, "deckBottomBar")!.findAll((node) => typeof node.type === "string" && pieces.includes(node.props.testID)).map((node) => node.props.testID);
+  expect(shown.filter((id, at) => id !== shown[at - 1])).toEqual(pieces);
   expect(pressable(root, "Show as Grid")).toBeUndefined();
+  unmount(root);
+});
+
+const incognitoSwitch = (root: Root) => root.root.findAll((node) => node.props.accessibilityLabel === "Incognito" && node.props.accessibilityRole === "switch" && typeof node.props.onPress === "function")[0];
+
+test("the bar's left button is an Incognito switch: Ardia's eyes glyph on 48-point glass, read as a switch with a hint, and only in the redesign Android's app doesn't run", () => {
+  const root = deck();
+  const toggle = incognitoSwitch(root)!;
+  expect(toggle.props.accessibilityState).toMatchObject({ checked: false });
+  expect(toggle.props.accessibilityHint).toBe("Shows your Incognito tabs.");
+  expect(host(root, "deckBarIncognitoGlyph")!.findAll((node) => node.type === Symbol && node.props.name === "eyes")).toHaveLength(1);
+  expect(root.root.findAll((node) => node.props.testID === "deckBarIncognito" && node.props.incognito === true)).toHaveLength(0);
+  expect(host(root, "deckBarIncognitoOn")).toBeUndefined();
+  unmount(root);
+  const android = deck(designFor("android"));
+  expect(incognitoSwitch(android)).toBeUndefined();
+  expect(host(android, "deckBarIncognito")).toBeUndefined();
+  unmount(android);
+});
+
+test("a tap on the switch shows only the Incognito tabs on Incognito glass, the plus makes Incognito tabs, and a second tap brings the normal deck back; only the switch to Incognito is counted", () => {
+  withPrivateTabs(2);
+  const root = deck();
+  expect(hosts(root, "deckCard")).toHaveLength(9);
+  act(() => incognitoSwitch(root)!.props.onPress());
+  act(() => jest.advanceTimersByTime(600));
+  expect(useTabs.getState().incognito).toBe(true);
+  expect(hosts(root, "deckCard")).toHaveLength(2);
+  expect(incognitoSwitch(root)!.props.accessibilityState).toMatchObject({ checked: true });
+  expect(incognitoSwitch(root)!.props.accessibilityHint).toBe("Shows your tabs.");
+  expect(root.root.findAll((node) => node.props.testID === "deckBarIncognito" && node.props.incognito === true).length).toBeGreaterThan(0);
+  expect(StyleSheet.flatten(host(root, "deckBarIncognitoOn")!.props.style)).toMatchObject({ width: 38, height: 38, borderRadius: 19 });
+  expect(pressable(root, "New Incognito Tab")).toBeDefined();
+  expect(counted.mock.calls.filter(([name]) => name === "deck_incognito_switches")).toHaveLength(1);
+  act(() => incognitoSwitch(root)!.props.onPress());
+  act(() => jest.advanceTimersByTime(600));
+  expect(useTabs.getState().incognito).toBe(false);
+  expect(hosts(root, "deckCard")).toHaveLength(9);
+  expect(counted.mock.calls.filter(([name]) => name === "deck_incognito_switches")).toHaveLength(1);
+  unmount(root);
+});
+
+test("the switch fades the shown side's cards out before the other side's cards take their place, and a second tap during the fade keeps the side", () => {
+  withPrivateTabs(2);
+  const root = deck();
+  act(() => incognitoSwitch(root)!.props.onPress());
+  expect(incognitoSwitch(root)!.props.accessibilityState).toMatchObject({ checked: true });
+  expect(hosts(root, "deckCard")).toHaveLength(9);
+  act(() => jest.advanceTimersByTime(600));
+  expect(hosts(root, "deckCard")).toHaveLength(2);
+  act(() => incognitoSwitch(root)!.props.onPress());
+  act(() => incognitoSwitch(root)!.props.onPress());
+  act(() => jest.advanceTimersByTime(600));
+  expect(useTabs.getState().incognito).toBe(true);
+  expect(hosts(root, "deckCard")).toHaveLength(2);
+  unmount(root);
+});
+
+test("with no Incognito tabs the switch shows an empty Incognito deck that says so, without the Archive link or the Archive capsule, and switching back shows every normal tab", () => {
+  act(() => useArchiveCard.setState({ showing: true }));
+  const root = deck();
+  expect(host(root, "archiveCapsule")).toBeDefined();
+  act(() => incognitoSwitch(root)!.props.onPress());
+  act(() => jest.advanceTimersByTime(600));
+  expect(hosts(root, "deckCard")).toHaveLength(0);
+  expect(host(root, "archiveCapsule")).toBeUndefined();
+  expect(textOf(root)).toContain("No Incognito Tabs");
+  expect(textOf(root)).toContain("Incognito tabs aren’t saved to your history or the Archive.");
+  expect(textOf(root)).not.toContain("Open Archive");
+  act(() => incognitoSwitch(root)!.props.onPress());
+  act(() => jest.advanceTimersByTime(600));
+  expect(hosts(root, "deckCard")).toHaveLength(9);
+  expect(textOf(root)).not.toContain("No Incognito Tabs");
+  expect(host(root, "archiveCapsule")).toBeDefined();
+  unmount(root);
+});
+
+test("closing the last Incognito card from the deck keeps the empty Incognito side, as Safari's Private does", () => {
+  withPrivateTabs(1);
+  const closed = jest.spyOn(browse, "closeTabFromDeck").mockImplementation((id) => useTabs.setState((state) => ({ ...state, privates: state.privates.filter((tab) => tab.id !== id), incognito: false })));
+  const root = deck();
+  act(() => incognitoSwitch(root)!.props.onPress());
+  act(() => jest.advanceTimersByTime(600));
+  const closes = (action: { name: string; label?: string }) => action.name === "Close Tab" || action.label === "Close Tab";
+  const card = root.root.findAll((node) => typeof node.props.onAccessibilityAction === "function" && node.props.accessibilityActions?.some(closes))[0]!;
+  const action = card.props.accessibilityActions.find(closes);
+  act(() => card.props.onAccessibilityAction({ nativeEvent: { actionName: action.name } }));
+  act(() => jest.advanceTimersByTime(1500));
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(useTabs.getState().privates).toHaveLength(0);
+  expect(useTabs.getState().incognito).toBe(true);
+  expect(textOf(root)).toContain("No Incognito Tabs");
+  unmount(root);
+});
+
+test("Android's original deck keeps its private tabs among the others, as before the switch", () => {
+  withPrivateTabs(2);
+  const root = deck(designFor("android"));
+  expect(hosts(root, "deckCard")).toHaveLength(11);
+  act(() => useTabs.setState({ incognito: true }));
+  act(() => jest.advanceTimersByTime(600));
+  expect(hosts(root, "deckCard")).toHaveLength(11);
   unmount(root);
 });
 

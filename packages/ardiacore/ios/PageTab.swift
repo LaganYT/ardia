@@ -32,6 +32,7 @@ protocol PageTab: NSView {
   func reloadIgnoringCache()
   func stopLoading()
   func focusPage()
+  func focusPageIfUnfocused() -> Bool
   func setMuted(_ muted: Bool)
   func zoomStep(_ direction: Int)
   func find(_ text: String, forward: Bool, findNext: Bool)

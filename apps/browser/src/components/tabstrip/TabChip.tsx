@@ -9,7 +9,7 @@ import { pressTabClose, useTabCloseControl } from "../../state/sidebar/closeCont
 import { currentMovingTabIds } from "../../state/tabs/topStrip";
 import { TabBadges } from "../media/TabBadges";
 import { TabIcon } from "../sidebar/TabIcon";
-import { Button, FadeLabel, Symbol, useTooltip } from "../ui";
+import { Button, FadeLabel, HoverFill, Symbol, useTooltip } from "../ui";
 import { HoverSlot } from "../ui/HoverSlot";
 import { surfaceTheme, useTheme } from "../ui/theme";
 import { ThemeOverride } from "../ui/ThemeOverride";
@@ -280,14 +280,13 @@ export function ItemRow({ hovered, pressed, padded = true, inset, children }: { 
         right: 0,
         top: ITEM_TOP,
         height: ITEM_HEIGHT,
-        borderRadius: tabRadius(),
-        backgroundColor: pressed ? theme.tabPressed : hovered ? theme.tabHover : undefined,
         flexDirection: "row",
         alignItems: "center",
         paddingLeft: inset ?? (padded ? CHIP_PAD.left : 0),
         paddingRight: inset ?? (padded ? CHIP_PAD.right : 0),
       }}
     >
+      <HoverFill shown={pressed || hovered} color={pressed ? theme.tabPressed : theme.tabHover} radius={tabRadius()} />
       {children}
     </View>
   );

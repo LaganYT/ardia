@@ -103,6 +103,13 @@ test("production graph uses current Linux adapters and one canonical shared stat
   assert.ok(!app.importedIds.includes(`${browser}components/tabstrip/TopTabStrip.tsx`));
   assert.ok(graph.get(`${linux}TopStripPeekRegion.tsx`).importedIds.includes(`${browser}components/tabstrip/TopTabStrip.tsx`));
 
+  for (const importer of ["components/window/TabPane.tsx", "components/toolbar/WindowToolbar.tsx"]) {
+    const toolbarHost = graph.get(`${browser}${importer}`);
+    assert.ok(toolbarHost.importedIds.includes(`${linux}AutoHideToolbarRegion.tsx`), `${importer}: the auto-hide toolbar reserves its input region over the page, so a peek keeps the page shown`);
+    assert.ok(!toolbarHost.importedIds.includes(`${browser}components/toolbar/AutoHideToolbar.tsx`));
+  }
+  assert.deepEqual(graph.get(`${browser}components/toolbar/AutoHideToolbar.tsx`).importers, [`${linux}AutoHideToolbarRegion.tsx`], "the shared auto-hide toolbar is reached only through the Linux region");
+
   assert.ok(graph.has(`${browser}lib/platformChrome.windows.ts`), "Linux lays out its window like the Windows build");
   assert.ok(!graph.has(`${browser}platform/windowControls.ts`) && !graph.has(`${browser}platform/windowControls.windows.ts`), "window buttons reach the Linux host, not a native Windows module");
   assert.ok(graph.get(`${browser}state/windows/controls.ts`).importedIds.includes(`${linux}hostWindowControls.ts`));

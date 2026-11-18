@@ -49,6 +49,8 @@ const tabLifecycle = here("../browser/src/state/tabs/tabLifecycle.ts");
 const importerReplacements = new Map([
   [`${here("../browser/src/components/sidebar/Sidebar.tsx")}\0${here("../browser/src/components/window/SidebarDock.tsx")}`, here("./src/SidebarPeekMark.tsx")],
   [`${here("../browser/src/components/tabstrip/TopTabStrip.tsx")}\0${here("../browser/src/App.tsx")}`, here("./src/TopStripPeekRegion.tsx")],
+  [`${here("../browser/src/components/toolbar/AutoHideToolbar.tsx")}\0${here("../browser/src/components/window/TabPane.tsx")}`, here("./src/AutoHideToolbarRegion.tsx")],
+  [`${here("../browser/src/components/toolbar/AutoHideToolbar.tsx")}\0${here("../browser/src/components/toolbar/WindowToolbar.tsx")}`, here("./src/AutoHideToolbarRegion.tsx")],
   [`${here("../browser/src/components/peek/PeekOverlay.tsx")}\0${here("../browser/src/components/window/ContentCard.tsx")}`, here("./src/PeekOverlay.tsx")],
   [`${here("../browser/src/state/app/toasts.ts")}\0${tabLifecycle}`, here("./src/policyToasts.ts")],
   [`${here("../browser/src/platform/performance.ts")}\0${tabLifecycle}`, here("./src/policyPerformance.ts")],

@@ -797,6 +797,12 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
   page overlay region (`TopStripPeekRegion.tsx`, swapped in for `App.tsx`'s import), so the host gives the shell the
   pointer where they cover a page: 2 px of the panel with the default toolbar, 15 px with the compact one. While the strip
   is hidden the window buttons and the `…` sit at the end of the toolbar row, as on Windows.
+- **Toolbar peek.** With Hide toolbar while scrolling, the toolbar is a page overlay region while it peeks or shows
+  (`AutoHideToolbarRegion.tsx`, swapped in for `TabPane.tsx`'s and `WindowToolbar.tsx`'s imports), not while it is
+  collapsed. A peek lays the toolbar over the page's top edge, and without the region `plainViewport`'s top samples
+  hit it and the page stopped drawing until the toolbar collapsed (#2390). `usage_counts.toolbar_peeks` counts peeks
+  and `toolbar_peek_page_hides` counts a page that stopped drawing while its toolbar peeked; it should stay near 0. Both
+  count in the telemetry leader window only, like `toolbar_scroll_hides`, so their ratio holds.
 - **Header.** The menu button shows here whenever the window buttons are hidden (full screen); otherwise it is the
   `…` beside them. The profile name beside it follows the Mac's rule
   (`ProfileIndicator.tsx`): only in an Incognito window or with two or more profiles, cut when at least 52 px of it

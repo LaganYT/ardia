@@ -11,6 +11,8 @@ import { startTabPages } from "../../browser/src/state/tabs/tabPages";
 import { startTabLifecycle, useLifecycle } from "../../browser/src/state/tabs/tabLifecycle";
 import { useMedia } from "../../browser/src/state/media/media";
 import { useToolbarAutoHide } from "../../browser/src/state/windows/toolbarAutoHide";
+import { noteToolbarPeekPageHidden } from "../../browser/src/state/telemetry/usage";
+import { onPageCovered } from "./shims/web/HostWebView";
 import { copyLinkToSelection, jumpToSelection, replaceInField, usePageSelection } from "../../browser/src/state/site/selection";
 import { webviews } from "../../browser/src/platform/webviews";
 import { startMemoryTrim } from "../../browser/src/state/tabs/memoryTrim";
@@ -130,6 +132,7 @@ async function start() {
     startHostData();
     startHostTabLifecycle(ardiaHost, useBrowser);
     startShellAbove(ardiaHost);
+    onPageCovered((tabId) => linuxTelemetryHooks.leading() && useToolbarAutoHide.getState().peek[tabId] && noteToolbarPeekPageHidden());
     startPipPlayer(ardiaHost);
     watchTabSwitches(useBrowser);
     setPopupDismissal({ popup: () => useExtensions.getState().popup, windowOf: (tabId) => useBrowser.getState().tabs[tabId]?.windowId, close: () => useExtensions.setState({ popup: null }) });

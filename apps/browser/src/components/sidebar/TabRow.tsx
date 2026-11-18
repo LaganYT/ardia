@@ -118,7 +118,7 @@ export const TabRow = memo(function TabRow({
             padLeft={(textOnly ? TAB_ROW.contentLeft - TAB_ROW.titleGap : TAB_ROW.contentLeft) - border}
             padRight={TAB_ROW.trailing - border}
           >
-            <View {...backToPin.hoverProps} style={textOnly ? NO_SLOT : undefined}>
+            <View {...(tab.pinnedUrl ? backToPin.hoverProps : null)} style={textOnly ? NO_SLOT : undefined}>
               {resettable ? (
                 <Pressable
                   onPress={() => returnToPinnedUrl(tab.id)}

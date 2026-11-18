@@ -4,7 +4,9 @@ import ExpoModulesCore
 
 final class ContextMenuArea: ExpoView {
   let onContextMenu = EventDispatcher()
+  let onMiddleClick = EventDispatcher()
   var captureDescendants = false
+  var middleClicks = false
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -20,6 +22,12 @@ final class ContextMenuArea: ExpoView {
 
   override func rightMouseDown(with event: NSEvent) {
     openMenu(for: event)
+  }
+
+  override func otherMouseUp(with event: NSEvent) {
+    guard middleClicks, event.buttonNumber == 2 else { return super.otherMouseUp(with: event) }
+    let flags = event.modifierFlags
+    onMiddleClick(["shiftKey": flags.contains(.shift), "altKey": flags.contains(.option), "metaKey": flags.contains(.command)])
   }
 
   override func mouseDown(with event: NSEvent) {

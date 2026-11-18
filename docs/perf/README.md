@@ -375,6 +375,14 @@ interaction's window starts at the interaction (a real key event for the command
 scroll and hover are driven in-process from the display link's own ticks, so they are stepped by frames) and ends a
 fixed time later.
 
+The two "pointer on the rows" scrolls are the ones that stand for a person scrolling the sidebar: hover and the cursor
+do their work only where the pointer is, and a hidden instance's pointer is elsewhere. The probe's `pointer` op answers
+`+[NSEvent mouseLocation]` and the window under it with a point in the middle of the list until the repetition ends, and
+on each scroll step it sends `mouseExited:` and `mouseEntered:` to the hover views that left and came under that point,
+as AppKit does with a real pointer in the window (its own events never reach a hidden instance). One
+scroll is the in-process flick again (4000 pt a second, the fast case); the other is `acperf postscroll`'s trackpad
+flick, real scroll events with phases and momentum.
+
 | Row | Measures |
 |---|---|
 | frames delivered | Display-link ticks in the window; the screen asked for window / refresh interval of them |

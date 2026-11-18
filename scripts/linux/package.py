@@ -112,6 +112,10 @@ def seed_content_blocker(runtime, blocker):
 def package(output, ui, destination, content_blocker=None, version=None, cli=None, deb=None, appimage=None, ubo_seed=False):
     if version is not None:
         check_version(version)
+    if deb is not None:
+        if version is None:
+            raise ValueError('a package with a .deb needs --version')
+        linux_formats.deb_version(version)
     cli_digest = None
     if cli is not None:
         if version is None:
@@ -173,13 +177,34 @@ def package(output, ui, destination, content_blocker=None, version=None, cli=Non
             target.parent.mkdir(parents=True)
             shutil.copyfile(icon, target)
         normalize_modes(root)
-        with tarfile.open(destination, 'x:xz') as archive:
-            archive.add(root, arcname='ardia')
+        write_archive(root, destination)
         if deb is not None:
             linux_formats.build_deb(root, deb, version)
         if appimage is not None:
             linux_formats.build_appimage(root, appimage)
     return destination
+
+
+def write_archive(root, destination):
+    with destination.open('xb') as handle:
+        try:
+            xz = subprocess.Popen(['xz', '-T0', '-6', '-c'], stdin=subprocess.PIPE, stdout=handle)
+        except OSError:
+            destination.unlink(missing_ok=True)
+            raise
+        try:
+            with tarfile.open(fileobj=xz.stdin, mode='w|', format=tarfile.PAX_FORMAT) as archive:
+                archive.add(root, arcname='ardia')
+        except BaseException:
+            xz.kill()
+            xz.wait()
+            destination.unlink(missing_ok=True)
+            raise
+        finally:
+            xz.stdin.close()
+        if xz.wait() != 0:
+            destination.unlink(missing_ok=True)
+            raise OSError(f'xz exited {xz.returncode} while writing {destination}')
 
 
 def main():
@@ -190,12 +215,14 @@ def main():
     parser.add_argument('--content-blocker', type=pathlib.Path)
     parser.add_argument('--version', help='the Ardia version, written to lib/ardia/VERSION')
     parser.add_argument('--cli', type=pathlib.Path, help=f'the ardia-cli-<version>-{CLI_PLATFORM}.tar.gz to bundle in lib/ardia/cli (needs --version)')
-    parser.add_argument('--deb', type=pathlib.Path, help='also build a .deb at this path (dpkg-deb)')
+    parser.add_argument('--deb', type=pathlib.Path, help='also build a .deb at this path (dpkg-deb and readelf; needs --version)')
     parser.add_argument('--appimage', type=pathlib.Path, help='also build an AppImage at this path (a pinned type 2 runtime and mksquashfs)')
     parser.add_argument('--no-ubo-seed', action='store_true', help="don't seed the content blocker (by default package.py runs the staged chrome once to save uBlock Origin's compiled engine, so a new profile filters from its first page)")
     args = parser.parse_args()
     if args.cli is not None and args.version is None:
         parser.error('--cli needs --version')
+    if args.deb is not None and args.version is None:
+        parser.error('--deb needs --version')
     try:
         blocker = args.content_blocker.resolve() if args.content_blocker else None
         cli = args.cli.resolve() if args.cli else None

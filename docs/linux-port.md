@@ -495,6 +495,59 @@ scripts/linux/build.sh --print-config
 python3 engine/patches/series.py files --platform linux
 ```
 
+## Installing on Linux
+
+Every release with Linux on it, nightlies included, has these assets for x86-64 on its GitHub release page, each with
+a `.sha256` file beside it (`sha256sum -c <asset>.sha256` checks a download):
+
+- **Debian 13, Ubuntu 24.04 and later: the `.deb`.**
+
+  ```bash
+  sudo apt install ./Ardia-<version>-linux-x64.deb
+  ```
+
+  apt pulls in the libraries Ardia needs (NSS, GTK 3, ALSA, CUPS, libsecret, curl and the rest). The package makes
+  `chrome-sandbox` setuid root, installs the AppArmor profile Chromium's sandbox needs on Ubuntu, and registers Ardia
+  as an `x-www-browser` alternative. A newer `.deb` installs over an older one, and a nightly's version
+  (`0.2.47~nightly.3`) sorts before its stable, so `apt install` of the stable upgrades it. `sudo apt remove ardia`
+  removes it and `sudo apt purge ardia` leaves nothing behind outside your home folder, where your profile
+  (`~/.config/ardia`) and the `ardia` command, if you turned it on (`~/.local/share/ardia`), stay.
+- **Arch: `ardia-bin`.** Once the package is on the AUR, which follows stable releases:
+
+  ```bash
+  yay -S ardia-bin
+  ```
+
+  Without the AUR, or for a nightly, build it from the release's Arch source package. It holds the PKGBUILD and
+  `.SRCINFO` pinned to that release's tarball, which makepkg downloads and checks against its sha256:
+
+  ```bash
+  tar xf ardia-bin-<version>.src.tar.gz
+  cd ardia-bin
+  makepkg -si
+  ```
+
+  `sudo pacman -R ardia-bin` removes it.
+- **Any distribution, no install: the AppImage.**
+
+  ```bash
+  chmod +x Ardia-<version>-linux-x64.AppImage
+  ./Ardia-<version>-linux-x64.AppImage
+  ```
+
+  It needs unprivileged user namespaces, which Ubuntu 24.04 and later restrict: there it refuses to start and says
+  so; use the `.deb`.
+- **Any distribution: the tarball.**
+
+  ```bash
+  tar xf Ardia-<version>-linux-x64.tar.xz
+  sudo ./ardia/install.sh
+  ```
+
+  It installs under `/usr` (or `--prefix`), and no package manager knows about it: install the libraries yourself, and
+  to remove it delete `<prefix>/lib/ardia`, `<prefix>/bin/ardia`, the desktop entry, the icon,
+  `/usr/share/polkit-1/actions/dev.ardia.linux.policy` and, on Ubuntu, `/etc/apparmor.d/ardia`.
+
 ## Packaging and installing
 
 ```bash
@@ -519,8 +572,7 @@ python3 scripts/linux/package.py \
   `--no-sandbox` runs without it: the launcher adds `--ardia-sandbox-decision=Ardia was started with --no-sandbox`, and
   the shell says so once per launch and counts `launches_without_sandbox`.
 - **`.deb`.** Installs under `/usr` (`/usr/bin/ardia` links the launcher), with `chrome-sandbox` setuid root, the
-  polkit policy and the AppArmor profile, which its `postinst` installs and loads on AppArmor 4 and its `postrm`
-  removes. Version `0.2.47-nightly.2` becomes `0.2.47~nightly.2` so a nightly sorts before its release.
+  polkit policy and the AppArmor profile; details under Debian package below.
 - **AppImage.** AppImage's static type 2 runtime and `mksquashfs` (zstd) from a toolset pinned by SHA-256, cached in
   `~/.cache/ardia-appimage`. It carries no setuid helper and no polkit policy, so reauth falls back to the login
   password, and it needs user namespaces: where they're restricted (Ubuntu 24.04 and later) it refuses to start.
@@ -547,6 +599,7 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   first-install restart and list compile and loads the saved engine. Packaging takes about a minute longer.
 - **Modes.** package.py sets every directory and executable to 0755 and every other file to 0644 before archiving,
   so a package built under a umask of 002, Ubuntu's default, matches one built under 022.
+- **Compression.** package.py streams the tar through `xz -T0 -6`, every core at once.
 - **Archive contents.**
   - `bin/ardia`;
   - `lib/ardia/chrome` and the Chromium runtime files from the allowlist in `scripts/linux/runtime_files.py`;
@@ -571,12 +624,47 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   - It always installs the polkit policy at `<destdir>/usr/share/polkit-1/actions` (mode 0644), whatever the prefix,
     because polkit reads actions only from there. Without the policy Ardia can't ask for the system password, so saved
     passwords and card numbers stay hidden.
-- **Arch.** Copy `scripts/linux/arch/PKGBUILD` and the archive, renamed `ardia-linux-x64.tar.xz`, into an empty folder
-  and run `makepkg -si` there. The package (`ardia-bin`) depends on `polkit` and installs through the same script.
-  Its `pkgver()` reads the package's `VERSION`, with `-` turned into `_` (`0.2.44_nightly.3`), and falls back to
-  `0.0.0` for a dev package. makepkg writes that version back into the PKGBUILD, which is why the copy goes in a
-  folder of its own.
-  `pkaction --action-id dev.ardia.linux.reauthenticate` then lists the action.
+- **Debian package.** `package.py --deb <path> --version <version>` (`scripts/linux/linux_formats.py`) builds it from
+  the staged tree with `dpkg-deb`, so it needs `dpkg-deb` and `readelf` (`apt install dpkg binutils`, Arch:
+  `pacman -S dpkg binutils`):
+  - `/usr/lib/ardia` is the tarball's `lib/ardia`, with `/usr/bin/ardia` a link to its launcher, the desktop entry
+    pointed at `/usr/bin/ardia`, the AppArmor profile at `/usr/share/ardia/apparmor/ardia` and
+    `/usr/share/doc/ardia` (copyright, changelog). `DEBIAN/md5sums` lists every file;
+  - its version is the Ardia version with `-` turned into `~` (`0.2.47~nightly.3`), so a nightly sorts before its
+    stable. A `.deb` needs `--version`;
+  - `Depends` comes from the binaries: every `NEEDED` library of the ELF files in `lib/ardia` (the Qt shims excepted:
+    Chromium loads them only on Qt desktops) maps to its Debian package with the 64-bit-time name first
+    (`libasound2t64 | libasound2`), `libc6`'s minimum is the highest `GLIBC_` symbol version, and the list adds what
+    Chromium loads at run time (GTK 3, libsecret, Liberation fonts, xdg-utils) and `curl`, which the bundled CLI
+    installer downloads with. A library with no package in `SONAME_PACKAGES` fails the build, so a new engine
+    dependency can't ship unnoticed. polkit and Vulkan are `Recommends`;
+  - it `Provides: www-browser`; `postinst` makes `chrome-sandbox` setuid root, copies the AppArmor profile to
+    `/etc/apparmor.d/ardia` and loads it where `/etc/apparmor.d/abi/4.0` exists, as `install.sh` does, and registers
+    `/usr/bin/ardia` as the `x-www-browser` and `gnome-www-browser` alternative (priority 100), also on dpkg's
+    `abort-remove`, `abort-deconfigure` and `abort-upgrade` rollbacks; `prerm` unregisters it only on `remove`, so a
+    deconfigure that dpkg rolls back keeps an admin's choice, and `postrm` unloads and deletes the profile (and its cache) on remove and purge.
+
+  `scripts/linux/deb-install-test.sh <deb>` installs it with apt in `debian:13` and `ubuntu:24.04` containers (Ubuntu
+  with the apparmor package): the dependencies resolve, `ldd` finds every library, `ardia --version` runs,
+  `chrome-sandbox` is setuid root, the browser alternatives and `curl` are there, the profile appears only with the
+  4.0 ABI, and `apt purge` leaves the file system as it was before the install. apt retries each download and each
+  image pull is retried, so a network flake doesn't fail it.
+- **Arch.** `scripts/linux/arch/PKGBUILD` is the AUR package `ardia-bin`: it downloads
+  `Ardia-<version>-linux-x64.tar.xz` from the `v<version>` release, checks its pinned sha256 and installs it with the
+  tarball's `install.sh`, then makes `chrome-sandbox` setuid root, as Arch's own `chromium` does, for kernels without
+  unprivileged user namespaces. `scripts/linux/arch/update-pkgbuild.sh <version> --package <tarball>` (or `--sha256`) sets
+  `pkgver` (`0.2.47-nightly.3` becomes `0.2.47nightly.3`, which pacman sorts before `0.2.47`), resets `pkgrel` and writes the matching `.SRCINFO` without makepkg;
+  `update-pkgbuild.sh --check` fails when the committed `.SRCINFO` drifts from the PKGBUILD. The committed pair
+  pins the 0.2.47-nightly.2 test build this was verified with; the AUR copy moves with each stable release.
+  `scripts/linux/arch/publish-aur.sh <version> --sha256 <digest>` clones `ssh://aur@aur.archlinux.org/ardia-bin.git`
+  (host keys pinned in `aur_known_hosts`), refuses to go back a version (a nightly counts as older than its stable), checks that the release's tarball has the
+  digest, commits and pushes; `--dry-run` clones over HTTPS and pushes nothing. The Release workflow runs it after
+  each stable release ([linux-ci.md](linux-ci.md) › The AUR).
+  `release.sh` also packs the PKGBUILD and `.SRCINFO` it pins to the release's tarball into
+  `ardia-bin-<version>.src.tar.gz` (a folder `ardia-bin/`), which every release carries, nightlies included.
+  To try a local tarball, write the pair with `update-pkgbuild.sh <version> --package <tarball> --out <folder>`, put
+  the tarball beside them renamed `ardia-bin-<pkgver>.tar.xz` (makepkg then skips the download), and run
+  `makepkg -si`. `pkaction --action-id dev.ardia.linux.reauthenticate` then lists the polkit action.
 - **Ubuntu.** On a host whose AppArmor reads the 4.0 ABI (`/etc/apparmor.d/abi/4.0`, Ubuntu 24.04 and later), an
   install without `--destdir` also writes `/etc/apparmor.d/ardia` and loads it with `apparmor_parser -r`. The profile
   leaves `<prefix>/lib/ardia/chrome` unconfined and allows it user namespaces, which Ubuntu denies to unprivileged

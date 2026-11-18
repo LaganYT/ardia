@@ -12,12 +12,14 @@ export const Favicon = memo(function Favicon({
   size = 16,
   profileId,
   direct,
+  opacity = 1,
 }: {
   url: string;
   favicon?: string | null;
   size?: number;
   profileId?: string;
   direct?: boolean;
+  opacity?: number;
 }) {
   const theme = useTheme();
   useAppearanceDark();
@@ -26,8 +28,8 @@ export const Favicon = memo(function Favicon({
   const shape = useFaviconTheme(theme.dark || direct ? "" : url, favicon, profileId);
   const white = shape?.kind === "template" && !!shape.stroke;
   const [broken, setBroken] = useState<string | null>(null);
-  if (!url && !resolved) return <NewTabIcon size={size} />;
-  if (!resolved || broken === resolved.uri) return <FaviconFallback url={url} size={size} />;
+  if (!url && !resolved) return <NewTabIcon size={size} opacity={opacity} />;
+  if (!resolved || broken === resolved.uri) return <FaviconFallback url={url} size={size} opacity={opacity} />;
   return (
     <Image
       key={white ? `${resolved.uri} tinted` : resolved.uri}
@@ -36,7 +38,7 @@ export const Favicon = memo(function Favicon({
         setBroken(resolved.uri);
         if (resolved.profileId) faviconFailed(resolved.profileId, resolved.uri);
       }}
-      style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, tintColor: white ? theme.textPrimary : undefined }}
+      style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, tintColor: white ? theme.textPrimary : undefined, opacity }}
     />
   );
 });
@@ -48,15 +50,15 @@ export const SiteFavicon = memo(function SiteFavicon({ host, profileId, size }: 
   return <Favicon url={url} favicon={`${url}/favicon.ico`} profileId={profileId} size={size} />;
 });
 
-export const FaviconFallback = memo(function FaviconFallback({ url, size = 16 }: { url: string; size?: number }) {
+export const FaviconFallback = memo(function FaviconFallback({ url, size = 16, opacity = 1 }: { url: string; size?: number; opacity?: number }) {
   const theme = useTheme();
   const bundled = bundledSiteIcon(url, theme.dark);
-  if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair }} />;
+  if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, opacity }} />;
   const initial = hostInitial(url);
-  if (!initial) return <Symbol name="globe" size={size - 2}color={theme.textSecondary} style={{ width: size, height: size }} />;
+  if (!initial) return <Symbol name="globe" size={size - 2} color={theme.textSecondary} style={{ width: size, height: size, opacity }} />;
   const tile = Math.round((size * 14) / 16);
   return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", opacity }}>
       <View
         style={{
           width: tile,
@@ -82,13 +84,13 @@ function hostInitial(url: string): string {
 
 const NEW_TAB_MARK = require("../../../assets/new-tab-mark.png");
 
-export function NewTabIcon({ size = 16 }: { size?: number }) {
+export function NewTabIcon({ size = 16, opacity = 1 }: { size?: number; opacity?: number }) {
   const theme = useTheme();
   return (
     <Image
       key={theme.dark ? "dark" : "light"}
       source={NEW_TAB_MARK}
-      style={{ width: size, height: size, tintColor: theme.mark, opacity: theme.dark ? 0.28 : 0.3 }}
+      style={{ width: size, height: size, tintColor: theme.mark, opacity: (theme.dark ? 0.28 : 0.3) * opacity }}
     />
   );
 }

@@ -226,7 +226,8 @@ the app as a person would rather than writing a new helper:
 
 A control that shows on hover (a row's ✕, a live folder's refresh, Show in Finder) goes in a `HoverSlot`
 (`components/ui/HoverSlot.tsx`): the slot keeps the width of what it shows at rest, at least the control's, and the control
-lies over it. `useHover` and `useRowHover` mark their handlers, and the dev harness's `ac.hoverShift.check({ scopes })`
+lies over it. A slot that takes room only on hover (`reserve="hover"`) and shows nothing at rest mounts no view until the hover,
+and the check counts it as opening from no width. `useHover` and `useRowHover` mark their handlers, and the dev harness's `ac.hoverShift.check({ scopes })`
 (`src/components/ui/hoverShift.ts`) hovers each marked view inside the named components in turn, measures every view under its
 parent before and while hovered, and returns what moved or resized; only a HoverSlot's inside may change.
 `hover-shift-test.mjs` runs it on the sidebar (with groups, a live folder and its open items), the tab strip and the

@@ -8,7 +8,7 @@ import { middleClickTab } from "../../state/sidebar/clearTabs";
 import { dismissHover } from "../../state/sidebar/hover";
 import { openTabMenu } from "../../state/sidebar/menus";
 import { clickHeldTabPress, holdTabPress, pressOutTabPress, type TabPress } from "../../state/sidebar/heldTabPress";
-import { ContextMenuArea, MouseArea } from "../ui";
+import { ContextMenuArea } from "../ui";
 
 export function TabPressArea({
   windowId,
@@ -30,28 +30,27 @@ export function TabPressArea({
   const press = useRef<TabPress | null>(null);
   const plainTooltip = useSettings((s) => !s.showTabHoverMenu);
   return (
-    <MouseArea onMiddleClick={() => middleClickTab(tab.id)} style={style}>
-      <ContextMenuArea
-        onContextMenu={() => {
-          dismissHover();
-          void openTabMenu(windowId, tab);
+    <ContextMenuArea
+      onMiddleClick={() => middleClickTab(tab.id)}
+      onContextMenu={() => {
+        dismissHover();
+        void openTabMenu(windowId, tab);
+      }}
+      style={style}
+    >
+      <Pressable
+        onPressIn={(e) => {
+          press.current = holdTabPress(windowId, tab.id, e, press.current);
         }}
-        style={style}
+        onPress={(e) => clickHeldTabPress(windowId, tab.id, e, press.current)}
+        onPressOut={(e) => pressOutTabPress(press.current, e)}
+        style={pressStyle}
+        hitSlop={hitSlop}
+        tooltip={tooltip ?? (plainTooltip ? titleTooltip(tab) : undefined)}
       >
-        <Pressable
-          onPressIn={(e) => {
-            press.current = holdTabPress(windowId, tab.id, e, press.current);
-          }}
-          onPress={(e) => clickHeldTabPress(windowId, tab.id, e, press.current)}
-          onPressOut={(e) => pressOutTabPress(press.current, e)}
-          style={pressStyle}
-          hitSlop={hitSlop}
-          tooltip={tooltip ?? (plainTooltip ? titleTooltip(tab) : undefined)}
-        >
-          {children}
-        </Pressable>
-      </ContextMenuArea>
-    </MouseArea>
+        {children}
+      </Pressable>
+    </ContextMenuArea>
   );
 }
 

@@ -20,6 +20,7 @@ export type AppEvent =
   | { type: "centeredResize"; epoch: string }
   | { type: "appLinkOpened"; windowId: string | null }
   | { type: "littleArdiaReturnedToApp" }
+  | { type: "littleArdiaReturnDropped"; count: number }
   | { type: "littleArdiaLinkKeptBehind"; when: "activation" | "arrival" | "open" | "released" }
   | { type: "windowTitleRead"; epoch: string }
   | { type: "keyHoldReplay"; tag: number; count: number }

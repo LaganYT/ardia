@@ -158,6 +158,10 @@ export function newTabLingeringOver(windowId: string, from: string | undefined, 
     notePageOverlay("newTabLeftForWebKit");
     return undefined;
   }
+  if (!PLATFORM_FEATURES.newTabWaitsForFirstFrame) {
+    notePageOverlay("newTabLeftWithoutLinger");
+    return undefined;
+  }
   if (PLATFORM_FEATURES.holdsColdPagesUntilPainted && !webviews.has(to) && heldUntilPainted(adoptKind(adoptOf(next))?.kind)) return undefined;
   notePageOverlay("newTabLingered");
   return from;

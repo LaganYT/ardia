@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, type EasingFunction } from "react-native";
+import { reduceMotion } from "./reduceMotion";
 
 export const curve = {
   linear: Easing.linear,
@@ -13,6 +14,20 @@ export const curve = {
   cssEaseOut: Easing.bezier(0, 0, 0.58, 1),
 } as const;
 
+export const currentValue = (value: Animated.Value): number => (value as unknown as { __getValue(): number }).__getValue();
+
+export const animating = (value: Animated.Value): boolean => (value as unknown as { _animation?: unknown })._animation != null;
+
+export const gateLevel = (on: boolean) => (on ? 1 : 0);
+
+export const gatedNode = (gate: Animated.Value, value: Animated.Value | Animated.AnimatedInterpolation<number>, rest: number) => Animated.add(rest, Animated.multiply(gate, Animated.subtract(value, rest)));
+
+export function useGated(on: boolean, value: Animated.Value | Animated.AnimatedInterpolation<number>, rest: number) {
+  const gate = useRef(new Animated.Value(gateLevel(on))).current;
+  useLayoutEffect(() => gate.setValue(gateLevel(on)), [gate, on]);
+  return useMemo(() => gatedNode(gate, value, rest), [gate, value, rest]);
+}
+
 export const duration = {
   fast: 100,
   base: 150,
@@ -21,6 +36,31 @@ export const duration = {
 } as const;
 
 export const period = { spinner: 900, pulse: 1100 } as const;
+
+export type LoopLeg = { to: number; ms: number; easing?: EasingFunction };
+
+export function legsEasing(legs: readonly LoopLeg[]): { duration: number; easing: EasingFunction } {
+  const total = legs.reduce((sum, leg) => sum + leg.ms, 0);
+  const easing = (t: number) => {
+    let at = t * total;
+    let from = 0;
+    for (const [i, leg] of legs.entries()) {
+      if (at < leg.ms || i === legs.length - 1) return from + (leg.to - from) * (leg.easing ?? curve.linear)(leg.ms > 0 ? Math.min(1, at / leg.ms) : 1);
+      at -= leg.ms;
+      from = leg.to;
+    }
+    return from;
+  };
+  return { duration: total, easing };
+}
+
+export function nativeLoop(value: Animated.Value, legs: readonly LoopLeg[], iterations = -1): Animated.CompositeAnimation {
+  const { duration, easing } = legsEasing(legs);
+  value.setValue(0);
+  return Animated.loop(Animated.timing(value, { toValue: 1, duration, easing, useNativeDriver: true, isInteraction: false }), { iterations });
+}
+
+export const buttonMotion = { iconPressScale: 0.96, controlPressScale: 0.985 } as const;
 
 export type Fade = { duration: number; easing: EasingFunction; delay?: number };
 
@@ -31,7 +71,10 @@ export function usePresence<T>(value: T | null, motion: { show: Fade; hide: Fade
   const [mounted, setMounted] = useState(showing);
   if (showing && !mounted) setMounted(true);
   const appear = useRef(new Animated.Value(showing ? 1 : 0)).current;
+  const heading = useRef(showing);
   useEffect(() => {
+    if (heading.current === showing) return;
+    heading.current = showing;
     const run = Animated.timing(appear, { toValue: showing ? 1 : 0, ...(showing ? motion.show : motion.hide), useNativeDriver: true });
     run.start(({ finished }) => finished && !showing && setMounted(false));
     return () => run.stop();
@@ -57,3 +100,31 @@ export const springs = {
   smooth: spring(springSpec.smooth),
   bouncy: spring(springSpec.bouncy),
 } as const;
+
+export function usePressScaleMotion(enabled = true, pressedScale: number = buttonMotion.iconPressScale) {
+  const scale = useRef<Animated.Value | null>(null);
+  if (enabled && !scale.current) scale.current = new Animated.Value(1);
+
+  useEffect(() => {
+    if (enabled) return;
+    scale.current?.stopAnimation();
+    scale.current?.setValue(1);
+  }, [enabled]);
+
+  const animate = (pressed: boolean) => {
+    const value = scale.current;
+    if (!enabled || !value) return;
+    value.stopAnimation();
+    if (reduceMotion() !== false) {
+      value.setValue(1);
+      return;
+    }
+    Animated.spring(value, { toValue: pressed ? pressedScale : 1, ...springs.snappy, useNativeDriver: true }).start();
+  };
+
+  return {
+    scale: enabled ? scale.current : null,
+    onPressIn: enabled ? () => animate(true) : undefined,
+    onPressOut: enabled ? () => animate(false) : undefined,
+  };
+}

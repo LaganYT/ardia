@@ -93,14 +93,21 @@ Measured materials (our own non-activating panels over solid backdrops; sRGB; ac
   `apps/browser/src/lib/windowLayout.ts`. Radius stays 10.
 - The frame is a setting (issue #66, 2026-11-07): `pageFrame`, 0–12 pt, default `CARD_INSET` (9), so the default look
   is the one above. Settings › Appearance › Page Frame and onboarding's "How much frame?" (`pageFrameOf` in
-  `windowLayout.ts`, `components/window/cardFrame.ts`). The inset applies at the window's edges, below the top strip's
+  `windowLayout.ts`, `components/window/cardFrame.ts`). A `borderlessMode` switch (off by default, synced) overrides the
+  effective inset to 0 and leaves `pageFrame` saved. Issue #999 adds two off-by-default synced flags
+  (`pageFrameZeroInFullScreen`, `pageFrameZeroWhenTabsHidden`): the first drops the effective inset to 0 in macOS full
+  screen; the second only when full screen and Auto-Hide Tabs are both on (`pageFrameInsetOf`); borderless wins over both.
+  Otherwise the slider still applies. The inset applies at the window's edges, below the top strip's
   sides, in Little Ardia below its bar, and to the peek panel's top, bottom and side (its side is `min(5, frame)`);
   split panes and the extension side panel sit `max(frame, 2)` apart, so two panes still read as two edge to edge.
   Docked beside the sidebar the card starts at the sidebar's edge for any frame up to 9 (the sidebar's rows keep their
   9 pt), and `frame - 9` past it above that. The corner radius scales with the frame, `10 × min(1, frame / 9)` rounded
   to half points (0 edge to edge, where the window's own corner rounds the page), and the peek's is
   `min(12, radius + frame - its side)`, so its corners still cover the card's. The traffic lights stay 21 pt below the
-  card's top (y = frame + 21; the compact toolbar lifts them as before). Below an 8 pt frame the sidebar's peek strip
+  card's top (y = frame + 21; the compact toolbar lifts them as before). The sidebar's header and its first row rise by
+  the same lift (`sidebarHeaderOf`, `firstRowTopOf` in `components/sidebar/geometry.ts`; issue #1364), so the first tab or
+  Top Apps tile stays 24 pt below the lights; with the address bar in the sidebar the lights are fixed and so is the
+  header. Below an 8 pt frame the sidebar's peek strip
   would lie over the page, so the native edge watch takes the 8 pt band instead and clicks there reach the page.
   Measured in a hidden instance (2x snapshots): card at 0/5/9/12 is 0/5/9/12 pt from the window's edges (docked: x 190,
   190, 190, 193), corner radius 0 / 5.5 / 10 / 10 pt.
@@ -149,7 +156,7 @@ the same as top"), so if a Dia capture ever differs, the owner's equal insets wi
 
 - Owner's capture of our 0.2.32 Site Controls (2x): the header favicon 13.5 pt from the left edge, 17 pt from the top;
   row glyphs 16.5–19.5 pt in, separators 13.5 pt in. Rows were 5 + 8 in, the header 13 in, so nothing shared a line.
-- Now one grid for every panel there (`PANEL` in `apps/browser/src/components/ui/Controls.tsx`): content inset
+- Now one grid for every panel there (`PANEL` in `apps/browser/src/components/ui/Popover.tsx`): content inset
   **16** from every edge; corner radius 12; rows 32 tall, hover fill 6 in (radius 6, concentric), contents 10 further in;
   a 20 pt icon slot (13 pt glyphs, the header's 20 pt favicon), 10 to the text, so titles start at 46; separators 16
   in, 5 above and below; the first and last rows' icon slots 16 from the top and bottom (list padding 10); a header's
@@ -209,10 +216,14 @@ the same as top"), so if a Dia capture ever differs, the owner's equal insets wi
   over a 0.16 hover fill. It sits one row gap (3 pt) under the tab above it, background to background.
 - Pinned tile hover: a custom tooltip showing the title and URL.
 - Groups (GitHub issue #154's Dia capture): at rest no box; the header sits on the sidebar like a row (icon at x 15) and
-  the group's tabs 16 pt further in (icon at x 31), their right edge with the other rows'. The box appears while the pointer
-  is over the group: `TabGroupNeutralBackground` (white 0.10 dark / black 0.05 light), edge `TabGroupSidebarStroke`
-  (white / black 0.10), header hover `TabGroupNeutralBackgroundHovered` (white 0.12 dark / 0.40 light). Fade time not
-  recovered; Ardia uses the hover card's 0.1 s curve.
+  the group's tabs 16 pt further in (icon at x 31). The box spans the list's width, and the group's rows end 3 pt inside
+  its right and bottom edges, at rest too (issue #154's 2× capture: pinned tiles end at x 221, the selected grouped row at
+  x 218; the owner's hovered capture of 2026-11-10, 4.15 px per pt from the 34 pt row: right 11 px, bottom 10–11 px, so
+  2.7 pt from the box's outer edge, read as 3 pt, the row gap). The box appears while the pointer is over the group:
+  `TabGroupNeutralBackground` (white 0.10 dark / black 0.05 light), edge `TabGroupSidebarStroke` (white / black 0.10).
+  The header gets no hover fill (owner's capture, 2026-11-10), although the binary carries a
+  `TabGroupNeutralBackgroundHovered` colour (white 0.12 dark / 0.40 light). Fade time not recovered; Ardia uses the hover
+  card's 0.1 s curve.
 
 ### Tab hover card motion (Dia's binary, 2026-10-20)
 
@@ -232,8 +243,11 @@ corner**, the corner nearest the row.
 - Show delay: the controller sleeps **0.5 s** or **0.1 s** before presenting (a flag in the hover source picks which;
   not identified) and **0** when another card is already up. A click or key down dismisses it (local event monitor).
   The leave delay comes from the hover source's dismissal behaviour; no value in the binary. Both need a recording.
-- Ours (`components/sidebar/hoverMotion.ts`): the same curve, spring and scale, anchored at the card's top-left, row to
-  row without animation, 0.5 s show delay, 160 ms leave delay. Measured on the native driver's own per-frame values
+- Ours (`components/sidebar/hoverMotion.ts`): the same curve, spring and scale, anchored at the card's top-left. Unlike Dia,
+  since 2026-11-14 (#1584, #1365) it opens only after the pointer rests 0.8 s on one row (Dia: 0.5 s, then 0 for every
+  next row), never moves from row to row with the pointer, leaves at once when the pointer leaves away from it (up, out
+  of the far edge, or onto another row) and 160 ms after a leave toward it, and never opens for rows a peeking sidebar
+  brings under the pointer during its first 0.4 s; Settings › Tabs › Show tab hover menu turns it off. Measured on the native driver's own per-frame values
   (120 Hz, a hidden instance): opacity within 0.007 of Dia's curve over its 12 frames, scale within 0.001 of the spring
   (peak 1.0022 at 180 ms, settled by 340 ms); the fade out takes 12 frames.
 
@@ -251,7 +265,7 @@ Regular rows on the 37 pt pitch; the same for "+ New Tab" and ⌘T, and for the 
 - Curves: the slide is Core Animation's default, cubic-bezier(0.25, 0.1, 0.25, 1) over 0.14 s, no overshoot (a
   spring with ω ≈ 40 rad/s and damping ratio 0.9 fits almost as well). The fade is ease-out, cubic-bezier(0, 0, 0.58,
   1) over 0.10 s, opacity 1 → 0.
-- Ardia (`sidebar/listMotion.tsx`): the same, for every top-level list entry (rows, splits, group blocks, the + row)
+- Ardia (`sidebar/ListMotion.tsx`): the same, for every top-level list entry (rows, splits, group blocks, the + row)
   and inside an expanded group, whose box grows or shrinks with its rows (a tab added as the group's last row: the box
   takes its height at once and what is below the group slides instead); several closes at once fade together. The row
   just under a new one is clipped at the new row's bottom edge while it slides, which gives Dia's look over our
@@ -312,7 +326,11 @@ Clear Tabs; Clear Today"); a toast confirms the clear and offers Undo. Measured 
 pitch, about 6.3 px/pt): the line is 1 pt at about white 0.08 and starts at the favicons' left edge; it ends 7.5 pt before
 the arrow; the arrow is 7 pt wide and 8 pt tall, 3 pt from the text; "Clear" is semibold with a cap height 0.75 of the
 tab titles' (10 pt beside our 13 pt titles) and ends where the titles do; the line's centre is 25 pt above the first
-row's centre. Ours: `components/sidebar/ClearDivider.tsx`, a 16 pt row with Dia's `divider` colour and secondary text.
+row's centre. Ours: `components/sidebar/ClearDivider.tsx`, a 21 pt row with Dia's `divider` colour and secondary text.
+Dia's divider under its Pinned section (owner's 2× capture, 2026-11-09): a 1 pt line 6.5 pt under the last pinned row and
+6.5 pt above what follows (a group's box or a row), 14 pt edge to edge. Dia shows no labels there; ours carries the
+Pinned fold and Tidy/Clear (10 pt tiny text on a 13 pt line), so its band is the label plus 4 pt each side, keeping a hovered row's
+background off the text: 21 pt at the default Sidebar Text size, 23 pt at Large and 25 pt at Larger.
 What it closes (issue #149): the unselected unpinned tabs (`clearOthers`), keeping the selected tab and, per Arc's 2022
 release notes, tabs playing media. Dia's Close All in the sidebar does the same with the selected tab (the issue's
 recording: of three unpinned tabs, the two unselected close and the selected one stays selected).
@@ -553,7 +571,7 @@ what the macOS 26 SDK gives standard AppKit controls, menus and popovers. Our bu
 
 ### Profile paging (ARCUI PageSwipeController, TabSidebar space switcher; 1.50.1)
 
-Implemented in `apps/browser/src/components/window/profilePager.ts` (+ `swipeMotion.ts`, `profiles/ProfileDots.tsx`).
+Implemented in `apps/browser/src/state/windows/profilePager.ts` (+ `components/window/swipeMotion.ts`, `components/profiles/ProfileDots.tsx`).
 - **Tracking** (trackpad loop `0x10059733c`, a `nextEventMatchingMask:` loop on phased scroll events): each event
   adds `scrollingDeltaX × −0.5` to the position in points (`0x100597ba0`: `fmul d0, d0, d8` with d8 = −0.5), so the
   pages move at half the scroll distance. No check of System Settings › Swipe between pages anywhere in ARCUI's
@@ -568,7 +586,10 @@ Implemented in `apps/browser/src/components/window/profilePager.ts` (+ `swipeMot
   page changes.
 - **Wheel mice** (`nonGesturalScrollState`, `0x1005983c4`, events with no phase): scroll deltas add up while they
   come less than ~0.049 s apart; once |Σ| > 1 pt the view pages one page that way (sign flipped by
-  `isDirectionInvertedFromDevice`), then ignores wheel events for 0.25 s.
+  `isDirectionInvertedFromDevice`), then ignores wheel events for 0.25 s. Ardia does not copy the flip: AppKit has
+  already applied the device's scroll-direction setting to `scrollingDeltaX`, so a scroll left (Δx > 0) shows the
+  previous page with Natural scrolling on or off, as the trackpad path does (the flip paged a wheel with it off
+  backwards, #325).
 - `TabSidebar.PagingContainerViewController` keeps `loadedPages` / `transitionPageIDs` and schedules page cleanup:
   pages beside the current one only exist during a transition. `TabStrip.TabStripSpacePagingController` pages the
   top tab strip too (with a content fade on settle, `settleUsesContentFade`, not decoded).
@@ -793,6 +814,21 @@ theme, a group "X" of five tabs after the pinned dock. Positions in points from 
   tab 6.5 after the chip, container 4.5 after it, the next tab 8 after the container; spring sampled in the app: response
   0.31 s / damping 0.81 expanding, 0.30 s / 0.82 collapsing, 1.1 % overshoot.
 
+#### Many tabs (1.57.1 binary, 2026-11-15)
+
+Not measured in pixels: Dia is read-only here and its strip with dozens of tabs was never captured. Its binary names
+the layout's inputs, which say what it does: `TabStrip.TabStripLayout` takes a `TabStripLayoutConfiguration`
+(`maximumTabWidth`, `lockedMaximumTabWidth`, `standardTabWidth`, `dockWidth`, `itemSpacing`, `trailingReservedWidth`,
+`contentInsets`, `bottomDragBufferRegionHeight`) and gives each item `TabStripItemLayoutAttributes` with its own
+`naturalWidth`, `minWidth` and `hasCloseButton`, plus a `primarySelectedTabID`, `tabsWithExpandedPreviewWidth` and a
+`hoverExitLayoutUnlockTask` (widths held until the pointer leaves after a close, Chrome's rule). A
+`TabStripClippingView` and a `fadeWidth` sit next to it. So: the selected tab has its own minimum, narrow tabs drop ×,
+the strip scrolls inside a clipped, faded view. Ardia (2026-11-15, `tabstrip/tokens.ts`): an even share of the room
+down to each tab's own minimum, then scrolling: 32 pt for a tab with its own favicon (favicon only below 52 pt), 64 pt
+for a tab whose favicon is shared or missing, 128 pt for the selected tab, 173 pt at most; × on hover only, and not
+below 84 pt; an 88 pt fade (to 0.25 opacity) at an edge that hides tabs; widths spring on a selection change at Dia's
+group spring (0.30 s, 0.82); drag auto-scroll within 48 pt of an edge, up to 14 pt a frame; a mouse wheel 40 pt a line.
+
 #### Dragging tabs and split targets (1.50.1, owner's 2× recordings, 2026-10-01)
 
 Two recordings, dark, tabs on top (3024 × 1964, variable frame rate, every frame's own timestamp): one with three
@@ -825,7 +861,7 @@ right split"; the numbers are from the pixels.
   tab-shaped pill in ~0.05 s (1.758 → 1.808 s) and that strip makes room for it; let go there, the tab joins it.
 - **The pill** (rec1027, 1.483 s): for a frame or two before the card, the tab itself (its strip look, title and ✕)
   follows the pointer; then it becomes the card (1.508 s).
-- **Ardia** (`layout/splitDrop.ts`, `SplitChrome.tsx`; the picture is `DragPreview` in `packages/shell/ios/DragPreview.swift`):
+- **Ardia** (`split/splitDrop.ts`, `SplitChrome.tsx`; the picture is `DragPreview` in `packages/shell/ios/DragPreview.swift`):
   the same target stages as fractions of the pane's card, the same lean, 0.11 s slide, a 0.2 s / 0.9 spring for the
   sizes; the dashes are React Native's (3 × the width: 2 pt → 6 / 6, 2.33 pt → 7 / 7). The picture is a borderless,
   non-activating panel that takes no mouse: the tab's own strip look as the pill (30 ms, then 60 ms into the card),
@@ -843,7 +879,7 @@ right split"; the numbers are from the pixels.
   place, nothing else moves. Ardia 0.2.22 in the same video: the tab stood still for 20 frames (333 ms) after the
   pointer set off (the drag picture's window snapshot, 0.13–0.35 s of the main thread at the press), the neighbours
   never moved (the dragged tab, at 0.92 opacity, slid over them), and the drop snapped everything in one frame. Now
-  (`layout/stripReorder.ts`): the snapshot waits until the tab leaves the strip and costs ~17 ms (the window at
+  (`tabstrip/stripReorder.ts`): the snapshot waits until the tab leaves the strip and costs ~17 ms (the window at
   half a point a pixel, the pill alone at 2x); the neighbours slide on that spring; the drop is one store update and
   one Chrome strip command, and the tab settles into its place on the same spring, the store moving it as it lands.
   The dragged item draws over its neighbours: React Native macOS's `zIndex` sets the layer's zPosition, which AppKit

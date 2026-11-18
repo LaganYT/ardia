@@ -5,8 +5,13 @@ import { answerExternalApp } from "../site/prompts";
 import { setPageSelection } from "../site/selection";
 import { clearEngineOffer, followSiteChoice } from "../engines/actions";
 import { revealToolbar } from "../windows/toolbarAutoHide";
-import { noteCaptureIndicatorCleared } from "../telemetry/usage";
+import { noteCaptureIndicatorCleared, noteMediaCardCleared } from "../telemetry/tabSleepCounts";
+import { setNowPlaying, useMedia } from "../media/media";
 import { patchPage, pageOf, setPopover } from "./pageState";
+import { isQuitting } from "../app/quit";
+import { closeTabNow } from "./actions";
+import { closedByUnload } from "../profiles/profileUnloading";
+import { forgetRendererHang } from "../telemetry/freezes";
 
 export function leftPage(tabId: string, url: string, previousPage: string, engine: PageEngine, inPeek: boolean) {
   if (pageOf(tabId).externalApp && hostOf(url) !== hostOf(previousPage)) answerExternalApp(tabId, false);
@@ -20,7 +25,16 @@ export function leftPage(tabId: string, url: string, previousPage: string, engin
 }
 
 export function pageEnded(tabId: string) {
+  forgetRendererHang(tabId);
+  if (useMedia.getState().sessions[tabId]) {
+    noteMediaCardCleared();
+    setNowPlaying(tabId, null);
+  }
   if (!pageOf(tabId).mediaAccess) return;
   noteCaptureIndicatorCleared();
   patchPage(tabId, { mediaAccess: null });
+}
+
+export function pageAskedToClose(tabId: string) {
+  if (!isQuitting() && !closedByUnload(tabId)) closeTabNow(tabId);
 }

@@ -18,6 +18,8 @@ import { parseCliCaller, type CliCaller } from "../app/cliCaller";
 import { errorText } from "../../lib/errors";
 import { minimizedUrl } from "../../lib/urlParts";
 import { automationWindows, type AutomationWindow } from "./automationWindows";
+import { consentToken, type ConsentToken } from "../telemetry/client";
+import { warnFor } from "../telemetry/logs";
 import { cliTabTargets } from "../../platform/cli";
 import { TAB_IDLE_EVENTS, USER_IDLE_EVENTS, type AutomationEventName } from "./eventNames";
 import { commands, failure, hello, parseRequest, parseSubscription, planRun, type RequestId, type Subscription } from "./automationMethods";
@@ -25,6 +27,7 @@ import { feedNeeds, stopFeed, updateFeed } from "./automationFeed";
 import { answerDecision, dropResponder, serveHooks, stopResponders } from "./decideSocket";
 import { launchToReplay, recordLaunch, runLaunchActions } from "./lifecycleEvents";
 import { startDecideHooks } from "./decideHooks";
+import { offscreenMethod } from "./offscreen";
 import { applyMethod, workspaceMethod } from "./workspaceMethods";
 
 export const useControlSocket = create<{ status: ControlSocketStatus | null }>()(() => ({ status: null }));
@@ -97,7 +100,7 @@ export function handleControlRequest({ connection, generation: tagged, line }: C
   if ("error" in request) return send(connection, request.id, { error: request.error });
   const { id, method, params } = request;
   if (tagged !== generation || !controlOn()) return send(connection, id, failure("failed", "Control is off."));
-  const ticket = method === "run" || method === "apply" ? ++nextTicket : 0;
+  const ticket = method === "run" ? ++nextTicket : 0;
   const caller = callers.get(connection);
   if (ticket && caller) noteCliCaller(caller);
   if (ticket) {
@@ -162,6 +165,8 @@ function answer(connection: number, method: string, params: Record<string, unkno
       return windowsWithTargets(automationWindows(useBrowser.getState())).then((result) => ({ result }));
     case "workspace":
       return workspaceMethod(params);
+    case "offscreen":
+      return offscreenMethod(params);
     case "apply": {
       const serving = generation;
       return applyMethod(params, () => generation === serving && controlOn());
@@ -208,13 +213,13 @@ function listen() {
   onControlWritten(({ tickets }) => runWritten(tickets));
 }
 
-async function start() {
+async function start(consent: ConsentToken | null) {
   listen();
   const status = await startControlSocket();
   useControlSocket.setState({ status });
   generation = status.state === "on" ? status.generation : null;
   noteSocketServing(generation !== null && controlOn());
-  if (status.state !== "on") console.warn(`[automation] the control socket is off: ${status.reason ?? "unknown"}`);
+  if (status.state !== "on") warnFor(consent, `[automation] the control socket is off: ${status.reason ?? "unknown"}`);
 }
 
 async function stop() {
@@ -233,6 +238,7 @@ function sync() {
   const on = controlOn();
   if (on === applied) return;
   applied = on;
+  const consent = consentToken();
   if (!on) {
     generation = null;
     noteSocketServing(false);
@@ -240,10 +246,10 @@ function sync() {
     runWritten([...unwrittenRuns]);
   }
   chain = chain
-    .then(() => (on ? start() : stop()))
+    .then(() => (on ? start(consent) : stop()))
     .catch((error: unknown) => {
       useControlSocket.setState({ status: { state: "off", generation: 0, path: "", reason: errorText(error) } });
-      console.warn("[automation] the control socket failed", error);
+      warnFor(consent, "[automation] the control socket failed", error);
     });
 }
 

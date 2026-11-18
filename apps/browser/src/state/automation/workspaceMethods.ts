@@ -2,27 +2,34 @@ import { errorText } from "../../lib/errors";
 import { useBrowser } from "../browser/store";
 import { activeTabId, isIncognitoProfile } from "../browser/model";
 import { noteCliEdits } from "../telemetry/usage";
+import { consentToken, type ConsentToken } from "../telemetry/client";
 import { failure, type ErrorCode, type MethodError } from "./automationMethods";
 import { eligibleKind, isEligibleTab, ownEntry } from "./automationWindows";
 import { parseOps, type Op } from "./workspaceOps";
 import { runOp } from "./workspaceApply";
 import { OpError, type Changed, type OpResult } from "./workspaceTargets";
 import { groupFields, isEligibleGroup, tabNode, workspace, type GroupNode, type TabNode } from "./workspaceTree";
+import { sampleTabUsage, workspaceWithUsage } from "./workspaceUsage";
 
 type Body = { result: unknown } | { error: MethodError };
 
 const textOrNull = (value: unknown) => (value === undefined || value === null ? null : typeof value === "string" ? value : undefined);
 
-export function workspaceMethod(params: Record<string, unknown>): Body {
+export function workspaceMethod(params: Record<string, unknown>): Body | Promise<Body> {
   const window = textOrNull(params.window);
   const profile = textOrNull(params.profile);
   if (window === undefined || profile === undefined) return failure("bad_request", "window and profile are ids.");
-  const unknown = Object.keys(params).filter((key) => key !== "window" && key !== "profile");
-  if (unknown.length) return failure("bad_request", `workspace takes window and profile, not ${unknown.join(", ")}.`);
+  const unknown = Object.keys(params).filter((key) => key !== "window" && key !== "profile" && key !== "usage");
+  if (unknown.length) return failure("bad_request", `workspace takes window, profile and usage, not ${unknown.join(", ")}.`);
+  if (params.usage !== undefined && typeof params.usage !== "boolean") return failure("bad_request", "usage is true or false.");
   const s = useBrowser.getState();
   if (window && !eligibleKind(s, window)) return failure("no_window", `There's no window ${window} the ardia command can use.`);
   if (profile && (!ownEntry(s.profiles, profile) || isIncognitoProfile(profile))) return failure("no_window", `There's no profile ${profile}.`);
-  return { result: workspace(s, { window, profile }) };
+  if (!params.usage) return { result: workspace(s, { window, profile }) };
+  return sampleTabUsage().then(
+    (usage) => ({ result: workspaceWithUsage(workspace(useBrowser.getState(), { window, profile }), usage) }),
+    (error) => failure("failed", `Ardia couldn't read its processes: ${errorText(error)}`),
+  );
 }
 
 export type ApplyResult = {
@@ -50,7 +57,7 @@ function settledState(ops: Op[], results: OpResult[]): Pick<ApplyResult, "tabs" 
 
 let chain: Promise<unknown> = Promise.resolve();
 
-async function runAll(ops: Op[], stillOn: () => boolean): Promise<ApplyResult> {
+async function runAll(ops: Op[], stillOn: () => boolean, consent: ConsentToken | null): Promise<ApplyResult> {
   const results: OpResult[] = [];
   let error: ApplyResult["error"];
   for (const [index, op] of ops.entries()) {
@@ -68,7 +75,7 @@ async function runAll(ops: Op[], stillOn: () => boolean): Promise<ApplyResult> {
     }
   }
   const applied = ops.slice(0, results.length);
-  noteCliEdits(applied.filter((op) => !op.op.startsWith("group.")).length, applied.filter((op) => op.op.startsWith("group.")).length, error ? 1 : 0);
+  noteCliEdits(applied.filter((op) => !op.op.startsWith("group.")).length, applied.filter((op) => op.op.startsWith("group.")).length, error ? 1 : 0, consent);
   return {
     ok: !error,
     applied: results.length,
@@ -86,7 +93,8 @@ export function applyMethod(params: Record<string, unknown>, stillOn: () => bool
     noteCliEdits(0, 0, 1);
     return failure(ops.code, ops.message);
   }
-  const run = chain.then(() => runAll(ops, stillOn));
+  const consent = consentToken();
+  const run = chain.then(() => runAll(ops, stillOn, consent));
   chain = run.catch(() => {});
   return run.then((result) => ({ result }));
 }

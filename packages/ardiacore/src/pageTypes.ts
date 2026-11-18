@@ -35,6 +35,7 @@ export type NowPlaying = {
   hasVideo: boolean;
   actions: string[];
   controllable: boolean;
+  loop?: boolean;
 };
 export type MediaCommand = "play" | "pause" | "toggle" | "next" | "previous" | "seekBy" | "seekTo" | "stop";
 export type MediaAccess = { camera: boolean; microphone: boolean; screen: boolean };
@@ -51,6 +52,9 @@ export type OpenWindowRequest = {
   point?: { x: number; y: number };
   site?: boolean;
   fromClick?: boolean;
+  shiftClick?: boolean;
+  linkWait?: "matched" | "skipped" | "timedOut";
+  popup?: boolean;
 };
 
 export type BlockedPopup = { id: string; url: string; origin: string };
@@ -64,8 +68,9 @@ export type PageShare = {
   fileUrl?: string;
 };
 export type PageCommand = {
-  command: "search" | "ask" | "copyLinkToHighlight" | "escape" | "share";
+  command: "search" | "ask" | "copyLinkToHighlight" | "escape" | "share" | "hideElement";
   text: string;
+  point?: [number, number];
   modifiers?: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };
   share?: PageShare;
   anchor?: [number, number, number, number];
@@ -110,7 +115,12 @@ export type WebNotification = {
   isMainFrame: boolean;
 };
 
-export type PictureInPictureState = { kind: "video" | "document"; active: boolean; fullScreenSpaces?: boolean };
+export type PictureInPictureShown = { kind: "video" | "document"; active: true; fullScreenSpaces: boolean; leftApp?: boolean; leftTab: boolean; epoch: string; closedBy?: "app" | "chrome"; auto?: boolean };
+export type PictureInPictureState = { kind: "video" | "document"; active: boolean; closedBy?: "app" | "chrome"; auto?: boolean } | PictureInPictureShown;
+export type PictureInPictureDrag = { offCursor: boolean; slowMove: boolean; epoch: string };
+export type PictureInPictureSkip = { seconds: number; epoch: string };
+export type AutoPictureInPictureHold = "onScreen" | "appSwitch" | "nothingPlaying";
+export type MediaFault = { reason: string; muted?: boolean; blockerActive?: boolean };
 export type ControlPress = { clickAt: number; control: number };
 export type ActivateRequest = { reason: "pictureInPicture" };
 export type DisplayMediaSource = {
@@ -135,6 +145,7 @@ export type PasswordPrompt = {
   passwordLength: number;
   federation: string;
   usernames: string[];
+  offer?: string;
 };
 export type PasswordPromptAnswer = "save" | "update" | "never" | "nope" | "dismiss";
 export type AutofillPrompt = {
@@ -156,6 +167,7 @@ export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 
 export type PageSelection = { text: string; rect: { x: number; y: number; width: number; height: number } };
 export type ScrollState = "down" | "up" | "top";
+export type FocusRestoreOutcome = "focused" | "kept" | "refused" | "gaveUp" | "unknown";
 export type ProtectedMediaRequest = { keySystem: string; main: boolean };
 
 export type WebViewProps = ViewProps & {
@@ -169,6 +181,7 @@ export type WebViewProps = ViewProps & {
   standalone?: boolean;
   extensionHost?: "popup" | "sidePanel";
   visible?: boolean;
+  selected?: boolean;
   warm?: boolean;
   neighbour?: boolean;
   pageBackgroundColor?: string;
@@ -186,7 +199,7 @@ export type WebViewProps = ViewProps & {
   onPopupBlocked?: (popup: BlockedPopup) => void;
   onFindResult?: (result: FindResult) => void;
   onFullscreen?: (fullscreen: boolean) => void;
-  onStatus?: (text: string) => void;
+  onStatus?: (text: string, fromBottom: number | null) => void;
   onCrashed?: (info: CrashInfo) => void;
   onUnresponsive?: () => void;
   onResponsive?: () => void;
@@ -198,17 +211,23 @@ export type WebViewProps = ViewProps & {
   onNotification?: (notification: WebNotification) => void;
   onNotificationClose?: (id: string) => void;
   onPictureInPicture?: (state: PictureInPictureState) => void;
+  onAutoPictureInPictureKept?: (reason: AutoPictureInPictureHold, epoch: string) => void;
+  onPictureInPictureDragged?: (drag: PictureInPictureDrag) => void;
+  onPictureInPictureSkip?: (skip: PictureInPictureSkip) => void;
+  onMediaFault?: (fault: MediaFault) => void;
   onActivateRequest?: (request: ActivateRequest) => void;
   onDisplayMediaRequest?: (request: DisplayMediaRequest) => void;
   onWindowClose?: () => void;
   onCommand?: (command: PageCommand) => void;
   onPageFocus?: () => void;
-  onPagePress?: () => void;
+  onPagePress?: (refused: boolean) => void;
+  onFocusRestore?: (outcome: FocusRestoreOutcome) => void;
   onSelection?: (selection: PageSelection | null) => void;
   onScroll?: (state: ScrollState) => void;
   onProtectedMedia?: (request: ProtectedMediaRequest) => void;
+  onAutoplayBlocked?: (count: number) => void;
   onReady?: () => void;
-  onDiscarded?: (url: string) => void;
+  onDiscarded?: (url: string, reason: DiscardReason | null) => void;
   onPasswordPrompt?: (prompt: PasswordPrompt) => void;
   onAutofillPrompt?: (prompt: AutofillPrompt | null, id: number) => void;
   onExternalApp?: (request: ExternalAppRequest) => void;
@@ -227,6 +246,7 @@ export type WebViewHandle = {
   forceReload(): Promise<void>;
   stopLoading(): Promise<void>;
   focus(): Promise<void>;
+  focusIfUnfocused(): Promise<boolean>;
   setMuted(muted: boolean): Promise<void>;
   zoomStep(direction: 1 | -1 | 0): Promise<void>;
   find(text: string, forward: boolean, findNext: boolean): Promise<void>;
@@ -251,7 +271,7 @@ export type WebViewHandle = {
   openBlockedPopup(id: string, always?: boolean): Promise<void>;
   clearSiteData(): Promise<{ cookies: number | false; storage: boolean }>;
 
-  resolvePasswordPrompt(answer: PasswordPromptAnswer, edits?: { username?: string; password?: string }): Promise<void>;
+  resolvePasswordPrompt(answer: PasswordPromptAnswer, edits?: { username?: string; password?: string; offer?: string }): Promise<void>;
   resolveAutofillPrompt(id: number, answer: AutofillPromptAnswer): Promise<void>;
   executeExtensionAction(extensionId: string): Promise<ExtensionActionResult | null>;
 
@@ -261,7 +281,10 @@ export type WebViewHandle = {
 
   resolveUnresponsive(terminate: boolean): Promise<void>;
   discard(options?: { unload?: boolean }): Promise<DiscardOutcome>;
+  sleepIfHidden(seconds: number): Promise<DiscardRefusal[]>;
   setFrozen(frozen: boolean): Promise<void>;
 };
 
 export type DiscardOutcome = "discarded" | "already" | "refused" | "unsupported";
+export type DiscardRefusal = number;
+export type DiscardReason = "external" | "urgent" | "proactive" | "suggested" | "frozen";

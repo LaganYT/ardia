@@ -5,11 +5,15 @@ import { readDocument, removeDocument } from "../../platform/documents";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { batchStoreUpdates, useBrowser, type BrowserState } from "../browser/store";
+import { ALL, useKeyed, watchAppDark } from "../browser/keyedWatch";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
 import { webviews } from "../../platform/webviews";
 import { changedPages, pagesWrittenSince, withPages, type PagesPair } from "./pagesWritten";
 import { onProfilesOpened, profileOpened } from "../profiles/profileLoading";
+import { consentToken } from "../telemetry/client";
+import { warnFor } from "../telemetry/logs";
+import { fetchFailedBefore, forgetAsked, markAsked, noteFetchFailed, unmarkAsked } from "./askedFavicons";
 
 type Icons = {
   pages: Record<string, string | null>;
@@ -75,12 +79,10 @@ const wrote = (key: string, page: string) => {
   const pending = inFlight.get(`${key}|${page}`);
   if (pending) pending.wrote = ++writeSeq;
 };
-const asked = new Set<string>();
 let lookupTimer: ReturnType<typeof setTimeout> | undefined;
 
 function ask(key: string, page: string) {
-  if (isIncognitoProfile(key) || asked.has(`${key}|${page}`)) return;
-  asked.add(`${key}|${page}`);
+  if (isIncognitoProfile(key) || !markAsked(key, page)) return;
   if (!queued.has(key)) queued.set(key, new Set());
   queued.get(key)!.add(page);
   lookupTimer ??= setTimeout(lookUp, LOOKUP_DELAY_MS);
@@ -97,6 +99,7 @@ function lookUp() {
 }
 
 function lookUpPages(key: string, list: string[]) {
+  const consent = consentToken();
   const pending = list.map((page) => {
     const id = `${key}|${page}`;
     const entry = inFlight.get(id) ?? { lookups: 0 };
@@ -117,8 +120,8 @@ function lookUpPages(key: string, list: string[]) {
       }, true),
     )
     .catch((error) => {
-      for (const page of list) asked.delete(`${key}|${page}`);
-      console.warn("[favicons] lookup failed", error);
+      for (const page of list) unmarkAsked(key, page);
+      warnFor(consent, "[favicons] lookup failed", error);
     })
     .finally(() => {
       for (const { id, entry } of pending) if (--entry.lookups === 0) inFlight.delete(id);
@@ -162,6 +165,7 @@ function remember(key: string, page: string, src: string, uri: string) {
     if (swapped && previous && previous !== uri) appearances = { ...appearances, [page]: dark ? [previous, uri] : [uri, previous] };
     const startsOver = Object.keys(icons.pages).length >= MAX_ICONS;
     const pages = startsOver ? { [page]: uri } : withPages(icons.pages, [[page, uri]]);
+    if (startsOver) forgetAsked(key, pages);
     return { pages, srcs: icons.srcs[src] === uri ? icons.srcs : capped(icons.srcs, src, uri), appearances };
   });
 }
@@ -180,20 +184,20 @@ export function adoptFavicons(profileId: string, known: KnownFavicon[]) {
     if (!fresh.length) return icons;
     const startsOver = Object.keys(icons.pages).length + fresh.length > MAX_ICONS;
     const writes = fresh.map(([page, f]): [string, string] => [page, `${PNG_DATA_URI}${f.png}`]);
-    return { ...icons, pages: startsOver ? Object.fromEntries(writes) : withPages(icons.pages, writes) };
+    const pages = startsOver ? Object.fromEntries(writes) : withPages(icons.pages, writes);
+    if (startsOver) forgetAsked(key, pages);
+    return { ...icons, pages };
   }, true);
   void (async () => {
     for (const [page, f] of found) await storeFavicon(key, page, f.icon, f.png).catch(() => null);
   })();
 }
 
-const failedFetches = new Set<string>();
-
 function fetchMissing(profileId: string, url: string, src: string) {
   const key = cacheKey(profileId);
   if (isIncognitoProfile(profileId) || !/^https?:/i.test(src) || !profileOpened(key)) return;
   const id = `${key}|${src}`;
-  if (inflight.has(id) || failedFetches.has(id)) return;
+  if (inflight.has(id) || fetchFailedBefore(id)) return;
   const pending = fetchFavicon(src, key)
     .then((image) => {
       if (image?.uri.startsWith(PNG_DATA_URI)) void storeFavicon(key, withoutFragment(url), src, image.uri.slice(PNG_DATA_URI.length)).catch(() => null);
@@ -204,7 +208,7 @@ function fetchMissing(profileId: string, url: string, src: string) {
   void pending.then((uri) => {
     inflight.delete(id);
     if (uri) remember(key, withoutFragment(url), src, uri);
-    else failedFetches.add(id);
+    else noteFetchFailed(id, MAX_ICONS);
   });
 }
 
@@ -244,7 +248,7 @@ export function resolveFavicon(url: string, src?: string | null, profileId?: str
   return null;
 }
 
-export const useAppearanceDark = () => useBrowser((s) => s.ui.appDark);
+export const useAppearanceDark = () => useKeyed(watchAppDark, ALL, () => useBrowser.getState().ui.appDark);
 
 function answered(url: string, profileId?: string): boolean {
   const { profiles } = useFavicons.getState();
@@ -338,12 +342,12 @@ export function useFaviconTheme(url: string, src?: string | null, profileId?: st
 }
 
 function forget(key: string) {
-  for (const id of [...asked]) if (id.startsWith(`${key}|`)) asked.delete(id);
+  forgetAsked(key);
   for (const [id, pending] of inFlight) if (id.startsWith(`${key}|`)) pending.wrote = ++writeSeq;
   update(key, () => EMPTY_ICONS, true);
 }
 
-export const pruneProfileFavicons = (profileId: string) => forget(cacheKey(profileId));
+export const pruneEngineFavicons = (engine: string) => forget(engine);
 
 function removeLegacyFiles(s: Pick<BrowserState, "profiles">) {
   for (const id of Object.keys(s.profiles)) {
@@ -364,7 +368,7 @@ export function startFavicons() {
     if (change.all) return forget(change.profile);
     const gone = new Set(change.urls.map(withoutFragment));
     const key = change.profile;
-    for (const page of gone) asked.delete(`${key}|${page}`);
+    for (const page of gone) unmarkAsked(key, page);
     update(key, (icons) => {
       if (!Object.keys(icons.pages).some((page) => gone.has(page))) return icons;
       return { ...icons, pages: Object.fromEntries(Object.entries(icons.pages).filter(([page]) => !gone.has(page))) };

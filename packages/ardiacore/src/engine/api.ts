@@ -1,29 +1,29 @@
 import type { AddressInput, SavedAddress, SavedCard } from "../autofill";
 import type { EngineBookmark, BookmarkOp } from "../bookmarks";
 import type { CastDialog, CastRoute, DeviceChooser } from "../media";
-import type { ContentBlockerState, ContentBlockerStats } from "../contentBlocker";
+import type { AddedFilterList, ContentBlockerState, ContentBlockerStats } from "../contentBlocker";
 import type {
-  ActionPopupRequest, ActionState, ChromeSearchEngine, ExtensionActionChange, ExtensionInstallPrompt, ExtensionPackage, ExtensionsChange, ExtensionsSyncApplied, ExtensionsSyncApply,
+  ActionPopupRequest, ActionState, ChromeSearchEngine, ExtensionActionChange, ExtensionInstallPrompt, ExtensionPackage, ExtensionsChange, ExtensionsLoadHealth, ExtensionsSyncApplied, ExtensionsSyncApply,
   ExtensionsSyncState, ExtensionSyncIntent, InstalledExtension, SidePanelRequest, TabsRequest,
 } from "../extensions";
 import type { HistoryChangedBatch, HistoryWireRow } from "../history";
 import type { FaviconImage } from "../favicons";
 import type { Download, DownloadSettings } from "../downloads";
 import type {
-  BatterySaverMode, BatterySaverState, CliControlStatus, CliTabTarget, EngineComponent, EngineInfo, EngineTask, MemorySaverRequest, MemorySaverState, SystemState,
+  BatterySaverMode, BatterySaverState, CliControlStatus, CursorRestore, CliTabTarget, EngineComponent, EngineInfo, EngineTask, HoverLostEpisode, MemorySaverRequest, PressLoopLongReport, MemorySaverState, PopupProtectedMedia, SystemState, WindowUnpaintedRecord,
 } from "../engineDomain";
 import type { ExternalAppAllowance, PermissionRequest, PermissionResult } from "../permissions";
 import type { BrowsingDataType } from "../profiles";
 import type { ChromeWindowState } from "../windows";
 import type { PasswordExportStatus, SavedPassword } from "../passwords";
 import type { ClearSiteDataResult, SiteSettings, SiteSettingType, SiteSettingValue } from "../siteSettings";
-import type { LinkRoute, TabStripCommand, TabStripTransaction } from "../tabs";
+import type { LinkRoute, TabStripCommand, TabStripTransaction, WindowRequest } from "../tabs";
 import type { PageCookie, PageEngine, PasskeyAccess } from "../webkit";
 import type { DisplayMediaSource } from "../pageTypes";
 
 type Profile = { profile: string };
 type Done = Record<string, never> | null;
-type VideoUpscalingState = { enabled: boolean; lowPower: boolean; thermalPressure: boolean; appActive: boolean; tabs: { tabId: number; allowed: boolean }[] };
+type VideoUpscalingState = { enabled: boolean; lowPower: boolean; thermalPressure: boolean; appActive: boolean; tabs: { tabId: number; allowed: boolean; capturing: boolean }[] };
 
 export type EngineCalls = {
   "engine.info": [{}, EngineInfo];
@@ -42,6 +42,9 @@ export type EngineCalls = {
   "engine.setCliControl": [{ on: boolean }, CliControlStatus];
   "engine.setCliActiveTab": [{ tabId: string | null }, CliControlStatus];
   "engine.cliTabTargets": [{ tabIds: string[] }, Record<string, CliTabTarget>];
+  "engine.cliOwnsTab": [{ tabId: string }, { owned: boolean; shown: boolean }];
+  "engine.cliMoveOffscreen": [{ tabId: string }, { ok: boolean; reason?: string }];
+  "engine.cliCloseOffscreenTabs": [{}, Done];
 
   "tabs.routeLinkTabs": [{ urls: string[] }, LinkRoute];
   "tabs.stripCommand": [{ id: number; command: TabStripCommand }, null];
@@ -77,6 +80,7 @@ export type EngineCalls = {
 
   "profiles.loaded": [{}, { profiles: string[] }];
   "profiles.release": [Profile, null];
+  "profiles.unloadIdle": [Profile, { status: "released" | "pending" | "busy"; tabs: string[]; heldBy?: string }];
   "profiles.deleteData": [Profile, { remaining: string[] }];
   "profiles.clearBrowsingData": [Profile & { types: BrowsingDataType[]; since: number | null }, null];
 
@@ -87,6 +91,8 @@ export type EngineCalls = {
   "sites.clearData": [Profile & { origin: string; engine: PageEngine }, ClearSiteDataResult];
   "sites.zoomLevels": [Profile, Record<string, number>];
   "sites.setZoom": [Profile & { host: string; zoom: number }, null];
+  "sites.preloadPages": [Profile, boolean];
+  "sites.setPreloadPages": [Profile & { on: boolean }, null];
 
   "passwords.list": [Profile, { passwords: SavedPassword[] }];
   "passwords.unlock": [Profile, { unlocked: boolean }];
@@ -116,17 +122,22 @@ export type EngineCalls = {
   "extensions.reload": [Profile & { id: string }, { ok: true }];
   "extensions.configure": [Profile & { id: string; options: Record<string, unknown> }, { ok: true }];
   "extensions.chooseFolder": [{}, string | null];
-  "extensions.resolveInstallPrompt": [{ requestId: string; accepted: boolean }, null];
-  "extensions.actionStates": [{ tabId: string; ids: string[] }, Record<string, ActionState>];
-  "extensions.sidePanelUrl": [{ tabId: string; extensionId: string }, string | null];
+  "extensions.resolveInstallPrompt": [Profile & { requestId: string; accepted: boolean }, null];
+  "extensions.actionStates": [Profile & { tabId: string; ids: string[] }, Record<string, ActionState>];
+  "extensions.sidePanelUrl": [Profile & { tabId: string; extensionId: string }, string | null];
   "extensions.watchActions": [Profile, Done];
   "extensions.syncState": [Profile, ExtensionsSyncState];
   "extensions.syncApply": [Profile & ExtensionsSyncApply, ExtensionsSyncApplied];
+  "extensions.loadHealth": [Profile, ExtensionsLoadHealth];
 
   "search.engines": [Profile, { list: { engines: ChromeSearchEngine[] } }];
-  "search.setEngineName": [{ name: string }, null];
+  "search.setEngineName": [{ name: string; keyword?: string; url?: string }, null];
+  "search.suggest": [Profile & { url: string; id: number }, { status: number; body?: string; netError?: number; stopped?: true }];
+  "search.stopSuggest": [Profile & { id: number }, Done];
 
   "media.displayMediaSources": [{}, DisplayMediaSource[]];
+  "media.screenRecordingAllowed": [{}, boolean];
+  "media.requestScreenRecording": [{}, boolean];
   "media.selectDevice": [{ id: number; index: number }, null];
   "media.cancelDeviceChooser": [{ id: number }, null];
   "media.refreshDeviceChooser": [{ id: number }, null];
@@ -145,8 +156,13 @@ export type EngineCalls = {
   "contentBlocker.state": [{}, ContentBlockerState];
   "contentBlocker.setEnabled": [{ enabled: boolean }, null];
   "contentBlocker.setListEnabled": [{ id: string; enabled: boolean }, null];
+  "contentBlocker.addList": [{ url: string }, AddedFilterList];
+  "contentBlocker.removeList": [{ id: string }, null];
   "contentBlocker.isAllowed": [{ host: string }, boolean];
   "contentBlocker.setAllowed": [{ host: string; allowed: boolean }, null];
+  "contentBlocker.hiddenElements": [{ profile: string }, string[]];
+  "contentBlocker.hideElements": [{ profile: string; filters: string[] }, null];
+  "contentBlocker.restoreElements": [{ profile: string; filters: string[] }, null];
   "contentBlocker.devFailNextMessage": [{}, null];
   "contentBlocker.devDelayNextLoad": [{ ms: number }, null];
 
@@ -170,12 +186,16 @@ export type EngineCalls = {
   "webView.setSplitLinkModifier": [{ modifier: "alt" | "altShift" }, null];
   "webView.setPeekOtherSiteTabs": [{ tabIds: string[] }, null];
   "webView.setSelectionPopover": [{ enabled: boolean }, null];
+  "webView.setBlockAutoplayEverywhere": [{ enabled: boolean }, null];
   "webView.setCommandScrollZoom": [{ enabled: boolean }, null];
   "webView.setLittleArdiaOpensNewTabLinks": [{ enabled: boolean }, null];
+  "webView.setPopupsOpenAsTabs": [{ enabled: boolean }, null];
   "webView.setAutoPictureInPicture": [{ enabled: boolean }, null];
   "webView.setVideoUpscaling": [{ enabled: boolean }, null];
-  "webView.setVideoUpscalingTestConditions": [{ lowPower?: boolean; thermalPressure?: boolean }, null];
+  "webView.setVideoUpscalingTestConditions": [{ lowPower?: boolean; thermalPressure?: boolean; capturing?: boolean }, null];
   "webView.videoUpscalingState": [{}, VideoUpscalingState | null];
+  "webView.takeContentDrift": [{}, { layouts: number; fits: number; maxPoints: number }];
+  "webView.takeFirstPaintHolds": [{}, { held: number; painted: number; loaded: number; pressed: number; timedOut: number; heldMs: number }];
 
   "webKit.removeDownloadStaging": [{ path: string }, boolean];
   "webKit.endPrivateSession": [{ session: string }, null];
@@ -193,6 +213,12 @@ export type EngineCalls = {
 export type EngineEvents = {
   "engine.systemState": SystemState;
   "engine.cliControl": CliControlStatus;
+  "engine.hoverLost": HoverLostEpisode;
+  "engine.popupProtectedMedia": PopupProtectedMedia;
+  "engine.devToolsKeyKept": { epoch: string };
+  "engine.cursorRestored": CursorRestore;
+  "engine.windowUnpainted": WindowUnpaintedRecord;
+  "engine.pressLoopLong": PressLoopLongReport;
   "tabs.strips": TabStripTransaction;
   "downloads.changed": Download;
   "permissions.requested": PermissionRequest;
@@ -213,4 +239,12 @@ export type EngineEvents = {
   "media.deviceChooser": DeviceChooser;
   "media.castDialog": CastDialog;
   "media.castRoutes": { profile: string; routes: CastRoute[] };
+};
+
+export type WindowsHostEvents = {
+  "tabs.windowRequest": WindowRequest;
+};
+
+export type LinuxHostEvents = {
+  "reauth.requested": { purpose: string; granted: boolean; result: string; method?: "polkit" | "loginPassword" };
 };

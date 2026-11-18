@@ -1,9 +1,11 @@
 import { APP_INGEST_KEY, INGEST_KEY_HEADER } from "@ardia/core";
-import { cancelUploads, fileSize, onReportEvent, removeReportFile, uploadFile } from "../../platform/report";
+import { cancelUploads, fileSize, onReportEvent, postReportJson, removeReportFile, uploadFile } from "../../platform/report";
 import { feedbackURLOverride } from "../../platform/launchConfig";
 import { confirm } from "../../platform/dialogs";
+import { readDocument, removeDocument, writeDocument } from "../../platform/documents";
+import { fileExists } from "../../platform/files";
 import { openUrls } from "../browser/actions";
-import { capture, isSharing } from "../telemetry/client";
+import { capture, consentNow, consentToken, isSharing } from "../telemetry/client";
 import { reportIdentity, telemetryIdentity, type ReportIdentity } from "../telemetry/identity";
 import { localEventsSince } from "../telemetry/localStore";
 import { startWatch } from "../telemetry/watch";
@@ -11,10 +13,10 @@ import { appInfo } from "../telemetry/transport";
 import { pageAddressOf, reportDiagnostics, systemLine, updateChannel } from "./details";
 import {
   buildPayload,
-  canSend,
   clampContact,
   clampDescription,
   clampTitle,
+  draftProblems,
   LOCAL_EVENTS_DAYS,
   watchDays,
   watchEndDate,
@@ -24,7 +26,8 @@ import {
   type ReportKind,
 } from "./form";
 import { discardRecording, discardTrace, lastRecordingStats, startRecording, stopRecording } from "./recording";
-import { currentReport, initialReportState, patchDraft, patchReport, useReportSheet } from "./store";
+import { SAVED_DRAFT_DOC, restoredDraft, savedDraftJson, savedDraftOf } from "./savedDraft";
+import { currentReport, initialReportState, patchDraft, patchReport, useReportSheet, type ReportSheetState } from "./store";
 import { isBusy, sendReport, type UploadDeps, type UploadState } from "./upload";
 
 export const FEEDBACK_URL = "https://ardia.dev/api/feedback";
@@ -36,14 +39,45 @@ let identity: ReportIdentity | null = null;
 let cancelled = false;
 const progressHandlers = new Set<(id: string, sent: number) => void>();
 let progressSubscribed = false;
+let draftRestored = false;
+let lastSavedDraft: string | null = null;
+
+function saveDraft(s: ReportSheetState) {
+  const saved = savedDraftOf(s, identity);
+  const json = saved ? savedDraftJson(saved) : null;
+  if (json === lastSavedDraft) return;
+  lastSavedDraft = json;
+  try {
+    if (json) writeDocument(SAVED_DRAFT_DOC, json);
+    else removeDocument(SAVED_DRAFT_DOC);
+  } catch {}
+}
+
+function restoreDraftOnce(): { recording: boolean } | null {
+  if (draftRestored) return null;
+  draftRestored = true;
+  let json: string | null = null;
+  try {
+    json = readDocument(SAVED_DRAFT_DOC);
+  } catch {}
+  lastSavedDraft = json;
+  const restored = restoredDraft(json, fileExists);
+  if (restored) {
+    const { identity: savedIdentity, ...state } = restored;
+    identity = savedIdentity;
+    patchReport(state);
+  }
+  useReportSheet.subscribe(saveDraft);
+  return restored ? { recording: restored.recording.phase === "ready" } : null;
+}
 
 export function openReport(windowId: string | null, source: "menu" | "check_in" = "menu") {
   if (!windowId) return;
-  const s = currentReport();
-  if (s.recording.phase === "recording") return;
-  if (s.sent) resetReport();
+  if (currentReport().recording.phase === "recording") return;
+  const restored = restoreDraftOnce();
+  if (currentReport().sent) resetReport();
   patchReport({ windowId, source, pageAddress: pageAddressOf(windowId), systemLine: systemLine(), preview: false, attachedOpen: false });
-  capture("report_sheet_opened", { source });
+  capture("report_sheet_opened", { source, restored_draft: !!restored, restored_recording: !!restored?.recording }, consentNow());
   void refreshLocalEvents();
 }
 
@@ -77,6 +111,7 @@ export function resetReport() {
   discardTrace();
   const s = currentReport();
   if (s.local) removeReportFile(s.local.path);
+  if (s.draftDir) removeReportFile(s.draftDir);
   identity = null;
   useReportSheet.setState(initialReportState());
 }
@@ -101,19 +136,12 @@ export function reportFiles(s = currentReport()): ReportFile[] {
 }
 
 async function postJson(url: string, body: unknown, headers: Record<string, string>) {
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), POST_TIMEOUT_MS);
+  const { status, text } = await postReportJson(url, JSON.stringify(body), { "Content-Type": "application/json", ...headers }, POST_TIMEOUT_MS);
+  let json: unknown = null;
   try {
-    const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body), signal: abort.signal });
-    const text = await response.text();
-    let json: unknown = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {}
-    return { status: response.status, json };
-  } finally {
-    clearTimeout(timer);
-  }
+    json = text ? JSON.parse(text) : null;
+  } catch {}
+  return { status, json };
 }
 
 function listenProgress() {
@@ -133,6 +161,7 @@ const deps: UploadDeps = {
     return () => void progressHandlers.delete(handler);
   },
   now: () => Date.now(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
 export async function previewPayload(): Promise<Record<string, unknown>> {
@@ -158,26 +187,55 @@ async function payloadContext(draft: ReportDraft, installId: string) {
   };
 }
 
+export const mayStartSending = (s: ReportSheetState) =>
+  !isBusy(s.upload) && s.recording.phase !== "recording" && s.recording.phase !== "saving" && s.trace.phase !== "tracing" && s.trace.phase !== "saving";
+
 export async function sendCurrentReport() {
+  const consent = consentToken();
   const s = currentReport();
-  if (!canSend(s.draft) || isBusy(s.upload) || s.recording.phase === "recording" || s.recording.phase === "saving" || s.trace.phase === "tracing" || s.trace.phase === "saving") return;
+  if (!mayStartSending(s)) return;
+  const problems = draftProblems(s.draft);
+  if (problems.length) {
+    patchReport({ showProblems: true });
+    capture("report_send_blocked", { reason: problems[0], problems: problems.length, kind: s.draft.kind }, consentNow());
+    return;
+  }
   cancelled = false;
-  const resume = s.upload.phase === "failed" ? s.upload.created : null;
+  const failed = s.upload.phase === "failed" ? s.upload : null;
+  let resume = failed && failed.errorClass !== "expired" ? failed.created : null;
   const sharing = isSharing();
-  identity = resume && identity ? identity : reportIdentity(s.draft.watch && !sharing);
   const files = reportFiles(s);
-  const payload = buildPayload(s.draft, await payloadContext(s.draft, identity.id));
   const endpoint = { url: feedbackEndpoint(), key: APP_INGEST_KEY, keyHeader: INGEST_KEY_HEADER };
-  const result = await sendReport(deps, endpoint, payload, files, (upload: UploadState) => !cancelled && patchReport({ upload }), resume, () => cancelled);
+  const onState = (upload: UploadState) => !cancelled && patchReport({ upload });
+  const attempt = async () => {
+    const shown = resume && identity ? identity : reportIdentity(s.draft.watch && !sharing);
+    identity = shown;
+    const payload = buildPayload(s.draft, await payloadContext(s.draft, shown.id));
+    return { shown, result: await sendReport(deps, endpoint, payload, files, onState, resume, () => cancelled) };
+  };
+  let { shown, result } = await attempt();
+  let restarted = false;
+  if (result.phase === "failed" && result.errorClass === "expired" && resume && !cancelled) {
+    resume = null;
+    restarted = true;
+    ({ shown, result } = await attempt());
+  }
   if (cancelled) return;
   if (result.phase === "failed") {
-    capture("report_failed", { stage: result.stage, kind: s.draft.kind });
+    capture("report_failed", {
+      stage: result.stage,
+      kind: s.draft.kind,
+      error_class: result.errorClass,
+      status: result.status,
+      attempts: result.attempts,
+      resumed: !!failed,
+      restarted,
+    }, consent);
     return;
   }
   if (result.phase !== "sent") return;
   const days = watchDays(s.draft, sharing);
   if (days > 0) startWatch(result.sent.id, days);
-  const shown = identity;
   patchReport({
     sent: {
       id: result.sent.id,
@@ -192,12 +250,17 @@ export async function sendCurrentReport() {
   capture("report_sent", {
     kind: s.draft.kind,
     has_recording: files.some((f) => f.name === "recording.mp4"),
+    recording_pip: s.recording.phase === "ready" && !!s.recording.pictureInPicture,
+    recording_withheld_windows: s.recording.phase === "ready" ? (s.recording.withheldWindows ?? 0) : 0,
     has_trace: files.some((f) => f.name === "trace.json.gz"),
     attachments: files.length,
     watch: days > 0,
     upload_ms: result.sent.uploadMs,
     bytes: result.sent.bytes,
-  });
+    retries: result.sent.retries,
+    resumed: !!failed,
+    restarted,
+  }, consent);
 }
 
 export function viewIssue() {

@@ -5,6 +5,7 @@ from contextlib import contextmanager
 FIELD_CONTROLS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 TEXT_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 JSON_CONTROLS = re.compile(r"[\x7f-\x9f]")
+LONE_SURROGATES = re.compile("[\ud800-\udfff]")
 
 
 def _escaped(found) -> str:
@@ -24,6 +25,12 @@ def json_safe(text: str) -> str:
     return JSON_CONTROLS.sub(_escaped, text)
 
 
+def well_formed(text: str) -> str:
+    if not LONE_SURROGATES.search(text):
+        return text
+    return text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+
+
 class InertStream:
     def __init__(self, stream, clean=inert):
         self._stream = stream
@@ -38,6 +45,28 @@ class InertStream:
 
     def __getattr__(self, name):
         return getattr(self._stream, name)
+
+
+def say(text: str) -> None:
+    sys.stdout.write(well_formed(text) + "\n")
+    sys.stdout.flush()
+
+
+def quiet_stdout() -> None:
+    import os
+
+    try:
+        sink = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(sink, sys.stdout.fileno())
+        os.close(sink)
+    except (OSError, ValueError):
+        pass
+
+
+def complain(text: str) -> None:
+    sys.stdout.flush()
+    sys.stderr.write(well_formed(text) + "\n")
+    sys.stderr.flush()
 
 
 def json_requested(argv: list[str]) -> bool:

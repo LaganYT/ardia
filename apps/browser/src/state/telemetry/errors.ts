@@ -1,11 +1,11 @@
 import { crashReports } from "../../platform/app";
-import { advanceCrashCursor, capture, crashCursor, loadChoice, saveQueueNow } from "./client";
-import { contextAt, contextProperties, sessionStart } from "./diagnostics";
+import { advanceCrashCursor, capture, consentNow, consentToken, crashCursor, loadChoice, saveQueueNow, type ConsentToken } from "./client";
+import { contextAt, contextProperties, recentWebuiPages, sessionStart } from "./diagnostics";
 import type { SavedContext } from "./savedContext";
-import { recordLog } from "./logs";
-import { errorCode, errorMessage, errorType, nativeCrashExceptions, nativeCrashTermination, parseStack, type ExceptionFrame } from "./sanitize";
+import { logConsent, recordLog } from "./logs";
+import { errorCode, errorMessage, errorType, jsFatalKind, nativeCrashExceptions, nativeCrashTermination, parseStack, type ExceptionFrame } from "./sanitize";
 
-type Mechanism = "onerror" | "onunhandledrejection" | "react" | "console" | "native_crash" | "helper_crash";
+type Mechanism = "onerror" | "onunhandledrejection" | "react" | "react_recovered" | "console" | "native_crash" | "helper_crash";
 
 const MAX_PER_SESSION = 25;
 const reported = new WeakSet<object>();
@@ -26,7 +26,7 @@ function exceptionProperties(entries: ExceptionEntry[], mechanism: Mechanism, ha
   };
 }
 
-export function captureException(error: unknown, mechanism: Mechanism, { fatal = false, handled = false } = {}) {
+export function captureException(error: unknown, mechanism: Mechanism, { fatal = false, handled = false, consent }: { fatal?: boolean; handled?: boolean; consent?: ConsentToken | null } = {}) {
   try {
     if (error && typeof error === "object") {
       if (reported.has(error)) return;
@@ -42,6 +42,7 @@ export function captureException(error: unknown, mechanism: Mechanism, { fatal =
     capture(
       "$exception",
       { $exception_level: fatal ? "fatal" : "error", source: mechanism, error_code: code },
+      consent === undefined ? consentNow() : consent,
       { urgent: true, persist: true, raw: exceptionProperties([{ type, value, frames }], mechanism, handled) },
     );
   } catch {}
@@ -115,8 +116,8 @@ export function installErrorReporting() {
         try {
           const first = args[0];
           if (level === "error" && first instanceof Error) {
-            captureException(first, (first as { isComponentError?: boolean }).isComponentError ? "react" : "console");
-          } else recordLog(level, args);
+            captureException(first, (first as { isComponentError?: boolean }).isComponentError ? "react" : "console", { consent: logConsent() });
+          } else recordLog(level, args, logConsent());
         } catch {}
         busy = false;
       }
@@ -133,10 +134,13 @@ const whole = (value: number | undefined) => (typeof value === "number" && Numbe
 
 export async function reportNativeCrashes(contexts: (SavedContext | null)[] = []) {
   const since = crashCursor();
+  const consent = consentToken();
   const reports = await crashReports(since).catch(() => []);
+  const floor = Math.max(since, crashCursor());
   let latest = since;
   for (const report of reports) {
     latest = Math.max(latest, report.fileTime ?? report.time);
+    if (floor > since && (report.fileTime ?? report.time) <= floor) continue;
     const browser = report.process === "browser";
     const mechanism: Mechanism = browser ? "native_crash" : "helper_crash";
     const { name, signal, subtype, images, exceptions } = nativeCrashExceptions(report);
@@ -157,8 +161,11 @@ export async function reportNativeCrashes(contexts: (SavedContext | null)[] = []
         crashed_engine_version: browser ? null : optional(report.engineVersion, ENGINE_VERSION),
         crash_uptime_s: whole(report.uptimeSeconds),
         crash_vm_writable_mb: whole(report.vmWritableMB),
+        crash_js_fatal: browser ? jsFatalKind(report.jsFatalSource, report.jsFatal) : null,
         ...contextProperties(context, "ctx_", report.time),
+        ctx_webui_pages: recentWebuiPages(context, report.time),
       },
+      consent,
       {
         urgent: true,
         persist: true,

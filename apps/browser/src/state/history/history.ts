@@ -3,7 +3,8 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import { engineProfiles } from "../profiles/engineProfiles";
-import type { HistoryEntry } from "../browser/types";
+import type { ClosedTab, HistoryEntry } from "../browser/types";
+import { withImportedCleaned } from "../pins/importedCleaned";
 import { isWebPageUrl } from "../../lib/url";
 
 export type HistoryView = { list: HistoryEntry[]; floor: number; ready: boolean };
@@ -12,12 +13,16 @@ export type HistorySlice = {
   history: Record<string, HistoryView>;
 
   removeHistory(profileId: string, urls: string[]): void;
-  clearHistory(profileId: string, since?: number): void;
+  clearHistory(profileId: string, since?: number, until?: number): void;
   importHistory(profileId: string, entries: Omit<HistoryEntry, "favicon">[]): number;
+  importCleanedTabs(entries: ClosedTab[]): { added: number; already: number };
 };
 
-export const MAX_HISTORY = 5000;
+export const MAX_HISTORY = 100_000;
 export const MAX_VISIT_TIMES = 50;
+export const SUGGESTION_HISTORY = 5000;
+export const SUGGESTION_FREQUENT = 2000;
+export const FREQUENT_VISITS = 4;
 
 export const NO_HISTORY: HistoryEntry[] = [];
 
@@ -27,17 +32,39 @@ export const historyViewOf = (s: HistoryState, profileId: string): HistoryView |
 
 export const historyOf = (s: HistoryState, profileId: string): HistoryEntry[] => historyViewOf(s, profileId)?.list ?? NO_HISTORY;
 
+const newestPages = new WeakMap<HistoryEntry[], HistoryEntry[]>();
+
+export function suggestionHistory(list: HistoryEntry[]): HistoryEntry[] {
+  if (list.length <= SUGGESTION_HISTORY) return list;
+  let newest = newestPages.get(list);
+  if (!newest) {
+    newest = list.slice(0, SUGGESTION_HISTORY);
+    let frequent = 0;
+    for (let i = SUGGESTION_HISTORY; i < list.length && frequent < SUGGESTION_FREQUENT; i++) {
+      if (list[i]!.visits < FREQUENT_VISITS) continue;
+      newest.push(list[i]!);
+      frequent++;
+    }
+    newestPages.set(list, newest);
+  }
+  return newest;
+}
+
+export const suggestionHistoryOf = (s: HistoryState, profileId: string): HistoryEntry[] => suggestionHistory(historyOf(s, profileId));
+
 export function withHistoryList(s: HistoryState, engine: string, list: HistoryEntry[]): Partial<Pick<BrowserState, "history">> {
   if (!engineProfiles(s).includes(engine)) return {};
   const was = s.history[engine];
   return { history: { ...s.history, [engine]: { list, floor: was?.floor ?? -Infinity, ready: was?.ready ?? false } } };
 }
 
-function withoutVisitsSince(entry: HistoryEntry, since: number): HistoryEntry | null {
+function withoutVisitsBetween(entry: HistoryEntry, since: number, until: number): HistoryEntry | null {
   if (entry.lastVisit < since) return entry;
   const times = entry.visitTimes?.length ? entry.visitTimes : [entry.lastVisit];
-  const kept = times.filter((t) => t < since);
+  const kept = times.filter((t) => t < since || t > until);
+  if (kept.length === times.length) return entry;
   if (!kept.length) return null;
+  kept.sort((a, b) => a - b);
   return { ...entry, visits: entry.visits - (times.length - kept.length), lastVisit: kept[kept.length - 1]!, visitTimes: kept };
 }
 
@@ -48,8 +75,15 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
 
   removeHistory(profileId, urls) {
     if (!urls.length || isIncognitoProfile(profileId)) return;
-    set((s) => withHistoryList(s, engineProfile(s, profileId), historyOf(s, profileId).filter((h) => !urls.includes(h.url))));
+    const gone = new Set(urls);
+    set((s) => withHistoryList(s, engineProfile(s, profileId), historyOf(s, profileId).filter((h) => !gone.has(h.url))));
     void deleteHistoryUrls(engineProfile(get(), profileId), urls).catch(failed("delete"));
+  },
+
+  importCleanedTabs(entries) {
+    const { cleanedTabs, added, already } = withImportedCleaned(get(), entries);
+    if (added) set({ cleanedTabs });
+    return { added, already };
   },
 
   importHistory(profileId, entries) {
@@ -71,12 +105,12 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
     return added;
   },
 
-  clearHistory(profileId, since) {
+  clearHistory(profileId, since, until = Infinity) {
     if (isIncognitoProfile(profileId)) return;
     set((s) => {
       const engine = engineProfile(s, profileId);
-      if (since === undefined) return withHistoryList(s, engine, []);
-      const kept = historyOf(s, profileId).map((h) => withoutVisitsSince(h, since)).filter((h): h is HistoryEntry => !!h);
+      if (since === undefined && until === Infinity) return withHistoryList(s, engine, []);
+      const kept = historyOf(s, profileId).map((h) => withoutVisitsBetween(h, since ?? -Infinity, until)).filter((h): h is HistoryEntry => !!h);
       return withHistoryList(s, engine, kept.sort((a, b) => b.lastVisit - a.lastVisit));
     });
   },

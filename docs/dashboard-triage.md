@@ -2,6 +2,8 @@
 
 `/triage` in the dashboard (`apps/dashboard`) shows the feedback-triage data that `ardia-db` mirrors into the `sandbox` database on the telemetry ClickHouse: requests, the reply queue, people, releases and GitHub issues. It sits behind the same Hexclave sign-in and admin gate as every other page: a verified primary email and `is_admin: true` in the user's client read-only metadata.
 
+The dashboard's `/settings` page, which settings opted-in users change, is described in `docs/dashboard-settings.md`.
+
 ## Credentials
 
 The dashboard's `reader` user only sees `telemetry.*`, so triage uses its own connection, configured with env vars that `serverEnv()` reads like the rest:
@@ -109,3 +111,19 @@ Tests: `pnpm -C apps/dashboard test` and `python3 -m unittest discover -s apps/d
 Leads and the reply queue's **Leads on X** group offer **Newest** (default), **Followers** and **Views**. Metrics sort highest first, unknowns last (a known zero stays ahead of unknown). Ties use the newest post, then its ID. Other reply groups keep their order.
 
 `leads.py` already reads followers from the author's `public_metrics.followers_count` and views from the post's `public_metrics.impression_count`. `ch_sync.py` mirrors both as nullable counts (`author_followers`, `views`) in `sandbox.ardia_leads`. To fill missing old values from saved post JSON without fetching X or inventing counts, install `apps/dashboard/pipeline/backfill_lead_metrics.py` beside `leads.py`, run `python3 backfill_lead_metrics.py`, then `python3 ch_sync.py leads`. Existing known values are not overwritten; absent metrics stay null.
+
+## Phone app events
+
+The phone app (`apps/phone`) sends to the same pipeline with service `ardia-phone` and `$lib` `ardia-phone-telemetry`, and tags every event `app: phone` and `platform: android|ios`. Every Mac section filters on `APP_SOURCE` (Mac sources and libs), so phone events never count toward Mac numbers; query them with `PHONE_APP_SOURCE` from `apps/dashboard/src/server/sql.ts`. Their events and fields are listed in `docs/phone.md` › Telemetry. People pages read `APP_SOURCE` too, so a phone install doesn't appear there.
+
+## Site downloads
+
+The Site page's **Where they clicked Download** panel splits `download_clicked` two ways: by platform first, then by the button's place on the page (`location`). The platform comes from the event's `platform` and `arch` properties, which the site sends from 0.2.47-nightly.3 on: `windows x64`, `windows arm64` or `linux x64`. Clicks without a `platform` count as Mac, because before Windows and Linux builds the site offered only the Mac download; older ranges therefore show Mac only. People is distinct visitors, Clicks is raw clicks. The Mac funnel stays on Funnels.
+
+## Freezes
+
+Performance › Freezes reads `app_freeze` over the last 7 days, grouped by `signature`: people (`uniqExact(distinct_id)`),
+freezes (`count()`), time frozen (`sum(freeze_ms)`), the most common thread and job, the latest version, and the top
+three frames from Ardia's own images (hover the place). Offsets symbolicate with the engine's uploaded symbols
+(`scripts/symbolicate-crash.sh`) and Hermes's with the release framework's local symbols.
+

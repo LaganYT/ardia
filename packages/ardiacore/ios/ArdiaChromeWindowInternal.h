@@ -20,6 +20,8 @@
 + (instancetype)ofWindow:(ArdiaCoreWindow *)coreWindow create:(BOOL)create;
 - (void)tab:(ArdiaCoreTab *)tab fullScreen:(BOOL)fullScreen tell:(void (^)(void))tell;
 - (BOOL)seen;
+- (BOOL)seenOnlyByWindowServer;
+- (void)reconsiderSight;
 - (NSDictionary *)state;
 - (ArdiaCoreTab *)probedTab;
 - (BOOL)covered;
@@ -35,6 +37,8 @@ NSMapTable<NSWindow *, ArdiaWindowController *> *Controllers();
 extern BOOL (^gRefusesUnhandledKey)(NSWindow *, NSEvent *);
 
 void ConfigureWindow(NSWindow *window);
+void InsetUtilityTrafficLights(NSWindow *window);
+CGFloat WindowCornerRadius(NSWindow *window);
 extern const void *kLightsCenterKey;
 extern const void *kLightsShownKey;
 extern const void *kLightsMoveKey;
@@ -49,11 +53,13 @@ NSMenuItem *ReservedMenuItemForEvent(NSEvent *event);
 bool IsReservedKey(NSEvent *event);
 bool IsSecondSidebarKeyPress(NSEvent *event);
 bool KeepsUnhandledSidebarKeyInPage(NSWindow *window, NSEvent *event);
+bool KeepsReservedKeyInDevTools(NSWindow *window, NSEvent *event);
 
 extern const void *kActedFullScreenKey;
 extern const void *kWindowFullScreenKey;
 BOOL IsWindowFullScreen(NSWindow *window);
 void ActOcclusion(NSWindow *window, NSNumber *visible);
+void ActWindowServer(NSWindow *window, BOOL shows);
 extern NSTimeInterval gActedOcclusionGap;
 void ActWindowFullScreen(ArdiaCoreWindow *coreWindow, BOOL enter, NSTimeInterval seconds);
 extern NSTimeInterval gActedTransition;

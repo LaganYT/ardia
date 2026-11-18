@@ -1,8 +1,7 @@
 import type { Shortcut } from "../commands/shortcuts";
 import { storeAction, useBrowser } from "../browser/store";
 import { tabLayoutOf } from "../browser/model";
-import { isRegularWindow } from "../windows/small";
-import { choose } from "./settings";
+import { steppedInterfaceScale } from "../../lib/interfaceScale";
 
 export const updateSettings = storeAction("updateSettings");
 export const setSearchEngine = storeAction("setSearchEngine");
@@ -24,17 +23,14 @@ export function chooseTabLayout(layout: "sidebar" | "top") {
   }
 }
 
-export function chooseAutoHideTabs(on: boolean) {
-  useBrowser.setState((s) => ({
-    ...choose(s, { autoHideTabs: on }),
-    windows: Object.fromEntries(Object.entries(s.windows).map(([id, w]) => [id, isRegularWindow(w) && w.sidebarOpen === on ? { ...w, sidebarOpen: !on } : w])),
-  }));
-}
-
 export function chooseSidebarSide(side: "left" | "right") {
   useBrowser.getState().updateSettings({ sidebarSide: side });
 }
 
 export function toggleSidebarSide() {
   chooseSidebarSide(useBrowser.getState().settings.sidebarSide === "right" ? "left" : "right");
+}
+
+export function chooseInterfaceScale(scale: number) {
+  useBrowser.getState().updateSettings({ interfaceScale: steppedInterfaceScale(scale) });
 }

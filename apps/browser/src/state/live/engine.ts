@@ -4,10 +4,21 @@ import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId, inPinnedContainer, viewTabIds } from "../browser/model";
 import { awayFromPin } from "../pins/organize";
 import { pinnedGroupMembers } from "../browser/structure";
+import { shownTabIds } from "../tabs/shownTabs";
 import { repoKey } from "./rows";
+import { hideNewRepos } from "./repoFilter";
 import { SOURCES } from "./sources";
-import { applyFetch, createFolder, releaseShownRepos, finishCompleting, live, markRead, removeFolder, setStatus, unhide, useLive } from "./store";
-import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
+import { beginLiveRefresh, applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, unhide, useLive } from "./store";
+import { LiveError, type CompletionState, type LiveFolder, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
+import { noteLiveCompletedTabsClosed } from "../telemetry/liveCompletedTabs";
+import { noteLiveSourceFetch } from "../telemetry/workCounts";
+import { consentToken } from "../telemetry/client";
+import { warnFor } from "../telemetry/logs";
+import { isPlaying, useMedia } from "../media/media";
+import { usePages } from "../tabs/pageState";
+import { liveOf, onLiveChange } from "../tabs/tabLive";
+import type { MediaAccess } from "../../platform/tabs";
+import { during } from "../app/jobActivity";
 
 const INTERVAL_MS: Record<LiveFolderKind, number> = { pullRequests: 3 * 60_000, documents: 10 * 60_000 };
 const STALE_ON_FOCUS_MS = 60_000;
@@ -15,6 +26,17 @@ export const COMPLETION_MS = 2600;
 
 const inflight = new Map<string, Promise<void>>();
 const fetchedSources = new Map<string, Set<LiveSourceId>>();
+const sharedFetches = new Map<string, Promise<LiveItem[]>>();
+
+function fetchSource(source: LiveSourceId, folder: LiveFolder, interactive: boolean): Promise<LiveItem[]> {
+  const key = JSON.stringify([source, live().accounts[source]?.connectedAt ?? null, folder.filters]);
+  const running = sharedFetches.get(key);
+  noteLiveSourceFetch(!!running);
+  if (running) return running;
+  const task = SOURCES[source].fetch(folder, { interactive }).finally(() => sharedFetches.delete(key));
+  sharedFetches.set(key, task);
+  return task;
+}
 
 const SECTION_ORDER: Record<PullRequestSection, number> = { authored: 0, review: 1, team: 2 };
 
@@ -24,25 +46,42 @@ function order(items: LiveItem[]): LiveItem[] {
   );
 }
 
-export function refreshFolder(folderId: string): Promise<void> {
+export function refreshFolder(folderId: string, interactive = false): Promise<void> {
   const running = inflight.get(folderId);
   if (running) return running;
-  const task = run(folderId).finally(() => inflight.delete(folderId));
+  const task = during("liveFolders", () => run(folderId, interactive)).finally(() => inflight.delete(folderId));
   inflight.set(folderId, task);
   return task;
 }
 
 export function manualRefresh(folderId: string): Promise<void> {
   unhide(folderId);
-  return refreshFolder(folderId);
+  return refreshFolder(folderId, true);
 }
 
-async function run(folderId: string) {
+const sortedKeys = (_key: string, value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : value;
+const sameFolder = (a: unknown, b: unknown) => JSON.stringify(a, sortedKeys) === JSON.stringify(b, sortedKeys);
+
+function claimRefresh(folderId: string) {
+  const refresh = beginLiveRefresh(folderId);
+  const consent = consentToken();
+  return refresh?.catch((error: unknown) => { warnFor(consent, "Couldn't claim the live folder refresh", error); return null; }).then((fence) => {
+    if (fence === null && live().folders[folderId]) setStatus(folderId, { state: "idle" });
+    return fence;
+  });
+}
+
+async function run(folderId: string, interactive: boolean) {
+  if (!live().folders[folderId]) return;
+  const claim = claimRefresh(folderId);
+  let fence = claim ? await claim : undefined;
+  if (fence === null) return;
   const folder = live().folders[folderId];
   if (!folder) return;
   const before = live();
   setStatus(folderId, { state: before.status[folderId]?.lastFetch ? "updating" : "initializing" });
-  const results = await Promise.allSettled(folder.sources.map((id) => SOURCES[id].fetch(folder)));
+  const results = await Promise.allSettled(folder.sources.map((id) => fetchSource(id, folder, interactive)));
 
   const fetched: LiveItem[] = [];
   const failed: { source: LiveSourceId; error: unknown }[] = [];
@@ -68,9 +107,21 @@ async function run(folderId: string) {
   for (const source of new Set(missing.map((it) => it.source))) {
     const resolve = SOURCES[source].resolveGone;
     if (!resolve) continue;
-    Object.assign(gone, await resolve(missing.filter((it) => it.source === source)).catch(() => ({})));
+    Object.assign(gone, await resolve(missing.filter((it) => it.source === source), { interactive }).catch(() => ({})));
   }
 
+  const folderBeforeHiding = live().folders[folderId];
+  hideNewRepos(folderId, fetched);
+  const folderAfterHiding = live().folders[folderId];
+  if (fence !== undefined && sameFolder(folderBeforeHiding, folder) && !sameFolder(folderAfterHiding, folderBeforeHiding)) {
+    const reclaim = claimRefresh(folderId);
+    fence = reclaim ? await reclaim : undefined;
+    if (fence === null || !live().folders[folderId]) return;
+    if (!sameFolder(live().folders[folderId], folderAfterHiding)) {
+      setStatus(folderId, { state: "idle" });
+      return;
+    }
+  }
   const current = live();
   const prev = current.items[folderId] ?? [];
   const animating = new Set(current.completing[folderId] ?? []);
@@ -85,11 +136,11 @@ async function run(folderId: string) {
   const quiet = new Set(lastSources ? next.filter((it) => !lastSources.has(it.source)).map((it) => it.id) : []);
   const succeeded = new Set(folder.sources.filter((id) => !failed.some((f) => f.source === id)));
   fetchedSources.set(folderId, succeeded);
-  applyFetch(folderId, order(next), gone, Date.now(), quiet);
-  releaseShownRepos(folderId, succeeded);
+  applyFetch(folderId, order(next), gone, Date.now(), quiet, fence, succeeded);
+  markCompletedTabs(folderId, gone, ids);
   if (firstFailure) setStatus(folderId, { state: "error", error: describe(firstFailure.source, firstFailure.error) });
   const leaving = Object.keys(gone);
-  if (leaving.length) setTimeout(() => finishCompleting(folderId, leaving), COMPLETION_MS);
+  if (leaving.length) setTimeout(() => finishCompleting(folderId, leaving, fence), COMPLETION_MS);
 }
 
 function describe(source: LiveSourceId, error: unknown) {
@@ -106,13 +157,13 @@ function fetchText(folderId: string, now: number): string {
   const st = live().status[folderId];
   if (!st || st.state === "initializing") return "Loading…";
   if (st.state === "updating") return "Updating…";
-  if (st.error) return errorText(st.error.kind, st.error.source);
+  if (st.error) return errorText(st.error.kind, st.error.source, now);
   if (!st.lastFetch) return "Not updated yet";
   const min = Math.floor((now - st.lastFetch) / 60_000);
   return min < 1 ? "Updated just now" : min < 60 ? `Updated ${min} min ago` : `Updated ${Math.floor(min / 60)} hr ago`;
 }
 
-export function errorText(kind: LiveError["kind"], source: LiveSourceId): string {
+export function errorText(kind: LiveError["kind"], source: LiveSourceId, now = Date.now()): string {
   const name = SOURCES[source].name;
   switch (kind) {
     case "notConfigured":
@@ -121,8 +172,12 @@ export function errorText(kind: LiveError["kind"], source: LiveSourceId): string
       return `Sign back in to ${name}`;
     case "sso":
       return `${name} needs Single Sign-On for this organization`;
-    case "rateLimited":
-      return `${name} rate limit exceeded. Try again in a few minutes.`;
+    case "rateLimited": {
+      const until = SOURCES[source].pausedUntil?.() ?? null;
+      const minutes = until === null ? 0 : Math.ceil((until - now) / 60_000);
+      if (minutes <= 0) return `${name} rate limit exceeded. Try again in a few minutes.`;
+      return `${name} rate limit reached. Updating again in ${minutes === 1 ? "a minute" : `${minutes} minutes`}.`;
+    }
     case "network":
       return `Couldn't connect to ${name}`;
     default:
@@ -143,7 +198,7 @@ export function newProfileLiveFolder(profileId: string, kind: LiveFolderKind, so
       ? (["github", "bitbucket"] as const).filter((id) => s.accounts[id])
       : (["notion", "confluence", "gdrive"] as const).filter((id) => s.accounts[id]);
   const id = createFolder(profileId, kind, sources ?? (connected.length ? connected : undefined));
-  void refreshFolder(id);
+  void refreshFolder(id, true);
   return id;
 }
 
@@ -158,7 +213,8 @@ export function openLiveItem(windowId: string, folderId: string, item: LiveItem,
     return existing;
   }
   const id = s.newTab(windowId, { url: item.url, background: options.background });
-  useBrowser.getState().updateTab(id, { liveItem: { folderId, itemId: item.id }, pinnedUrl: home });
+  const completed = live().completed[folderId]?.some((c) => c.item.id === item.id && ended(c.state));
+  useBrowser.getState().updateTab(id, { liveItem: completed ? { folderId, itemId: item.id, completed } : { folderId, itemId: item.id }, pinnedUrl: home });
   return id;
 }
 
@@ -193,6 +249,39 @@ export function syncLiveHomes() {
   }
 }
 
+const ended = (state: CompletionState | undefined) => state === "merged" || state === "closed";
+
+function markCompletedTabs(folderId: string, gone: Record<string, CompletionState>, listed: Set<string>) {
+  const s = useBrowser.getState();
+  const hidden = new Set((live().hidden[folderId] ?? []).map((it) => it.id));
+  for (const t of Object.values(s.tabs)) {
+    const ref = t.liveItem;
+    if (ref?.folderId !== folderId) continue;
+    if (ended(gone[ref.itemId]) && !hidden.has(ref.itemId) && !ref.completed) s.updateTab(t.id, { liveItem: { ...ref, completed: true } });
+    else if (ref.completed && listed.has(ref.itemId)) s.updateTab(t.id, { liveItem: { folderId, itemId: ref.itemId } });
+  }
+  closeCompletedTabs();
+}
+
+const capturing = (access: MediaAccess | null | undefined) => !!access && (access.camera || access.microphone || access.screen);
+
+const inUse = (s: BrowserState, id: string) => {
+  const media = useMedia.getState();
+  return liveOf(id).playingAudio || !!media.pipOpen[id] || isPlaying(media.sessions[id]) || capturing(usePages.getState().pages[id]?.mediaAccess) || !!media.tabShares[id] || Object.values(media.tabShares).some((share) => share.capturedTabId === id);
+};
+
+function closeCompletedTabs() {
+  const s = useBrowser.getState();
+  const { folders, items } = live();
+  const shown = shownTabIds(s);
+  const tabs = Object.values(s.tabs)
+    .filter(({ id, liveItem: ref }) => ref?.completed && folders[ref.folderId]?.showCompleted === false && !shown.has(id) && !inPinnedContainer(s, id) && !inUse(s, id) && !items[ref.folderId]?.some((it) => it.id === ref.itemId))
+    .map((t) => t.id);
+  if (!tabs.length) return;
+  s.closeTabs(tabs);
+  noteLiveCompletedTabsClosed(tabs.length);
+}
+
 let started = false;
 const lastNudge = new Map<string, number>();
 
@@ -210,13 +299,12 @@ export function startLiveEngine() {
   useLive.subscribe((s, prev) => {
     if (s.folders !== prev.folders) orphans();
     if (s.items !== prev.items || s.hidden !== prev.hidden || s.completed !== prev.completed) syncLiveHomes();
+    if (s.folders !== prev.folders || s.items !== prev.items) closeCompletedTabs();
   });
+  closeCompletedTabs();
 
   useBrowser.subscribe((s, prev) => {
     if (s.groups !== prev.groups) syncLiveHomes();
-  });
-
-  useBrowser.subscribe((s, prev) => {
     if (s.profiles === prev.profiles) return;
     for (const f of Object.values(live().folders)) if (!s.profiles[f.profileId]) removeFolder(f.id);
   });
@@ -237,6 +325,19 @@ export function startLiveEngine() {
   });
   onWindowEvent((e) => {
     if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);
+  });
+
+  useBrowser.subscribe((s, prev) => {
+    if (s.windows !== prev.windows || s.splits !== prev.splits || s.peeks !== prev.peeks) closeCompletedTabs();
+  });
+  onLiveChange((id, now, was) => {
+    if (was.playingAudio && !now.playingAudio && useBrowser.getState().tabs[id]) closeCompletedTabs();
+  });
+  usePages.subscribe((p, prev) => {
+    if (p.pages !== prev.pages && Object.keys(prev.pages).some((id) => capturing(prev.pages[id]?.mediaAccess) && !capturing(p.pages[id]?.mediaAccess))) closeCompletedTabs();
+  });
+  useMedia.subscribe((m, prev) => {
+    if (m.pipOpen !== prev.pipOpen || m.sessions !== prev.sessions || m.tabShares !== prev.tabShares) closeCompletedTabs();
   });
 
   useBrowser.subscribe((s, prev) => {

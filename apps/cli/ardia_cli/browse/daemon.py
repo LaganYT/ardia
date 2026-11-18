@@ -1,8 +1,8 @@
 import asyncio
+import contextlib
 import json
 import logging
 import os
-import re
 import signal
 import sys
 import time
@@ -12,17 +12,15 @@ from ardia_cli import command_metrics
 from ardia_cli.browse import paths
 from ardia_cli.caller import parse as parse_caller
 from ardia_cli.browse.errors import BrowseError, ConnectionLost, Unreachable, Usage
+from ardia_cli.browse.limits import BEHIND_SCRIPT_WAIT, QUEUE_WAIT, command_limit, queue_wait
 
 CONNECTED_IDLE = 30.0
 DEFAULT_DAEMON_IDLE = 3600.0
 MAX_REQUEST = 16 * 1024 * 1024
 MAX_RESPONSE = 256 * 1024 * 1024
-OUTPUT_CAP = 6000
-QUEUE_WAIT = 30.0
-COMMAND_LIMIT = 120.0
-LIMIT_MARGIN = 30.0
-SCRIPT_DEFAULT = 90.0
-LONG_COMMANDS = {"batch": 600.0, "read": 600.0, "record": 600.0}
+OUTPUT_CAP = 12000
+SCRIPT_OUTPUT_CAP = 20000
+SPILL_KEEP = 40
 SETTLE_TIMEOUT = 5.0
 WATCH_INTERVAL = 2.0
 EXIT_GRACE = 3.0
@@ -40,9 +38,9 @@ def unreachable_message(endpoint, error) -> str:
 
 
 def load_commands():
-    from ardia_cli.browse import audit, capture, commands, media, react
+    from ardia_cli.browse import audit, capture, commands, flows, media, react
 
-    return commands, (audit, capture, media, react)
+    return commands, (audit, capture, flows, media, react)
 
 
 async def run_one(ctx, argv, options: dict | None = None):
@@ -72,7 +70,22 @@ async def dispatch(ctx, name, argv):
     handler = COMMANDS.get(name)
     if handler is None:
         raise Usage(f"Unknown command: {name}. Run `ardia browse --help`")
-    result = await handler(ctx, argv)
+    if name != "batch":
+        from ardia_cli.browse.changes import settle_reaction
+
+        await settle_reaction(ctx.state, name, argv)
+    from ardia_cli.browse import flowlog
+
+    step = await flowlog.begin(ctx, name, argv)
+    try:
+        result = await handler(ctx, argv)
+    except BrowseError as error:
+        await flowlog.end(ctx, step, error)
+        raise
+    except BaseException:
+        flowlog.abandon(ctx, step)
+        raise
+    await flowlog.end(ctx, step)
     extras = getattr(ctx.state, "extras", None)
     if name != "batch" and isinstance(extras, dict) and extras.get("top_command") != "script":
         from ardia_cli.browse.commands import note_reading
@@ -131,10 +144,11 @@ def _render(options: dict, result=None, error: BrowseError | None = None, name: 
     text = result.text
     if text is None:
         return code, "", ""
-    text = cap(redact_text(text), options, name)
+    text = cap(redact_text(text), options, name, getattr(result, "output_cap", None))
+    notice = cap_notice(text)
     if result.page_content and options.get("content_boundaries"):
         text = boundary(text)
-    return code, inert(text) + "\n", ""
+    return code, inert(text) + "\n", inert(notice) + "\n" if notice else ""
 
 
 NARROWER = {
@@ -142,21 +156,55 @@ NARROWER = {
     "get": "get text <css> or read -s <css> (one region)",
     "read": "read -s <css> (one region per page), or fewer pages",
     "eval": "return less from the script, or get text <css> / read -s <css> for one region",
+    "script": "return fewer fields or rows from the script",
+    "flow": "flow run <name> --fields a,b --limit n --where field=value",
 }
+CAP_NOTICE = "[output capped at "
 NARROW_ANY = "snapshot -i, snapshot -s <css>, get text <css>, read -s <css>, find role <role> <action> --name <text>"
 
 
-def cap(text: str, options: dict, name: str = "") -> str:
+def cap(text: str, options: dict, name: str = "", default: int | None = None) -> str:
     if options.get("full"):
         return text
     limit = options.get("max_output")
-    limit = OUTPUT_CAP if limit is None else int(limit)
+    limit = (default or (SCRIPT_OUTPUT_CAP if name == "script" else OUTPUT_CAP)) if limit is None else int(limit)
     if limit <= 0 or len(text) <= limit:
         return text
     cut = text.rfind("\n", 0, limit + 1)
     cut = cut if cut >= limit * 0.8 else limit
-    return text[:cut] + (f"\n[output capped at {cut:,} of {len(text):,} characters. Narrow it instead: {NARROWER.get(name, NARROW_ANY)}. "
+    saved = spill(text)
+    where = f"; all of it is in {saved}" if saved else ""
+    return text[:cut] + (f"\n{CAP_NOTICE}{cut:,} of {len(text):,} characters{where}. Narrow it instead: {NARROWER.get(name, NARROW_ANY)}. "
                          f"Only if you need every line: --max-output {len(text)}]")
+
+
+def spill(text: str) -> str | None:
+    import tempfile
+
+    folder = Path(tempfile.gettempdir()) / f"ardia-browse-output-{os.getuid()}"
+    try:
+        folder.mkdir(mode=0o700, exist_ok=True)
+        info = folder.lstat()
+        if not folder.is_dir() or folder.is_symlink() or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            return None
+        fd, path = tempfile.mkstemp(prefix="output-", suffix=".txt", dir=folder)
+        from ardia_cli.printable import well_formed
+
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(well_formed(text))
+        older = sorted(folder.glob("output-*.txt"), key=lambda item: item.stat().st_mtime)[:-SPILL_KEEP]
+        for item in older:
+            item.unlink(missing_ok=True)
+    except OSError:
+        return None
+    command_metrics.flag("output_saved", True)
+    return path
+
+
+def cap_notice(text: str) -> str:
+    last = text.rpartition("\n")[2]
+    cut_short = last.startswith("[") and "Narrow it instead: " in last and "--max-output " in last
+    return last if last.startswith(CAP_NOTICE) or cut_short else ""
 
 
 class Daemon:
@@ -185,6 +233,7 @@ class Daemon:
         self.last = time.monotonic()
         self.stop = asyncio.Event()
         self.stopping = False
+        self.closing = 0
         self.active: set = set()
         self.sock_id = None
         self.idle_limit = float(config.get("idle_timeout_ms") or DEFAULT_DAEMON_IDLE * 1000) / 1000
@@ -349,7 +398,10 @@ class Daemon:
                 return
             gone.cancel()
             code, out, err = execute.result()
-            writer.write(encode_answer(code, out, err, command_metrics.answer_fields(request)))
+            fields = command_metrics.answer_fields(request)
+            if request.get("busy_elsewhere"):
+                fields["busy_elsewhere"] = True
+            writer.write(encode_answer(code, out, err, fields))
             await writer.drain()
         except Exception:
             log.exception("request failed")
@@ -378,12 +430,21 @@ class Daemon:
             return self.refuse_closing(options, name)
         if name == "close":
             return await self.close(ctx)
+        if request.get("beside_if_busy") and self.lock.locked():
+            request["busy_elsewhere"] = True
+            return render(options, error=self.busy_error(waited=False), name=name)
+        patience = queue_wait(name, [str(arg) for arg in argv[1:]], QUEUE_WAIT, name == "read" and bool(request.get("patient_queue")))
+        if self.lock.locked() and (self.state.extras.get("running") or {}).get("name") == "script" and patience < BEHIND_SCRIPT_WAIT:
+            patience = BEHIND_SCRIPT_WAIT
+            command_metrics.flag("queued_behind_script", True)
+        elif patience > QUEUE_WAIT and self.lock.locked():
+            command_metrics.flag("read_queued_beside" if request.get("patient_queue") else "script_queued_behind_busy", True)
         try:
-            await asyncio.wait_for(self.lock.acquire(), QUEUE_WAIT)
+            await asyncio.wait_for(self.lock.acquire(), patience)
         except asyncio.TimeoutError:
-            return render(options, error=self.busy_error(), name=name)
+            return render(options, error=self.busy_error(waited=patience), name=name)
         try:
-            if self.stopping:
+            if self.stopping or self.closing:
                 return self.refuse_closing(options, name)
             if self.state.lost:
                 return render(options, error=ConnectionLost(), name=name)
@@ -417,12 +478,20 @@ class Daemon:
             if getattr(page, "temporary_metrics", False) and page.session_id and self.state.connected:
                 await restore_metrics(page)
 
-    def busy_error(self) -> BrowseError:
+    def busy_error(self, waited: float | bool = True) -> BrowseError:
         running = self.state.extras.get("running") or {}
         age = f" for {time.monotonic() - running['since']:.0f} s" if running.get("since") else ""
         what = f"`{running['name']}`" if running.get("name") else "another command"
-        return BrowseError(f"This session is still running {what}{age}; this command waited {QUEUE_WAIT:g} s for it and gave up without "
-                           "running. Try again shortly, or use another --session", code="session_busy")
+        seconds = QUEUE_WAIT if waited is True else waited
+        waiting = f"this command waited {seconds:g} s for it and gave up without running" if waited else "this command didn't run"
+        stuck = [self.state.tab_id(page.target_id) for page in list(self.state.pages.values())
+                 if getattr(page, "unanswered_at", 0.0) and time.monotonic() - page.unanswered_at < 120]
+        if stuck:
+            command_metrics.flag("session_busy_on_stuck_tab", True)
+            what += f", which is waiting on [{stuck[0]}], a tab whose page isn't answering (its own scripts keep it busy)"
+        return BrowseError(f"This session is still running {what}{age}; {waiting}. A session runs one command at a time: wait for it "
+                           "(a long `script` returns when done), or run independent work with `--session <name>`, which gets its own tab",
+                           code="session_busy")
 
     async def answer(self, ctx, name, argv, options) -> tuple[int, str, str]:
         try:
@@ -444,12 +513,24 @@ class Daemon:
             return render(options, error=BrowseError(f"{name} failed: {type(error).__name__}: {error}"), name=name)
         return render(options, result=result, name=name)
 
+    @contextlib.asynccontextmanager
+    async def lock_for_close(self):
+        self.closing += 1
+        try:
+            await self.lock.acquire()
+        finally:
+            self.closing -= 1
+        try:
+            yield
+        finally:
+            self.lock.release()
+
     async def close(self, ctx):
         from ardia_cli.browse.commands import Result
 
         closed = 0
         kept = []
-        async with self.lock:
+        async with self.lock_for_close():
             if self.stopping:
                 return self.refuse_closing(ctx.options, "close")
             self.stopping = True
@@ -498,26 +579,6 @@ def joined_batch(out: str, closed: str, options: dict) -> str:
     return json.dumps(outcomes, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
-def seconds_of(text: str | None) -> float | None:
-    if not text:
-        return None
-    match = re.fullmatch(r"(\d+(?:\.\d+)?)(ms|s|m)?", text.strip())
-    if not match:
-        return None
-    number, unit = float(match.group(1)), match.group(2) or "ms"
-    return number * {"ms": 0.001, "s": 1, "m": 60}[unit]
-
-
-def command_limit(name: str, argv: list[str], timeout: float) -> float:
-    given = None
-    if "--timeout" in argv and argv.index("--timeout") + 1 < len(argv):
-        given = seconds_of(argv[argv.index("--timeout") + 1])
-    if name == "wait":
-        plain = next((seconds_of(arg) for arg in argv if re.fullmatch(r"\d+(\.\d+)?", arg)), None)
-        return max(COMMAND_LIMIT, (given or plain or timeout) + LIMIT_MARGIN)
-    if name == "script":
-        return (given or SCRIPT_DEFAULT) + LIMIT_MARGIN
-    return max(LONG_COMMANDS.get(name, COMMAND_LIMIT), (given or 0) + LIMIT_MARGIN)
 
 
 def timed_out(name: str, limit: float) -> BrowseError:
@@ -528,7 +589,9 @@ def timed_out(name: str, limit: float) -> BrowseError:
 
 
 def encode_answer(code: int, out: str, err: str, fields: dict | None = None) -> bytes:
-    data = (json.dumps({"exit": code, "out": out, "err": err, **(fields or {})}, ensure_ascii=False) + "\n").encode()
+    from ardia_cli.printable import well_formed
+
+    data = (well_formed(json.dumps({"exit": code, "out": out, "err": err, **(fields or {})}, ensure_ascii=False)) + "\n").encode()
     if len(data) <= MAX_RESPONSE:
         return data
     message = f"✗ The answer was too large ({len(data)} bytes, the limit is {MAX_RESPONSE}); narrow it (snapshot -s, -d, --max-output)\n"
@@ -557,7 +620,6 @@ def main():
     sys.stderr = redact.RedactingStream(sys.stderr)
     redact.install_log_redaction()
     logging.basicConfig(level=logging.INFO if config.get("debug") else logging.WARNING, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    logging.getLogger("pydoll").setLevel(logging.CRITICAL)
     logging.getLogger("websockets").setLevel(logging.ERROR)
     load_commands()
     lease = take_lease()

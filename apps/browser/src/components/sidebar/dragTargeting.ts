@@ -6,7 +6,7 @@ import { tabDragOutside } from "../../state/drag/tabDrag";
 import { dragMarksOf, markDrag } from "../../state/sidebar/dragMarks";
 import { folderPanel } from "../../state/sidebar/tileFolderUi";
 import { overPins, pinGridHeight } from "./pinZone";
-import { boxed, type Drop, FOLDER_HOLD_MS, folderOf, inside, type Item, pinnedBlock, ROW_GAP, spring } from "./dragModel";
+import { boxed, type Drop, FOLDER_HOLD_MS, folderOf, inside, type Item, pinnedBlock, spring } from "./dragModel";
 import { aimAt, type Pointing } from "./dragZones";
 import { DragGeometry } from "./dragGeometry";
 import { hapticTick } from "../../state/drag/dragNative";
@@ -29,6 +29,7 @@ export class DragTargeting extends DragGeometry {
     this.clearHold();
     hold.key = target.key;
     if (folderOf(target)) return void (hold.ready = target.key);
+    if (!currentSettings().topAppFolders) return;
     hold.timer = setTimeout(() => {
       if (this.session !== session || hold.key !== target.key || !session.sources.length) return;
       hold.ready = target.key;
@@ -55,7 +56,7 @@ export class DragTargeting extends DragGeometry {
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
     const count = external || (folderOf(source) ? 1 : dragged.size);
-    const rowPitch = (boxed(source) ? source.foldedHeight() : layout.rowHeight * (source.kind === "split" ? 1 : Math.max(1, session.ghost?.count ?? external ?? 1))) + ROW_GAP;
+    const rowPitch = (boxed(source) ? source.foldedHeight() : layout.rowHeight * (source.kind === "split" ? 1 : Math.max(1, session.ghost?.count ?? external ?? 1))) + layout.rowGap;
     const blocks = live.filter(pinnedBlock).sort(byY);
     const moved = sources
       .filter((s) => s.frame)
@@ -133,7 +134,7 @@ export class DragTargeting extends DragGeometry {
     if (folderAway !== dragMarksOf(this.marks).folderAway) markDrag(this.marks, { folderAway });
     const key = JSON.stringify(drop);
     if (key === session.dropKey && gapKey === session.gapKey) return;
-    if (session.dropKey && drop.type !== "none" && currentSettings().tabReorderHaptics) hapticTick();
+    if (session.dropKey && drop.type !== "none") hapticTick();
     session.dropKey = key;
     session.drop = drop;
     session.into = into;

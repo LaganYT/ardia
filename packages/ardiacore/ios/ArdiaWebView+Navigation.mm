@@ -135,7 +135,7 @@ NSString *PNGDataURL(NSImage *image) {
 }
 
 - (void)tabDidChangeLoading:(ArdiaCoreTab *)tab {
-  if (!tab.loading && tab.url.length && ![tab.url hasPrefix:@"about:"]) [self revealLittlePage:YES];
+  if (!tab.loading && tab.url.length && ![tab.url hasPrefix:@"about:"]) [self showHeldPageAfterLoad];
   if (tab.loading) [self resetBlocked:YES];
   if (tab.loading) ArdiaFieldMarkNow(_transferKey, @"start");
   [self queueNavigation];
@@ -160,6 +160,7 @@ NSString *PNGDataURL(NSImage *image) {
 
 - (void)tabDidCommitDocument:(ArdiaCoreTab *)tab {
   [self noteDocumentCommits];
+  _firstPaint.scripted = NO;
   ArdiaFieldMarkNow(_transferKey, @"commit");
   [ArdiaEarlyWindow pageCommitted:tab shownURL:_shownURL];
   _reports.theme = nil;
@@ -220,7 +221,7 @@ NSString *PNGDataURL(NSImage *image) {
 
 - (void)loadNow:(NSString *)url userInitiated:(BOOL)userInitiated {
   if ([self skipsNavigationDownload:url userInitiated:userInitiated]) return;
-  if (url.length && ![url hasPrefix:@"about:"]) [self holdLittlePage];
+  if (url.length && ![url hasPrefix:@"about:"]) [self holdPageUntilPainted:NO];
   ArdiaFieldMarkNow(_transferKey, @"request");
   [_tab loadURL:url userInitiated:userInitiated];
   [self focusAfterLoad];
@@ -276,7 +277,14 @@ NSString *PNGDataURL(NSImage *image) {
 }
 
 - (void)tab:(ArdiaCoreTab *)tab didChangeStatusText:(NSString *)text {
-  [self emit:@"status" payload:@{@"text" : text ?: @""}];
+  NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithObject:text ?: @"" forKey:@"text"];
+  NSWindow *window = self.window;
+  if (window && text.length) {
+    const NSPoint local = [self convertPoint:[window convertPointFromScreen:NSEvent.mouseLocation] fromView:nil];
+    if (NSPointInRect(local, self.bounds))
+      payload[@"fromBottom"] = @((self.isFlipped ? NSMaxY(self.bounds) - local.y : local.y - NSMinY(self.bounds)) * RootPointsPerLocalPoint(self));
+  }
+  [self emit:@"status" payload:payload];
 }
 
 - (void)openBlockedPopup:(NSString *)popupId always:(BOOL)always {

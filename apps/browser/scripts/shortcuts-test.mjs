@@ -129,6 +129,7 @@ const shortcuts = [
   ["⌥⇧⌘C", cmd("C", 8, "shift", "option"), { command: "copyUrlAsMarkdown" }, "⌥⇧⌘C"],
   ["⌘V", cmd("v", 9), { title: "Paste" }, "⌘V", "clipboard"],
   ["⇧⌘V", cmd("V", 9, "shift"), { title: "Paste and Match Style" }, "⇧⌘V", "clipboard"],
+  ["⌥⇧⌘V", cmd("V", 9, "shift", "option"), { title: "Paste and Match Style" }, "(macOS's)", "clipboard"],
   ["⌘A", cmd("a", 0), { title: "Select All" }, "⌘A"],
   ["⌘F", cmd("f", 3), { command: "findInPage" }, "⌘F"],
   ["⌥⌘F", cmd("f", 3, "option"), { command: "findAndReplace" }, "⌥⌘F"],
@@ -654,6 +655,14 @@ await post("v", 9);
 await sleep(600);
 const afterEscape = await pageField("f.value");
 check("Escape out of the command bar gives the page its focus back", responder.startsWith("RenderWidgetHostViewCocoa") && afterEscape === "after-escape", `first responder ${responder}, page field "${afterEscape}"`);
+for (const [name, modifiers] of [["⇧⌘V", ["command", "shift"]], ["⌥⇧⌘V", ["command", "shift", "option"]]]) {
+  await resetToPageField("", [0, 0]);
+  await clipboard.set(`plain-${modifiers.length}`);
+  await post("V", 9, modifiers);
+  await sleep(600);
+  const pastedPlain = await pageField("f.value");
+  check(`${name} pastes and matches style into a page field`, pastedPlain === `plain-${modifiers.length}`, `page field "${pastedPlain}"`);
+}
 await resetToPageField("", [0, 0]);
 
 for (const where of ["the find field", "the page"]) {

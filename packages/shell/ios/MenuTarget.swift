@@ -1,4 +1,5 @@
 import AppKit
+import ArdiaCore
 
 final class MenuTarget: NSObject, NSMenuItemValidation {
   static let shared = MenuTarget()
@@ -76,7 +77,10 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
     return !MainMenu.editsText(window.firstResponder)
   }
 
+  private static var pageIsCovered: Bool { ArdiaWebView.refusesInputAheadOfSwitch(NSApp.keyWindow?.firstResponder) }
+
   private func forwardEdit(_ action: Selector, from sender: Any?) {
+    if Self.pageIsCovered { return }
     if FocusHandoff.shared.defers(action) {
       PasteRefusal.reportMenuPaste(action, .deferred)
       return
@@ -86,7 +90,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
   }
 
   private static func validateForwarded(_ menuItem: NSMenuItem, _ action: Selector) -> Bool {
-    guard let target = NSApp.target(forAction: action) as? NSObject else { return false }
+    guard let target = NSApp.target(forAction: action) as? NSObject, !ArdiaWebView.refusesInputAheadOfSwitch(target) else { return false }
     typealias Validate = @convention(c) (AnyObject, Selector, NSMenuItem) -> ObjCBool
     for name in ["validateMenuItem:", "validateUserInterfaceItem:"] {
       let validate = NSSelectorFromString(name)
@@ -98,6 +102,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
   }
 
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    if let action = menuItem.action, FocusHandoff.editActions.contains(action), Self.pageIsCovered { return false }
     if let action = menuItem.action, FocusHandoff.editActions.contains(action), FocusHandoff.shared.gatesKeyWindow { return true }
     if let action = menuItem.action, FocusHandoff.editActions.contains(action), !(menuItem is CommandItem),
       action != #selector(pasteAndMatchStyle(_:)) {
@@ -139,6 +144,8 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
 
   @objc func pasteAndMatchStyle(_ sender: Any?) {
     let web = Selector(("pasteAndMatchStyle:"))
+    FocusHandoff.shared.countPasteAndMatchStyleKey(NSApp.currentEvent)
+    if Self.pageIsCovered { return }
     if FocusHandoff.shared.defers(web) {
       PasteRefusal.reportMenuPaste(web, .deferred)
       return

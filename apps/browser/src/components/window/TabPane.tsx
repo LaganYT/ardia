@@ -133,6 +133,7 @@ export const TabPane = memo(function TabPane({
         borderRadius: fullscreen ? 0 : cardRadius,
         overflow: "hidden",
         opacity: covered ? 0 : 1,
+        zIndex: lingering ? -1 : undefined,
         backgroundColor: visible && !fullscreen && !seeThrough ? theme.card : undefined,
       }}
     >

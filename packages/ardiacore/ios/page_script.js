@@ -1214,6 +1214,9 @@
     if (typeof config.selectionPopover === "boolean" && handlers.selectionPopover) handlers.selectionPopover(config.selectionPopover);
   };
   send("hello", { top: isTop, url: location.href });
+  const tellExclusive = guard(() => send("exclusive", { held: !!(document.pointerLockElement || document.fullscreenElement) }));
+  document.addEventListener("pointerlockchange", tellExclusive);
+  document.addEventListener("fullscreenchange", tellExclusive);
 
   if (!isTop) return receive;
 

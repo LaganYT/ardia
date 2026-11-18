@@ -1,3 +1,4 @@
+import { countUsage } from "../../state/telemetry/telemetry";
 import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LayoutAnimationConfig } from "react-native-reanimated";
@@ -53,7 +54,7 @@ export function PageMenu({ tabId, open, onHidden }: { tabId: string; open: boole
     pageMenuHidden();
   };
   return (
-    <Sheet open={open} onDismiss={closePageMenu} onHidden={hidden} fill={redesigned ? ink.sheet : undefined}>
+    <Sheet open={open} onDismiss={closePageMenu} onHidden={hidden} fill={redesigned ? ink.sheet : undefined} onTapAway={isPrivate ? undefined : () => countUsage("page_menu_tapped_away")}>
       {confirmsTranslation ? (
         <ConfirmDialog
           confirmation={{ title: "Translate with Google?", message: "Google will see this page’s address.", action: "Translate", destructive: false, run: translatePage }}

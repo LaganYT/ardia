@@ -12,7 +12,8 @@ import { DESIGNS, designFor, type Design } from "../lib/design";
 import * as pageActions from "../state/page/actions";
 import { useBrowse } from "../state/browse/store";
 import { currentTabs, useTabs } from "../state/tabs/store";
-import { renderSurface, unmount, withTabs } from "../../test/render/harness";
+import { renderSurface, someTabs, unmount, withTabs } from "../../test/render/harness";
+import type { BrowserTab } from "../state/tabs/tabModels";
 
 const safeArea = require("react-native-safe-area-context") as { useSafeAreaInsets: () => { top: number; bottom: number; left: number; right: number } };
 
@@ -62,6 +63,20 @@ test("the redesigned bar is three glass pieces, 48 points tall, 8 apart and 12 i
   for (const piece of ["floatingBarTabs", "floatingBarPlus"]) expect(StyleSheet.flatten(host(root, piece)!.props.style)).toMatchObject({ width: 48, height: 48, borderRadius: 24 });
   expect(StyleSheet.flatten(host(root, "floatingBarAddress")!.props.style)).toMatchObject({ flex: 1, height: 48, borderRadius: 24 });
   unmount(root);
+});
+
+test("the redesigned bar's tabs button and its recent-tabs menu hold only the tabs of the page's own mode, so a normal page never shows an Incognito page's picture; the original bar keeps them all", () => {
+  act(() => useTabs.setState((state) => ({ ...state, privates: someTabs(2, true) })));
+  const modes = (root: ReturnType<typeof renderSurface>, bar: typeof FloatingBar | typeof BottomBar) => (root.root.findAll((node) => node.type === bar)[0]!.props.order as BrowserTab[]).map((tab) => tab.isPrivate);
+  const normal = page("redesigned");
+  expect(modes(normal, FloatingBar)).toEqual([false, false, false]);
+  unmount(normal);
+  const incognito = page("redesigned", currentTabs().privates[0]!);
+  expect(modes(incognito, FloatingBar)).toEqual([true, true]);
+  unmount(incognito);
+  const original = page("original");
+  expect(modes(original, BottomBar)).toHaveLength(5);
+  unmount(original);
 });
 
 test("the address capsule shows the page's host, and a tap on it searches with the page's address while the dots open the page menu", () => {

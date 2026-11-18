@@ -81,9 +81,15 @@ export function TabStack({ tabs, roles }: { tabs: BrowserTab[]; roles: ColorRole
   if (!tabs.length) {
     return <View style={[styles.tile, { width: tile.width, height: tile.height, borderColor: roles.foregroundSecondary, borderWidth: 1.5 }]} />;
   }
-  if (tabs.length === 1) return <Thumbnail tab={tabs[0]!} roles={roles} turn="-4deg" x={0} y={0} />;
+  if (tabs.length === 1) {
+    return (
+      <View testID="tabStack" style={{ width: tile.width, height: tile.height }}>
+        <Thumbnail tab={tabs[0]!} roles={roles} turn="-4deg" x={0} y={0} />
+      </View>
+    );
+  }
   return (
-    <View style={{ width: tile.width, height: tile.height }}>
+    <View testID="tabStack" style={{ width: tile.width, height: tile.height }}>
       <Thumbnail tab={tabs[0]!} roles={roles} turn="-12deg" x={-4} y={1} />
       <Thumbnail tab={tabs[1]!} roles={roles} turn="6deg" x={4} y={-1} />
     </View>
@@ -95,6 +101,7 @@ function Thumbnail({ tab, roles, turn, x, y }: { tab: BrowserTab; roles: ColorRo
   const shown = display(tab.url);
   return (
     <View
+      testID="tabStackCard"
       style={[
         styles.tile,
         styles.thumbnail,

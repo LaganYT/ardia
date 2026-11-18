@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import importlib.util
+import gzip
+import hashlib
 import os
 import pathlib
 import shutil
@@ -570,6 +572,33 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('chmod 4755 "$helper"', postinst)
             self.assertIn('apparmor_parser -r /etc/apparmor.d/ardia', postinst)
             self.assertIn('rm -f /etc/apparmor.d/ardia', (scripts / 'postrm').read_text())
+            self.assertIn('update-alternatives --install "/usr/bin/$name" "$name" /usr/bin/ardia 100', postinst)
+            self.assertIn('for name in x-www-browser gnome-www-browser', postinst)
+            prerm = (scripts / 'prerm').read_text()
+            self.assertIn('update-alternatives --remove "$name" /usr/bin/ardia', prerm)
+            self.assertIn('if [ "$1" = remove ]; then', prerm)
+            self.assertNotIn('deconfigure', prerm)
+            for rollback in ('abort-remove', 'abort-deconfigure', 'abort-upgrade'):
+                self.assertIn(f'[ "$1" = {rollback} ]', postinst)
+            fields = subprocess.run(['dpkg-deb', '-f', str(deb), 'Depends', 'Provides'], capture_output=True, text=True, check=True).stdout
+            self.assertIn('Provides: www-browser', fields)
+            for package in ('libc6 (>= 2.17)', 'libgtk-3-0t64 | libgtk-3-0', 'libsecret-1-0', 'xdg-utils', 'curl'):
+                self.assertIn(package, fields)
+            self.assertIn('Upstream-Name: Ardia', (unpacked / 'usr/share/doc/ardia/copyright').read_text())
+            with gzip.open(unpacked / 'usr/share/doc/ardia/changelog.gz', 'rt') as changelog:
+                self.assertIn('ardia (0.2.47~nightly.3) stable', changelog.read())
+            sums = dict(reversed(line.split('  ', 1)) for line in (scripts / 'md5sums').read_text().splitlines())
+            self.assertEqual(sums['usr/lib/ardia/chrome'], hashlib.md5((unpacked / 'usr/lib/ardia/chrome').read_bytes()).hexdigest())
+            self.assertIn('usr/share/doc/ardia/copyright', sums)
+            self.assertFalse([name for name in sums if name.startswith('usr/bin/')])
+
+    @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb is required')
+    def test_a_deb_needs_a_version(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = pathlib.Path(scratch)
+            with self.assertRaisesRegex(ValueError, 'needs --version'):
+                self.fake_package(root, sandbox=True, deb=root / 'ardia.deb')
+            self.assertFalse((root / 'ardia.tar.xz').exists())
 
     def test_the_appimage_carries_no_setuid_helper_runs_the_launcher_and_has_the_type_2_header(self):
         with tempfile.TemporaryDirectory() as scratch:

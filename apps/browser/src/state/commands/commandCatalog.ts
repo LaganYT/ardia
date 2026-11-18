@@ -185,7 +185,7 @@ export const STANDARD_ITEMS: Readonly<Record<string, { keys?: Keys }>> = {
   "std:cut:": { keys: ["⌘X"] },
   "std:copy:": { keys: ["⌘C"] },
   "std:paste:": { keys: ["⌘V"] },
-  "std:pasteAndMatchStyle:": { keys: ["⇧⌘V"] },
+  "std:pasteAndMatchStyle:": { keys: ["⇧⌘V", "⌥⇧⌘V"] },
   "std:delete:": {},
   "std:selectAll:": { keys: ["⌘A"] },
   "std:showGuessPanel:": { keys: ["⌘:"] },

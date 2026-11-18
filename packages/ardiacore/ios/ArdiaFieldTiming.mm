@@ -29,17 +29,13 @@ os_unfair_lock gLock = OS_UNFAIR_LOCK_INIT;
 NSMutableArray<NSArray *> *gMarks;
 id gInputMonitor;
 
-double EventTime(NSEvent *event) {
-  return ArdiaFieldNow() - (NSProcessInfo.processInfo.systemUptime - event.timestamp) * 1000;
-}
-
 void SetEnabled(bool enabled) {
   gEnabled = enabled;
   dispatch_async(dispatch_get_main_queue(), ^{
     if (enabled && !gInputMonitor) {
       gInputMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskLeftMouseDown | NSEventMaskLeftMouseUp
                                                             handler:^NSEvent *(NSEvent *event) {
-        gLastInputAt = EventTime(event);
+        gLastInputAt = ArdiaFieldEventTime(event);
         gLastInputKind = event.type == NSEventTypeKeyDown ? 1 : 2;
         ArdiaFreezeNoteInput(event.timestamp);
         return event;
@@ -64,6 +60,10 @@ BOOL ArdiaFieldTimingEnabled(void) {
 
 double ArdiaFieldNow(void) {
   return NSDate.date.timeIntervalSince1970 * 1000;
+}
+
+double ArdiaFieldEventTime(NSEvent *event) {
+  return ArdiaFieldNow() - (NSProcessInfo.processInfo.systemUptime - event.timestamp) * 1000;
 }
 
 void ArdiaFieldMark(NSString *key, NSString *kind, double at) {

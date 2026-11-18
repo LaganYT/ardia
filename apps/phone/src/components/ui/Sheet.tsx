@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, useWindowDimensions, View, type ViewInstance } from "react-native";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, useWindowDimensions, View, type ScrollViewProps, type ViewInstance } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import {
   clampedProgress,
@@ -25,6 +27,60 @@ const SHEET_REDUCED_MS = reducedMotionMs(trayMotion.reduced);
 
 const HIDE_FALLBACK_MS = 900;
 const DIM_TRAVEL_RADII = 8;
+const AT_TOP_SLOP = 0.5;
+
+export const sheetMaxHeight = (height: number, safeTop: number) => Math.max(Math.min(height - safeTop - menuLayout.sheetTopGap, height * menuLayout.sheetMaxShare), 0);
+
+export const sheetPullTranslation = (translationY: number, scrolls: boolean, atTop: boolean) => {
+  "worklet";
+  if (!scrolls) return translationY;
+  return atTop && translationY > 0 ? translationY : 0;
+};
+
+export const sheetPullOffset = (translationY: number, scrolls: boolean, atTop: boolean) => {
+  "worklet";
+  return trayDragOffset(sheetPullTranslation(translationY, scrolls, atTop));
+};
+
+export type SheetScroll = { native: ReturnType<typeof Gesture.Native>; atTop: SharedValue<boolean>; scrolls: SharedValue<boolean> };
+
+export const SheetScrollContext = createContext<SheetScroll | null>(null);
+
+export function SheetScrollView({ children, onLayout, onContentSizeChange, ...rest }: ScrollViewProps) {
+  const sheet = useContext(SheetScrollContext);
+  const [frame, setFrame] = useState({ view: 0, content: 0 });
+  useEffect(() => {
+    if (sheet) sheet.scrolls.value = frame.content > frame.view + AT_TOP_SLOP;
+  }, [sheet, frame]);
+  useEffect(
+    () => () => {
+      if (sheet) sheet.scrolls.value = false;
+    },
+    [sheet],
+  );
+  const onScroll = useAnimatedScrollHandler((event) => {
+    if (sheet) sheet.atTop.value = event.contentOffset.y <= AT_TOP_SLOP;
+  });
+  const list = (
+    <Animated.ScrollView
+      {...rest}
+      scrollEventThrottle={16}
+      onScroll={onScroll}
+      onLayout={(event) => {
+        onLayout?.(event);
+        const view = event.nativeEvent.layout.height;
+        setFrame((was) => (was.view === view ? was : { ...was, view }));
+      }}
+      onContentSizeChange={(width, content) => {
+        onContentSizeChange?.(width, content);
+        setFrame((was) => (was.content === content ? was : { ...was, content }));
+      }}
+    >
+      {children}
+    </Animated.ScrollView>
+  );
+  return sheet ? <GestureDetector gesture={sheet.native}>{list}</GestureDetector> : list;
+}
 
 export function usePresence(open: boolean): {
   mounted: boolean;
@@ -42,10 +98,11 @@ type Props = {
   onDismiss: () => void;
   onHidden: () => void;
   fill?: string;
+  onTapAway?: () => void;
   children: ReactNode;
 };
 
-export function Sheet({ open, onDismiss, onHidden, fill, children }: Props) {
+export function Sheet({ open, onDismiss, onHidden, fill, onTapAway, children }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -55,9 +112,14 @@ export function Sheet({ open, onDismiss, onHidden, fill, children }: Props) {
   const sheetHeight = useSharedValue(height);
   const drag = useSharedValue(0);
   const reduceMotion = useReduceMotion();
+  const atTop = useSharedValue(true);
+  const scrolls = useSharedValue(false);
+  const native = useMemo(() => Gesture.Native(), []);
+  const scroll = useMemo<SheetScroll>(() => ({ native, atTop, scrolls }), [native]);
   useEffect(() => {
     if (open) {
       drag.value = 0;
+      atTop.value = true;
       shown.value = reduceMotion
         ? withTiming(1, {
             duration: SHEET_REDUCED_MS,
@@ -85,11 +147,13 @@ export function Sheet({ open, onDismiss, onHidden, fill, children }: Props) {
     .enabled(open)
     .activeOffsetY([-12, 12])
     .failOffsetX([-24, 24])
+    .simultaneousWithExternalGesture(native)
     .onUpdate((event) => {
-      drag.value = trayDragOffset(event.translationY);
+      drag.value = sheetPullOffset(event.translationY, scrolls.value, atTop.value);
     })
     .onEnd((event) => {
       if (
+        (!scrolls.value || drag.value > 0) &&
         trayDragDismisses(
           event.translationY,
           event.velocityY,
@@ -117,7 +181,8 @@ export function Sheet({ open, onDismiss, onHidden, fill, children }: Props) {
       { translateY: (1 - shown.value) * sheetHeight.value + drag.value },
     ],
   }));
-  const settled = Math.max(height - insets.top - menuLayout.sheetTopGap, 0);
+  const settled = sheetMaxHeight(height, insets.top);
+  const grabber = menuLayout.sheetGrabber;
   return (
     <View
       style={StyleSheet.absoluteFill}
@@ -129,7 +194,10 @@ export function Sheet({ open, onDismiss, onHidden, fill, children }: Props) {
         <Pressable
           accessibilityLabel="Close"
           style={[StyleSheet.absoluteFill, { backgroundColor: theme.trayDim }]}
-          onPress={onDismiss}
+          onPress={() => {
+            if (grabber) onTapAway?.();
+            onDismiss();
+          }}
         />
       </Animated.View>
       <GestureDetector gesture={pull}>
@@ -152,7 +220,16 @@ export function Sheet({ open, onDismiss, onHidden, fill, children }: Props) {
           ]}
         >
           {fill ? <View testID="sheetFill" style={[StyleSheet.absoluteFill, { backgroundColor: fill }]} /> : <LookBackdrop />}
-          {children}
+          <SheetScrollContext.Provider value={grabber ? scroll : null}>{children}</SheetScrollContext.Provider>
+          {grabber ? (
+            <View
+              testID="sheetGrabber"
+              pointerEvents="none"
+              importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden
+              style={[styles.grabber, { top: grabber.top, width: grabber.width, height: grabber.height, borderRadius: grabber.height / 2, marginLeft: -grabber.width / 2, backgroundColor: theme.tertiaryLabel }]}
+            />
+          ) : null}
         </Animated.View>
       </GestureDetector>
     </View>
@@ -170,4 +247,5 @@ const styles = StyleSheet.create({
     borderTopRightRadius: menuLayout.sheetRadius,
     elevation: 12,
   },
+  grabber: { position: "absolute", left: "50%" },
 });

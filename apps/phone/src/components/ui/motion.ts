@@ -42,6 +42,7 @@ export const tabsMotion = {
   gapClose: iPhoneOr(spring(0.22, 1), spring(0.4, 0.8)),
   pagerSettle: iPhoneOr(spring(0.26, 1), spring(0.38, 1)),
   fade: iPhoneOr(150, 200),
+  sideLeave: 90,
   flyAway: iPhoneOr(160, 200),
   cardFlyAway: 0.32,
   barTone: iPhoneOr(200, 250),

@@ -193,6 +193,11 @@ jobs:
           node scripts/linux/smoke.mjs --package "$RUNNER_TEMP/dist/$PACKAGE_NAME.tar.xz" --results "$RUNNER_TEMP/smoke" --timeout-ms 600000 "${extra[@]}"
           node scripts/linux/smoke.mjs --package "$RUNNER_TEMP/dist/$PACKAGE_NAME.deb" --results "$RUNNER_TEMP/smoke/deb" --timeout-ms 600000 "${extra[@]}"
           node scripts/linux/smoke.mjs --package "$RUNNER_TEMP/dist/$PACKAGE_NAME.AppImage" --results "$RUNNER_TEMP/smoke/appimage" --timeout-ms 600000 "${extra[@]}"
+      - name: Debian package installs
+        run: |
+          set -euo pipefail
+          dpkg-deb --info "$RUNNER_TEMP/dist/$PACKAGE_NAME.deb"
+          scripts/linux/deb-install-test.sh "$RUNNER_TEMP/dist/$PACKAGE_NAME.deb"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ env.PACKAGE_NAME }}

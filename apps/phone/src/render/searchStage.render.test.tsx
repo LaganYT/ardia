@@ -319,7 +319,7 @@ onIPhone("a long address holds its scroll from the open until the reveal, and fr
 onIPhone("the dim fades in once the stage says the panel is up, and fades with the drag as it pulls the panel down", () => {
   jest.spyOn(Keyboard, "isVisible").mockReturnValue(true);
   const root = page();
-  open();
+  act(() => presentSearch("page", "site0.example", null, { currentUrl: "https://site0.example/", currentTabId: currentTabs().open[0]!.id }));
   reveal();
   expect(opacity(host(root, "trayDim"))).toBe(0);
   lift(300, true);

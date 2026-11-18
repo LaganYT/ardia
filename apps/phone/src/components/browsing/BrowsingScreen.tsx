@@ -77,6 +77,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   const pressing = usePressOpen();
   const tone = usePageTone(tab.id);
   const order = useDeckOrder();
+  const barOrder = useMemo(() => (design === "redesigned" && !column ? order.filter((other) => other.isPrivate === tab.isPrivate) : order), [order, design, column, tab.isPrivate]);
   const frozen = useFrozenOrder();
   const searching = useSearchOpen();
   const [tabsMenu, setTabsMenu] = useState(false);
@@ -187,7 +188,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
                   >
                     <FloatingBar
                       tab={tab}
-                      order={order}
+                      order={barOrder}
                       roles={rolesFor(barDark)}
                       dark={barDark}
                       showsPlus={staged || !searching}
@@ -228,7 +229,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
       </Shade>
       {tabsMenu ? (
         <Menu
-          items={tabsMenuItems(order)}
+          items={tabsMenuItems(barOrder)}
           place={column ? { ...columnMenuPlace(column, width, SCREEN_COLUMN.top), width: Math.min(tabsLayout.menuWidth, pageWidth - space.l * 2) } : { bottom: barHeight(insets.bottom, design) + space.xs, left: space.l, width: Math.min(tabsLayout.menuWidth, width - space.l * 2) }}
           onDismiss={() => setTabsMenu(false)}
         />

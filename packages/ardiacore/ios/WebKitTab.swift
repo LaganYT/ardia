@@ -258,6 +258,12 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     window?.makeFirstResponder(view)
   }
 
+  func focusPageIfUnfocused() -> Bool {
+    guard let window, window.firstResponder == nil || window.firstResponder === window else { return false }
+    focusPage()
+    return true
+  }
+
   func setMuted(_ on: Bool) {
     muted = on
     let code = muteScript

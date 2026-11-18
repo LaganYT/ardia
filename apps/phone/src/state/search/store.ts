@@ -32,6 +32,7 @@ type SearchState = {
   fieldVersion: number;
   incognitoOnCancel: boolean | null;
   arrival: TrayArrival;
+  editsPage: boolean;
 };
 
 export const useSearch = create<SearchState>()(() => ({
@@ -47,6 +48,7 @@ export const useSearch = create<SearchState>()(() => ({
   fieldVersion: 0,
   incognitoOnCancel: null,
   arrival: "rises",
+  editsPage: false,
 }));
 
 let remote: { text: string; values: string[] } = { text: "", values: [] };
@@ -116,6 +118,7 @@ export function presentSearch(origin: SearchOrigin, text = "", incognitoOnCancel
     fieldVersion: 0,
     incognitoOnCancel,
     arrival,
+    editsPage: page?.currentUrl != null,
   }));
   offerPaste(useSearch.getState().session);
 }

@@ -116,8 +116,10 @@ packages/
 
 ## Run it
 
-The Linux desktop target is `apps/linux`, for x86-64 Linux on Wayland or X11. Releases ship it as a tarball, a `.deb`
-and an AppImage; its source-build and packaging instructions are in [docs/linux-port.md](docs/linux-port.md). It builds against the dedicated Linux Chromium host.
+The Linux desktop target is `apps/linux`, for x86-64 Linux on Wayland or X11. Releases ship it as a `.deb`
+(`sudo apt install ./Ardia-<version>-linux-x64.deb`), an AppImage, a tarball and an Arch source package, and stables as
+`ardia-bin` on the AUR: [docs/linux-port.md › Installing on Linux](docs/linux-port.md#installing-on-linux). The same
+file has the source-build and packaging instructions. It builds against the dedicated Linux Chromium host.
 
 The macOS app requires Xcode 26+, CocoaPods, Node 24 (pinned in `.nvmrc`), pnpm 11.
 

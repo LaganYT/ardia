@@ -50,6 +50,7 @@ import {
   beginOpeningTab,
   closeAllFromDeck,
   closeTabFromDeck,
+  stayIncognito,
   consumeDeckEntrance,
   deckEntranceCapture,
   peekDeckEntrance,
@@ -138,7 +139,12 @@ export const TabDeck = memo(function TabDeck() {
   const deckWidth = column ? columnContentWidth(column, width) : width;
   const contentLeft = column ? columnContentLeft(column) : 0;
   const safeSide = column ? 0 : Math.max(insets.left, insets.right);
-  const archiveCard = useArchiveCardShowing();
+  const incognito = useIncognito();
+  const sided = redesigned && !column;
+  const wantedSide = sided && incognito;
+  const [side, setSide] = useState(wantedSide);
+  const archiveOffered = useArchiveCardShowing();
+  const archiveCard = archiveOffered && !side;
   const headerGeometry = useMemo(() => deckGeometry(deckWidth, height, insets.top, insets.bottom, safeSide, Platform.OS, design, deckHeaderBottom(), DECK_SCREEN_CORNER()), [deckWidth, height, insets.top, insets.bottom, safeSide, design]);
   const archiveGeometry = useMemo(() => deckGeometry(deckWidth, height, insets.top, insets.bottom, safeSide, Platform.OS, design, deckArchiveBottom(), DECK_SCREEN_CORNER()), [deckWidth, height, insets.top, insets.bottom, safeSide, design]);
   const archiveResizes = redesigned && archiveGeometry.cardWidth < headerGeometry.cardWidth - ARCHIVE_RESIZE_SLACK;
@@ -149,8 +155,8 @@ export const TabDeck = memo(function TabDeck() {
   const { tabs: allTabs, selectedId: heldSelected } = useHeldDeckOrder();
   const shownSpace = useShownSpace();
   const [needle, setNeedle] = useState("");
-  const live = useMemo(() => (needle ? allTabs.filter((tab) => tabMatchesQuery(tab, needle)) : allTabs), [allTabs, needle]);
-  const incognito = useIncognito();
+  const sideTabs = useMemo(() => (sided ? allTabs.filter((tab) => tab.isPrivate === side) : allTabs), [allTabs, sided, side]);
+  const live = useMemo(() => (needle ? sideTabs.filter((tab) => tabMatchesQuery(tab, needle)) : sideTabs), [sideTabs, needle]);
   const privateCount = usePrivateCount();
   const canReopen = useCanReopen();
   const hasArchive = useHasArchivedTabs();
@@ -182,9 +188,10 @@ export const TabDeck = memo(function TabDeck() {
   const [gridLayer, setGridLayer] = useState(grid);
   const [stackLayer, setStackLayer] = useState(!grid);
   const syncedShown = useRef(shown);
-  const syncedTabs = useRef(allTabs);
-  if (syncedShown.current !== shown || (!shown && syncedTabs.current !== allTabs)) {
-    const ids = allTabs.map((t) => t.id);
+  const syncedTabs = useRef(sideTabs);
+  if (side !== wantedSide && (!shown || syncedShown.current !== shown)) setSide(wantedSide);
+  if (syncedShown.current !== shown || (!shown && syncedTabs.current !== sideTabs)) {
+    const ids = sideTabs.map((t) => t.id);
     const target = shown ? (grid ? null : peekDeckEntrance()) : heldSelected;
     const nextAnchor = focusedIndex(deckScrollFor(ids, target), ids.length);
     const nextPhase = entrancePhase(ids, target);
@@ -204,7 +211,7 @@ export const TabDeck = memo(function TabDeck() {
   }
   useLayoutEffect(() => {
     syncedShown.current = shown;
-    syncedTabs.current = allTabs;
+    syncedTabs.current = sideTabs;
   });
   const deckSheet = useSheet();
   const reduceMotion = useReduceMotion();
@@ -248,6 +255,8 @@ export const TabDeck = memo(function TabDeck() {
   const backdropStyle = useAnimatedStyle(() => ({ opacity: deckPhase.value === DECK_PHASE.closing ? 1 : Math.min(1, positionProgress.value * BACKDROP_LEAD) }));
   const cardsOpacity = useSharedValue(first.cardsOpacity);
   const cardsShift = useSharedValue(0);
+  const sideFade = useSharedValue(1);
+  const sideFadeStyle = useAnimatedStyle(() => ({ opacity: sideFade.value }));
   const handedOverAway = useSharedValue(0);
   const handOverStyle = useAnimatedStyle(() => ({ transform: [{ translateX: handedOverAway.value * HANDED_OVER_AWAY }] }));
   useEffect(() => {
@@ -257,10 +266,11 @@ export const TabDeck = memo(function TabDeck() {
   const archiveMorphed = useSharedValue(1);
   const cardsStyle = useAnimatedStyle(() => {
     if (!redesigned) return { opacity: cardsOpacity.value };
+    const shownOpacity = cardsOpacity.value * sideFade.value;
     const morph = archiveMorph.value;
     const left = 1 - archiveMorphed.value;
     return {
-      opacity: cardsOpacity.value,
+      opacity: shownOpacity,
       transformOrigin: [morph.originX, morph.originY, 0],
       transform: [{ translateX: morph.dx * left }, { translateY: cardsShift.value * Math.min(1, Math.max(0, positionProgress.value)) + morph.dy * left }, { scale: 1 + (morph.scale - 1) * left }],
     };
@@ -290,6 +300,10 @@ export const TabDeck = memo(function TabDeck() {
 
   const searchedFor = useRef(needle);
   const spaceShown = useRef(shownSpace);
+  const sideShown = useRef(side);
+  const sideLeaving = useRef(false);
+  const sideEntering = useRef(false);
+  const sideScrolls = useRef<{ normal: number | null; incognito: number | null }>({ normal: null, incognito: null });
   const openingId = useRef<string | null>(null);
   const handedOver = useRef<string | null>(null);
   const openPath = useRef<CardOpen>("deckCard");
@@ -337,6 +351,8 @@ export const TabDeck = memo(function TabDeck() {
   useLayoutEffect(() => {
     if (!shown) return;
     spaceShown.current = shownSpace;
+    sideShown.current = side;
+    sideScrolls.current = { normal: null, incognito: null };
     searchedFor.current = needle;
     const entrance = peekDeckEntrance();
     const index = entrance ? order.indexOf(entrance) : -1;
@@ -442,13 +458,55 @@ export const TabDeck = memo(function TabDeck() {
     runOnUI(shiftDeck)(next, to, by, expandedAt, keepsExpanded, reduced, leave);
 
   useEffect(() => {
+    if (!shown) {
+      sideLeaving.current = false;
+      sideEntering.current = false;
+      sideFade.value = 1;
+      return;
+    }
+    if (side === wantedSide) {
+      if (sideLeaving.current && sideShown.current === side) {
+        sideLeaving.current = false;
+        sideFade.value = withTiming(1, { duration: tabsMotion.fade });
+      }
+      return;
+    }
+    sideLeaving.current = true;
+    let current = true;
+    const swap = () => {
+      if (current) setSide(wantedSide);
+    };
+    sideFade.value = withTiming(0, { duration: tabsMotion.sideLeave }, (finished) => {
+      "worklet";
+      if (finished) runOnJS(swap)();
+    });
+    return () => {
+      current = false;
+    };
+  }, [shown, wantedSide, side]);
+
+  useEffect(() => {
     if (!shown) return;
     const ids = live.flatMap((t) => (leavingIds.current.has(t.id) ? [] : [t.id]));
     const alive = new Set(allTabs.map((t) => t.id));
     if (spaceShown.current !== shownSpace) {
       spaceShown.current = shownSpace;
+      sideShown.current = side;
       searchedFor.current = needle;
       showNewSpace(ids, alive);
+      if (sideLeaving.current && side === wantedSide) {
+        sideLeaving.current = false;
+        sideFade.value = withTiming(1, { duration: tabsMotion.fade });
+      }
+      return;
+    }
+    if (sideShown.current !== side) {
+      sideScrolls.current[sideShown.current ? "incognito" : "normal"] = scroll.value;
+      sideShown.current = side;
+      searchedFor.current = needle;
+      const kept = sideScrolls.current[side ? "incognito" : "normal"];
+      showSide(ids, alive, kept === null ? initialDeckScroll(ids.length) : Math.min(Math.max(kept, 0), Math.max(ids.length - 1, 0)), sideLeaving.current);
+      sideLeaving.current = false;
       return;
     }
     const next = mergeDeckOrder(order, ids);
@@ -464,8 +522,19 @@ export const TabDeck = memo(function TabDeck() {
     setOrder(next);
   }, [live]);
 
+  useEffect(() => {
+    if (!sideEntering.current) return;
+    sideEntering.current = false;
+    if (sideLeaving.current) return;
+    sideFade.value = withTiming(1, { duration: tabsMotion.fade });
+  }, [order]);
+
   const showNewSpace = (ids: string[], alive: ReadonlySet<string>) => {
-    const to = initialDeckScroll(ids.length);
+    showSide(ids, alive, initialDeckScroll(ids.length));
+    if (!archiveOffered) offerArchiveCard(ids.length);
+  };
+
+  const showSide = (ids: string[], alive: ReadonlySet<string>, to: number, faded = false) => {
     for (const id of hidden.current) if (!alive.has(id)) hidden.current.delete(id);
     runOnUI((next: readonly string[], at: number) => {
       "worklet";
@@ -481,11 +550,13 @@ export const TabDeck = memo(function TabDeck() {
     })(ids, to);
     leavingIds.current.clear();
     setLeavingCards(NO_LEAVING_CARDS);
-    cardsOpacity.value = 0;
-    cardsOpacity.value = withTiming(1, { duration: tabsMotion.fade });
+    if (faded) sideEntering.current = true;
+    else {
+      cardsOpacity.value = 0;
+      cardsOpacity.value = withTiming(1, { duration: tabsMotion.fade });
+    }
     setAnchor(to);
     setOrder(ids);
-    if (!archiveCard) offerArchiveCard(ids.length);
   };
 
   const settledOpen = (id: string) => openTab(id);
@@ -647,9 +718,15 @@ export const TabDeck = memo(function TabDeck() {
     else if (!tabs.get(id)?.isPrivate) countUsage("card_opens_waited");
   };
 
+  const closeKeepingSide = (id: string) => {
+    const keepsSide = side && allTabs.some((other) => other.id !== id);
+    closeTabFromDeck(id);
+    if (keepsSide) stayIncognito();
+  };
+
   const remove = (id: string) => {
     hidden.current.add(id);
-    closeTabFromDeck(id);
+    closeKeepingSide(id);
   };
 
   const finishLeaving = (id: string, closesDeck: boolean) => {
@@ -699,7 +776,7 @@ export const TabDeck = memo(function TabDeck() {
     setLeavingCards((now) => [...now, { id, tab, at: index }]);
     setAnchor(Math.round(after));
     setOrder([...next]);
-    if (!closesDeck) closeTabFromDeck(id);
+    if (!closesDeck) closeKeepingSide(id);
     setTimeout(() => finishLeaving(id, closesDeck), deckLeaveGoneMs(spec, deckFlyGoneLift(spec, g.cardHeight)) + LEAVE_SLACK_MS);
   };
 
@@ -964,10 +1041,12 @@ export const TabDeck = memo(function TabDeck() {
               if (finished) setGridLayer(grid);
             }}
           >
-            <TabGrid tabs={gridTabs} selectedId={heldSelected} geometry={g} reduceMotion={reduceMotion} onOpen={cardActions.openTab} onClose={cardActions.closeTab} />
+            <Animated.View testID="tabGridSide" style={[StyleSheet.absoluteFill, sideFadeStyle]} pointerEvents="box-none" collapsable={false}>
+              <TabGrid tabs={gridTabs} selectedId={heldSelected} geometry={g} reduceMotion={reduceMotion} onOpen={cardActions.openTab} onClose={cardActions.closeTab} />
+            </Animated.View>
           </MotionView>
         ) : null}
-        {!count && !leavingCards.length && phase.kind === "settled" ? <DeckEmpty centerY={g.cardCenterY} showsArchive={hasArchive} onArchive={openArchive} searching={needle !== ""} /> : null}
+        {!count && !leavingCards.length && phase.kind === "settled" ? <DeckEmpty centerY={g.cardCenterY} showsArchive={hasArchive} onArchive={openArchive} searching={needle !== ""} incognito={side} /> : null}
         {archiveCard && phase.kind === "settled" && !grid ? (
           redesigned ? (
             <ArchiveCapsule centerY={g.safeTop + deckChromeLayout.archiveCenter} safeSide={g.safeSide} />

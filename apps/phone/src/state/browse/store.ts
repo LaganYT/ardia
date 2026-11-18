@@ -301,6 +301,12 @@ export function newRegularTab() {
   presentSearch(trayOrigin(), "", was);
 }
 
+export function switchDeckIncognito() {
+  const was = useTabs.getState().incognito;
+  if (!was) countUsage("deck_incognito_switches");
+  setIncognito(!was);
+}
+
 export function toggleTrayIncognito() {
   const was = useTabs.getState().incognito;
   if (searchState().incognitoOnCancel === null) useSearch.setState({ incognitoOnCancel: was });
@@ -372,6 +378,10 @@ export function leaveDeckIfEmpty() {
 export function closeTabFromDeck(id: string) {
   closeTabById(id);
   leaveDeckIfEmpty();
+}
+
+export function stayIncognito() {
+  if (!useTabs.getState().incognito) setIncognito(true);
 }
 
 export function closeAllFromDeck() {

@@ -307,7 +307,7 @@ onIPhone("VoiceOver reads each card as main's: the title, the host as its value,
 });
 
 onIPhone("an Incognito tab's cell is titled Incognito, and its card reads Incognito with the host", () => {
-  act(() => tabStore.useTabs.setState((state) => ({ ...state, privates: someTabs(1, true) })));
+  act(() => tabStore.useTabs.setState((state) => ({ ...state, privates: someTabs(1, true), incognito: true })));
   const root = deck();
   toggle();
   const at = hosts(root, "tabGridTitle").findIndex((node) => node.props.children === "Incognito");

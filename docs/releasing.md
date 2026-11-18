@@ -265,8 +265,29 @@ The Linux package ships on the same GitHub release. The Release workflow's `linu
 
 - `Ardia-<version>-linux-x64.tar.xz` and its `.sha256`: the browser, with `lib/ardia/VERSION` and the bundled CLI.
 - `Ardia-<version>-linux-x64.deb` and `Ardia-<version>-linux-x64.AppImage`, each with its `.sha256`: the same build
-  as a Debian package (setuid sandbox helper, polkit policy, AppArmor profile) and as an AppImage.
+  as a Debian package (setuid sandbox helper, polkit policy, AppArmor profile, computed `Depends`) and as an AppImage.
+  The `.deb` is installed and purged in Debian 13 and Ubuntu 24.04 containers first; one that fails is left out and
+  the rest ships ([linux-ci.md](linux-ci.md) › Linux releases).
+- `ardia-bin-<version>.src.tar.gz` and its `.sha256`: the Arch PKGBUILD and `.SRCINFO` pinned to that tarball, for
+  `makepkg -si` without the AUR.
 - `ardia-cli-<version>-linux-x64.tar.gz` and its `.sha256`: the `ardia` command for Linux.
+
+How users install each one: [linux-port.md](linux-port.md#installing-on-linux).
+
+After a stable release, the workflow's `aur` job moves the AUR package `ardia-bin` to the new tarball when the
+`AUR_SSH_PRIVATE_KEY` secret is set ([linux-ci.md](linux-ci.md) › The AUR). Nightlies never go to the AUR. The
+one-time setup:
+
+1. Make an account on aur.archlinux.org for the project.
+2. Make a key for it and add the public half under My Account › SSH Public Key:
+   `ssh-keygen -t ed25519 -N '' -C ardia-bin -f aur_ed25519`.
+3. Store the private half as the repository secret, then delete both files:
+   `gh secret set AUR_SSH_PRIVATE_KEY -R ardia-browser/ardia < aur_ed25519`.
+4. Optionally set the commit author: `gh variable set AUR_GIT_NAME -R ardia-browser/ardia --body "<name>"` and the
+   same for `AUR_GIT_EMAIL`.
+
+The first stable release after that creates `ardia-bin` on the AUR. To create it sooner, run
+`scripts/linux/arch/publish-aur.sh <the latest stable> --package <its tarball>` with `AUR_SSH_KEY_FILE` set to the key.
 
 The script refuses what `release.sh` refuses: a missing notes file or one whose frontmatter doesn't read, a
 `MARKETING_VERSION` other than `<version>`, and uncommitted changes (here under `apps/browser`, `apps/linux`,

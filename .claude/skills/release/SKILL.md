@@ -401,10 +401,14 @@ writes `/Applications/Ardia.app`): `brew audit --cask --online ardia-browser/tap
 ### 5d. Linux package
 
 The Release workflow builds it in its `linux` job (`scripts/linux/release.sh <version> --engine exact`, smoke gate
-included), and `publish.sh` attaches `Ardia-<version>-linux-x64.tar.xz`, `ardia-cli-<version>-linux-x64.tar.gz` and
-their `.sha256` files to the release, nightly or stable. That needs the Linux engine for the release commit's engine
+included, then the `.deb` installed and purged on Debian 13 and Ubuntu 24.04), and `publish.sh` attaches
+`Ardia-<version>-linux-x64.tar.xz`, `.deb` and `.AppImage`, `ardia-bin-<version>.src.tar.gz` (the Arch PKGBUILD),
+`ardia-cli-<version>-linux-x64.tar.gz` and their `.sha256` files to the release, nightly or stable. A `.deb` that
+fails the install test is dropped (`deb dropped` in `provenance.txt`) and the rest still ships. That needs the Linux engine for the release commit's engine
 key (`engine/engine-key.sh`) published in ardia-browser/ardia. Without it the `linux` job fails, the Mac release
-still ships, and `publish` warns that Linux was skipped.
+still ships, and `publish` warns that Linux was skipped. After a stable release the `aur` job moves the AUR package
+`ardia-bin` to it (`scripts/linux/arch/publish-aur.sh`) when the `AUR_SSH_PRIVATE_KEY` secret is set; a dry run, or a
+missing secret, only shows the commit it would push.
 
 Linux engines are built on a Boat VM (boat.dev, `boat new --type xlarge`), never in GitHub Actions. On the VM, at the
 commit whose engine key needs one:
@@ -420,7 +424,8 @@ scripts/linux/publish-engine.sh --out "$CB/chromium_git/chromium/src/out/$GN_OUT
 bare `git commit`) before dispatching the release; fetches also read the table on `main`, so older commits find it.
 
 To add Linux to a release that shipped without it: publish the engine, then on a Linux machine at the release commit
-run `scripts/linux/release.sh <version>` and the `gh release upload` line it prints. `--engine nearest` or
+run `scripts/linux/release.sh <version>` and the `gh release upload` line it prints, then for a stable
+`scripts/linux/arch/publish-aur.sh <version> --package <tarball>`. `--engine nearest` or
 `--allow-dirty` make test builds, never releases (`docs/linux-ci.md` › Linux releases).
 
 ### 5e. Windows installers

@@ -20,6 +20,7 @@ import { entryHeightNow, foldedGroupHeight, headGap } from "../../state/sidebar/
 import { dismissHover } from "../../state/sidebar/hover";
 import { useGroupHover, useRowHover } from "./hoverController";
 import { useHoverFade } from "./hoverMotion";
+import { buttonMotion, usePressScaleMotion } from "../ui/motion";
 import { GhostSlot, ListMotionContext, useGroupMotion } from "./ListMotion";
 import { pressGroupClose, useGroupCloseControlWhile } from "../../state/sidebar/closeControl";
 import { openGroupMenu } from "../../state/sidebar/menus";
@@ -172,6 +173,8 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const closeControl = useGroupCloseControlWhile(groupId, hovered && !renaming);
   const profileId = usePageProfileId();
   const showsExtra = useShowsExtraTabs(windowId, profileId, groupId);
+  const pressMotion = usePressScaleMotion(!renaming, buttonMotion.rowPressScale);
+  const rowScale = pressMotion.scale ? { transform: [{ scale: pressMotion.scale }] } : undefined;
   if (!group) return null;
   const target = { kind: "group" as const, id: groupId };
 
@@ -184,6 +187,8 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
         }}
       >
         <Pressable
+          onPressIn={pressMotion.onPressIn}
+          onPressOut={pressMotion.onPressOut}
           onPress={() => {
             dismissHover();
             if (renaming) return;
@@ -193,6 +198,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
           }}
         >
           {() => (
+            <Animated.View style={rowScale}>
             <SidebarRowSurface fill={dropInto ? theme.tabPressed : ink.clear} cornerRadius={GROUP_INNER_RADIUS}>
               <FolderOrIcon icon={group.icon} open={!collapsed || dropInto} color={group.color} />
               {renaming ? (
@@ -232,6 +238,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                 {countdown.label && !renaming ? <MeetingTimeLabel label={countdown.label} urgent={countdown.urgent} /> : null}
               </HoverSlot>
             </SidebarRowSurface>
+            </Animated.View>
           )}
         </Pressable>
       </ContextMenuArea>

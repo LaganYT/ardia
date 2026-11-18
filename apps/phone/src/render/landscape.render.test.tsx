@@ -147,7 +147,7 @@ test("in landscape a sheet stops at the side insets and fits the shorter window,
   act(() => Dimensions.set({ window: { ...PORTRAIT, ...LANDSCAPE }, screen: { ...PORTRAIT, ...LANDSCAPE } }));
   const after = flat(panel(root));
   expect(after).toMatchObject({ left: 59, right: 59, paddingBottom: 21 });
-  expect(after.maxHeight).toBe(LANDSCAPE.height - INSETS.top - (Platform.OS === "ios" ? 0 : 24));
+  expect(after.maxHeight).toBe(Math.min(LANDSCAPE.height - INSETS.top - (Platform.OS === "ios" ? 0 : 24), LANDSCAPE.height * (Platform.OS === "ios" ? 0.9 : 1)));
   expect(after.maxHeight as number).toBeLessThan(before.maxHeight as number);
   unmount(root);
 });

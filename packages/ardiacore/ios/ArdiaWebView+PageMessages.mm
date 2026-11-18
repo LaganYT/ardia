@@ -124,6 +124,7 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
   if ([kind isEqualToString:@"hello"]) {
     PeekTrace(@{@"event" : @"hello", @"main" : @(main), @"frame" : frameId ?: @"", @"url" : Text(dict, @"url", 8192) ?: @""});
     if (main && !tab.discarded) [self resetPageMedia];
+    if (main) _reports.exclusiveFrames = nil;
     if (main && ![(Text(dict, @"url", 8192) ?: @"about:") hasPrefix:@"about:"]) _requests.requestedURL = nil;
     [self noteScriptFrame:frameId main:main];
     [self callFrame:frameId kind:@"peekConfig" json:PeekConfigJSON(self)];
@@ -143,6 +144,10 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
     [self callFrame:frameId kind:@"peekConfig" json:PeekConfigJSON(self)];
   } else if ([kind isEqualToString:@"peekGone"]) {
     [self forgetScriptFrame:frameId];
+  } else if ([kind isEqualToString:@"exclusive"] && dict) {
+    if (!_reports.exclusiveFrames) _reports.exclusiveFrames = [NSMutableSet set];
+    if (Flag(dict, @"held")) [_reports.exclusiveFrames addObject:frameId];
+    else [_reports.exclusiveFrames removeObject:frameId];
   } else if ([kind isEqualToString:@"commandWheel"] && dict) {
     [self commandWheelFromPage:dict];
   } else if ([kind isEqualToString:@"peekTrace"] && dict) {
@@ -274,6 +279,7 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
 
 - (void)forgetScriptFrame:(NSString *)frameId {
   if (frameId.length) [ScriptFramesOf(_tab) removeObject:frameId];
+  [_reports.exclusiveFrames removeObject:frameId ?: @""];
 }
 
 - (void)pushSelectionPopover {

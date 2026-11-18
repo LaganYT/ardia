@@ -8,7 +8,7 @@ import { useSplitRowPanes, useTabBadged } from "../../state/sidebar/hooks";
 import { muteTitle } from "../../state/tabs/mute";
 import { usePictureInPicture } from "../../state/media/media";
 import { HoverSlot } from "../ui/HoverSlot";
-import { ActivitySpinner, Button, Divider, FadeLabel, ink, OutsidePressArea, radius, sidebarFont, sidebarLineHeight, space, Symbol, typeFace, useHover, withAlpha } from "../ui";
+import { ActivitySpinner, Button, Divider, FadeLabel, HoverFill, ink, OutsidePressArea, radius, sidebarFont, sidebarLineHeight, space, Symbol, typeFace, useHover, withAlpha } from "../ui";
 import { isPinnedRow, tabTitle } from "../../state/browser/model";
 import { awayFromPin, rowAwayTitle } from "../../state/pins/organize";
 import { hidesRowIcon } from "../../state/pins/rowIcons";
@@ -93,9 +93,9 @@ export const TabRow = memo(function TabRow({
   const title = resetting ? "Back to Pinned URL" : tab.customTitle ? tabTitle(tab) : titleWithoutUnread(tabTitle(tab), unread);
   const away = resettable && !resetting ? rowAwayTitle(tab) : null;
   const textOnly = hidesRowIcon(tab, badged);
-  const fill = quiet
-    ? active ? tokens.quietWash : selected ? tokens.multiSelected : hovered ? tokens.quietHover : ink.clear
-    : active ? theme.tabSelected : selected ? tokens.multiSelected : hovered ? theme.tabHover : ink.clear;
+  const fill = active ? (quiet ? tokens.quietWash : theme.tabSelected) : selected ? tokens.multiSelected : ink.clear;
+  const hoverFill = quiet ? tokens.quietHover : theme.tabHover;
+  const plain = !active && !selected && !onto;
   const border = (active && !quiet) || selected ? 0.5 : 0;
   const titleColor = quiet ? hex(withAlpha(theme.textTab, active ? tokens.quietActiveText : tokens.quietText)) : active ? theme.rowSelectedText : theme.textTab;
   const pressedFill = quiet ? tokens.quietPressed : theme.tabPressed;
@@ -108,23 +108,27 @@ export const TabRow = memo(function TabRow({
       style={moved.style as object}
       onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
     >
-      <TabPressArea windowId={windowId} tab={tab} hitSlop={rowGapSlop(0)}>
+      <TabPressArea windowId={windowId} tab={tab} squish="row" hitSlop={rowGapSlop(0)} selected={selected}>
       {({ pressed }) => (
+        <>
+          <HoverFill shown={plain && (hovered || pressed)} instant={!plain} color={pressed ? pressedFill : hoverFill} radius={radius.chrome} />
           <SidebarRowSurface
-            fill={onto || (!active && pressed) ? pressedFill : fill}
+            fill={onto || (selected && !active && pressed) ? pressedFill : fill}
             selected={active && !quiet}
             border={border}
             stroke={selected && !active ? tokens.multiSelectedStroke : undefined}
             padLeft={(textOnly ? TAB_ROW.contentLeft - TAB_ROW.titleGap : TAB_ROW.contentLeft) - border}
             padRight={TAB_ROW.trailing - border}
           >
-            <View {...backToPin.hoverProps} style={textOnly ? NO_SLOT : undefined}>
+            <View {...(tab.pinnedUrl ? backToPin.hoverProps : null)} style={textOnly ? NO_SLOT : undefined}>
               {resettable ? (
                 <Pressable
                   onPress={() => returnToPinnedUrl(tab.id)}
                   onPressIn={pinActionMotion.onPressIn}
                   onPressOut={pinActionMotion.onPressOut}
                   tooltip={withShortcut("Back to Pinned URL", backToPinHint)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to Pinned URL"
                 >
                   <Animated.View pointerEvents="none" style={pinActionScale}>
                     {resetting ? (
@@ -177,6 +181,7 @@ export const TabRow = memo(function TabRow({
               ) : null}
             </HoverSlot>
           </SidebarRowSurface>
+        </>
       )}
       </TabPressArea>
     </View>
@@ -197,6 +202,8 @@ function StatusIconButton({ icon, color, tooltip, onPress }: { icon: string; col
       onPressOut={pressMotion.onPressOut}
       style={{ marginLeft: space.s }}
       tooltip={tooltip}
+      accessibilityRole="button"
+      accessibilityLabel={tooltip}
     >
       <Animated.View style={[glyphFrame, scaleStyle]}>
         <Symbol name={icon} size={ROW_GLYPH.symbol} color={color} style={glyphFrame} />
@@ -325,9 +332,9 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
               flexDirection: "row",
               alignItems: "center",
               paddingLeft: space.s,
-              backgroundColor: active ? undefined : pressed ? theme.tabPressed : hovered ? theme.rowHover : undefined,
             }}
           >
+            <HoverFill shown={!active && (pressed || hovered)} instant={active} color={pressed ? theme.tabPressed : theme.rowHover} radius={radius.tile} />
             <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} compact />
             <FadeLabel text={tabTitle(tab)} fontSize={sidebarFont.small.fontSize} color={active ? theme.rowSelectedText : theme.textTab} strikethrough={struck} style={{ flex: 1, height: Math.max(ROW_GLYPH.box, sidebarLineHeight.small + 1), marginLeft: space.xs, opacity: struck ? SLEEPING_TITLE_OPACITY : 1 }} />
             <HoverSlot

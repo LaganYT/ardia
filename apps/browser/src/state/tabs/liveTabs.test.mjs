@@ -148,6 +148,14 @@ class FakeChrome {
     f.s.tabs.splice(at, 0, f.tab);
     this.emit(f.id, null);
   }
+  activateBehindStaleFlag(key) {
+    const f = this.find(key);
+    f.s.active = f.tab.browser;
+    f.s.pickedOnClose = true;
+    this.emit(f.id, null);
+    f.s.pickedOnClose = false;
+    this.emit(f.id, null);
+  }
   activate(key, cmd = null) {
     const f = this.find(key);
     f.s.active = f.tab.browser;
@@ -215,7 +223,8 @@ const chrome = new FakeChrome();
 globalThis.acTestTabStrip = chrome;
 const { useBrowser } = await import("../browser/store.ts");
 const model = await import("../browser/model.ts");
-const { startChromeTabs } = await import("./chromeTabs.ts");
+const { chromeTabsBookkeeping, startChromeTabs } = await import("./chromeTabs.ts");
+const { splitTabIdsOf } = await import("../splits/splits.ts");
 startChromeTabs();
 
 const S = () => useBrowser.getState();
@@ -244,7 +253,7 @@ function anotherWindow(...urls) {
 function mountViews({ w, strip }) {
   for (const id of S().windows[w]?.tabIds ?? []) {
     const t = S().tabs[id];
-    if ((t.navigation || t.adoptId) && !chrome.find(id)) chrome.create(strip, id);
+    if ((t.page.nav || t.page.adopt) && !chrome.find(id)) chrome.create(strip, id);
   }
   for (const s of chrome.strips.values()) for (const t of [...s.tabs]) if (!S().tabs[t.key]) chrome.remove(t.key);
 }
@@ -298,13 +307,13 @@ test("an extension's move, pin and activation reach the sidebar", async () => {
   assert.deepEqual(order(win.w), ["d", "a", "b", "c"]);
   chrome.pin(c, true);
   await settle(win);
-  assert.equal(S().tabs[c].pinned, true);
+  assert.equal(!!S().tabs[c].pin, true);
   assert.deepEqual(order(win.w), ["c", "d", "a", "b"]);
   chrome.activate(d);
   await settle(win);
   assert.equal(shown(win.w), "d");
   assert.deepEqual(chromeOrder(win.strip), order(win.w), "Chrome and the sidebar agree");
-  assert.equal(S().tabs[a].pinned, false);
+  assert.equal(!!S().tabs[a].pin, false);
   const id = (u) => S().windows[win.w].tabIds.find((t) => urlOf(t) === u);
   const g = S().groupTabs([id("a"), id("b")], { pinned: false });
   await settle(win);
@@ -332,6 +341,18 @@ test("the tab Chrome shows after a close doesn't override the app's successor ru
   await settle(win);
   assert.equal(shown(win.w), "a", "the store's pick stands");
   assert.equal(chromeShown(win.strip), "a", "and Chrome shows it too");
+});
+
+test("an extension that shows another tab and then discards the shown one is obeyed, whatever the strip last said about a close", async () => {
+  const win = windowWith("a", "b", "c");
+  await settle(win);
+  const [a, b] = S().windows[win.w].tabIds;
+  assert.equal(shown(win.w), "a");
+  chrome.activateBehindStaleFlag(b);
+  await settle(win);
+  assert.equal(shown(win.w), "b", "the tab the extension showed");
+  assert.equal(chromeShown(win.strip), "b", "Chrome isn't put back on the tab being discarded");
+  assert.ok(S().tabs[a], "the discarded tab stays in the sidebar");
 });
 
 test("a command on its way wins over Chrome's earlier change; stale transactions are dropped", async () => {
@@ -399,6 +420,45 @@ test("an extension's tab groups reach the sidebar, and the sidebar's groups reac
   assert.equal(S().groups[mine].color, "magenta");
 });
 
+test("a binding to a group the sidebar removed is dropped, and a closed strip leaves no bookkeeping behind", async () => {
+  const win = windowWith("a", "b", "c");
+  await settle(win);
+  const id = (u) => S().windows[win.w].tabIds.find((t) => urlOf(t) === u);
+  chrome.group([id("b"), id("c")], "Reading");
+  await settle(win);
+  const made = Object.values(S().groups).find((g) => g.windowId === win.w);
+  assert.ok(made, "the store made the group");
+  const bound = chromeTabsBookkeeping().groups;
+  assert.ok(bound >= 1);
+  S().ungroup(made.id);
+  await settle(win);
+  assert.deepEqual(Object.keys(S().groups), []);
+  assert.equal(chromeTabsBookkeeping().groups, 0);
+  const other = anotherWindow("x", "y");
+  await settle(other);
+  const sent = chrome.sent;
+  const notShown = (w) => S().windows[w].tabIds.find((t) => t !== model.activeTabId(S(), w));
+  S().activate(notShown(win.w));
+  S().activate(notShown(other.w));
+  await settle(win);
+  await settle(other);
+  assert.ok(chrome.sent >= sent + 2, "each strip was sent a command, so each has a signature");
+  const close = async (strip) => {
+    chrome.outbox.push({ rev: ++chrome.rev, cmd: null, strips: [{ ...chrome.state(strip), closed: true }] });
+    chrome.strips.delete(strip);
+    chrome.deliver();
+    await tick();
+    return chromeTabsBookkeeping();
+  };
+  const open = chromeTabsBookkeeping();
+  assert.ok(open.changedAt >= 1);
+  const firstClosed = await close(win.strip);
+  assert.equal(firstClosed.changedAt, open.changedAt - 1);
+  assert.ok(firstClosed.tried < open.tried, "the closed strip's signatures are gone");
+  const bothClosed = await close(other.strip);
+  assert.ok(bothClosed.tried < firstClosed.tried, "the other strip's signatures were kept until its own close");
+});
+
 test("an extension that closes the shown tab and shows another in one go is obeyed", async () => {
   const win = windowWith("a", "b");
   const [a, b] = S().windows[win.w].tabIds;
@@ -440,8 +500,8 @@ test("as in Dia: an extension pinning one pane of a split leaves the split; coll
   await settle(win);
   chrome.pin(b, true);
   await settle(win);
-  assert.equal(S().tabs[b].pinned, false, "the pane isn't pinned");
-  assert.ok(Object.values(S().splits).some((v) => v.tabIds.includes(a) && v.tabIds.includes(b)), "the split stays");
+  assert.equal(!!S().tabs[b].pin, false, "the pane isn't pinned");
+  assert.ok(Object.values(S().splits).some((v) => splitTabIdsOf(v).includes(a) && splitTabIdsOf(v).includes(b)), "the split stays");
   assert.equal(chrome.find(b).tab.pinned, false, "Chrome is put back");
   S().activate(c);
   const g = S().groupTabs([c], { pinned: false, name: "C" });
@@ -570,7 +630,7 @@ test("Chrome's own pin or move of a group's tab while a rename of the group is o
     if (change === "pin") chrome.pin(id("b"), true);
     else chrome.reorder(win.strip, [id("x"), id("b"), id("a")]);
     await settle(win);
-    if (change === "pin") assert.equal(S().tabs[id("b")].pinned, true, "Chrome's pin stands");
+    if (change === "pin") assert.equal(!!S().tabs[id("b")].pin, true, "Chrome's pin stands");
     else assert.deepEqual(order(win.w), ["x", "b", "a"], "Chrome's move stands");
     assert.deepEqual(chromeOrder(win.strip), order(win.w));
     assert.equal(chrome.strips.get(win.strip).groups.get([...chrome.strips.get(win.strip).groups.keys()].at(-1)).title, "Renamed");
@@ -643,8 +703,23 @@ test("Chrome selecting a Peek's source dismisses the Peek instead of bouncing ba
   assert.equal(chromeShown(win.strip), "p");
   chrome.activate(a);
   await settle(win);
-  assert.equal(S().peeks[win.w], undefined);
+  assert.equal(S().peeks[a], undefined);
   assert.equal(S().tabs[peek], undefined);
   assert.equal(shown(win.w), "a");
   assert.equal(chromeShown(win.strip), "a");
+});
+
+test("an extension that shows a tab of another space that shares data, then discards the shown one, is obeyed: that space is shown and Chrome keeps the pick", async () => {
+  const win = windowWith("a");
+  const home = S().windows[win.w].profileId;
+  const work = S().createProfile({ name: "Work", shareWith: home });
+  const b = S().newTab(win.w, { url: "b.com", profileId: work, background: true });
+  await settle(win);
+  assert.equal(shown(win.w), "a");
+  assert.equal(chromeShown(win.strip), "a");
+  chrome.activate(b);
+  await settle(win);
+  assert.equal(S().windows[win.w].profileId, work, "the window shows the tab's space");
+  assert.equal(shown(win.w), "b");
+  assert.equal(chromeShown(win.strip), "b", "the app doesn't send the tab being discarded back");
 });

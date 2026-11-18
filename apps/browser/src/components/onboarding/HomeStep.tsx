@@ -7,20 +7,23 @@ import {
   setAsDefaultBrowser,
   setLaunchAtLogin,
 } from "../../state/app/appSettings";
-import { GlassBacking, solidFill } from "./GlassBacking";
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
-import { Symbol } from "../ui";
-import { font, weight } from "../ui/tokens";
-import { confirmAnswer, recordDefaultBrowserTrial, setOnboardingDraft, setOnboardingExtras, skipStep, useOnboarding } from "../../state/onboarding/onboarding";
+import { Image, View } from "react-native";
+import { Checkbox, Symbol, Text } from "../ui";
+import { capsule, space } from "../ui/tokens";
+import { ChoiceCard } from "./ChoiceCard";
+import { OptionCard } from "./OptionCard";
+import { confirmAnswer, confirmDefaultBrowserAnswer, recordDefaultBrowserTrial, setOnboardingDraft, setOnboardingExtras, skipStep, useOnboarding } from "../../state/onboarding/onboarding";
+import { probeOnboardingSystem, type OnboardingSystem } from "../../state/onboarding/systemProbe";
 import { ChoiceList, useMockFocus, type ChoiceOption } from "./ChoiceList";
-import { CheckMark, CheckRow, useOnboardingColors } from "./Parts";
+import { useOnboardingColors } from "./Parts";
 import { MockPanel, useScreen } from "./Screen";
 import { StepActions, StepLayout } from "./StepLayout";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
+import { PLATFORM_TERMS } from "../../lib/platformTerms";
 
 const ICON = require("../../../assets/app-icon.png");
 
-type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean };
 
 const LINK_CHOICES: ChoiceOption<boolean>[] = [
   { value: true, preview: "links-little", title: "Little Ardia", subtitle: "A small window that's gone when you're done" },
@@ -34,18 +37,17 @@ export function HomeStep() {
 
 function DefaultBrowserQuestion() {
   const extras = useOnboarding((s) => s.extras);
-  const [system, setSystem] = useState<SystemState | null>(null);
+  const redo = useOnboarding((s) => s.redo);
+  const [system, setSystem] = useState<OnboardingSystem | null>(null);
   const [busy, setBusy] = useState(false);
   const setDefault = extras.setDefault ?? !backgroundInstance;
-  const trial = extras.trial ?? false;
+  const trial = !redo && PLATFORM_FEATURES.setsDefaultBrowser && (extras.trial ?? false);
   const dock = extras.dock ?? true;
   const login = extras.login ?? system?.loginEnabled ?? false;
   const setExtras = setOnboardingExtras;
 
   useEffect(() => {
-    void Promise.all([isDefaultBrowser(), isInDock(), launchAtLoginStatus()]).then(([isDefault, inDock, login]) =>
-      setSystem({ isDefault, inDock, loginEnabled: login === "enabled" }),
-    );
+    void probeOnboardingSystem({ isDefaultBrowser, isInDock, launchAtLoginStatus }).then(setSystem);
   }, []);
 
   const apply = async () => {
@@ -58,10 +60,10 @@ function DefaultBrowserQuestion() {
         picked.push(setDefault ? "Ardia is your default browser" : "A week as your default browser");
       }
       if (login !== system.loginEnabled) await setLaunchAtLogin(login).catch(() => {});
-      if (dock && !system.inDock) await addToDock();
+      if (dock && system.dockAvailable && !system.inDock) await addToDock();
     } finally {
       setBusy(false);
-      confirmAnswer("default", {}, picked);
+      confirmDefaultBrowserAnswer(picked);
     }
   };
 
@@ -80,24 +82,25 @@ function DefaultBrowserQuestion() {
           onSkip={() => skipStep()}
         />
       }
-      preview={<SystemPreview isDefault={!!(defaultOn || trying)} dock={!!(system?.inDock || dock)} login={login} />}
+      preview={<SystemPreview isDefault={!!(defaultOn || trying)} dock={!!(system?.inDock || (dock && system?.dockAvailable !== false))} login={login} />}
     >
-      <View style={{ gap: 8 }}>
-        <CheckRow
+      <View style={{ gap: space.m }}>
+        <OptionCard
+          control="check"
           icon="globe"
           title="Set Ardia as default browser"
-          subtitle={system?.isDefault ? "Ardia is already your default browser" : "Open links and web pages in Ardia"}
-          value={!!defaultOn}
+          subtitle={system?.isDefault ? "Ardia is already your default browser" : PLATFORM_FEATURES.setsDefaultBrowser ? "Open links and web pages in Ardia" : `Continue opens ${PLATFORM_TERMS.os} Settings, where you choose Ardia`}
+          selected={!!defaultOn}
           disabled={!system || system.isDefault}
-          onChange={(v) => setExtras(v ? { setDefault: true } : { setDefault: false, trial: true })}
+          onPress={() => setExtras(defaultOn ? { setDefault: false, trial: !redo } : { setDefault: true })}
         />
-        {system && !defaultOn ? (
-          <CheckRow icon="calendar" title="Try it for seven days" subtitle="We'll check in to make sure you love it." value={trial} onChange={(v) => setExtras({ trial: v })} />
+        {system && !defaultOn && !redo && PLATFORM_FEATURES.setsDefaultBrowser ? (
+          <OptionCard control="check" icon="calendar" title="Try it for seven days" subtitle="We'll check in to make sure you love it." selected={trial} onPress={() => setExtras({ trial: !trial })} />
         ) : null}
-        {system && !system.inDock ? (
-          <CheckRow icon="dock.rectangle" title="Add Ardia to Dock" subtitle="Quick access whenever you need it" value={dock} onChange={(v) => setExtras({ dock: v })} />
+        {system && system.dockAvailable && !system.inDock ? (
+          <OptionCard control="check" icon="dock.rectangle" title="Add Ardia to Dock" subtitle="Quick access whenever you need it" selected={dock} onPress={() => setExtras({ dock: !dock })} />
         ) : null}
-        <CheckRow icon="power" title="Open Ardia at login" subtitle="Ready when you sign in" value={login} onChange={(v) => setExtras({ login: v })} />
+        <OptionCard control="check" icon="power" title="Open Ardia at login" subtitle="Ready when you sign in" selected={login} onPress={() => setExtras({ login: !login })} />
       </View>
     </StepLayout>
   );
@@ -111,7 +114,7 @@ function LinksQuestion() {
     <StepLayout
       pageKey="links"
       title="Where do links from other apps open?"
-      subtitle="From Mail, Slack, Notes and the rest."
+      subtitle={`From ${PLATFORM_TERMS.linkSourceApps} and the rest.`}
       actions={
         <StepActions
           onContinue={() =>
@@ -127,37 +130,29 @@ function LinksQuestion() {
   );
 }
 
+const CHIP_HEIGHT = 34;
+
 function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
   const colors = useOnboardingColors();
   const chip = (on: boolean, icon: string, label: string) => (
-    <View
+    <ChoiceCard
       key={label}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        height: 34,
-        paddingLeft: 12,
-        paddingRight: 10,
-        borderRadius: 17,
-        backgroundColor: solidFill(colors.row),
-        borderWidth: StyleSheet.hairlineWidth * 2,
-        borderColor: colors.rowBorder,
-        opacity: on ? 1 : 0.45,
-      }}
+      radius={capsule(CHIP_HEIGHT)}
+      style={{ flexDirection: "row", alignItems: "center", gap: space.m, height: CHIP_HEIGHT, paddingLeft: space.l, paddingRight: space.ml, opacity: on ? 1 : 0.45 }}
     >
-      <GlassBacking fill={colors.row} radius={17} border={StyleSheet.hairlineWidth * 2} />
       <Symbol name={icon} size={13} color={colors.title} style={{ width: 16, height: 16 }} />
-      <Text style={{ ...font.small, fontWeight: weight.medium, color: colors.title }}>{label}</Text>
-      <CheckMark on={on} size={16} />
-    </View>
+      <Text size="small" weight="medium" color={colors.title}>
+        {label}
+      </Text>
+      <Checkbox look="ring" size="s" value={on} />
+    </ChoiceCard>
   );
   return (
-    <View style={{ alignItems: "center", gap: 28 }}>
+    <View style={{ alignItems: "center", gap: space.xxxl }}>
       <Image source={ICON} style={{ width: 132, height: 132 }} />
-      <View style={{ gap: 8, alignItems: "center" }}>
+      <View style={{ gap: space.m, alignItems: "center" }}>
         {chip(isDefault, "globe", "Default browser")}
-        {chip(dock, "dock.rectangle", "In your Dock")}
+        {PLATFORM_FEATURES.dock ? chip(dock, "dock.rectangle", "In your Dock") : null}
         {chip(login, "power", "Opens at login")}
       </View>
     </View>

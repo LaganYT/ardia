@@ -4,21 +4,34 @@
   ],
   "apple": {
     "modules": [
+      "AppWindowsModule",
+      "FocusModule",
+      "MenusModule",
       "ShellModule",
+      "DialogsModule",
+      "DocumentsModule",
       "SymbolModule",
       "FadeLabelModule",
+      "EdgeFadeMaskModule",
       "ActivitySpinnerModule",
+      "FolderIconModule",
       "ContextMenuAreaModule",
       "OutsidePressAreaModule",
       "MagnifyAreaModule",
       "SurfaceModule",
       "VisualEffectModule",
       "GlassEffectModule",
+      "GlassGroupModule",
       "PopoverBubbleModule",
       "SystemModule",
       "FileDragModule",
       "FileDropModule",
       "AppModule",
+      "UpdaterModule",
+      "NotificationsModule",
+      "LocationModule",
+      "ScriptingModule",
+      "DevModule",
       "CalendarModule",
       "KeychainModule",
       "DockSelectionModule",
@@ -26,7 +39,12 @@
       "TranslateModule",
       "WindowProfileModule",
       "CliModule",
-      "UserScriptsModule"
+      "UserScriptsModule",
+      "ConfigModule",
+      "AutomationModule",
+      "SystemSignalsModule",
+      "ReportModule",
+      "TelemetryLocalModule"
     ]
   }
 }

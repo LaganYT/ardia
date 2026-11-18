@@ -2,7 +2,7 @@ import type { CommandAction } from "@ardia/core";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTab, isIncognitoProfile, viewTabIds } from "../browser/model";
 import { hiddenEmptyCard } from "../omnibox/newTabBarPolicy";
-import { MAX_SPLIT_PANES, slotsOf, splitOf } from "../splits/splits";
+import { isStacked, MAX_SPLIT_PANES, splitOf, splitTabIds, splitTabIdsOf, splitViewAvailable } from "../splits/splits";
 import type { SplitView, Tab } from "../browser/types";
 
 export type OrganizeContext = { s: BrowserState; windowId: string; tab: Tab; split: SplitView | undefined };
@@ -16,14 +16,14 @@ type OrganizeDef<Id extends string = string> = {
 };
 
 export const sideBySide = (split: SplitView | undefined) => split?.orientation === "horizontal";
-const hasRoom = (split: SplitView | undefined) => !split || split.tabIds.length < MAX_SPLIT_PANES;
-const stacked = ({ split, tab }: OrganizeContext) => !!split && slotsOf(split).some((slot) => slot.length === 2 && slot.includes(tab.id));
-const inProfiles = ({ s, windowId, tab }: OrganizeContext) => !s.windows[windowId]?.incognito && !isIncognitoProfile(tab.profileId);
+const hasRoom = (split: SplitView | undefined) => !split || splitTabIds(split).length < MAX_SPLIT_PANES;
+const stacked = ({ split, tab }: OrganizeContext) => !!split && isStacked(split, tab.id);
+const inProfiles = ({ s, windowId, tab }: OrganizeContext) => s.windows[windowId]?.kind !== "private" && !isIncognitoProfile(tab.profileId);
 
 export function splitCandidates({ s, windowId, tab, split }: OrganizeContext): Tab[] {
   return viewTabIds(s, windowId)
     .map((id) => s.tabs[id]!)
-    .filter((t) => t.id !== tab.id && !!t.url && !split?.tabIds.includes(t.id));
+    .filter((t) => t.id !== tab.id && !!t.url && !splitTabIdsOf(split)?.includes(t.id));
 }
 
 const organizeDefs = <const Id extends string>(defs: OrganizeDef<Id>[]) => defs;
@@ -131,7 +131,7 @@ function contextFor(s: BrowserState, windowId: string): OrganizeContext | null {
 export function organizeActions(s: BrowserState, windowId: string): CommandAction[] {
   const c = contextFor(s, windowId);
   if (!c) return [];
-  const out: CommandAction[] = DEFS.filter((d) => d.shows(c)).map((d) => ({
+  const out: CommandAction[] = DEFS.filter((d) => (splitViewAvailable || !d.id.startsWith("split:")) && d.shows(c)).map((d) => ({
     id: d.id,
     title: typeof d.title === "string" ? d.title : d.title(c),
     icon: d.icon,

@@ -1,7 +1,9 @@
-import { Shell, type AppearanceMode } from "./shellNative";
+import type { EventSubscription } from "expo-modules-core";
+import type { BangListReply } from "./documents";
 
 export type AppEvent =
-  | { type: "reopen" }
+  | { type: "reopen"; pastFloating: boolean }
+  | { type: "pipActivationReturn"; success: boolean; epoch: string }
   | { type: "willQuit" }
   | { type: "quitCancelled" }
   | { type: "appearance"; dark: boolean }
@@ -9,16 +11,47 @@ export type AppEvent =
   | { type: "resignActive" }
   | { type: "screenLocked" }
   | { type: "lockedOrAsleep" }
-  | { type: "switcherReleased" }
-  | { type: "switcherKey"; key: "escape" | "next" | "previous" }
+  | { type: "switcherReleased"; afterMenu?: boolean }
+  | { type: "switcherKey"; key: "escape" | "next" | "previous" | "close" }
   | { type: "switcherMouseUp" }
-  | { type: "dragEscape" };
+  | { type: "dragEscape" }
+  | { type: "unclaimedEscape"; windowId: string }
+  | { type: "snapKeyHandedBack"; windowId: string; afterMenu?: boolean }
+  | { type: "centeredResize"; epoch: string }
+  | { type: "appLinkOpened"; windowId: string | null }
+  | { type: "littleArdiaReturnedToApp" }
+  | { type: "littleArdiaLinkKeptBehind"; when: "activation" | "arrival" | "open" | "released" }
+  | { type: "windowTitleRead"; epoch: string }
+  | { type: "keyHoldReplay"; tag: number; count: number }
+  | { type: "littleArdiaGlobalShortcut" }
+  | { type: "windowDragLoop"; epoch: string }
+  | {
+      type: "pasteRefused";
+      reason: string;
+      epoch: string;
+      gateOpen: boolean;
+      layout?: string;
+      types?: string[];
+      responder?: string;
+      dropped?: number;
+    };
 
-export const setAppearance = (mode: AppearanceMode) => Shell.setAppearance(mode);
-export const isDarkAppearance = () => Shell.isDarkAppearance();
+export type AppearanceMode = "auto" | "light" | "dark";
 
-export const replyToTerminate = (ok: boolean) => Shell.replyToTerminate(ok);
+export type OpenURLSource = { bundleId: string | null; appName: string | null };
 
-export const onAppEvent = (listener: (e: AppEvent) => void) => Shell.addListener("onAppEvent", listener);
-export const onOpenURLs = (listener: (urls: string[], pointer?: [number, number]) => void) =>
-  Shell.addListener("onOpenURLs", ({ urls, pointer }) => listener(urls, pointer));
+type ShellEvents = {
+  onAppEvent: (e: AppEvent) => void;
+  onOpenURLs: (e: { urls: string[]; pointer?: [number, number]; source?: OpenURLSource; returnTo?: string }) => void;
+};
+
+export type ShellNative = {
+  addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
+  setAppearance(mode: AppearanceMode): Promise<void>;
+  isDarkAppearance(): Promise<boolean>;
+  startDictation(): void;
+  dictationAvailable?(): boolean;
+  fetchBangList(etag: string | null): Promise<BangListReply>;
+  copyText(text: string): void;
+  readText(): Promise<string>;
+};

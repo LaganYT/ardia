@@ -1,5 +1,5 @@
-import { showMenu } from "../../../state/app/system";
-import { Symbol, Button, Checkbox, font, ink, Sheet } from "../../ui";
+import { confirm, showMenu } from "../../../state/app/system";
+import { Box, Button, Checkbox, DialogActions, DialogTitle, ink, lineHeight, proseLineHeight, radius, Sheet, space, Symbol, tabularNums, Text, TextField } from "../../ui";
 import {
   copyRecoveryKit,
   copyRecoveryPhrase,
@@ -11,32 +11,44 @@ import {
   type FolderInfo,
 } from "../../../state/sync/recoveryKit";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, View } from "react-native";
 import { useTheme } from "../../ui/theme";
-import { addRemoteProfile, enterRecoveryPhrase, stopSync, useSync } from "../../../state/sync/engine";
-import type { RemoteProfile } from "../../../state/sync/syncDoc";
+import { addRemoteProfile, enterRecoveryPhrase, removeRemoteProfile, removeSyncedDevice, stopSync, useSync } from "../../../state/sync/engine";
+import type { RemoteProfile, SyncedDevice } from "../../../state/sync/syncDoc";
 import { ProfileBadge } from "../../profiles/ProfileIcons";
-import { Group, Row, SheetTitle } from "../Form";
+import { Group, Row } from "../Form";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
-import { settingsType } from "../tokens";
 import { useSettingsColors } from "../useSettingsColors";
+import { SYNC_CODE_SIZE, syncCodeFrame } from "./syncCodeFrame";
+import { PLATFORM_TERMS } from "../../../lib/platformTerms";
+import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
+import { monoFace, perLook } from "../../ui/tokens";
 
 const WORDS = 24;
 
-function Body({ children, style }: { children: ReactNode; style?: object }) {
-  const theme = useTheme();
-  return <Text style={[{ ...settingsType.lead, lineHeight: 17, marginTop: 6, color: theme.textSecondary }, style]}>{children}</Text>;
-}
-
-function Buttons({ children, left }: { children: ReactNode; left?: ReactNode }) {
+function Body({ children }: { children: ReactNode }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 18 }}>
-      {left}
-      <View style={{ flex: 1 }} />
+    <Text size="small" tone="textSecondary" style={BODY()}>
       {children}
-    </View>
+    </Text>
   );
 }
+
+const BODY = perLook(() => ({ lineHeight: proseLineHeight.small, marginTop: space.ml }) as const);
+const PREVIEW = { width: 168, height: 217 } as const;
+const PREVIEW_FRAME = perLook(() => ({ ...PREVIEW, borderRadius: radius.control, overflow: "hidden", borderWidth: 1, backgroundColor: ink.white }) as const);
+const WARNING_TEXT = perLook(() => ({ flex: 1, lineHeight: lineHeight.body }) as const);
+const UNDERLINE = { textDecorationLine: "underline" } as const;
+const SECTION_TOP = { marginTop: space.xl } as const;
+const PHRASE_FOOT = { marginTop: space.s } as const;
+const PHRASE_ERROR = perLook(() => ({ flex: 1, lineHeight: lineHeight.caption }) as const);
+const FOLDER_ROW = { alignItems: "center", marginTop: space.ml } as const;
+const FILL = { flex: 1 } as const;
+const QR = { width: SYNC_CODE_SIZE, height: SYNC_CODE_SIZE } as const;
+const QR_NOTE = perLook(() => ({ flex: 1, lineHeight: lineHeight.body }) as const);
+const WORDS_BOX = { flexWrap: "wrap", marginTop: space.xl } as const;
+const WORD = perLook(() => ({ width: "25%", paddingVertical: space.xs, ...monoFace() }) as const);
+const CHECK_TOP = { marginTop: space.l } as const;
 
 export function showRecoveryKit() {
   showSettingsSheet(<RecoveryKitSheet />);
@@ -55,7 +67,7 @@ function RecoveryKitSheet() {
   const more = async () => {
     const choice = await showMenu([
       { id: "copy", title: "Copy", symbol: "doc.on.doc" },
-      { id: "share", title: "Share…", symbol: "square.and.arrow.up" },
+      ...(PLATFORM_FEATURES.sharesFiles ? [{ id: "share", title: "Share…", symbol: "square.and.arrow.up" }] : []),
       { separator: true },
       { id: "text", title: "Save as Text…", symbol: "doc.plaintext" },
     ]);
@@ -64,40 +76,30 @@ function RecoveryKitSheet() {
     else if (choice === "text") await save("text");
   };
   return (
-    <Sheet width={460} onClose={closeSettingsSheet}>
-      <View style={{ flexDirection: "row", gap: 18 }}>
-        <View style={{ flex: 1 }}>
-          <SheetTitle>Save Your Recovery Kit</SheetTitle>
-          <Body>Your Recovery Kit contains all you need to recover your data should you lose access to this device.</Body>
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 8,
-              marginTop: 14,
-              padding: 10,
-              borderRadius: 8,
-              backgroundColor: look.warningFill,
-            }}
-          >
+    <Sheet size="l" onClose={closeSettingsSheet}>
+      <Box row gap="xl">
+        <View style={FILL}>
+          <DialogTitle subtitle="Your Recovery Kit contains all you need to recover your data should you lose access to this device.">Save Your Recovery Kit</DialogTitle>
+          <Box row gap="m" pad="ml" radius="panel" style={[SECTION_TOP, { backgroundColor: look.warningFill }]}>
             <Symbol name="exclamationmark.triangle.fill" size={12} color={theme.warning} style={{ width: 16, height: 16 }} />
-            <Text style={{ flex: 1, ...font.small, lineHeight: 16, color: theme.textPrimary }}>
+            <Text size="small" style={WARNING_TEXT()}>
               Save a copy of your Recovery Kit to{" "}
-              <Text style={{ textDecorationLine: "underline" }}>another</Text> device or to the cloud. You’ll need it if you lose access to this device.
+              <Text size="small" style={UNDERLINE}>
+                another
+              </Text>{" "}
+              device or to the cloud. You’ll need it if you lose access to this device.
             </Text>
-          </View>
-          {saved ? <Body style={{ marginTop: 10 }}>Saved to {saved.replace(/^\/Users\/[^/]+/, "~")}.</Body> : null}
+          </Box>
+          {saved ? <Body>Saved to {saved.replace(/^\/Users\/[^/]+/, "~")}.</Body> : null}
         </View>
-        <View
-          accessibilityLabel="Recovery kit preview"
-          style={{ width: 168, height: 217, borderRadius: 4, overflow: "hidden", borderWidth: 1, borderColor: theme.groupBorder, backgroundColor: ink.white }}
-        >
-          {preview ? <Image source={{ uri: preview }} style={{ width: 168, height: 217 }} /> : null}
+        <View accessibilityLabel="Recovery kit preview" style={[PREVIEW_FRAME(), { borderColor: theme.groupBorder }]}>
+          {preview ? <Image source={{ uri: preview }} style={PREVIEW} /> : null}
         </View>
-      </View>
-      <Buttons left={<Button title="Other Options" onPress={() => void more()} />}>
+      </Box>
+      <DialogActions leading={<Button title="Other Options" onPress={() => void more()} />}>
         <Button title="Close" onPress={closeSettingsSheet} />
         <Button title="Save…" kind="primary" onPress={() => void save("pdf")} />
-      </Buttons>
+      </DialogActions>
     </Sheet>
   );
 }
@@ -120,7 +122,7 @@ const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string
     case "noData":
       return "There’s no synced data in this folder yet. Choose the folder your other devices sync to, or wait for it to finish downloading.";
     case "keychain":
-      return "Couldn’t save the sync key in your Keychain.";
+      return `Couldn’t save the sync key in ${PLATFORM_TERMS.secretStore}.`;
     case "unavailable":
       return "Sync isn’t available in this build.";
   }
@@ -148,69 +150,82 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
   };
   if (joined) return <JoinedSheet />;
   return (
-    <Sheet width={440} onClose={closeSettingsSheet}>
-      <SheetTitle>Connect with Recovery Phrase</SheetTitle>
-      <Body>Enter your 24-word recovery phrase to sync with another device.</Body>
-      <View
-        style={{
-          marginTop: 12,
-          height: 96,
-          borderRadius: 7,
-          padding: 8,
-          backgroundColor: theme.field,
-          borderWidth: StyleSheet.hairlineWidth * 2,
-          borderColor: error ? theme.destructive : theme.fieldBorder,
-        }}
-      >
-        <TextInput
+    <Sheet onClose={closeSettingsSheet}>
+      <DialogTitle subtitle="Enter your 24-word recovery phrase to sync with another device.">Connect with Recovery Phrase</DialogTitle>
+      <View style={CHECK_TOP}>
+        <TextField
+          multiline
+          mono
+          invalid={!!error}
           value={text}
           onChangeText={(t) => {
             setText(t);
             setError(null);
           }}
-          multiline
           autoFocus
           placeholder="Enter your 24-word recovery phrase"
-          placeholderTextColor={theme.textTertiary}
-          selectionColor={theme.selection}
-          enableFocusRing={false}
-          autoCorrect={false}
-          spellCheck={false}
-          style={{ flex: 1, ...font.body, lineHeight: 18, color: theme.textPrimary, fontFamily: "Menlo" }}
         />
       </View>
-      <View style={{ flexDirection: "row", marginTop: 6 }}>
-        <Text style={{ flex: 1, ...font.footnote, lineHeight: 15, color: error ? theme.destructive : theme.textSecondary }}>{error ?? ""}</Text>
-        <Text style={{ ...font.footnote, color: count > WORDS ? theme.destructive : theme.textTertiary, fontVariant: ["tabular-nums"] }}>
+      <Box row style={PHRASE_FOOT}>
+        <Text size="caption" tone={error ? "destructive" : "textSecondary"} style={PHRASE_ERROR()}>
+          {error ?? ""}
+        </Text>
+        <Text size="caption" tone={count > WORDS ? "destructive" : "textTertiary"} style={tabularNums}>
           {count > WORDS ? "too many words" : `${count}/${WORDS} words`}
         </Text>
-      </View>
+      </Box>
       {folder ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 }}>
+        <Box row gap="s" style={FOLDER_ROW}>
           <Symbol name="folder" size={11} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
-          <Text numberOfLines={1} style={{ flex: 1, ...font.footnote, color: theme.textSecondary }}>
+          <Text size="caption" tone="textSecondary" lines={1} style={FILL}>
             {folderLabel(folder)}
           </Text>
           {onChooseFolder ? <Button title="Change…" kind="plain" onPress={onChooseFolder} /> : null}
-        </View>
+        </Box>
       ) : null}
-      <Buttons>
+      <DialogActions>
         <Button title="Cancel" onPress={closeSettingsSheet} />
         <Button title={busy ? "Connecting…" : "Connect"} kind="primary" disabled={busy || count !== WORDS || !folder} onPress={() => void submit()} />
-      </Buttons>
+      </DialogActions>
     </Sheet>
   );
 }
 
-export function remoteProfileDescription(p: Pick<RemoteProfile, "sharesWith" | "waiting">): string {
+function sharingDescription(p: Pick<RemoteProfile, "sharesWith" | "waiting">): string {
   if (p.waiting) return "On your other devices. Waiting for the profile it shares data with to sync.";
   if (!p.sharesWith) return "On your other devices";
   const { name, added } = p.sharesWith;
   return added ? `On your other devices. Shares data with ${name}, which is added too.` : `On your other devices. Shares data with ${name}.`;
 }
 
+export function remoteProfileDescription(p: Pick<RemoteProfile, "sharesWith" | "waiting" | "sharedByOthers">): string {
+  const sharing = sharingDescription(p);
+  if (!p.sharedByOthers) return sharing;
+  return `${sharing.endsWith(".") ? sharing : `${sharing}.`} To remove it, first remove the profiles that share its data.`;
+}
+
 export function addAllRemoteProfiles(profiles: RemoteProfile[]) {
   for (const p of profiles) if (!p.waiting) addRemoteProfile(p.syncId);
+}
+
+async function confirmRemoveFromSync(profile: RemoteProfile) {
+  const { confirmed } = await confirm({
+    title: `Remove “${profile.name}” from Sync?`,
+    message: "It leaves this list on all your devices. A device that still has this profile keeps it, and it comes back here.",
+    confirmTitle: "Remove",
+    destructive: true,
+  });
+  if (confirmed) removeRemoteProfile(profile.syncId);
+}
+
+export async function confirmRemoveDevice(device: SyncedDevice) {
+  const { confirmed } = await confirm({
+    title: `Remove “${device.name}” from Sync?`,
+    message: "It leaves this list on all your devices, with the tabs it shared. Its data stays on it, and if it still syncs, it comes back here.",
+    confirmTitle: "Remove",
+    destructive: true,
+  });
+  if (confirmed) removeSyncedDevice(device.id);
 }
 
 export function RemoteProfileRow({ profile }: { profile: RemoteProfile }) {
@@ -220,7 +235,10 @@ export function RemoteProfileRow({ profile }: { profile: RemoteProfile }) {
       title={profile.name}
       description={remoteProfileDescription(profile)}
     >
-      <Button title="Add to This Mac" disabled={!!profile.waiting} onPress={() => addRemoteProfile(profile.syncId)} />
+      <Box row gap="s">
+        <Button title="Remove…" disabled={!!profile.sharedByOthers} onPress={() => void confirmRemoveFromSync(profile)} />
+        <Button title={`Add to This ${PLATFORM_TERMS.computerTitle}`} disabled={!!profile.waiting} onPress={() => addRemoteProfile(profile.syncId)} />
+      </Box>
     </Row>
   );
 }
@@ -231,10 +249,10 @@ export function lookingForProfiles(pending: number): string {
 }
 
 function joinedMessage(found: number, joining: boolean, pending: number, error: string | null): string {
-  if (found) return "These profiles are on your other devices. Add them to this Mac to sync their pinned tabs, bookmarks, history and passwords here too.";
+  if (found) return `These profiles are on your other devices. Add them to this ${PLATFORM_TERMS.computer} to sync their pinned tabs, bookmarks, history${PLATFORM_FEATURES.syncsPasswords ? " and passwords" : ""} here too.`;
   if (error) return error;
   if (joining) return lookingForProfiles(pending);
-  return "Every profile on your other devices is on this Mac too.";
+  return `Every profile on your other devices is on this ${PLATFORM_TERMS.computer} too.`;
 }
 
 function JoinedSheet() {
@@ -244,20 +262,21 @@ function JoinedSheet() {
   const error = useSync((s) => (s.status === "stalled" ? s.error : null));
   const addable = remote.filter((p) => !p.waiting).length;
   return (
-    <Sheet width={460} onClose={closeSettingsSheet}>
-      <SheetTitle>This Mac Is Syncing</SheetTitle>
-      <Body>{joinedMessage(remote.length, joining, pending, error)}</Body>
+    <Sheet size="l" onClose={closeSettingsSheet}>
+      <DialogTitle subtitle={joinedMessage(remote.length, joining, pending, error)}>{`This ${PLATFORM_TERMS.computerTitle} Is Syncing`}</DialogTitle>
       {remote.length ? (
-        <Group style={{ marginTop: 14 }}>
-          {remote.map((p) => (
-            <RemoteProfileRow key={p.syncId} profile={p} />
-          ))}
-        </Group>
+        <View style={SECTION_TOP}>
+          <Group>
+            {remote.map((p) => (
+              <RemoteProfileRow key={p.syncId} profile={p} />
+            ))}
+          </Group>
+        </View>
       ) : null}
-      <Buttons>
+      <DialogActions>
         <Button title="Done" kind={addable > 1 ? "default" : "primary"} onPress={closeSettingsSheet} />
         {addable > 1 ? <Button title="Add All" kind="primary" onPress={() => addAllRemoteProfiles(remote)} /> : null}
-      </Buttons>
+      </DialogActions>
     </Sheet>
   );
 }
@@ -271,32 +290,32 @@ function ConnectDeviceSheet() {
   const [qr, setQr] = useState<string | null>(null);
   const [words, setWords] = useState<string[] | null>(null);
   return (
-    <Sheet width={480} onClose={closeSettingsSheet}>
-      <SheetTitle>Connect Another Device</SheetTitle>
-      <Body>
-        On your other Mac, open Ardia › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words
-        of your recovery phrase.
-      </Body>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginTop: 16 }}>
-        <View style={{ width: 132, height: 132, borderRadius: 8, backgroundColor: ink.white, alignItems: "center", justifyContent: "center" }}>
-          {qr ? <Image source={{ uri: qr }} style={{ width: 120, height: 120 }} /> : <Button title="Show Code" onPress={() => void recoveryQrCode()?.then(setQr)} />}
-        </View>
-        <Text style={{ flex: 1, ...font.small, lineHeight: 16, color: theme.textSecondary }}>
-          Or scan this code with your iPhone’s camera to copy the words, then paste them on your other Mac with Universal Clipboard.
+    <Sheet size="l" onClose={closeSettingsSheet}>
+      <DialogTitle
+        subtitle={`On your other ${PLATFORM_TERMS.syncedComputer}, open Ardia › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words of your recovery phrase.`}
+      >
+        Connect Another Device
+      </DialogTitle>
+      <Box row gap="xl" style={[SECTION_TOP, { alignItems: "center" }]}>
+        <View style={syncCodeFrame(theme, qr !== null)}>{qr ? <Image source={{ uri: qr }} style={QR} /> : <Button title="Show Code" onPress={() => void recoveryQrCode().then(setQr)} />}</View>
+        <Text size="small" tone="textSecondary" style={QR_NOTE()}>
+          {PLATFORM_FEATURES.syncsWithPhone
+            ? "Click Show Code. On your iPhone, open Ardia, tap Sync With Mac, and scan the code. For another Mac, you can also scan it with your iPhone’s camera and paste the words there with Universal Clipboard."
+            : "Click Show Code, then scan it with your phone’s camera to copy the words and enter them on your other computer."}
         </Text>
-      </View>
+      </Box>
       {words ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 14, padding: 10, borderRadius: 8, backgroundColor: theme.groupFill }}>
+        <Box row pad="ml" radius="tile" fill="groupFill" style={WORDS_BOX}>
           {words.map((w, i) => (
-            <Text key={i} style={{ width: "25%", paddingVertical: 3, ...settingsType.lead, color: theme.textPrimary, fontFamily: "Menlo" }}>
-              <Text style={{ color: theme.textTertiary }}>{`${i + 1}`.padStart(2, " ")} </Text>
+            <Text key={i} size="small" style={WORD()}>
+              <Text size="small" tone="textTertiary">{`${`${i + 1}`.padStart(2, " ")} `}</Text>
               {w}
             </Text>
           ))}
-        </View>
+        </Box>
       ) : null}
-      <Buttons
-        left={
+      <DialogActions
+        leading={
           <>
             <Button title={words ? "Hide Words" : "Show Words"} onPress={() => (words ? setWords(null) : void recoveryWords()?.then(setWords))} />
             <Button title="Copy Words" onPress={() => void copyRecoveryPhrase()} />
@@ -304,7 +323,7 @@ function ConnectDeviceSheet() {
         }
       >
         <Button title="Done" kind="primary" onPress={closeSettingsSheet} />
-      </Buttons>
+      </DialogActions>
     </Sheet>
   );
 }
@@ -315,16 +334,14 @@ export function showStopSync() {
 
 function StopSheet() {
   return (
-    <Sheet width={420} onClose={closeSettingsSheet}>
-      <SheetTitle>Stop Syncing This Device?</SheetTitle>
-      <Body>
-        Syncing will stop on this device. To re-enable sync, you’ll need another device that is currently syncing, or the recovery phrase from your
-        Recovery Kit. Everything on this Mac stays as it is.
-      </Body>
-      <Buttons left={<Button title="Save Recovery Kit" onPress={() => showSettingsSheet(<RecoveryKitSheet />)} />}>
+    <Sheet size="s" onClose={closeSettingsSheet}>
+      <DialogTitle subtitle={`Syncing will stop on this device. To re-enable sync, you’ll need another device that is currently syncing, or the recovery phrase from your Recovery Kit. Everything on this ${PLATFORM_TERMS.computer} stays as it is.`}>
+        Stop Syncing This Device?
+      </DialogTitle>
+      <DialogActions leading={<Button title="Save Recovery Kit" onPress={() => showSettingsSheet(<RecoveryKitSheet />)} />}>
         <Button title="Cancel" onPress={closeSettingsSheet} />
         <Button title="Stop Syncing" kind="destructive" onPress={() => showSettingsSheet(<DeleteDataSheet />)} />
-      </Buttons>
+      </DialogActions>
     </Sheet>
   );
 }
@@ -338,24 +355,27 @@ function DeleteDataSheet() {
     closeSettingsSheet();
   };
   return (
-    <Sheet width={420} onClose={() => void finish(false)}>
-      <SheetTitle>Delete Sync Data?</SheetTitle>
-      <Body>
-        Would you also like to permanently delete your synced data from the sync folder? This will stop syncing on all your other devices too. To sync
-        again, you’ll need to set up each device from scratch. Your data on each Mac stays.
-      </Body>
-      <View style={{ marginTop: 12 }}>
+    <Sheet size="s" onClose={() => void finish(false)}>
+      <DialogTitle subtitle={`Would you also like to permanently delete your synced data from the sync folder? This will stop syncing on all your other devices too. To sync again, you’ll need to set up each device from scratch. Your data on each ${PLATFORM_TERMS.syncedComputer} stays.`}>
+        Delete Sync Data?
+      </DialogTitle>
+      <View style={CHECK_TOP}>
         <Checkbox value={understood} onChange={setUnderstood} label="I understand this cannot be undone" />
       </View>
-      <Buttons>
+      <DialogActions>
         <Button title="Keep Sync Data" disabled={busy} onPress={() => void finish(false)} />
         <Button title="Delete My Sync Data" kind="destructive" disabled={!understood || busy} onPress={() => void finish(true)} />
-      </Buttons>
+      </DialogActions>
     </Sheet>
   );
 }
 
 export function folderLabel(folder: Pick<FolderInfo, "path" | "inICloud">): string {
+  if (folder.path.includes("\\")) {
+    const parts = folder.path.split("\\").filter(Boolean);
+    const root = parts.findIndex((part) => part.startsWith(PLATFORM_TERMS.cloudDrive));
+    return folder.inICloud && root >= 0 ? [PLATFORM_TERMS.cloudDrive, ...parts.slice(root + 1)].join(" › ") : folder.path;
+  }
   if (folder.inICloud) {
     const rest = folder.path.split("com~apple~CloudDocs")[1]?.split("/").filter(Boolean) ?? [];
     return ["iCloud Drive", ...rest].join(" › ");

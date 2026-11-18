@@ -1,6 +1,8 @@
 #import "ArdiaWebViewInternal.h"
+#import "ArdiaRuntime.h"
 
 using namespace ardia_web_view;
+using namespace ardia_runtime;
 
 @implementation ArdiaWebView (PageCommands)
 
@@ -21,7 +23,7 @@ using namespace ardia_web_view;
         @"zoom" : @(round(zoom * 100) / 100),
         @"host" : [NSURL URLWithString:_tab.url ?: @""].host.lowercaseString ?: @"",
         @"isDefault" : @(fabs(zoom - 1) < 0.001),
-        @"pinchScale" : @(_pinchScale ?: 1),
+        @"pinchScale" : @(_reports.pinchScale ?: 1),
         @"user" : @(user),
       }];
 }
@@ -92,7 +94,12 @@ using namespace ardia_web_view;
   if (command) [self runChromeCommand:command];
 }
 
+- (BOOL)awaitsFirstDocument {
+  return _tab.loading && _tab.committedInitial && !_tab.initialDocumentAccessed;
+}
+
 - (void)executeJavaScript:(NSString *)code {
+  if (self.awaitsFirstDocument) return;
   [_tab executeJavaScript:code frame:nil];
 }
 
@@ -101,17 +108,16 @@ using namespace ardia_web_view;
 }
 
 - (void)evaluate:(NSString *)code completion:(void (^)(NSString *))completion {
-  if (!_tab) return completion(nil);
+  if (!_tab || self.awaitsFirstDocument) return completion(nil);
   [self thawHiddenPage];
   [_tab evaluate:code completion:completion];
 }
 
 - (void)capturePicture:(double)scale completion:(void (^)(NSDictionary<NSString *, id> *))completion {
   NSWindow *window = self.window;
-  if (!_tab || !window || self.hidden) return completion(nil);
-  NSRect inWindow = [self convertRect:self.bounds toView:nil];
-  CGFloat top = NSHeight(window.contentView.frame);
-  NSArray *frame = @[ @(NSMinX(inWindow)), @(top - NSMaxY(inWindow)), @(NSWidth(inWindow)), @(NSHeight(inWindow)) ];
+  if (!_tab || !window || self.hidden || self.awaitsFirstDocument) return completion(nil);
+  const NSRect inRoot = RootRectFromWindow(window, [self convertRect:self.bounds toView:nil]);
+  NSArray *frame = @[ @(NSMinX(inRoot)), @(NSMinY(inRoot)), @(NSWidth(inRoot)), @(NSHeight(inRoot)) ];
   __block BOOL answered = NO;
   void (^answer)(NSDictionary *) = ^(NSDictionary *result) {
     if (answered) return;
@@ -141,8 +147,16 @@ using namespace ardia_web_view;
 
 - (void)mediaCommand:(NSString *)action seconds:(double)seconds {
   [self thawHiddenPage];
-  if ([action isEqualToString:@"play"] || [action isEqualToString:@"toggle"]) [_tab grantUserActivationToFrame:_nowPlayingFrame ?: @""];
-  [self callFrame:_nowPlayingFrame ?: @"" kind:@"media" json:JSONString(@{@"action" : action ?: @"", @"seconds" : @(seconds)})];
+  if ([action isEqualToString:@"play"] || [action isEqualToString:@"toggle"]) [_tab grantUserActivationToFrame:_reports.nowPlaying.frame ?: @""];
+  [self callFrame:_reports.nowPlaying.frame ?: @"" kind:@"media" json:JSONText(@{@"action" : action ?: @"", @"seconds" : @(seconds)})];
+}
+
+- (void)seekPictureInPictureBy:(double)seconds {
+  [self thawHiddenPage];
+  NSString *json = JSONText(@{@"action" : @"seekPictureInPictureBy", @"seconds" : @(seconds)});
+  NSArray<NSString *> *frames = ScriptFramesOf(_tab).array;
+  if (!frames.count) return [self callFrame:@"" kind:@"media" json:json];
+  for (NSString *frameId in frames) [self callFrame:frameId kind:@"media" json:json];
 }
 
 @end

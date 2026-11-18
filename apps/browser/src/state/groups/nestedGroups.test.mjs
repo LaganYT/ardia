@@ -3,7 +3,7 @@ import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
 const { groupEntries, sidebarEntries, numberedTabs } = await import("../sidebar/entries.ts");
 const { nestGroups, orderSections } = await import("./groups.ts");
-const { canMoveGroup } = await import("../pins/organize.ts");
+const { canMoveGroup } = await import("../pins/tabGrouping.ts");
 const { liveAnchors, withLiveFolders } = await import("../sidebar/pinnedOrder.ts");
 const { createFolder, removeFolder, updateFolder, useLive } = await import("../live/store.ts");
 
@@ -261,7 +261,7 @@ test("nesting repair keeps a tab in a single chain", () => {
 const sectionsInOrder = (w) => {
   const s = S();
   const pinnedMember = new Set(Object.values(s.groups).filter((g) => g.pinned).flatMap((g) => g.tabIds));
-  const rank = (id) => (s.tabs[id].pinned ? (s.tabs[id].pinnedAsRow ? 1 : 0) : pinnedMember.has(id) ? 2 : 3);
+  const rank = (id) => (!!s.tabs[id].pin ? ((s.tabs[id].pin?.as === "row") ? 1 : 0) : pinnedMember.has(id) ? 2 : 3);
   const ranks = s.windows[w].tabIds.map(rank);
   return ranks.every((r, i) => i === 0 || ranks[i - 1] <= r);
 };
@@ -339,8 +339,8 @@ test("a saved or synced nested group pinned unlike its root settles to the root'
 
 test("settling a nested group pinned unlike its root keeps pinned groups ahead of the list", async () => {
   const { settleNesting } = await import("./groups.ts");
-  const tab = (id, extra = {}) => ({ id, windowId: "w", profileId: "default", url: `https://${id}.example/`, pinned: false, ...extra });
-  const tabs = { e: tab("e", { pinned: true, pinnedAsRow: true }), b: tab("b"), c: tab("c"), p: tab("p"), a: tab("a"), d: tab("d") };
+  const tab = (id, extra = {}) => ({ id, windowId: "w", profileId: "default", url: `https://${id}.example/`, pin: null, ...extra });
+  const tabs = { e: tab("e", { pin: { as: "row" } }), b: tab("b"), c: tab("c"), p: tab("p"), a: tab("a"), d: tab("d") };
   const group = (id, tabIds, extra = {}) => ({ id, windowId: "w", profileId: "default", name: id, icon: null, color: null, collapsed: false, pinned: false, tabIds, createdAt: 0, ...extra });
   const groups = {
     O: group("O", ["b", "c", "a", "d"]),
@@ -416,4 +416,36 @@ test("a live folder whose pinned anchor goes keeps its place under the item abov
   assert.equal(liveStore().folders[folder].after, `t:${ids[1]}`, "it stays under r1, not at the end");
   assert.deepEqual(sidebarEntries(S(), w).pinned, [`t:${ids[1]}`, `t:${ids[3]}`]);
   removeFolder(folder);
+});
+
+test("⌘1–⌘9 count a collapsed group as one row, plus the tabs kept under its header, as the sidebar draws them", () => {
+  reset();
+  const { w, outer, inner, a, b, c, d, e } = nested();
+  const now = Date.now();
+  for (const [id, at] of [[a, 1], [b, 2], [c, 3], [d, 4], [e, 5]]) S().updateTab(id, { lastActiveAt: now - 100 + at });
+  S().updateGroup(inner, { collapsed: true });
+  assert.deepEqual(hosts(numberedTabs(S(), w)), ["a", "c", "d", "e"], "the collapsed inner group is one number, its last used tab");
+  S().updateGroup(outer, { collapsed: true });
+  assert.deepEqual(hosts(numberedTabs(S(), w)), ["d", "a", "e"], "the collapsed group is one number, and the shown tab kept under it another");
+  S().activate(b);
+  assert.deepEqual(hosts(numberedTabs(S(), w)), ["d", "a", "c", "b", "e"], "the outer header, the tabs and inner header kept under it, then e");
+  S().updateGroup(outer, { collapsed: false });
+  S().updateGroup(inner, { collapsed: false });
+  assert.deepEqual(hosts(numberedTabs(S(), w)), ["a", "b", "c", "d", "e"], "expanded groups number every tab again");
+});
+
+test("a collapsed group's number reaches its hidden tab, not the other pane of a split kept under its header", () => {
+  reset();
+  const { w, ids } = windowWith("x", "a", "b", "c", "e");
+  const [x, a, b, c, e] = ids;
+  const group = S().groupTabs([a, b, c], { pinned: false, name: "G" });
+  S().createSplit([b, c]);
+  const now = Date.now();
+  for (const [id, at] of [[x, 1], [a, 2], [e, 3], [b, 4], [c, 5]]) S().updateTab(id, { lastActiveAt: now - 100 + at });
+  S().activate(b);
+  S().updateGroup(group, { collapsed: true });
+  const numbered = hosts(numberedTabs(S(), w));
+  assert.equal(numbered.length, 4, "x, the group header, the kept split row, e");
+  assert.equal(numbered[1], "a", "the header's number opens the hidden tab, not c of the visible split");
+  assert.equal(numbered[2], "b", "the kept split row's number opens the pane on screen");
 });

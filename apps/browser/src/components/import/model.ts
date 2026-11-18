@@ -7,27 +7,35 @@ import type {
   ImportResult,
   SpaceSummary,
 } from "../../state/import/apply";
+import { IMPORT_KINDS } from "../../state/import/flow";
 
 export type { BrowserProfile, BrowserSource, DiaTabsResult, ImportedExtension, ImportKind, ImportResult, SpaceSummary };
 
 export const APP = "Ardia";
 
-export type Step = "loading" | "choose" | "profiles" | "safari" | "access" | "unlock" | "progress" | "done";
-export type Status = "pending" | "active" | "done" | "failed";
+const KIND_LOOK: Record<ImportKind, { title: string; icon: string }> = {
+  bookmarks: { title: "Bookmarks", icon: "bookmark" },
+  history: { title: "History", icon: "clock" },
+  passwords: { title: "Passwords", icon: "key" },
+  cookies: { title: "Cookies (stay signed in)", icon: "person.badge.key" },
+  autofill: { title: "Addresses and cards", icon: "creditcard" },
+  tabs: { title: "Tabs", icon: "square.on.square" },
+  spaces: { title: "Spaces", icon: "square.stack" },
+  pinnedTabs: { title: "Pinned tabs", icon: "pin" },
+  favorites: { title: "Favorites", icon: "star" },
+  linkRules: { title: "Air Traffic Control", icon: "airplane" },
+  archive: { title: "Archived tabs", icon: "archivebox" },
+};
+export const KINDS: { kind: ImportKind; title: string; icon: string }[] = IMPORT_KINDS.map((kind) => ({ kind, ...KIND_LOOK[kind] }));
+export const kindTitle = (k: ImportKind) => KIND_LOOK[k].title;
 
-export const KINDS: { kind: ImportKind; title: string; icon: string }[] = [
-  { kind: "bookmarks", title: "Bookmarks", icon: "bookmark" },
-  { kind: "history", title: "History", icon: "clock" },
-  { kind: "passwords", title: "Passwords", icon: "key" },
-  { kind: "cookies", title: "Cookies (stay signed in)", icon: "person.badge.key" },
-  { kind: "autofill", title: "Addresses and cards", icon: "creditcard" },
-  { kind: "tabs", title: "Tabs", icon: "square.on.square" },
-  { kind: "spaces", title: "Spaces", icon: "square.stack" },
-  { kind: "pinnedTabs", title: "Pinned tabs", icon: "pin" },
-  { kind: "favorites", title: "Favorites", icon: "star" },
-];
-export const kindTitle = (k: ImportKind) => KINDS.find((x) => x.kind === k)?.title ?? k;
+const DIA_NOT_SHARED = "Custom tab names, colours, spaces and folders stay in Dia: its AppleScript doesn't share them.";
+const DIA_ASKED = `${APP} asks Dia for its open and pinned tabs, opening it in the background if it isn't running.`;
+const DIA_READ = `${APP} reads Dia's sidebar from its own files, without opening Dia: spaces, folders, groups, split views and renamed tabs come over as they are.`;
 
-export const ENCRYPTED: ImportKind[] = ["passwords", "cookies", "autofill"];
-
-export const DIA_NOT_SHARED = "Custom tab names, colours, spaces and folders stay in Dia: its AppleScript doesn't share them.";
+export function diaTabsNote(profiles: BrowserProfile[]): string {
+  const files = profiles.filter((p) => p.diaSidebar).length;
+  if (!files) return `${DIA_ASKED} ${DIA_NOT_SHARED}`;
+  if (files === profiles.length) return DIA_READ;
+  return `${DIA_READ} For a profile last opened in an older Dia, ${APP} asks Dia for its open and pinned tabs instead.`;
+}

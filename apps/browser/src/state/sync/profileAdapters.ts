@@ -3,11 +3,16 @@ import { useBrowser } from "../browser/store";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
 import { sanitizeTheme } from "../../lib/profileLook";
 import type { Profile, ProfileTheme } from "../browser/types";
-import { PROFILE, PROFILE_THEME, SHARE, profileRecord } from "./records";
+import { noteTopAppsSharingFromSync, startedBySync } from "../telemetry/topAppsSharing";
+import { PROFILE, PROFILE_OPEN_TABS, PROFILE_THEME, PROFILE_TOP_APPS, SHARE, openTabsRecord, profileRecord, topAppsRecord, type OpenTabsRecord, type TopAppsRecord } from "./records";
 
 const store = () => useBrowser.getState();
 
-export type ProfileRecord = { n: string; c: Profile["color"]; i: string | null; d?: true; th?: ProfileTheme | null };
+type Removed = () => ReadonlySet<string>;
+
+const NOTHING_REMOVED: Removed = () => new Set();
+
+export type ProfileRecord = { n: string; c: Profile["color"]; i: string | null; d?: true; o?: true; th?: ProfileTheme | null };
 
 export type ProfileThemeRecord = { t: ProfileTheme } | { preset: true };
 
@@ -41,7 +46,7 @@ export function legacyThemeOf(record: ProfileRecord): Pick<Profile, "theme"> | n
   return theme ? { theme } : null;
 }
 
-export function profilesAdapter(links: () => Record<string, { syncId: string }>): Adapter {
+export function profilesAdapter(links: () => Record<string, { syncId: string }>, removed: Removed = NOTHING_REMOVED): Adapter {
   const linked = () => Object.entries(links()).filter(([id]) => store().profiles[id]);
   return {
     prefix: PROFILE,
@@ -61,7 +66,8 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
         } satisfies ProfileRecord);
       }
       const mine = new Set(values.keys());
-      return { values, ignore: (key) => !mine.has(key) };
+      const gone = removed();
+      return { values, ignore: (key) => !mine.has(key) && !gone.has(key) };
     },
     apply: (visible, changed, _base, records) => {
       for (const [id, { syncId }] of linked()) {
@@ -78,7 +84,7 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
 export function profileThemesAdapter(
   links: () => Record<string, { syncId: string; themeAdopting?: true }>,
   records: () => Record<string, { v: unknown }> | undefined,
-  adopted: (profileId: string) => void = () => {},
+  removed: Removed = NOTHING_REMOVED,
 ): Adapter {
   const linked = () => Object.entries(links()).filter(([id]) => store().profiles[id]);
   const unapplied = (key: string, base: (key: string) => unknown) => {
@@ -100,7 +106,8 @@ export function profileThemesAdapter(
         if (Object.keys(angles).length || known(angleKey)) values.set(angleKey, angles satisfies ThemeAngleRecord);
       }
       const mine = new Set(values.keys());
-      return { values, ignore: (key) => !mine.has(key) };
+      const gone = removed();
+      return { values, ignore: (key) => !mine.has(key) && !gone.has(key) };
     },
     apply: (visible, changed) => {
       for (const [id, { syncId }] of linked()) {
@@ -109,7 +116,63 @@ export function profileThemesAdapter(
         const patch = themeFromRecord(visible.get(`${PROFILE_THEME}${syncId}`), visible.get(angleKey));
         if (!patch) continue;
         store().setProfileLook(id, patch);
-        adopted(id);
+      }
+    },
+  };
+}
+
+export function profileTopAppsAdapter(links: () => Record<string, { syncId: string }>, removed: Removed = NOTHING_REMOVED): Adapter {
+  const linked = () => Object.entries(links()).filter(([id]) => store().profiles[id]);
+  return {
+    prefix: PROFILE_TOP_APPS,
+    adoptRemoteOnJoin: true,
+    extract: (base, _queued, _now, known, remote) => {
+      const values = new Map<string, unknown>();
+      for (const [id, { syncId }] of linked()) {
+        const key = `${PROFILE_TOP_APPS}${syncId}`;
+        const on = !!store().profiles[id]!.shareTopApps;
+        const unapplied = known(key) && remote(key) !== null && canonical(remote(key)) !== canonical(base(key) ?? null);
+        if ((on || known(key)) && !unapplied) values.set(key, { on } satisfies TopAppsRecord);
+      }
+      const mine = new Set(values.keys());
+      const gone = removed();
+      return { values, ignore: (key) => !mine.has(key) && !gone.has(key) };
+    },
+    apply: (visible, changed) => {
+      for (const [id, { syncId }] of linked()) {
+        const key = `${PROFILE_TOP_APPS}${syncId}`;
+        const record = changed.has(key) ? topAppsRecord(visible.get(key)) : null;
+        if (!record) continue;
+        const changes = record.on !== !!store().profiles[id]!.shareTopApps;
+        startedBySync(() => store().updateProfile(id, { shareTopApps: record.on || undefined }));
+        if (changes) noteTopAppsSharingFromSync(store(), "synced_record", record.on);
+      }
+    },
+  };
+}
+
+export function profileOpenTabsAdapter(links: () => Record<string, { syncId: string }>, removed: Removed = NOTHING_REMOVED): Adapter {
+  const linked = () => Object.entries(links()).filter(([id]) => store().profiles[id]);
+  return {
+    prefix: PROFILE_OPEN_TABS,
+    adoptRemoteOnJoin: true,
+    extract: (base, _queued, _now, known, remote) => {
+      const values = new Map<string, unknown>();
+      for (const [id, { syncId }] of linked()) {
+        const key = `${PROFILE_OPEN_TABS}${syncId}`;
+        const on = !!store().profiles[id]!.syncTabs;
+        const unapplied = known(key) && remote(key) !== null && canonical(remote(key)) !== canonical(base(key) ?? null);
+        if ((on || known(key)) && !unapplied) values.set(key, { on } satisfies OpenTabsRecord);
+      }
+      const mine = new Set(values.keys());
+      const gone = removed();
+      return { values, ignore: (key) => !mine.has(key) && !gone.has(key) };
+    },
+    apply: (visible, changed) => {
+      for (const [id, { syncId }] of linked()) {
+        const key = `${PROFILE_OPEN_TABS}${syncId}`;
+        const record = changed.has(key) ? openTabsRecord(visible.get(key)) : null;
+        if (record) store().updateProfile(id, { syncTabs: record.on || undefined });
       }
     },
   };

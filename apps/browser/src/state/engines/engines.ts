@@ -2,7 +2,9 @@ import type { PageEngine } from "../../platform/tabs";
 import type { BrowserState } from "../browser/store";
 import type { Tab } from "../browser/types";
 import { isWebPageUrl } from "../../lib/url";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { adoptKind } from "../tabs/adoptIds";
+import { adoptOf, navigationOf } from "../tabs/pageSession";
 
 export type { PageEngine } from "../../platform/tabs";
 
@@ -13,8 +15,10 @@ export const otherEngine = (engine: PageEngine): PageEngine => (engine === "webk
 
 type EngineState = Pick<BrowserState, "tabs" | "settings">;
 
-export function siteOf(url: string | undefined | null): string | null {
-  if (!url) return null;
+const SITE_CACHE_SIZE = 512;
+const sites = new Map<string, string | null>();
+
+function parseSite(url: string): string | null {
   try {
     const u = new URL(url);
     return u.protocol === "http:" || u.protocol === "https:" ? `${u.protocol}//${u.host}`.toLowerCase() : null;
@@ -23,14 +27,27 @@ export function siteOf(url: string | undefined | null): string | null {
   }
 }
 
-export const canSwitchEngine = (url: string | undefined | null) => !!url && isWebPageUrl(url);
+export function siteOf(url: string | undefined | null): string | null {
+  if (!url) return null;
+  const known = sites.get(url);
+  if (known !== undefined) return known;
+  const site = parseSite(url);
+  if (sites.size >= SITE_CACHE_SIZE) sites.delete(sites.keys().next().value!);
+  sites.set(url, site);
+  return site;
+}
+
+export const canSwitchEngine = (url: string | undefined | null) => PLATFORM_FEATURES.webKit && !!url && isWebPageUrl(url);
+export const offersEngineChoice = () => PLATFORM_FEATURES.webKit;
 export const chromiumOnly = (url: string | undefined | null) => !!url && /^(ardia|chrome|chrome-extension|chrome-untrusted|devtools|view-source):/i.test(url);
 
-export const defaultEngine = (s: Pick<BrowserState, "settings">): PageEngine => (s.settings.pageEngine === "webkit" ? "webkit" : "chromium");
+const offered = <Engine extends PageEngine | undefined>(engine: Engine): Engine | "chromium" => (engine === "webkit" && !PLATFORM_FEATURES.webKit ? "chromium" : engine);
+
+export const defaultEngine = (s: Pick<BrowserState, "settings">): PageEngine => offered(s.settings.pageEngine === "webkit" ? "webkit" : "chromium");
 
 export function ruleFor(s: Pick<BrowserState, "settings">, url: string | undefined | null): PageEngine | undefined {
   const site = siteOf(url);
-  return site ? s.settings.websiteEngines?.[site] : undefined;
+  return offered(site ? s.settings.websiteEngines?.[site] : undefined);
 }
 
 export const PROTECTED_VIDEO_SITES: readonly string[] = [
@@ -54,12 +71,12 @@ export const PROTECTED_VIDEO_SITES: readonly string[] = [
 export function protectedVideoSite(url: string | undefined | null): boolean {
   const site = siteOf(url);
   if (!site?.startsWith("https://")) return false;
-  const host = new URL(site).hostname;
+  const host = site.slice("https://".length).replace(/:\d+$/, "");
   return PROTECTED_VIDEO_SITES.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
 export const builtInEngine = (s: Pick<BrowserState, "settings">, url: string | undefined | null): PageEngine | undefined =>
-  s.settings.protectedVideoInWebKit === true && protectedVideoSite(url) ? "webkit" : undefined;
+  PLATFORM_FEATURES.webKit && s.settings.protectedVideoInWebKit === true && protectedVideoSite(url) ? "webkit" : undefined;
 
 export const chosenEngine = (s: Pick<BrowserState, "settings">, url: string | undefined | null): PageEngine | undefined => ruleFor(s, url) ?? builtInEngine(s, url);
 
@@ -68,7 +85,7 @@ export const recommendedEngineFor = (s: Pick<BrowserState, "settings">, url: str
 export const engineForUrl = (s: Pick<BrowserState, "settings">, url: string | undefined | null): PageEngine => chosenEngine(s, url) ?? defaultEngine(s);
 
 const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undefined => {
-  const id = adoptKind(t.adoptId);
+  const id = adoptKind(adoptOf(t));
   if (id?.kind === "webkit") return "webkit";
   if (id?.kind === "ardiacore" || id?.kind === "tab") return "chromium";
   if (id?.kind !== "clone") return undefined;
@@ -77,13 +94,13 @@ const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undef
 };
 
 function engineOf(s: EngineState, t: Tab, depth: number): PageEngine {
-  if (chromiumOnly(t.navigation?.url ?? t.url)) return "chromium";
-  if (t.engine) return t.engine;
+  if (chromiumOnly(navigationOf(t)?.url ?? t.url)) return "chromium";
+  if (t.engine) return offered(t.engine);
   const adopted = fromAdoption(s, t, depth);
-  if (adopted) return adopted;
+  if (adopted) return offered(adopted);
   const opener = t.openerId ? s.tabs[t.openerId] : undefined;
-  if (opener?.engine && (opener.url || opener.navigation)) return opener.engine;
-  return engineForUrl(s, t.navigation?.url ?? t.url);
+  if (opener?.engine && (opener.url || navigationOf(opener))) return offered(opener.engine);
+  return engineForUrl(s, navigationOf(t)?.url ?? t.url);
 }
 
 export function tabEngine(s: EngineState, tabId: string): PageEngine {
@@ -95,12 +112,12 @@ export function typedNavigationEngine(s: EngineState, tab: Tab, url: string): Pa
   if (chromiumOnly(url)) return "chromium";
   const chosen = chosenEngine(s, url);
   if (chosen) return chosen;
-  return tab.url || tab.navigation ? tabEngine(s, tab.id) : defaultEngine(s);
+  return tab.url || navigationOf(tab) ? tabEngine(s, tab.id) : defaultEngine(s);
 }
 
 export function engineMark(s: EngineState, tabId: string): PageEngine | null {
   const t = s.tabs[tabId];
-  if (!t || !canSwitchEngine(t.url || t.navigation?.url)) return null;
+  if (!t || !canSwitchEngine(t.url || navigationOf(t)?.url)) return null;
   const engine = tabEngine(s, tabId);
   return engine === defaultEngine(s) ? null : engine;
 }

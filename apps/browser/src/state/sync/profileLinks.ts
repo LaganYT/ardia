@@ -1,11 +1,16 @@
-import { emptyScope, SyncNative, visible, type ScopeState } from "../../platform/sync";
+import { emptyScope, holdsBack, SyncNative, visible, type ScopeState } from "../../platform/sync";
 import { useBrowser } from "../browser/store";
 import { isIncognitoProfile } from "../browser/model";
 import { DEFAULT_PROFILE_ID } from "../settings/settings";
-import { PROFILE, SHARE, profileRecord, profileScope, recordId, shareRecord } from "./records";
-import { legacyThemeOf, type ProfileRecord } from "./profileAdapters";
+import { PROFILE, PROFILE_OPEN_TABS, PROFILE_TOP_APPS, SHARE, openTabsRecord, profileRecord, profileScope, recordId, shareRecord, topAppsRecord } from "./records";
+import type { ProfileRecord } from "./profileAdapters";
 import { APP_SCOPE, type SyncDoc } from "./syncDoc";
 import { pairTheme } from "./syncThemes";
+import { noteTopAppsSharingFromSync, startedBySync } from "../telemetry/topAppsSharing";
+
+const remoteTopApps = (doc: SyncDoc, syncId: string) => topAppsRecord(doc.scopes[APP_SCOPE]?.records[`${PROFILE_TOP_APPS}${syncId}`]?.v);
+
+const remoteOpenTabs = (doc: SyncDoc, syncId: string) => openTabsRecord(doc.scopes[APP_SCOPE]?.records[`${PROFILE_OPEN_TABS}${syncId}`]?.v);
 
 export const remoteProfileRecord = (doc: SyncDoc, syncId: string) => profileRecord(doc.scopes[APP_SCOPE]?.records[`${PROFILE}${syncId}`]?.v) ?? undefined;
 
@@ -50,8 +55,7 @@ export function readyToPair(doc: SyncDoc, app: ScopeState, now = Date.now()): bo
   if (!doc.joining || pairingOverdue(doc, now)) return true;
   const synced = [...visible(app, PROFILE).values()].flatMap((v) => profileRecord(v) ?? []);
   if (synced.some((r) => r.d)) return true;
-  const downloading = Object.values(app.pendingSince ?? {}).some((at) => now - at <= PAIRING_WAIT_MS);
-  return synced.length > 0 && !downloading && !Object.keys(app.damaged).length;
+  return synced.length > 0 && !holdsBack(app, now, PAIRING_WAIT_MS);
 }
 
 export function linkProfiles(doc: SyncDoc, app: ScopeState) {
@@ -64,12 +68,19 @@ export function linkProfiles(doc: SyncDoc, app: ScopeState) {
   for (const id of s.profileOrder) {
     const profile = s.profiles[id];
     if (!profile || isIncognitoProfile(id) || doc.profiles[id]) continue;
-    const match = doc.joining
-      ? remote.find(([syncId, r]) => !taken.has(syncId) && (id === DEFAULT_PROFILE_ID ? r.d : r.n === profile.name))?.[0]
-      : undefined;
+    const [match] = doc.joining
+      ? (remote.find(([syncId, r]) => !taken.has(syncId) && (id === DEFAULT_PROFILE_ID ? r.d : r.n === profile.name)) ?? [])
+      : [];
     const syncId = match ?? SyncNative!.newDeviceId();
     doc.profiles[id] = { syncId, enabled: true };
     taken.add(syncId);
+    const topApps = match ? remoteTopApps(doc, match) : null;
+    if (topApps && topApps.on !== !!profile.shareTopApps) {
+      startedBySync(() => s.updateProfile(id, { shareTopApps: topApps.on || undefined }));
+      noteTopAppsSharingFromSync(useBrowser.getState(), "link_profiles", topApps.on);
+    }
+    const openTabs = match ? remoteOpenTabs(doc, match) : null;
+    if (openTabs && openTabs.on !== !!profile.syncTabs) s.updateProfile(id, { syncTabs: openTabs.on || undefined });
     if (match) {
       doc.scopes[profileScope(syncId)] = { ...emptyScope(), awaitRemote: true };
       pairTheme(app, id, doc.profiles[id]!);
@@ -80,15 +91,12 @@ export function linkProfiles(doc: SyncDoc, app: ScopeState) {
 }
 
 export function addLinkedProfile(doc: SyncDoc, syncId: string, record: ProfileRecord, shareWith: string | null): string {
-  const id = useBrowser.getState().createProfile({ name: record.n, color: record.c, icon: record.i, shareWith });
-  const app = doc.scopes[APP_SCOPE];
+  const shareTopApps = remoteTopApps(doc, syncId)?.on;
+  const id = startedBySync(() => useBrowser.getState().createProfile({ name: record.n, color: record.c, icon: record.i, shareWith, shareTopApps }));
+  if (shareTopApps) noteTopAppsSharingFromSync(useBrowser.getState(), "linked_profile_created", true);
+  if (remoteOpenTabs(doc, syncId)?.on) useBrowser.getState().updateProfile(id, { syncTabs: true });
   doc.profiles[id] = { syncId, enabled: true };
-  if (app) pairTheme(app, id, doc.profiles[id]!);
-  else {
-    const theme = legacyThemeOf(record);
-    if (theme) useBrowser.getState().setProfileLook(id, theme);
-    doc.profiles[id]!.themeAdopting = true;
-  }
+  pairTheme(doc.scopes[APP_SCOPE], id, doc.profiles[id]!, record);
   doc.scopes[profileScope(syncId)] = { ...emptyScope(), awaitRemote: true };
   return id;
 }

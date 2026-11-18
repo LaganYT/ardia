@@ -21,7 +21,7 @@ export type SwipeStep = {
   delayMs?: number;
 };
 
-export type NativePagerConfig = { key: string; selected: number; count: number; width?: number; ack?: number; order?: string };
+export type NativePagerConfig = { key: string; selected: number; count: number; width?: number; ack?: number; order?: readonly string[] };
 
 export type PagerStateEvent = {
   phase: "began" | "selected" | "settled";
@@ -51,7 +51,7 @@ export type SwipeAreaProps = ViewProps & {
   isPager?: boolean;
   onSwipe: (event: SwipeEvent) => void;
   nativePager?: NativePagerConfig;
-  onPagerPosition?: (...args: never[]) => void;
+  onPagerPosition?: (event: { nativeEvent: { position: number } }) => void;
   onPagerState?: (event: PagerStateEvent) => void;
 };
 
@@ -59,37 +59,38 @@ export type SwipeAreaHandle = {
   devSimulate(steps: SwipeStep[], options?: { x?: number; y?: number; ignorePreference?: boolean }): Promise<unknown>;
 };
 
-type NativeProps = Omit<SwipeAreaProps, "onSwipe" | "onPagerState"> & {
-  onSwipe: (e: NativeSyntheticEvent<SwipeEvent>) => void;
-  onPagerState?: (e: NativeSyntheticEvent<PagerStateEvent>) => void;
+type NativeSwipe<T> = Pick<NativeSyntheticEvent<T>, "nativeEvent">;
+
+export type NativeSwipeAreaProps = Omit<SwipeAreaProps, "onSwipe" | "onPagerState"> & {
+  onSwipe: (e: NativeSwipe<SwipeEvent>) => void;
+  onPagerState?: (e: NativeSwipe<PagerStateEvent>) => void;
 };
 type NativeHandle = { devLocate(): Promise<{ windowNumber: number; x: number; y: number; width: number; height: number } | null> };
 
 export type SwipeModule = {
   haptic(pattern: string): void;
-  switchPager(key: string, index: number, order?: string): Promise<boolean>;
-  stepPager(key: string, delta: number, wrap: boolean, order?: string): Promise<boolean>;
-  selectPager(key: string, profileId: string, order: string): Promise<boolean>;
+  switchPager(key: string, index: number, order?: readonly string[]): Promise<boolean>;
+  stepPager(key: string, delta: number, wrap: boolean, order?: readonly string[]): Promise<boolean>;
+  selectPager(key: string, profileId: string, order: readonly string[]): Promise<boolean>;
   pagerState(key: string): PagerSnapshot | null;
   devPagerState(key: string): Promise<unknown>;
   devSimulate(x: number, y: number, windowNumber: number, steps: SwipeStep[], ignorePreference: boolean): Promise<unknown>;
 };
-type NativeComponent = React.ComponentType<NativeProps & { ref?: React.Ref<NativeHandle> }>;
+type NativeComponent = React.ComponentType<NativeSwipeAreaProps & { ref?: React.Ref<NativeHandle> }>;
 
 const Module = nativeModule("ArdiaSwipe");
-const Native = requireNativeViewManager<NativeProps>("ArdiaSwipe") as unknown as NativeComponent;
+const Native = requireNativeViewManager<NativeSwipeAreaProps>("ArdiaSwipe") as unknown as NativeComponent;
 let AnimatedNative: NativeComponent | undefined;
 const animatedNative = () => (AnimatedNative ??= Animated.createAnimatedComponent(Native) as unknown as NativeComponent);
 
 export const swipeHaptic = (pattern: "levelChange" | "alignment" | "generic") => Module.haptic(pattern);
 
-export const switchPager = (key: string, index: number, order?: string): Promise<boolean> => Module.switchPager(key, index, order);
-export const stepPager = (key: string, delta: -1 | 1, wrap = false, order?: string): Promise<boolean> =>
+export const switchPager = (key: string, index: number, order?: readonly string[]): Promise<boolean> => Module.switchPager(key, index, order);
+export const stepPager = (key: string, delta: -1 | 1, wrap = false, order?: readonly string[]): Promise<boolean> =>
   Module.stepPager(key, delta, wrap, order);
-export const selectPager = (key: string, profileId: string, order: string): Promise<boolean> =>
+export const selectPager = (key: string, profileId: string, order: readonly string[]): Promise<boolean> =>
   Module.selectPager(key, profileId, order);
 export const pagerState = (key: string): PagerSnapshot | null => Module.pagerState(key);
-export const devPagerState = (key: string): Promise<unknown> => Module.devPagerState(key);
 
 export const SwipeArea = forwardRef<SwipeAreaHandle, SwipeAreaProps>(function SwipeArea({ onSwipe, onPagerState, ...props }, ref) {
   const handle = useRef<NativeHandle>(null);
@@ -107,8 +108,8 @@ export const SwipeArea = forwardRef<SwipeAreaHandle, SwipeAreaProps>(function Sw
     <View
       ref={handle}
       {...props}
-      onSwipe={(e: NativeSyntheticEvent<SwipeEvent>) => onSwipe(e.nativeEvent)}
-      onPagerState={onPagerState && ((e: NativeSyntheticEvent<PagerStateEvent>) => onPagerState(e.nativeEvent))}
+      onSwipe={(e: NativeSwipe<SwipeEvent>) => onSwipe(e.nativeEvent)}
+      onPagerState={onPagerState && ((e: NativeSwipe<PagerStateEvent>) => onPagerState(e.nativeEvent))}
     />
   );
 });

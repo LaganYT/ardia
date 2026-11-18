@@ -1,30 +1,40 @@
 import { terminateCastRoute, type CastRoute, toggleCastPicker, useCastRoutes } from "../../state/media/cast";
 import type { ActionState, InstalledExtension } from "../../state/extensions/store";
-import { ContextMenuArea, Symbol, Button, Text, useHover } from "../ui";
+import { Badge, Button, ContextMenuArea, Symbol, useToolbarRowContext } from "../ui";
 import { chooseFromMenu } from "../../state/app/menuChoice";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, View } from "react-native";
+import { Animated, Image, PanResponder, View } from "react-native";
 import { useTheme } from "../ui/theme";
 import type { ToolbarPalette } from "../ui/toolbarColors";
 import { usePages } from "../../state/tabs/pageState";
-import { ink, opacity, radius, weight } from "../ui/tokens";
-import { BADGE_FALLBACK_FILL, BADGE_TEXT } from "./tokens";
+import { ink, opacity } from "../ui/tokens";
+import { buttonMotion, usePressScaleMotion } from "../ui/motion";
+import { BADGE_FALLBACK_FILL, TOOLBAR_DRAG_START } from "./tokens";
+import { SLIDE } from "../tabstrip/tokens";
 import { isLight } from "../../lib/color";
 import { dropToolbarAnchor, setToolbarAnchor } from "../../state/extensions/toolbarAnchors";
+import { onInterfaceScaleSettled } from "../../state/settings/interfaceScale";
 import {
   activateExtension,
-  EXTENSION_LIST_ITEMS,
-  type ExtensionListChoice,
+  extensionOverflowItems,
   runExtensionListChoice,
   showExtensionMenu,
   useExtensions,
   useWindowExtensions,
   currentWindowExtensions,
+  moveToolbarExtension,
+  setToolbarDrag,
+  endToolbarDrag,
+  useToolbarDrag,
+  useToolbarReorderable,
   type Anchor,
 } from "../../state/extensions/actions";
+import { dropIndex, makeRoomShift, toolbarOrder, type ToolbarDrag } from "../../state/extensions/toolbarOrder";
 
 const BUTTON = 28;
+const GLYPH = 14;
 const GLYPH_BOX = 18;
+const IMAGE = 16;
 const GAP = 2;
 const PITCH = BUTTON + GAP;
 
@@ -33,17 +43,19 @@ function useToolbarExtensions(windowId: string, limit: number) {
   const routes = useCastRoutes(windowId);
   const casting = routes.length > 0;
   return useMemo(() => {
-    const all = shown.filter((x) => x.pinned);
+    const all = toolbarOrder(shown);
     const room = Math.max(0, limit - (casting ? 1 : 0));
     const overflow = all.length > room;
-    return { pinned: overflow ? all.slice(0, Math.max(0, room - 1)) : all, overflow, casting, routes };
+    const pinned = overflow ? all.slice(0, Math.max(0, room - 1)) : all;
+    return { pinned, hidden: pinned.length ? all.slice(pinned.length) : [], overflow, casting, routes };
   }, [shown, routes, casting, limit]);
 }
 
 export const extensionsFitting = (room: number) => Math.max(1, Math.floor((room + GAP) / PITCH));
 
-export function useToolbarExtensionsWidth(windowId: string, limit = Infinity, button = BUTTON): number {
+export function useToolbarExtensionsWidth(windowId: string, limit = Infinity): number {
   const { pinned, overflow, casting } = useToolbarExtensions(windowId, limit);
+  const button = useToolbarRowContext().extensionButton;
   const count = pinned.length + (overflow ? 1 : 0) + (casting ? 1 : 0);
   return count ? count * (button + GAP) - GAP + 6 : 0;
 }
@@ -55,7 +67,7 @@ type ToolbarExtensionsProps = {
   top: number;
   right: number;
   limit?: number;
-  button?: number;
+  onActivate?: () => void;
 };
 
 export const ToolbarExtensions = memo(function ToolbarExtensions(props: ToolbarExtensionsProps) {
@@ -69,18 +81,41 @@ function TabToolbarExtensions({
   top,
   right,
   limit = Infinity,
-  button = BUTTON,
+  onActivate,
 }: ToolbarExtensionsProps) {
-  const { pinned, overflow, routes } = useToolbarExtensions(windowId, limit);
+  const { pinned, hidden, overflow, routes } = useToolbarExtensions(windowId, limit);
   const ready = usePages((p) => !!p.ready[tabId]);
-  if (!pinned.length && !overflow && !routes.length) return <EmptyAnchor windowId={windowId} tabId={tabId} top={top} right={right} button={button} />;
+  const pitch = useToolbarRowContext().extensionButton + GAP;
+  const reorderable = useToolbarReorderable(windowId);
+  const movable = reorderable && pinned.length > 1;
+  const drag = useToolbarDrag(windowId);
+  useEffect(() => () => endToolbarDrag(windowId), [windowId]);
+  if (!pinned.length && !overflow && !routes.length) return <EmptyAnchor windowId={windowId} tabId={tabId} top={top} right={right} />;
+  const reorder: Reorder | undefined = movable
+    ? {
+        count: pinned.length,
+        pitch,
+        drag,
+        move: (id, from, dx) => setToolbarDrag(windowId, { id, from, dx }),
+        drop: (id, from, dx) => {
+          const to = dropIndex(from, dx, pitch, pinned.length);
+          if (to !== from) void moveToolbarExtension(windowId, id, to, "drag");
+          endToolbarDrag(windowId);
+        },
+        cancel: () => endToolbarDrag(windowId),
+      }
+    : undefined;
   return (
     <View style={{ position: "absolute", top, right, flexDirection: "row", gap: GAP }}>
-      {routes.length ? <CastButton windowId={windowId} tabId={tabId} routes={routes} palette={palette} button={button} /> : null}
-      {pinned.map((ext) => (
-        <ExtensionButton key={ext.id} ext={ext} windowId={windowId} tabId={tabId} ready={ready} palette={palette} button={button} />
-      ))}
-      {overflow && <OverflowButton windowId={windowId} tabId={tabId} palette={palette} button={button} />}
+      {routes.length ? <CastButton windowId={windowId} tabId={tabId} routes={routes} palette={palette} /> : null}
+      {pinned.length ? (
+        <View style={{ width: pinned.length * pitch - GAP, height: pitch - GAP }}>
+          {paintOrder(pinned, drag?.id).map(({ ext, index }) => (
+            <ExtensionButton key={ext.id} ext={ext} index={index} pitch={pitch} reorder={reorder} windowId={windowId} tabId={tabId} ready={ready} palette={palette} onActivate={onActivate} />
+          ))}
+        </View>
+      ) : null}
+      {overflow && <OverflowButton windowId={windowId} tabId={tabId} hidden={reorderable ? hidden : []} palette={palette} onActivate={onActivate} />}
     </View>
   );
 }
@@ -89,8 +124,9 @@ export function ToolbarPopupAnchor(props: { windowId: string; tabId: string; top
   return <EmptyAnchor key={`${props.windowId}|${props.tabId}`} {...props} />;
 }
 
-function EmptyAnchor({ windowId, tabId, top, right, button = BUTTON }: { windowId: string; tabId: string; top: number; right: number; button?: number }) {
+function EmptyAnchor({ windowId, tabId, top, right }: { windowId: string; tabId: string; top: number; right: number }) {
   const { ref, measure } = useAnchor(windowId, tabId, "*");
+  const button = useToolbarRowContext().extensionButton;
   return <View ref={ref} pointerEvents="none" style={{ position: "absolute", top, right, width: button, height: button }} onLayout={() => void measure()} />;
 }
 
@@ -113,85 +149,118 @@ function useAnchor(windowId: string, tabId: string, slot: string) {
         const anchor = { x, y, width, height };
         if (ref.current) {
           mine.current = anchor;
-          setToolbarAnchor(owner.windowId, owner.tabId, owner.slot, anchor);
+          setToolbarAnchor(owner.windowId, owner.tabId, owner.slot, anchor, measure);
         }
         resolve(anchor);
       });
     });
+  useEffect(() => onInterfaceScaleSettled(() => void measure()), [owner]);
   return { ref, measure };
 }
 
-function ExtensionButton({ ext, windowId, tabId, ready, palette, button }: { ext: InstalledExtension; windowId: string; tabId: string; ready: boolean; palette: ToolbarPalette; button: number }) {
+const paintOrder = (pinned: InstalledExtension[], dragging: string | undefined) =>
+  pinned.map((ext, index) => ({ ext, index })).sort((a, b) => Number(a.ext.id === dragging) - Number(b.ext.id === dragging));
+
+function useSlotLeft(target: number, following: boolean, onSettled: () => void) {
+  const left = useRef(new Animated.Value(target)).current;
+  const settled = useRef(onSettled);
+  settled.current = onSettled;
+  useEffect(() => {
+    if (following) return left.setValue(target);
+    const slide = Animated.spring(left, { toValue: target, ...SLIDE });
+    slide.start(({ finished }) => finished && settled.current());
+    return () => slide.stop();
+  }, [target, following]);
+  return left;
+}
+
+type Reorder = {
+  count: number;
+  pitch: number;
+  drag: ToolbarDrag | null;
+  move: (id: string, from: number, dx: number) => void;
+  drop: (id: string, from: number, dx: number) => void;
+  cancel: () => void;
+};
+
+function useReorderResponder(id: string, index: number, reorder: Reorder | undefined) {
+  const latest = useRef(reorder);
+  latest.current = reorder;
+  return useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => !!latest.current && Math.abs(g.dx) > TOOLBAR_DRAG_START,
+        onPanResponderMove: (_, g) => latest.current?.move(id, index, g.dx),
+        onPanResponderRelease: (_, g) => latest.current?.drop(id, index, g.dx),
+        onPanResponderTerminate: () => latest.current?.cancel(),
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [id, index],
+  );
+}
+
+function ExtensionButton({ ext, index, pitch, reorder, windowId, tabId, ready, palette, onActivate }: { ext: InstalledExtension; index: number; pitch: number; reorder?: Reorder; windowId: string; tabId: string; ready: boolean; palette: ToolbarPalette; onActivate?: () => void }) {
   const fetched = useExtensions((e) => (ready ? e.actions[tabId] : undefined));
   const held = useRef<ActionState | undefined>(undefined);
   if (fetched) held.current = fetched[ext.id];
   const state = held.current;
   const open = useExtensions((e) => e.popup?.windowId === windowId && e.popup.extensionId === ext.id);
-  const { hovered, hoverProps } = useHover();
   const { ref, measure } = useAnchor(windowId, tabId, ext.id);
   const badge = state?.badgeText ?? "";
   const dimmed = state ? !state.enabled : false;
   const title = state?.title || ext.actionTitle || ext.name;
   const icon = state?.icon || ext.actionIcon || ext.icon;
+  const fill = state?.badgeColor && state.badgeColor !== ink.black ? state.badgeColor : BADGE_FALLBACK_FILL;
+  const badgeRoom = useToolbarRowContext().extensionButton - BADGE_PLACE.right;
+  const pressMotion = usePressScaleMotion(true, buttonMotion.iconPressScale);
+  const scaleStyle = pressMotion.scale ? { transform: [{ scale: pressMotion.scale }] } : undefined;
+  const responder = useReorderResponder(ext.id, index, reorder);
+  const drag = reorder?.drag ?? null;
+  const dragging = drag?.id === ext.id;
+  const target = dragging ? Math.max(0, Math.min((reorder!.count - 1) * pitch, index * pitch + drag!.dx)) : index * pitch + makeRoomShift(index, drag, pitch, reorder?.count ?? 0);
+  const left = useSlotLeft(target, dragging, () => void measure());
+  const shownPalette = useMemo(() => (drag && !dragging ? { ...palette, hover: ink.clear } : palette), [palette, drag && !dragging]);
   return (
-    <View ref={ref} tooltip={title} {...hoverProps} onLayout={() => void measure()}>
+    <Animated.View
+      ref={ref}
+      collapsable={false}
+      {...responder.panHandlers}
+      onLayout={() => void (drag ? undefined : measure())}
+      style={{ position: "absolute", top: 0, left }}
+    >
       <ContextMenuArea onContextMenu={() => void showExtensionMenu(windowId, ext)}>
-        <Pressable onPress={async () => activateExtension(windowId, ext, await measure(), fetched?.[ext.id], tabId)}>
-          {({ pressed }) => (
-            <View
-              style={{
-                width: button,
-                height: button,
-                borderRadius: radius.button,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: pressed || open ? palette.pressed : hovered ? palette.hover : undefined,
-              }}
-            >
-              {icon ? (
-                <View pointerEvents="none">
-                  <Image source={{ uri: icon }} style={{ width: 16, height: 16, opacity: dimmed ? opacity.disabled : 1 }} />
-                </View>
-              ) : (
-                <Symbol name="puzzlepiece.extension" size={14} color={palette.icon} style={{ width: 18, height: 18 }} />
-              )}
-              {badge ? <Badge text={badge} color={state?.badgeColor} textColor={state?.badgeTextColor} /> : null}
-            </View>
-          )}
-        </Pressable>
+        <Button
+          variant="icon"
+          look="extension"
+          palette={shownPalette}
+          active={open}
+          tooltip={title}
+          onPressIn={pressMotion.onPressIn}
+          onPressOut={pressMotion.onPressOut}
+          onPress={async () => {
+            onActivate?.();
+            return activateExtension(windowId, ext, await measure(), fetched?.[ext.id], tabId);
+          }}
+          badge={badge ? <Badge text={badge.slice(0, 4)} size="s" fit={badgeRoom} fill={fill} color={state?.badgeTextColor ?? contrastText(fill)} style={BADGE_PLACE} /> : null}
+        >
+          <Animated.View pointerEvents="none" style={[{ width: GLYPH_BOX, height: GLYPH_BOX, alignItems: "center", justifyContent: "center" }, scaleStyle]}>
+            {icon ? (
+              <Image source={{ uri: icon }} style={{ width: IMAGE, height: IMAGE, opacity: dimmed ? opacity.disabled : 1 }} />
+            ) : (
+              <Symbol name="puzzlepiece.extension" size={GLYPH} color={palette.icon} style={{ width: GLYPH_BOX, height: GLYPH_BOX }} />
+            )}
+          </Animated.View>
+        </Button>
       </ContextMenuArea>
-    </View>
+    </Animated.View>
   );
 }
 
-function Badge({ text, color, textColor }: { text: string; color?: string | null; textColor?: string | null }) {
-  const fill = color && color !== ink.black ? color : BADGE_FALLBACK_FILL;
-  return (
-    <View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        right: 1,
-        bottom: 3,
-        minWidth: 13,
-        height: 11,
-        paddingHorizontal: 2.5,
-        borderRadius: 3,
-        backgroundColor: fill,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Text numberOfLines={1} weight="bold" style={[BADGE_TEXT, { color: textColor ?? contrastText(fill) }]}>
-        {text.slice(0, 4)}
-      </Text>
-    </View>
-  );
-}
+const BADGE_PLACE = { position: "absolute", right: 1, bottom: 3 } as const;
 
 const contrastText = (fill: string) => (isLight(fill) ? ink.black : ink.white);
 
-function CastButton({ windowId, tabId, routes, palette, button }: { windowId: string; tabId: string; routes: CastRoute[]; palette: ToolbarPalette; button: number }) {
+function CastButton({ windowId, tabId, routes, palette }: { windowId: string; tabId: string; routes: CastRoute[]; palette: ToolbarPalette }) {
   const theme = useTheme();
   const tooltip = routes.map((r) => (r.description ? `${r.description} on ${r.sink}` : `Casting to ${r.sink}`)).join("\n");
   const menu = async () => {
@@ -205,27 +274,27 @@ function CastButton({ windowId, tabId, routes, palette, button }: { windowId: st
   };
   return (
     <ContextMenuArea onContextMenu={() => void menu()}>
-      <Button variant="icon" icon="tv.and.mediabox.fill" size={14} box={button} glyphBox={GLYPH_BOX} radius={radius.button} color={theme.accent} palette={palette} tooltip={tooltip} onPress={() => void toggleCastPicker(windowId, tabId)} />
+      <Button variant="icon" icon="tv.and.mediabox.fill" look="extension" color={theme.accent} palette={palette} tooltip={tooltip} onPress={() => void toggleCastPicker(windowId, tabId)} />
     </ContextMenuArea>
   );
 }
 
-function OverflowButton({ windowId, tabId, palette, button }: { windowId: string; tabId: string; palette: ToolbarPalette; button: number }) {
+function OverflowButton({ windowId, tabId, hidden, palette, onActivate }: { windowId: string; tabId: string; hidden: InstalledExtension[]; palette: ToolbarPalette; onActivate?: () => void }) {
   const { ref, measure } = useAnchor(windowId, tabId, "*");
   const onPress = async () => {
     const anchor = await measure();
     const enabled = currentWindowExtensions(windowId);
-    const choice = await chooseFromMenu<InstalledExtension, ExtensionListChoice>([
-      ...enabled.map((x) => ({ value: x, title: x.name, symbol: x.pinned ? "pin.fill" : undefined })),
-      ...(enabled.length ? [{ separator: true as const }] : []),
-      ...EXTENSION_LIST_ITEMS,
-    ]);
-    if (choice && typeof choice === "object") void activateExtension(windowId, choice, anchor, undefined, tabId);
-    else runExtensionListChoice(choice, windowId);
+    const choice = await chooseFromMenu(extensionOverflowItems(enabled, hidden));
+    if (choice && typeof choice === "object" && "front" in choice) void moveToolbarExtension(windowId, choice.front.id, 0, "menu");
+    else if (choice && typeof choice === "object") {
+      onActivate?.();
+      void activateExtension(windowId, choice, anchor, undefined, tabId);
+    }
+    else if (choice !== "front") runExtensionListChoice(choice, windowId);
   };
   return (
     <View ref={ref} onLayout={() => void measure()}>
-      <Button variant="icon" icon="puzzlepiece.extension" size={14} box={button} glyphBox={GLYPH_BOX} radius={radius.button} palette={palette} tooltip="Extensions" onPress={() => void onPress()} />
+      <Button variant="icon" icon="puzzlepiece.extension" look="extension" palette={palette} tooltip="Extensions" onPress={() => void onPress()} />
     </View>
   );
 }

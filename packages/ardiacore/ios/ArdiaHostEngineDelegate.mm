@@ -2,10 +2,10 @@
 #import "ArdiaEarlyWindow.h"
 #import "ArdiaServices.h"
 #import "ArdiaNavigationDownloads.h"
+#import "ArdiaRuntime.h"
 #import "ArdiaStartup.h"
 #import "ArdiaTabParking.h"
 #import "ArdiaWebViewInternal.h"
-#import "ArdiaNotifications.h"
 
 #import <Security/Security.h>
 #import <objc/runtime.h>
@@ -18,13 +18,27 @@
 
 using namespace ardia_host;
 
+static void EndFailedPageDragsAtMouseUp() {
+  const SEL begin = @selector(beginDraggingSessionWithItems:event:source:);
+  const bool installed = ardia_runtime::ReplaceMethod(NSClassFromString(@"WebContentsViewCocoa"), begin, ^id(IMP original) {
+    return ^NSDraggingSession *(NSView *view, NSArray<NSDraggingItem *> *items, NSEvent *event, id<NSDraggingSource> source) {
+      NSDraggingSession *session = ((NSDraggingSession * (*)(NSView *, SEL, NSArray<NSDraggingItem *> *, NSEvent *, id<NSDraggingSource>))original)(view, begin, items, event, source);
+      session.animatesToStartingPositionsOnCancelOrFail = NO;
+      return session;
+    };
+  });
+  if (!installed) NSLog(@"[ardiacore] page drag session override not installed: WebContentsViewCocoa has no %@", NSStringFromSelector(begin));
+}
+
 @implementation ArdiaHostEngineDelegate
 
 - (void)engineDidStart {
+  ArdiaLaunchSequence.shared.engineStartedAt = NSDate.date.timeIntervalSince1970 * 1000;
   NSLog(@"[ardiacore] engine started (Chromium %@)", ArdiaCoreEngine.sharedEngine.chromiumVersion);
-  gStarted = YES;
+  ArdiaLaunchSequence.shared.engineRunning = YES;
   WatchReservedShortcuts();
   ardia_host::InstallActivationGuardsLate();
+  EndFailedPageDragsAtMouseUp();
   if (gScratchDataDir && ardia_host::Background())
     ardia_host::InstallTestCrashGuard([gDataDirectory stringByDeletingLastPathComponent]);
   ArdiaCoreEngine *engine = ArdiaCoreEngine.sharedEngine;
@@ -32,15 +46,14 @@ using namespace ardia_host;
   ardia_host::LoadContentBlocker(@"");
   [ArdiaWebView installScrollZoom];
   [ArdiaWebView installSwitchPrewarm];
-  [ArdiaWebView installOutgoingFocusSnapshots];
+  [ArdiaWebView removeSharedImages];
   [ArdiaServices watchDownloads:@""];
 
   NSBundle *bundle = [NSBundle bundleForClass:ArdiaHostEngineDelegate.class];
   NSString *path = [bundle pathForResource:@"page_script" ofType:@"js"];
   NSString *script = path ? [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] : nil;
   if (script) engine.pageScript = script;
-  if (gAppKitDidFinish) StartEarlyWindow();
-  else gEarlyWindowPending = true;
+  [ArdiaLaunchSequence.shared reach:ArdiaLaunchEngineStarted];
 
   CFRunLoopObserverRef idle = CFRunLoopObserverCreateWithHandler(
       nullptr, kCFRunLoopBeforeWaiting, false, 0, ^(CFRunLoopObserverRef observer, CFRunLoopActivity) {
@@ -61,6 +74,7 @@ using namespace ardia_host;
 }
 
 - (void)launchApp {
+  ArdiaLaunchSequence.shared.reactNativeStartedAt = NSDate.date.timeIntervalSince1970 * 1000;
   NSArray<NSURL *> *launchURLs = gBootstrap.urls.copy;
   LinksArrived(launchURLs);
   gAppDelegate = gMakeDelegate();
@@ -75,28 +89,32 @@ using namespace ardia_host;
   NSApp.delegate = gAppDelegate;
   gBootstrap = nil;
   NSNotification *note = [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification object:NSApp];
-  if (gAppKitWillFinish && [gAppDelegate respondsToSelector:@selector(applicationWillFinishLaunching:)])
+  ArdiaLaunchSequence *launch = ArdiaLaunchSequence.shared;
+  if ([launch reached:ArdiaLaunchAppKitWillFinish] && [gAppDelegate respondsToSelector:@selector(applicationWillFinishLaunching:)])
     [gAppDelegate applicationWillFinishLaunching:note];
-  if (!gAppKitDidFinish) {
+  if (![launch reached:ArdiaLaunchAppKitDidFinish]) {
     NSLog(@"[ardiacore] app delegate %@ set before AppKit finished launching", NSStringFromClass([gAppDelegate class]));
-    gPendingLaunchURLs = launchURLs;
+    if (launchURLs.count)
+      [launch after:ArdiaLaunchAppKitDidFinish
+                 do:^{
+                   dispatch_async(dispatch_get_main_queue(), ^{ ReplayLaunchURLs(launchURLs); });
+                 }];
     return;
   }
   note = [NSNotification notificationWithName:NSApplicationDidFinishLaunchingNotification object:NSApp];
   if ([gAppDelegate respondsToSelector:@selector(applicationDidFinishLaunching:)])
     [gAppDelegate applicationDidFinishLaunching:note];
   NSLog(@"[ardiacore] app delegate %@ launched", NSStringFromClass([gAppDelegate class]));
-  if (launchURLs.count && [gAppDelegate respondsToSelector:@selector(application:openURLs:)])
-    [gAppDelegate application:NSApp openURLs:launchURLs];
+  if (launchURLs.count) ReplayLaunchURLs(launchURLs);
 }
 
 - (void)engineWillShutDown {
-  gStarted = NO;
+  [ArdiaLaunchSequence.shared engineShutDown];
 }
 
 - (void)engineQuitCancelled {
   NSLog(@"[ardiacore] quit cancelled");
-  [NSNotificationCenter.defaultCenter postNotificationName:ArdiaQuitCancelledNotification object:nil];
+  if (ArdiaHost.quitCancelledHandler) ArdiaHost.quitCancelledHandler();
 }
 
 - (void)engine:(ArdiaCoreEngine *)engine permissionRequest:(NSDictionary *)request tab:(ArdiaCoreTab *)tab {
@@ -166,10 +184,13 @@ using namespace ardia_host;
   return YES;
 }
 
-- (void)engine:(ArdiaCoreEngine *)engine extensionInstallPrompt:(NSDictionary *)prompt tab:(ArdiaCoreTab *)tab {
+- (void)engine:(ArdiaCoreEngine *)engine
+    extensionInstallPrompt:(NSDictionary *)prompt
+                   profile:(ArdiaCoreProfile *)profile
+                       tab:(ArdiaCoreTab *)tab {
   NSMutableDictionary *payload = [prompt mutableCopy];
   payload[@"tabId"] = ardia_host::AppTabIdValue(tab);
-  if ([prompt[@"profile"] isKindOfClass:NSString.class]) payload[@"profile"] = ardia_host::ProfileNameOfDirectory(prompt[@"profile"]);
+  payload[@"profile"] = ardia_host::ProfileName(profile);
   gInstallPrompts[payload[@"requestId"] ?: @""] = payload;
   [ArdiaEvents emit:@"extensions.installPrompt" data:payload];
 }
@@ -185,8 +206,10 @@ using namespace ardia_host;
 }
 
 - (ArdiaCoreWindow *)engineWindowForNewBrowserOfProfile:(ArdiaCoreProfile *)profile type:(NSString *)type {
+  if ([type isEqualToString:@"app"]) ardia_host::ChromeMakesAppWindow(profile);
   if (![type isEqualToString:@"normal"] && ![type isEqualToString:@"popup"]) return nil;
-  if ([type isEqualToString:@"normal"] && !profile.offTheRecord)
+  if ([type isEqualToString:@"popup"]) return ardia_host::PopupWindowForChromeBrowser(profile);
+  if (!profile.offTheRecord)
     if (ArdiaWindowController *made = [ArdiaWindowController chromeMadeWindowForProfile:profile]) return made.coreWindow;
   return [ArdiaWindowController strayWindowForProfile:profile].coreWindow;
 }

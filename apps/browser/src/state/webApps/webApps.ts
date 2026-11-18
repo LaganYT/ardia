@@ -12,8 +12,8 @@ const ICON_SIZE = 128;
 const SCHEME = "ardia-app:";
 const openApps = new Map<string, string>();
 
-export async function installPageAsApp(tab: Tab, windowId: string) {
-  if (!/^https?:/i.test(tab.url) || useBrowser.getState().windows[windowId]?.incognito) return;
+export async function installPageAsApp(tab: Tab | undefined, windowId: string) {
+  if (!tab || !/^https?:/i.test(tab.url) || useBrowser.getState().windows[windowId]?.kind === "private") return;
   const name = await prompt({
     title: "Install as App",
     value: tab.customTitle || tab.title || new URL(tab.url).hostname,

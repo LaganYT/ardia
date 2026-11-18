@@ -15,7 +15,9 @@ All of them are in `apps/browser/scripts/perf/`.
 | `acmark.m` | native | Injected into the bench's copy of the app: marks when a window's React content commits, and (`AC_BENCH_KEYLOG=1`) every key down the app's event loop sees. |
 | `acframes.m`, `frames-phase.mjs`, `frames-phase.test.mjs` | native | The frame rig (`native-bench.mjs --only frames`, `framecounts`): `acframes.m` is injected like `acmark.m` and records display-link ticks, main- and JS-thread run-loop busy time and layout counters; `frames-phase.mjs` drives the interactions and reads them; the test checks the window arithmetic. Rows: [What the frame rows measure](#what-the-frame-rows-measure). |
 | `scroll-frames.mjs` | native | Scroll smoothness on local pages that follow the scroll in script, rAF, canvas, scroll-driven animations, a smooth-scroll library and an inner scroller: real trackpad (phases and momentum, at 120, 90 or 60 events/s), wheel and key scrolls into a hidden instance (`acperf postscroll`, CDP keys), read from Chrome's trace. Rows: compositor draws, main frames, stale draws (a draw with no new main frame since the one before: script-placed content shows the old scroll position), rAF rate and gaps, per app. Its header has the details. |
-| `tab-actions.mjs`, `actabs.m` | native | Tab actions from the AppKit event to the last paint, on a session that looks like a real one (60 tabs, 2 profiles, pinned tiles and rows, groups, audible and loading tabs, 2 windows): sidebar click, ⌃Tab, ⌘1–9, ⌘T, ⌘-click, ⌘W, the row's ✕, pin and unpin, ⌃⇧PgDn. Sides (a bundle each, `--side-env` for extra environment) alternate launch by launch. Each action is split into event → store, React's commit, layout, the UI blocks on the main thread and AppKit's display + Core Animation commit, plus the shown page's frame, with React renders and commits per action. `actabs.m` is injected like `acmark.m`: it posts the key, mouse and menu events in-process and times every UI-manager flush to its Core Animation commit. |
+| `strip-scroll.mjs`, `acstrip.m` | native | What a two-finger pan and a wheel over the top tab strip cost (25 or 80 tabs, 1 or 2 profiles, mid-strip, at either end, leaving and reaching its start): main- and JS-thread CPU and busy time, the longest main-thread iteration, the process's CPU, UI-manager layout passes and view updates, React commits and renders, and how far the strip moved, sides interleaved gesture by gesture. `acstrip.m` is injected like `acframes.m`: it finds the strip's scroll view, sets its offset, reads thread CPU, and makes the gestures in-process (precise phaseless deltas; `--driver acperf` posts real phased ones when the screen is unlocked). |
+| `sidebar-scroll-bench.mjs` | native | What a flick and a wheel spin over the sidebar's tab list cost at 50, 150 and 300 tabs (pinned tiles and rows, groups, audible and loading tabs), 1 or 2 profiles, with the hover pointer resting over the list: main- and JS-thread CPU and busy time, frames and the longest gap, the process's CPU, root hit tests, view updates and layout passes, React commits and renders, JS tasks from scroll and hover events, and how far the list moved. Runs a production bundle on a Debug app through a stand-in packager; sides interleave with `--append`. `acframes.m` posts the gestures in-process (`gesture` op: phaseless precise pans and wheel notches, which a locked screen still routes) and reads or sets the scroll offset (`scrollpos`). |
+| `tab-actions.mjs`, `actabs.m` | native | Tab actions from the AppKit event to the last paint, on a session that looks like a real one (60 tabs, 2 profiles, pinned tiles and rows, groups, audible and loading tabs, 2 windows): sidebar click, ⌃Tab, ⌘1–9, ⌘T, ⌘-click, ⌘W, the row's ✕, pin and unpin, ⌃⇧PgDn. `--extra-tabs N` adds N plain tabs to it, the many-tab session: J2 (⌘T) and J3 (⌃Tab) must cost the same at 0 and 100 extra (#1330). Sides (a bundle each, `--side-env` for extra environment) alternate launch by launch. Each action is split into event → store, React's commit, layout, the UI blocks on the main thread and AppKit's display + Core Animation commit, plus the shown page's frame, with React renders and commits per action. `actabs.m` is injected like `acmark.m`: it posts the key, mouse and menu events in-process and times every UI-manager flush to its Core Animation commit. |
 | `launch-trace.mjs` | native | Where the engine's start goes, two sides compared: Chrome's startup traces (`native-bench.mjs --only launch --trace-startup <categories>`), milestones from the process's creation (ChromeMain, BrowserMain, each process's first event) and the browser main thread's slices by name. |
 | `acsample.c`, `launch-samples.mjs` | native | The stretch the trace doesn't cover (ChromeMain → BrowserMain, ~100 ms): `acsample.c`, injected with `--env DYLD_INSERT_LIBRARIES`, samples the main thread every ~1 ms from before `main`; `launch-samples.mjs` symbolizes the samples against the unstripped framework (`dist/<v>/symbols`) and compares the functions in a window of two sides. How to run: its header. It found 0.2.31's +20 ms: the platform policy loader waiting on `/usr/bin/profiles`. |
 | `bench-entry.js`, `bench-channel.js`, `bench-offline.js` | native | The JS entry of the bench bundle: the app's `index.js` plus the command channel (`ac.journeys()` is the field timing's own view). `bench-offline.js` answers every non-local `fetch` itself when the data folder holds a `bench-offline` file, so nothing is uploaded while sharing is on. |
@@ -26,8 +28,14 @@ All of them are in `apps/browser/scripts/perf/`.
 | `census.mjs` | render | Per action of each journey (Cmd-T, keystroke, Cmd-L, tab switch, Enter, page load, hover): components rendered, wasted renders, hooks run, store subscriptions notified, selectors evaluated, native view updates, timers scheduled. Its results and fix list: [render-census.md](render-census.md). |
 | `micro-bench.mjs` | Node | Store-side work that grows with a profile (sidebar entries, group names, omnibox) in Node. No app needed. Its `counts` and `instr` cases feed the ratchet. |
 | `suggest-instr.mjs`, `suggest-hermes.mjs`, `bar-actions.json` | Node, Hermes | One command-bar keystroke on the seed profile (typing `github.com/net` and `react native perf`: site check, the bar's 46 actions, suggestions). `micro-bench.mjs suggest-keys` prints ops and time per key (`SUGGEST_BEFORE=1` runs the code as it was before the J2 hill-climb: the frozen spec `packages/core/src/suggest.reference.ts`); `suggest-instr.mjs` the instructions retired per round; `suggest-hermes.mjs` the same keys in the app's Hermes (the app's babel transform, the `hermes` CLI from Pods), per key, run under the perflab lock. `packages/core/src/suggest.property.test.ts` and `fuzzy.property.test.ts` hold the live code to the frozen spec on random profiles and typing sequences. |
+| `bookmark-move-bench.mjs` | Node | A Bookmarks page drag of a selection into another folder: CPU time of the store update and of the diff sent to Chrome, and how many ops it sends (`--each` and `--slice`/`--flat` time older code). No app needed. |
 | `ratchet.mjs`, `ratchet.json` | ratchet | Ceilings on counts that can only go down, and the commands that check, lower and rebuild them. |
-| `ratchet-app.js`, `ops.mjs`, `ratchet-proof.mjs` | ratchet | The `launch` scenario the ratchet adds to js-bench, the builtin-call counter micro-bench uses, and the before/after proof that counts track wall-clock. |
+| `ratchet-app.js`, `ops.mjs` | ratchet | The `launch` scenario the ratchet adds to js-bench, and the builtin-call counter micro-bench uses. |
+
+Every bench that runs a copy of the app (js-bench, render-bench, census, native-bench, tab-actions) makes it with
+`prepareApp` in `scripts/lib/app-copy.mjs`: an APFS clone with the bundle swapped in, re-signed with the original's identity
+and entitlements only when something changed (the bundle, or the dyld and library-validation entitlements the injected
+`.m` tools need), and never from `/Applications`.
 
 The app side of the JS benches is `apps/browser/src/state/app/perfProbe.ts`. It only turns on in an isolated instance
 whose data folder holds a `perf-probe` file.
@@ -247,8 +255,9 @@ and `xctrace` counters need root or Instruments and weren't tried.
 
 ### Do the counts track wall-clock?
 
-`ratchet-proof.mjs` runs one workload on two revisions of the source, exported with `git archive` (nothing is checked
-out), and prints the exact builtin calls and the median wall-clock side by side. The pair is `f3417151^` and `f3417151`,
+`ratchet-proof.mjs` (deleted 2026-11-09; `git show 3737e1b79:apps/browser/scripts/perf/ratchet-proof.mjs`) ran one workload
+on two revisions of the source, exported with `git archive` (nothing is checked out), and printed the exact builtin calls
+and the median wall-clock side by side. The pair is `f3417151^` and `f3417151`,
 the commit "Strip and sidebar entries look tabs' groups and splits up by index", which stopped `sidebarEntries` from
 searching every split for every tab on a title change:
 
@@ -262,8 +271,7 @@ the 3.1 → 0.16 ms line is one run on a calmer machine. The calls are the same 
 
 Both fall, by more on the bigger window, as a quadratic-to-linear fix predicts, and the time falls further than the
 calls because a call isn't weighted by what it costs (the old code's calls were array scans). **Proven:** builtin calls
-for Node store work: a fix that cut the work cut the count by 68% to 92% and the time by 62% to 99% in every run, and
-`ratchet-proof.mjs` repeats it. **Not proven:** the app-side counts (commits, renders, host updates) against
+for Node store work: a fix that cut the work cut the count by 68% to 92% and the time by 62% to 99% in every run. **Not proven:** the app-side counts (commits, renders, host updates) against
 milliseconds. They are the same kind of count and `render-bench.mjs` times each component's renders, but no fix since the
 probe existed has been timed by the native bench with the machine quiet enough to see it; the first one should be added
 here with its before and after. Until then a drop in a React count is a drop in work, and a rise is a regression only in
@@ -312,7 +320,7 @@ a special case, cache or deferral that saves under 0.5 ms an action isn't worth 
 | `a3c9eff4` mounted set | +4 −1 | ~n²/2 string compares per switch | keep (simpler than before) |
 | `33e88e6f` page progress out of the store | +84 −13 (incl. preload hunks swept in) | 2 fewer store updates per load | keep |
 | `099fc058`, `cbfeb1ab`, `9b7eab76` narrower reads, memo leaves | +71 −51 | renders 414 → 134 per page load; 45 → 25 per key | keep (unproven family) |
-| `7184f7e8`, `e261559a` deferred sidebar rows | +146 −90 | first commit mounts 2757 → 1150 | keep; `scripts/layout-shift-test.mjs` holds the no-shift rule |
+| `7184f7e8`, `e261559a` deferred sidebar rows | +146 −90 | first commit mounts 2757 → 1150 | keep; `apps/browser/scripts/layout-shift-test.mjs` holds the no-shift rule |
 | `d7e6372a`, `bdee6047` legacy-file launch work | +69 −10 | 400 ms of bundle evaluation, but only on a launch with an old history.json / bookmarks.json | see below |
 | `be2ca8f7` update prewarm | +94 | 130–190 ms on an update's first launch | keep |
 | `9947002f` field timing listener only when sharing | +9 −2 | µs per store update | keep (also correct: off means off) |
@@ -382,7 +390,6 @@ What it does not see: the render server and the GPU. A frame the main thread del
 offscreen pass for a shadow or blur) is not counted; the layout and mount counters and the code are where those are
 looked for. Over-budget counts are noisy; the layout, mount and React counts repeat to the digit, which is why
 `frames-ratchet.json` holds ceilings for those only (`node apps/browser/scripts/perf/frames-phase.mjs check <results.json>`).
-Results and the fix list: [frames.md](frames.md).
 
 **cpu-cap.** `scripts/agent/cpu-cap` puts our processes on background QoS (efficiency cores) and pauses the busiest while
 the Mac is over its cap. Timings from a run it touched are not a user's: the table has a row that counts the runs under
@@ -400,6 +407,155 @@ shape.
 - `otherJsMs`: JS time outside the measured steps.
 - `writes`, `writeKB`: document writes.
 - `startup.*`: marks from the bundle's start to the first window.
+
+## Profiles at launch (#801)
+
+A launch loads only the profiles its windows show (`state/profiles/profileLoading.ts`, switch `lazyProfiles`, setting
+Load profiles when opened). The deterministic count is the loaded profiles, `ac.engine.call("profiles.loaded")`, and the
+`--extension-process` renderers (one uBlock Origin per loaded profile): with one window on Personal, N profiles give 1
+and 1, against N and N with the setting off. Measured 2026-11-06 on a Release build, one window showing Personal, N
+profiles of 3 restored tabs each, no other extensions, physical footprint of the process tree after a 60 s idle, the
+setting off and on alternating launch by launch, two runs each (load average 3 to 10):
+
+| Profiles | All at launch | When opened | Saved |
+|---:|---:|---:|---:|
+| 2 | 499 MiB | 363 MiB | 136 MiB (27 %) |
+| 4 | 822 MiB | 351 MiB | 471 MiB (57 %) |
+| 8 | 1492 MiB | 393 MiB | 1099 MiB (74 %) |
+
+The first switch to a deferred profile, 8 profiles, 3 runs a side: the profile is loaded 2 ms after the switch, its
+bookmarks, history and favicons answered after 50 to 75 ms (19 to 28 ms preloaded), and its page's first contentful
+paint comes 2.1 to 2.2 s after the switch (0.1 to 0.3 s preloaded), nearly all of it the navigation hold until that
+profile's uBlock Origin rulesets are ready (`held 1 navigations … the first 2060 ms` in the app log), the same on a data
+folder where every profile had run before. Later switches cost what they did before.
+
+## Profiles no window shows (#1367, #1371)
+
+`native-bench.mjs --only profiles` measures what the profiles a window isn't showing cost, and what going back to one
+costs. It seeds one window with `--profile-count` profiles of one local tab each (`profile-seed.mjs`), opens each
+profile once, shows Personal again, and reads the loaded profiles (`profiles.loaded`) and the process tree's physical
+footprint 60 s later and again after `--idle` seconds. Then it switches to the first other profile and times its page:
+shown again when it was kept, first contentful paint when it had to load. `--setting K=V` and `--control-setting K=V`
+put a setting in each side's seeded session, so one app is measured against itself (they also work with `--seed big`,
+for a launch with a setting changed). The bench closes its DevTools sessions before idling: a page being debugged keeps
+its profile loaded. `--profile-visits 0` opens no other profile, which measures what a launch loads.
+
+```sh
+node apps/browser/scripts/perf/native-bench.mjs --app $APP --control $APP \
+  --label unload-5m --control-label unload-never --only profiles --profile-count 4 --runs 2 --idle 450 \
+  --setting unloadProfilesAfter=5m --control-setting unloadProfilesAfter=never --out $OUT/profiles
+```
+
+Unload inactive profiles (Settings › Advanced › Performance, off by default; `state/profiles/profileUnloading.ts`),
+measured 2026-11-14 on a Release build, 4 profiles, 450 s on Personal, two runs a side, load average 45 to 60:
+
+| | Never | After 5 minutes |
+|---|---:|---:|
+| Profiles loaded after the idle | 4 | 1 |
+| Processes | 13 | 6 |
+| Memory, process tree | 653 MB (644 to 662) | 311 MB (308 to 314) |
+| Back to a profile → its page shown | 76 ms (one run; the page was kept) | 634 ms (455 and 813; the profile, its uBlock Origin and the page load again) |
+
+Going back to an unloaded profile is a load, not a switch, which is why the setting is off unless chosen. In a Debug
+build the same return took 0.93 to 1.14 s in three rounds, 0.8 to 1.0 s of it the navigation hold until that profile's
+uBlock Origin rulesets are ready; the page came back at its URL, scroll position and back/forward list, with its
+cookies (session cookies too) and local storage.
+
+## Freeze monitoring (#2479)
+
+Every copy watches two threads for stalls: the app's main thread (AppKit, our native code and Chromium's browser UI
+thread, which are one thread: `ChromeMain` runs in our process) and the Hermes JS thread that runs the interface.
+`ArdiaFreezeWatch.mm` (packages/ardiacore) adds two `CFRunLoopObserver`s to each run loop in the common modes: one at
+the lowest order for after-waiting (a busy stretch starts) and one at the highest for before-waiting (it ends). A
+stretch of 250 ms or more is a stall. There is no timer: the observers run only when the loop wakes, so a sleeping app
+pays nothing. On the JS thread the watch also reads Hermes's cumulative GC time (`HermesInternal.getInstrumentedStats()`
+`js_gcTime`, through JSI, on the JS thread itself and only at its run loop's top level: as each busy stretch starts, and
+again when a stall ends; a read costs about 0.6 µs) to say how much of each stall was collection. Each bridge owns its
+JS-thread observers and its runtime pointer, so a reload's new bridge never reads the old runtime or the reverse. The release Hermes framework gives counts and totals only
+(`js_numGCs`, `js_gcTime`, `js_gcCPUTime`, `js_heapSize`): no per-collection pause and no GC callback, so the longest
+single pause isn't available; `js_stall_gc_longest_ms` is the most GC inside one stall.
+
+Sent hourly in `perf_memory`, sharing on only (`state/telemetry/freezes.ts`), per thread (`main_` and `js_`):
+`*_stall_250_500ms`, `_500ms_1s`, `_1_2s`, `_2_5s`, `_5_10s`, `_over_10s`, `*_stall_longest_ms`, `*_stall_input_waits`
+and `*_stall_input_wait_max_ms` (a click or key that waited 50 ms or more behind the stall; main thread: an event handled
+in the stalled stretch, JS thread: an event that arrived during it; measured from the input monitor that runs only while
+sharing is on); for the JS thread `js_stall_gc_measured`, `js_stall_gc_ms`, `js_stall_gc_longest_ms` and
+`js_stall_gc_bound` (stalls at least half GC); `js_gc_count` and `js_gc_ms` (all collections in the hour) and
+`js_heap_mb_floor` (0, 64, 128, 256, 512, 1024 or 2048). Pages: `renderer_unresponsive` (Chrome's "Page Unresponsive",
+counted when it ends), `renderer_unresponsive_exited` (Exit Page), and by how long it lasted `_under_5s`, `_5_30s`,
+`_30s_2m`, `_over_2m`.
+
+Consent: JS hands the native watch a random epoch for each sharing period (0 while off); a stall is tallied only when
+the epoch at its start is still the current one, a new epoch empties the tallies, and `take(epoch)` answers only for the
+current epoch, so nothing from while sharing was off is sent later. When #2455 lands, the epoch is its consent epoch.
+The `freezeWatchOff` experiment (`ARDIA_SWITCHES=freezeWatchOff=on`) turns the watch off.
+
+Dev commands: `expo.modules.ArdiaDev.devBlockMain(ms)` (Debug builds) spins the main thread and `ac.blockJs(ms, garbage)`
+the JS thread (with `garbage`, allocating, so Hermes collects). `node apps/browser/scripts/freeze-watch-test.mjs <Debug
+app> [--metro=<port>]` blocks each thread for 300 ms, 1.2 s and 6 s and checks each bucket, the GC share, that sharing
+off counts nothing, and a page hung 22 s after a real click (Chrome ignores a hang while DevTools is attached to the
+page, so the test clicks through AppKit).
+
+Idle cost, 2026-11-17: native-bench `--only idle` on a Release build of this change against the same app with
+`ARDIA_SWITCHES=freezeWatchOff=on`, interleaved run by run, 4 runs a side, 60 s idles, engine 2ebf9722fefc. Other agents'
+builds kept the 1-minute load at 89–153, so the CPU rows are indicative only; wakeups are counts and hold up. The
+browser-process wakeups row is the same rusage `perf_memory.browser_wakeups_per_s` reports.
+
+| Idle, median (range) | Watch off | Watch on |
+|---|---:|---:|
+| Wakeups/s, browser process, 1 tab | 2.1 (1.9–2.8) | 1.9 (1.8–2.1) |
+| Wakeups/s, browser process, 20 tabs | 3.2 (3.1–3.5) | 3.2 (3.2–3.4) |
+| Wakeups/s, all processes, 1 tab | 7.2 (7.0–8.8) | 6.5 (6.3–6.9) |
+| Wakeups/s, all processes, 20 tabs | 15.8 (13.3–19.9) | 16.0 (15.7–16.4) |
+| CPU, browser process, 1 tab (load 89–153) | 0.46 % (0.33–0.62) | 0.31 % (0.28–0.33) |
+| CPU, browser process, 20 tabs (load 89–153) | 0.34 % (0.26–0.49) | 0.26 % (0.25–0.37) |
+
+### What caused a freeze (#2479 part 2)
+
+When a busy stretch passes 400 ms while the app is active, a one-shot watchdog on a utility queue
+(`ArdiaFreezeCapture.mm`) samples the stuck thread: up to 3 samples 100 ms apart, 24 frames each
+(`ArdiaStackSample.c`: `thread_info` first and no sample if someone else holds the thread suspended,
+`thread_suspend`, `thread_get_state`, a frame-pointer walk bounded to the thread's own stack, 16-byte aligned, strictly
+upward, read with `mach_vm_read_overwrite` so a bad pointer fails instead of faulting, then `thread_resume`; nothing
+between suspend and resume allocates, locks, logs or calls Objective-C, and a sample whose stretch ended meanwhile is
+dropped). Never with a debugger attached (`P_TRACED`). The watchdog is armed at a loop's after-waiting (when no
+earlier deadline is pending) and disarmed at before-waiting once neither loop is busy and no capture is running, so a
+short stretch costs two timer updates and no wakeup (a wake's deadline check and arming take the same lock as idle
+cancellation, so a loop that wakes while the other is being disarmed always ends up armed: `ArdiaFreezeArming.h`,
+`tests/freeze-arming.test.cc` under ThreadSanitizer); it re-arms only for a stretch still running. Sampling and the
+2-second write run on their own queue, apart from the queue that allocates (recovery, the JS event, annotations), so a
+thread frozen holding the malloc lock can't stop the write; registration takes a small lock, never a queue.
+
+Frames are resolved without `dladdr`: a table of our own images' `__TEXT` ranges and UUIDs (Ardia, Chromium Framework,
+hermes) is built at start, the dyld shared cache's range is "system", anything else "other" with no offset. Two seconds
+into a freeze the watchdog writes the record into one of 20 fixed 4 KB slots (frames stop short of the slot's last 640 bytes, so the images and end marker always fit) of `freezes.txt` in the data folder,
+preformatted into a static buffer with `pwrite` to a file opened at start, so a force quit still leaves it; the frozen
+thread's recovery rewrites the slot with its length, and JS adds the job that was running. Help › Copy Last Freeze
+copies the latest; Copy Diagnostics carries one line (count today, longest, last cause). Hermes's offsets name GC
+(`HadesGC::*`) or the interpreter (`Interpreter::interpretFunction`) from the release framework's own local symbols.
+
+Idle cost of the watchdog, 2026-11-17: native-bench `--only idle` on a Release build with `ARDIA_TEST=freezeWatchActive=1`
+on both sides (hidden instances are never active, so without it the watchdog never arms), against the same app with
+`ARDIA_SWITCHES=freezeWatchOff=on`, interleaved, 4 runs a side, 60 s idles. Load ran from 38 to 730 during the run, so
+only the wakeup counts mean anything.
+
+| Idle, median (range) | Watch off | Watch and watchdog on |
+|---|---:|---:|
+| Wakeups/s, browser process, 1 tab | 2.1 (1.8–2.3) | 1.9 (1.8–2.0) |
+| Wakeups/s, browser process, 20 tabs | 3.2 (2.9–7.4) | 2.8 (2.6–3.0) |
+| Wakeups/s, all processes, 1 tab | 6.5 (6.5–7.0) | 6.8 (6.0–11.2) |
+| Wakeups/s, all processes, 20 tabs | 15.0 (10.2–65.5) | 14.8 (9.2–19.0) |
+
+The job: our own JS jobs mark what they run (`state/app/jobActivity.ts`: `sync`, `sessionSave`, `memoryTrim` (its forced
+`gc()`), `omniboxSuggest`, `liveFolders`, `historyApply`, `import`), and a freeze is given the one it overlapped most.
+
+`app_freeze` (sharing on, and only for a freeze whose consent epoch at its start is still current): `freeze_thread`,
+`freeze_duration` (400ms_1s … over_30s), `freeze_ms`, `input_wait_ms`, `gc_ms`, `gc_count`, `heap_mb_floor`,
+`activity`, `tabs_floor`, `windows`, `sync_on`, `layout`, `action_in_flight` (the journeys' pending new tab, switch,
+navigation or launch), `memory_pressure`, `thermal`, `on_battery`, `uptime`, `signature` (`sig_` and the FNV-1a, in hex, of the top three frames
+from our own images), `samples`, and `freeze_frames`/`freeze_images` in the crash reports' shape. At most 5 a session and
+20 a UTC day, one per signature a day, counted in `freeze-sends.json` (the day, its send count and its signatures; apart from the 20-slot local ring, which wraps). The dashboard's Performance › Freezes card
+ranks signatures over 7 days by people affected, then total time frozen.
 
 ## Rows that don't compare with CEF-era numbers (0.2.21 and older)
 

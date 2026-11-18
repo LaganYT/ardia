@@ -2,11 +2,9 @@ import ExpoModulesCore
 
 public class AutofillModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaAutofill")
+    Name(Self.calls.moduleName)
 
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      AutofillModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
 
     AsyncFunction("saveCard") { (profile: String, card: [String: Any], number: String?, promise: Promise) in
       ArdiaServices.saveCard(card, number: number, profile: profile) { CallReply(promise: promise).service($0, $1) }
@@ -15,17 +13,16 @@ public class AutofillModule: Module {
 
   static let calls = CallTable(domain: "autofill", handlers: [
     "settings": { args, reply in
-      reply.ok([
-        "addresses": ArdiaServices.boolPreference("autofill.profile_enabled", profile: args.profile),
-        "cards": ArdiaServices.boolPreference("autofill.credit_card_enabled", profile: args.profile),
-      ])
+      ArdiaServices.profileToggles(profile: args.profile, set: nil) { toggles, error in
+        guard let toggles = toggles as? [String: Bool] else { return reply.service(nil, error ?? "no autofill settings") }
+        reply.ok(["addresses": toggles["addresses"] ?? true, "cards": toggles["cards"] ?? true])
+      }
     },
     "setSettings": { args, reply in
-      let addresses = try args.optionalBool("addresses")
-      let cards = try args.optionalBool("cards")
-      if let addresses { ArdiaServices.setBoolPreference("autofill.profile_enabled", value: addresses, profile: args.profile) }
-      if let cards { ArdiaServices.setBoolPreference("autofill.credit_card_enabled", value: cards, profile: args.profile) }
-      reply.ok()
+      var values: [String: NSNumber] = [:]
+      if let addresses = try args.optionalBool("addresses") { values["addresses"] = NSNumber(value: addresses) }
+      if let cards = try args.optionalBool("cards") { values["cards"] = NSNumber(value: cards) }
+      ArdiaServices.profileToggles(profile: args.profile, set: values) { _, error in reply.service(nil, error) }
     },
     "addresses": { args, reply in ArdiaServices.addresses(profile: args.profile) { reply.service($0, $1) } },
     "saveAddress": { args, reply in ArdiaServices.saveAddress(try args.dict("address"), profile: args.profile) { reply.service($0, $1) } },

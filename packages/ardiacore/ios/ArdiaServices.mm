@@ -5,6 +5,7 @@
 #import "ArdiaInternal.h"
 #import "ArdiaExtensionPackage.h"
 #import "ArdiaWebViewInternal.h"
+#import "ArdiaRuntime.h"
 
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
@@ -12,23 +13,15 @@
 
 #include <cmath>
 
+using namespace ardia_runtime;
+
 namespace {
 
 NSDictionary *Parse(NSString *json) {
-  NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
-  id value = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+  id value = JSONObject(json);
   return [value isKindOfClass:NSDictionary.class] ? value : @{@"error" : @"bad reply from the engine"};
 }
 
-NSString *JSON(NSDictionary *value) {
-  NSData *data = value ? [NSJSONSerialization dataWithJSONObject:value options:0 error:nil] : nil;
-  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
-}
-
-void Wipe(NSMutableData *data) {
-  volatile unsigned char *bytes = (volatile unsigned char *)data.mutableBytes;
-  for (NSUInteger i = 0; i < data.length; i++) bytes[i] = 0;
-}
 
 char *AppendHex(char *out, NSString *text) {
   const NSUInteger capacity = [text maximumLengthOfBytesUsingEncoding:NSUTF8StringEncoding];
@@ -42,7 +35,7 @@ char *AppendHex(char *out, NSString *text) {
     *out++ = hex[bytes[i] >> 4];
     *out++ = hex[bytes[i] & 15];
   }
-  Wipe(raw);
+  WipeSecret(raw);
   return out;
 }
 
@@ -132,7 +125,7 @@ NSString *StoreFolder(NSString *profile, NSString *extensionId, id version) {
 @implementation ArdiaServices
 
 + (void)call:(NSString *)name profile:(NSString *)profile args:(NSDictionary *)args completion:(ArdiaCoreResult)completion {
-  [ArdiaEngineBridge call:name profile:profile args:JSON(args) completion:^(NSString *json) { completion(Parse(json)); }];
+  [ArdiaEngineBridge call:name profile:profile args:args ? JSONText(args) : nil completion:^(NSString *json) { completion(Parse(json)); }];
 }
 
 + (void)callBase:(NSString *)name profile:(NSString *)profile args:(NSDictionary *)args completion:(ArdiaCoreResult)completion {
@@ -210,15 +203,31 @@ NSString *StoreFolder(NSString *profile, NSString *extensionId, id version) {
   [panel beginWithCompletionHandler:^(NSModalResponse response) { run(response == NSModalResponseOK ? panel.URL.path : nil); }];
 }
 
-+ (BOOL)boolPreference:(NSString *)name profile:(NSString *)profile {
-  ArdiaCoreProfile *p = ardia_host::LoadedProfile(ardia_host::OriginalProfileName(profile));
-  NSNumber *value = [p boolPreference:name];
-  return value ? value.boolValue : YES;
++ (void)profileToggles:(NSString *)profile set:(NSDictionary<NSString *, NSNumber *> *)values reply:(ArdiaServiceReply)reply {
+  NSDictionary<NSString *, NSNumber *> *wanted = [values copy];
+  ArdiaServiceReply done = [reply copy];
+  ardia_host::WithProfile(ardia_host::OriginalProfileName(profile), ^(ArdiaCoreProfile *p) {
+    if (!p || p.destroyed) return done(nil, @"profile not loaded");
+    if (NSNumber *on = wanted[@"passwords"]) p.passwordsOffered = on.boolValue;
+    if (NSNumber *on = wanted[@"addresses"]) p.addressesAutofilled = on.boolValue;
+    if (NSNumber *on = wanted[@"cards"]) p.cardsAutofilled = on.boolValue;
+    done(@{@"passwords" : @(p.passwordsOffered), @"addresses" : @(p.addressesAutofilled), @"cards" : @(p.cardsAutofilled)}, nil);
+  });
 }
 
-+ (void)setBoolPreference:(NSString *)name value:(BOOL)value profile:(NSString *)profile {
-  ArdiaCoreProfile *p = ardia_host::LoadedProfile(ardia_host::OriginalProfileName(profile));
-  [p setBoolPreference:name value:value];
++ (void)preloadPages:(NSString *)profile reply:(ArdiaServiceReply)reply {
+  ardia_host::WithProfile(ardia_host::OriginalProfileName(profile), ^(ArdiaCoreProfile *p) {
+    if (!p) return reply(nil, @"profile not loaded");
+    reply(p.preloadPages ? @YES : @NO, nil);
+  });
+}
+
++ (void)setPreloadPages:(BOOL)on profile:(NSString *)profile reply:(ArdiaServiceReply)reply {
+  ardia_host::WithProfile(ardia_host::OriginalProfileName(profile), ^(ArdiaCoreProfile *p) {
+    if (!p) return reply(nil, @"profile not loaded");
+    p.preloadPages = on;
+    reply(nil, nil);
+  });
 }
 
 + (void)addresses:(NSString *)profile reply:(ArdiaServiceReply)reply {
@@ -341,6 +350,7 @@ NSString *StoreFolder(NSString *profile, NSString *extensionId, id version) {
   NSMutableDictionary *args = [NSMutableDictionary dictionaryWithObject:extensionId forKey:@"id"];
   for (NSString *key in @[ @"pinned", @"incognito", @"fileAccess", @"userScripts", @"siteAccess" ])
     if (options[key]) args[key] = options[key];
+  if ([options[@"pinnedIndex"] isKindOfClass:NSNumber.class]) args[@"pinnedIndex"] = @([options[@"pinnedIndex"] integerValue]);
   [self run:@"ac_extensions_configure" profile:profile args:args event:@"configured" reply:reply];
 }
 
@@ -384,7 +394,7 @@ NSMutableDictionary<NSString *, NSString *> *DownloadProfiles() {
 
 + (void)downloadCommand:(NSString *)command id:(NSString *)downloadId {
   NSString *profile = DownloadProfiles()[downloadId ?: @""] ?: @"";
-  [self callBase:[@"ac_downloads_" stringByAppendingString:command] profile:profile args:@{@"id" : downloadId ?: @""}
+  [self callBase:@"ac_downloads_command" profile:profile args:@{@"id" : downloadId ?: @"", @"command" : command ?: @""}
       completion:^(NSDictionary *) {}];
 }
 
@@ -449,11 +459,14 @@ NSMutableDictionary<NSString *, NSString *> *DownloadProfiles() {
   })];
 }
 
-+ (void)clearBrowsingData:(NSString *)profile types:(NSArray<NSString *> *)types since:(double)sinceMs completion:(void (^)(void))completion {
++ (void)clearBrowsingData:(NSString *)profile types:(NSArray<NSString *> *)types since:(double)sinceMs completion:(void (^)(NSString * _Nullable))completion {
   if ([types containsObject:@"history"]) [ArdiaEarlyWindow forgetPictures];
-  ArdiaCoreProfile *p = ardia_host::LoadedProfile(profile);
-  if (!p) return completion();
-  [p clearBrowsingData:types since:[NSDate dateWithTimeIntervalSince1970:sinceMs / 1000] completion:completion];
+  [self call:@"ac_browsing_data_clear" profile:profile args:@{@"types" : types, @"since" : @(sinceMs)} completion:^(NSDictionary *result) {
+    if (id error = result[@"error"]) return completion([error description]);
+    id ok = result[@"ok"];
+    const BOOL cleared = [ok isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)ok) == CFBooleanGetTypeID() && [ok boolValue];
+    completion(cleared ? nil : @"Some browsing data could not be cleared.");
+  }];
 }
 
 @end

@@ -1,43 +1,48 @@
-import { Symbol, VisualEffect, WindowDragRegion, Button, font, Toggle, useHover } from "../ui";
+import { Button, ListRow, NativeFormContext, space, Symbol, Text, VisualEffect, WindowDragRegion } from "../ui";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useTheme } from "../ui/theme";
-import { useProfile, useSettings } from "../../state/browser/hooks";
-import { updateSettings } from "../../state/settings/actions";
+import { useProfile } from "../../state/browser/hooks";
 import { trackSettingsSection } from "../../state/telemetry/track";
 import { preparePane, usePaneLoaded } from "../../state/settings/paneData";
-import { clearSettingsReveal, flashSetting, settingsSectionKey, useSettingsSearch } from "../../state/settings/searchState";
+import { clearSettingsReveal, flashSetting, useSettingsSearch } from "../../state/settings/searchState";
 import { anchorView } from "./anchors";
-import { ADVANCED_PANES, findSetting, PANES } from "./settingsIndex";
-import { SettingsPaneContext, SheetTitle } from "./Form";
+import { findSetting, PANES, paneTitle } from "./settingsIndex";
+import { SettingsPaneContext } from "./Form";
+import { PageToolbar } from "../pages/PageLayout";
 import { SettingsSearchField, SettingsSearchResults } from "./SettingsSearch";
 import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";
-import { CalendarPane } from "./panes/Calendar";
+import { AutomationsPane } from "./panes/Automations";
 import { GeneralPane } from "./panes/General";
-import { LiveFoldersPane } from "./panes/LiveFolders";
-import { ExtensionsPane } from "./panes/Extensions";
-import { PasswordsPane } from "./panes/Passwords";
-import { AutofillPane } from "./panes/Autofill";
-import { PrivacyPane } from "./panes/Privacy";
-import { ProfileDetailsPane, ProfilesPane } from "./panes/Profiles";
-import { SearchPane } from "./panes/Search";
-import { EnginesPane } from "./panes/Engines";
+import { ProfilesPane } from "./panes/Profiles";
 import { ShortcutsPane } from "./panes/Shortcuts";
-import { SyncPane } from "./panes/Sync";
 import { TabsPane } from "./panes/Tabs";
 import { useSettingsSheet } from "../../state/settings/sheet";
-import { goToSettingsPane, settingsBack, settingsForward, useSettingsNav, type SettingsPane, type SettingsPlace } from "../../state/settings/settingsWindows";
+import { goToSettingsPane, SETTINGS_WINDOW_ID, settingsBack, settingsForward, useSettingsNav, type SettingsPane, type SettingsPlace } from "../../state/settings/settingsWindows";
+import { closeProfileIconPickerIn } from "../../state/profiles/iconPicker";
+import { ProfileIconPicker } from "../profiles/ProfileIconPicker";
 import { settingsProfileFor } from "../../state/extensions/store";
 import { useSettingsColors } from "./useSettingsColors";
+import { paneTile, paneTints, settingsLayout } from "./tokens";
+import { pageToolbar } from "../pages/tokens";
+import { WINDOW_CHROME, WINDOW_CONTROLS, windowControlsWidth } from "../../lib/windowChrome";
+import { markCaptionRegions } from "../../state/windows/controls";
+import { LIGHTS_CENTER } from "../../state/windows/dockMotion";
+import { setTrafficLightsCenter } from "../../state/windows/nativeWindow";
+import { WindowControls } from "../window/WindowControls";
+import { noteSettingsScroll } from "../../state/settings/growingRows";
 
-
-const SIDEBAR = 214;
-const TOOLBAR = 52;
+const SIDEBAR = settingsLayout.sidebarWidth;
+const TOOLBAR = pageToolbar.window.height;
+const SIDEBAR_TOP = WINDOW_CHROME.leadingWidth ? TOOLBAR : space.ml;
+const TITLE_LEFT = SIDEBAR + 96;
+const CONTROLS_ROOM = WINDOW_CONTROLS.edge + windowControlsWidth() + WINDOW_CONTROLS.gap;
 const HOLD_CAP_MS = 250;
 const REVEAL_MARGIN = 16;
 
 const shownKey = (s: SettingsPlace) => `${s.pane}:${s.profileId ?? ""}:${s.detail ?? ""}`;
+const pageKey = (s: SettingsPlace) => (s.pane === "profiles" && !s.detail ? "profiles::" : shownKey(s));
 
 function useShownPane(): SettingsPlace | null {
   const nav = useSettingsNav();
@@ -72,23 +77,22 @@ export function SettingsWindow() {
   const shown = useShownPane();
   usePrefetchAllPanes(!!shown);
   const profileName = useProfile(shown?.profileId, (p) => p?.name);
-  const title = shown ? (shown.pane === "profiles" && profileName ? profileName : PANES.find((p) => p.id === shown.pane)!.title) : "";
+  const title = shown ? (shown.pane === "profiles" && profileName ? profileName : paneTitle(shown.pane)) : "";
   const sheet = useSettingsSheet((s) => s.sheet);
   useEffect(() => trackSettingsSection(nav.pane), [nav.pane]);
+  useEffect(() => markCaptionRegions(SETTINGS_WINDOW_ID, [[TITLE_LEFT, 0, CONTROLS_ROOM, TOOLBAR]]), []);
+  useEffect(() => void setTrafficLightsCenter(SETTINGS_WINDOW_ID, [LIGHTS_CENTER[0], TOOLBAR / 2]), []);
   const scroller = useRef<ScrollView>(null);
   const key = shown ? shownKey(shown) : "";
-  useLayoutEffect(() => scroller.current?.scrollTo({ y: 0, animated: false }), [key]);
+  const page = shown ? pageKey(shown) : "";
+  useLayoutEffect(() => scroller.current?.scrollTo({ y: 0, animated: false }), [page]);
+  useEffect(() => closeProfileIconPickerIn(SETTINGS_WINDOW_ID), [key]);
   const content = useRef<View>(null);
   const scrollTop = useRef(0);
   const viewport = useRef(0);
   const query = useSettingsSearch((s) => s.query);
   const reveal = useSettingsSearch((s) => s.reveal);
   const revealPane = reveal ? (findSetting(reveal.id)?.pane ?? null) : null;
-  const showAdvanced = useSettings((s) => s.showAdvancedSettings);
-  const revealedSections = useSettingsSearch((s) => s.revealedSections);
-  const panes = PANES.filter(
-    (p) => showAdvanced || !ADVANCED_PANES.has(p.id) || nav.pane === p.id || revealedSections.some((k) => k.startsWith(settingsSectionKey(p.id, ""))),
-  );
   const switched = useRef(key);
   useEffect(() => {
     if (!reveal) return;
@@ -120,101 +124,84 @@ export function SettingsWindow() {
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: look.windowFill }}>
       <View style={{ width: SIDEBAR }}>
         <VisualEffect material="sidebar" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
-        <WindowDragRegion style={{ height: TOOLBAR }} />
+        <WindowDragRegion style={{ height: SIDEBAR_TOP }} />
         <SettingsSearchField />
         {query.trim() ? (
           <SettingsSearchResults query={query} />
         ) : (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 12, gap: 1 }}>
-            {panes.map((p) => (
-              <SidebarItem key={p.id} title={p.title} icon={p.icon} selected={nav.pane === p.id} onPress={() => goToSettingsPane(p.id, settingsProfileFor(p.id, nav))} />
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={SIDEBAR_LIST}>
+            {PANES.map((p) => (
+              <SidebarItem key={p.id} title={p.title} icon={p.icon} tint={paneTints[p.tint]} selected={nav.pane === p.id} onPress={() => goToSettingsPane(p.id, settingsProfileFor(p.id, nav))} />
             ))}
           </ScrollView>
         )}
-        <AdvancedToggle />
       </View>
       <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: look.sidebarDivider }} />
       <View style={{ flex: 1 }}>
-        <View style={{ height: TOOLBAR, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 2 }}>
-          <WindowDragRegion style={StyleSheet.absoluteFill} />
-          <Button variant="icon" toolbar icon="chevron.left" size={13} box={28} radius={6} disabled={!nav.back.length} onPress={() => settingsBack()} tooltip="Back" />
-          <Button variant="icon" toolbar icon="chevron.right" size={13} box={28} radius={6} disabled={!nav.forward.length} onPress={() => settingsForward()} tooltip="Forward" />
-          <SheetTitle style={{ marginLeft: 8 }}>{title}</SheetTitle>
-        </View>
+        <PageToolbar size="window" drag>
+          <Button variant="icon" toolbar icon="chevron.left" size="l" disabled={!nav.back.length} onPress={() => settingsBack()} tooltip="Back" />
+          <Button variant="icon" toolbar icon="chevron.right" size="l" disabled={!nav.forward.length} onPress={() => settingsForward()} tooltip="Forward" />
+          <Text size="title" weight="semibold" style={WINDOW_TITLE}>
+            {title}
+          </Text>
+        </PageToolbar>
         <ScrollView
           ref={scroller}
           scrollEventThrottle={16}
-          onScroll={(e) => void (scrollTop.current = e.nativeEvent.contentOffset.y)}
+          onScroll={({ nativeEvent: { contentOffset, layoutMeasurement, contentSize } }) => {
+            scrollTop.current = contentOffset.y;
+            noteSettingsScroll(contentOffset.y, layoutMeasurement.height, contentSize.height);
+          }}
           onLayout={(e) => void (viewport.current = e.nativeEvent.layout.height)}
-          contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
-          <View key={key} ref={content} collapsable={false} style={{ width: "100%", maxWidth: 600, paddingHorizontal: 24 }}>
+          contentContainerStyle={PANE_SCROLL}>
+          <View key={page} ref={content} collapsable={false} style={PANE_COLUMN}>
             {shown ? (
-              <SettingsPaneContext.Provider value={shown.pane}>
-                <Pane {...shown} />
-              </SettingsPaneContext.Provider>
+              <NativeFormContext.Provider value>
+                <SettingsPaneContext.Provider value={shown.pane}>
+                  <Pane {...shown} />
+                </SettingsPaneContext.Provider>
+              </NativeFormContext.Provider>
             ) : null}
           </View>
         </ScrollView>
       </View>
+      <ProfileIconPicker windowId={SETTINGS_WINDOW_ID} />
       {sheet}
+      <WindowControls windowId={SETTINGS_WINDOW_ID} centerY={TOOLBAR / 2} size={WINDOW_CONTROLS.regular} />
     </View>
   );
 }
 
+const SIDEBAR_LIST = { paddingHorizontal: space.ml, paddingBottom: space.l, gap: space.xs } as const;
+const WINDOW_TITLE = { marginLeft: space.m } as const;
+const PANE_SCROLL = { alignItems: "center", paddingBottom: settingsLayout.paneBottom } as const;
+const PANE_COLUMN = { width: "100%", maxWidth: settingsLayout.paneMaxWidth, paddingHorizontal: space.xxxl } as const;
 const PANE_VIEWS: Record<SettingsPane, (place: SettingsPlace) => ReactNode> = {
-  general: () => <GeneralPane />,
-  profiles: ({ profileId }) => (profileId ? <ProfileDetailsPane profileId={profileId} /> : <ProfilesPane />),
-  sync: () => <SyncPane />,
-  tabs: () => <TabsPane />,
-  appearance: () => <AppearancePane />,
-  privacy: () => <PrivacyPane />,
-  passwords: ({ profileId }) => <PasswordsPane profileId={profileId} />,
-  autofill: ({ profileId }) => <AutofillPane profileId={profileId} />,
-  extensions: ({ profileId, detail }) => <ExtensionsPane profileId={profileId} detail={detail} />,
-  search: () => <SearchPane />,
-  engines: () => <EnginesPane />,
-  shortcuts: () => <ShortcutsPane />,
-  liveFolders: () => <LiveFoldersPane />,
-  calendar: () => <CalendarPane />,
-  advanced: () => <AdvancedPane />,
+  general: (place) => <GeneralPane {...place} />,
+  profiles: (place) => <ProfilesPane {...place} />,
+  tabs: (place) => <TabsPane {...place} />,
+  appearance: (place) => <AppearancePane {...place} />,
+  automations: (place) => <AutomationsPane {...place} />,
+  shortcuts: (place) => <ShortcutsPane {...place} />,
+  advanced: (place) => <AdvancedPane {...place} />,
 };
 
 function Pane(place: SettingsPlace): ReactNode {
   return PANE_VIEWS[place.pane](place);
 }
 
-function SidebarItem({ title, icon, selected, onPress }: { title: string; icon: string; selected: boolean; onPress: () => void }) {
-  const theme = useTheme();
-  const { hovered, hoverProps } = useHover();
+function SidebarItem({ title, icon, tint, selected, onPress }: { title: string; icon: string; tint: string; selected: boolean; onPress: () => void }) {
   return (
-    <View {...hoverProps}>
-      <Pressable onPress={onPress}>
-        <View
-          style={{
-            height: 30,
-            borderRadius: 7,
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 8,
-            gap: 9,
-            backgroundColor: selected ? theme.formAccent : hovered ? theme.rowHover : undefined,
-          }}
-        >
-          <Symbol name={icon} size={13} color={selected ? theme.onAccent : theme.icon} style={{ width: 20, height: 20 }} />
-          <Text style={{ ...font.body, color: selected ? theme.onAccent : theme.textPrimary }}>{title}</Text>
-        </View>
-      </Pressable>
-    </View>
+    <ListRow height={SIDEBAR_ITEM_HEIGHT} selected={selected} selectedTone="accent" onPress={onPress}>
+      <View style={[PANE_TILE, { backgroundColor: tint }]}>
+        <Symbol name={icon} size={paneTile.symbol} weight="semibold" color={paneTints.ink} style={PANE_TILE_SYMBOL} />
+      </View>
+      <Text tone={selected ? "onAccent" : "textPrimary"}>{title}</Text>
+    </ListRow>
   );
 }
 
-function AdvancedToggle() {
-  const theme = useTheme();
-  const shown = useSettings((s) => s.showAdvancedSettings);
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: theme.divider }}>
-      <Text style={{ flex: 1, ...font.small, color: theme.textSecondary }}>Show advanced settings</Text>
-      <Toggle value={shown} onChange={(v) => updateSettings({ showAdvancedSettings: v })} />
-    </View>
-  );
-}
+const SIDEBAR_ITEM_HEIGHT = 30;
+const PANE_TILE = { width: paneTile.size, height: paneTile.size, borderRadius: paneTile.radius, alignItems: "center", justifyContent: "center" } as const;
+const PANE_TILE_SYMBOL = { width: paneTile.size, height: paneTile.size } as const;
+

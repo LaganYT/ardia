@@ -1,15 +1,22 @@
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { space, useTheme, VisualEffect, WindowDragRegion } from "../ui";
-import type { Step } from "./model";
+import { PageToolbar } from "../pages/PageLayout";
 import { ChooseBody, ChooseFooter } from "./steps/ChooseStep";
 import { DoneBody, DoneFooter } from "./steps/DoneStep";
 import { ProfilesBody, ProfilesFooter } from "./steps/ProfilesStep";
 import { ProgressBody, ProgressFooter } from "./steps/ProgressStep";
 import { AccessBody, AccessFooter, SafariBody, SafariFooter } from "./steps/SafariStep";
 import { UnlockBody, UnlockFooter } from "./steps/UnlockStep";
-import { importColors, importLayout } from "./tokens";
-import { useImportFlow, type ImportFlow } from "./useImportFlow";
+import { startImport, useImportFlow, type ImportFlow, type ImportStepName } from "../../state/import/flow";
+import { useImportDevHandle } from "./importDevHandle";
+import { importColors, importLayout, importMotion } from "./tokens";
+import { WINDOW_CONTROLS, windowControlsWidth } from "../../lib/windowChrome";
+import { markCaptionRegions } from "../../state/windows/controls";
+import { IMPORT_WINDOW_ID } from "../../state/settings/settingsWindows";
+import { WindowControls } from "../window/WindowControls";
+
+const CONTROLS_ROOM = WINDOW_CONTROLS.edge + windowControlsWidth(2) + WINDOW_CONTROLS.gap;
 
 type StepView = ComponentType<{ flow: ImportFlow }>;
 
@@ -17,7 +24,7 @@ function Loading() {
   return <ActivityIndicator style={{ marginTop: importLayout.loadingTop }} />;
 }
 
-const STEPS: Record<Step, { Body: StepView; Footer: StepView | null }> = {
+const STEPS: Record<ImportStepName, { Body: StepView; Footer: StepView | null }> = {
   loading: { Body: Loading, Footer: null },
   choose: { Body: ChooseBody, Footer: ChooseFooter },
   profiles: { Body: ProfilesBody, Footer: ProfilesFooter },
@@ -31,7 +38,10 @@ const STEPS: Record<Step, { Body: StepView; Footer: StepView | null }> = {
 export function ImportWindow() {
   const theme = useTheme();
   const flow = useImportFlow();
-  const { Body, Footer } = STEPS[flow.step];
+  useEffect(() => startImport(importMotion.doneDelay), []);
+  useImportDevHandle(flow);
+  useEffect(() => markCaptionRegions(IMPORT_WINDOW_ID, [[0, 0, CONTROLS_ROOM, importLayout.dragRegion]]), []);
+  const { Body, Footer } = STEPS[flow.step.name];
   return (
     <View style={{ flex: 1, backgroundColor: theme.dark ? importColors.windowFill.dark : importColors.windowFill.light }}>
       <VisualEffect material="windowBackground" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
@@ -39,19 +49,10 @@ export function ImportWindow() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: importLayout.padX, paddingTop: importLayout.padTop, paddingBottom: space.xxl }}>
         <Body flow={flow} />
       </ScrollView>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: space.m,
-          paddingHorizontal: space.xxl,
-          height: importLayout.footerHeight,
-          borderTopWidth: StyleSheet.hairlineWidth * 2,
-          borderTopColor: theme.divider,
-        }}
-      >
+      <PageToolbar size="footer" divider>
         {Footer ? <Footer flow={flow} /> : null}
-      </View>
+      </PageToolbar>
+      <WindowControls windowId={IMPORT_WINDOW_ID} centerY={importLayout.dragRegion / 2} size={WINDOW_CONTROLS.small} maximizable={false} />
     </View>
   );
 }

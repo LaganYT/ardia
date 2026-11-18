@@ -1,8 +1,9 @@
 import type { BrowserState } from "../browser/store";
 import { autoGroupName } from "../groups/groupNames";
 import { ancestorIds, canNest, commonGroup, innermostGroupOf, insertAll, leaveGroups, nestGroups, orderSections, placeBlock, placeGroups, reparent, syncGroupOrder, withParent } from "../groups/groups";
+import { withShownTab } from "../groups/shownTabs";
 import { inPinnedContainer, isIncognitoProfile, isPinnedRow, newId, pinKeyOf } from "../browser/model";
-import { splitOf, withSplitRows } from "../splits/splits";
+import { splitOf, splitTabIdsOf, withSplitRows } from "../splits/splits";
 import { markPinned } from "./pinChoices";
 import type { BrowserWindow, Tab, TabGroup } from "../browser/types";
 
@@ -41,7 +42,7 @@ export function groupWithOpener(s: BrowserState, tabId: string, openerId: string
   const existing = groupOf(s, openerId);
   if (!existing && !(background && s.settings.cmdClickCreatesTabGroup)) return s;
   if (existing) return joinGroup(s, w, existing, tabId);
-  const panes = splitOf(s, openerId)?.tabIds ?? [openerId];
+  const panes = splitTabIdsOf(splitOf(s, openerId)) ?? [openerId];
   return withGroup(s, [...panes, tabId], { autoUngroup: true })[0];
 }
 
@@ -51,7 +52,7 @@ export const pinnedChildGroup = (s: Pick<BrowserState, "groups">, openerId: stri
 function joinGroup(s: BrowserState, w: BrowserWindow, group: TabGroup, tabId: string): BrowserState {
   const members = [...group.tabIds, tabId];
   const window = { ...w, tabIds: placeBlock(w.tabIds, w.tabIds.filter((id) => members.includes(id))) };
-  const groups = { ...s.groups, [group.id]: { ...group, tabIds: window.tabIds.filter((id) => members.includes(id)) } };
+  const groups = withShownTab({ ...s.groups, [group.id]: { ...group, tabIds: window.tabIds.filter((id) => members.includes(id)) } }, tabId);
   return { ...s, groups, windows: { ...s.windows, [w.id]: window } };
 }
 
@@ -60,7 +61,7 @@ export function withGroup(
   ids: string[],
   o: { name?: string; pinned?: boolean; autoUngroup?: boolean; pinnedOpenerId?: string; parentId?: string | null } = {},
 ): [BrowserState, string] {
-  const tabs = withSplitRows(s, ids).map((id) => s.tabs[id]).filter((t): t is Tab => !!t && !t.pinned);
+  const tabs = withSplitRows(s, ids).map((id) => s.tabs[id]).filter((t): t is Tab => !!t && !t.pin);
   const first = tabs[0];
   if (!first || tabs.some((t) => t.windowId !== first.windowId || t.profileId !== first.profileId)) return [s, ""];
   const w = s.windows[first.windowId]!;
@@ -101,8 +102,7 @@ export function withRowsGrouped(s: BrowserState, asked: string[], o: { name?: st
   if (!rows.length) return withGroup(s, ids, o);
   const tabs = { ...s.tabs };
   for (const id of rows) {
-    const { pinnedAsRow: _, ...rest } = tabs[id]!;
-    tabs[id] = { ...rest, pinned: false };
+    tabs[id] = { ...tabs[id]!, pin: null };
   }
   const [next, id] = withGroup({ ...s, tabs }, ids, { ...o, pinned: true });
   const g = next.groups[id];
@@ -153,7 +153,7 @@ export function movingGroup(s: BrowserState, groupId: string, p: GroupPlacement)
     at = kept.length ? rest.indexOf(kept.at(-1)!) + 1 : Math.min(w.tabIds.indexOf(g.tabIds[0]!), rest.length);
   } else if (pinned) {
     const pinnedGroup = new Set(Object.values(groups).filter((x) => x.pinned && !moving.has(x.tabIds[0] ?? "")).flatMap((x) => x.tabIds));
-    at = rest.reduce((last, id, i) => (s.tabs[id]?.pinned || pinnedGroup.has(id) ? i + 1 : last), 0);
+    at = rest.reduce((last, id, i) => (s.tabs[id]?.pin || pinnedGroup.has(id) ? i + 1 : last), 0);
   } else at = rest.length;
   insertAll(rest, at, g.tabIds);
   const window = { ...w, tabIds: orderSections(placeGroups(rest, groups, w.id), s.tabs, groups) };

@@ -3,7 +3,9 @@ if (!P) throw new Error("perf probe is off (no perf-probe file in the data folde
 const store = ac.store;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const S = () => store.getState();
-const windowId = () => S().ui.focusedWindowId;
+const windowId = () => S().ui.focusOrder?.[0] ?? S().ui.focusedWindowId;
+const isPinned = (tab) => !!(tab.pin ?? tab.pinned);
+const historyList = (view) => (Array.isArray(view) ? view : view.list);
 const activeId = () => {
   const s = S();
   const w = s.windows[windowId()];
@@ -26,7 +28,7 @@ async function until(test, timeoutMs, step = 25) {
 }
 
 async function quiet(ms = 400) {
-  await until(() => !S().live[activeId()]?.isLoading, 8000);
+  await until(() => !ac.tabLive.liveOf(activeId()).isLoading, 8000);
   await sleep(ms);
 }
 
@@ -68,7 +70,7 @@ const scenarios = {
     await sleep(200);
     S().openPanel(w);
     const id = `${w}:panel`;
-    if (!(await until(() => ac.omnibox.get(id), 3000))) throw new Error("omnibox driver missing");
+    if (!(await until(() => ac.omnibox.get(id), 10000))) throw new Error("omnibox driver missing");
     await sleep(500);
     const driver = ac.omnibox.get(id);
     P.reset();
@@ -87,7 +89,7 @@ const scenarios = {
   async switchTabs({ count = 12 } = {}) {
     const w = windowId();
     const s = S();
-    const view = s.windows[w].tabIds.filter((id) => s.tabs[id].profileId === s.windows[w].profileId && !s.tabs[id].pinned);
+    const view = s.windows[w].tabIds.filter((id) => s.tabs[id].profileId === s.windows[w].profileId && !isPinned(s.tabs[id]));
     const ids = view.slice(30, 30 + count);
     const start = activeId();
     for (const id of ids) {
@@ -181,8 +183,8 @@ const scenarios = {
       P.reset();
       const t0 = Date.now();
       timed(() => S().navigate(tab, `${origin}/heavy?run=${r}-${Date.now()}`));
-      await until(() => S().live[tab]?.isLoading, 3000, 5);
-      await until(() => !S().live[tab]?.isLoading, 15000, 10);
+      await until(() => ac.tabLive.liveOf(tab).isLoading, 3000, 5);
+      await until(() => !ac.tabLive.liveOf(tab).isLoading, 15000, 10);
       const loadMs = Date.now() - t0;
       await sleep(1000);
       results.push({ loadMs, stats: P.read() });
@@ -231,7 +233,7 @@ const scenarios = {
     await quiet();
     const s = S();
     const w = windowId();
-    const bg = s.windows[w].tabIds.find((id) => id !== activeId() && s.live[id] && !s.tabs[id].pinned);
+    const bg = s.windows[w].tabIds.find((id) => id !== activeId() && s.tabs[id] && !isPinned(s.tabs[id]));
     P.reset();
     const steps = [];
     for (let i = 0; i < count; i++) {
@@ -312,10 +314,10 @@ const scenarios = {
     };
     const tabs = Object.values(s.tabs);
     return {
-      history: time({ version: 2, history: s.history }),
+      history: time({ version: 2, history: Object.fromEntries(Object.entries(s.history).map(([engine, view]) => [engine, historyList(view)])) }),
       bookmarks: time({ version: 2, bookmarks: s.bookmarks }),
       session: time({ version: 2, profiles: s.profiles, settings: s.settings, windows: Object.values(s.windows), tabs, groups: Object.values(s.groups), closedTabs: s.closedTabs, closedWindows: s.closedWindows }),
-      counts: { tabs: tabs.length, history: Object.values(s.history).reduce((n, h) => n + h.length, 0), bookmarks: Object.keys(s.bookmarks.nodes).length },
+      counts: { tabs: tabs.length, history: Object.values(s.history).reduce((n, view) => n + historyList(view).length, 0), bookmarks: Object.keys(s.bookmarks.nodes).length },
     };
   },
 };
@@ -352,11 +354,11 @@ function renderScenarios() {
       }
       timed(() => S().activate(start));
       await quiet(1000);
-      return tabsInView().filter((id) => S().live[id]).length;
+      return tabsInView().filter((id) => S().tabs[id]).length;
     },
     async tabSwitch({ count = 10, gapMs = 300 } = {}) {
       const s = S();
-      const ids = tabsInView().filter((id) => !s.tabs[id].pinned).slice(0, count);
+      const ids = tabsInView().filter((id) => !isPinned(s.tabs[id])).slice(0, count);
       const start = activeId();
       await quiet(800);
       P.reset();
@@ -433,7 +435,7 @@ function renderScenarios() {
     async bgLoad({ origin } = {}) {
       await quiet(800);
       const s = S();
-      const id = tabsInView().find((t) => t !== activeId() && !s.tabs[t].pinned && s.live[t]);
+      const id = tabsInView().find((t) => t !== activeId() && !isPinned(s.tabs[t]) && s.tabs[t]);
       if (!id) throw new Error("no loaded background tab");
       P.reset();
       S().navigate(id, `${origin}/heavy?run=bg-${Date.now()}`);
@@ -539,22 +541,6 @@ function censusScenarios() {
     await sleep(800);
     return ac.omnibox.get(id);
   }
-  function untilStore(test, timeoutMs) {
-    return new Promise((resolve) => {
-      if (test(S())) return resolve(true);
-      let timer;
-      const off = store.subscribe((st) => {
-        if (!test(st)) return;
-        off();
-        clearTimeout(timer);
-        resolve(true);
-      });
-      timer = setTimeout(() => {
-        off();
-        resolve(false);
-      }, timeoutMs);
-    });
-  }
   return {
     async cenStartup() {
       await until(() => P.marks.firstWindow, 20000);
@@ -622,7 +608,7 @@ function censusScenarios() {
         enter.per.push(summary(rd, ms));
         merge(enter.stats, rd);
         P.reset();
-        await untilStore((st) => !st.live[tab]?.isLoading, 15000);
+        await until(() => !ac.tabLive.liveOf(tab).isLoading, 15000, 10);
         await sleep(1500);
         rd = P.read();
         for (const k of SKIP) delete rd[k];
@@ -634,7 +620,7 @@ function censusScenarios() {
     async cenSwitch({ count = 10, gapMs = 300 } = {}) {
       const w = windowId();
       const s = S();
-      const ids = tabsInView().filter((id) => !s.tabs[id].pinned).slice(0, count);
+      const ids = tabsInView().filter((id) => !isPinned(s.tabs[id])).slice(0, count);
       const start = activeId();
       await quiet(800);
       const click = sink();
@@ -672,7 +658,7 @@ function censusScenarios() {
       for (let r = 0; r < repeats; r++) {
         await quiet(800);
         const s = S();
-        const id = tabsInView().find((t) => t !== activeId() && !s.tabs[t].pinned && s.live[t]);
+        const id = tabsInView().find((t) => t !== activeId() && !isPinned(s.tabs[t]) && s.tabs[t]);
         if (!id) throw new Error("no loaded background tab");
         await action(() => S().navigate(id, `${origin}/heavy?run=cenbg-${r}-${Date.now()}`), 3500, out);
       }

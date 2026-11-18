@@ -24,6 +24,16 @@ inline void WithoutActions(void (^block)(void)) {
   [CATransaction commit];
 }
 
+inline id JSONObject(NSString *json) {
+  NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+  return data ? [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingFragmentsAllowed error:nil] : nil;
+}
+
+inline NSString *JSONText(id value) {
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value ?: NSNull.null options:NSJSONWritingFragmentsAllowed error:nil];
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"null";
+}
+
 inline void WipeSecret(NSMutableData *data) {
   volatile unsigned char *bytes = (volatile unsigned char *)data.mutableBytes;
   for (NSUInteger i = 0; i < data.length; i++) bytes[i] = 0;

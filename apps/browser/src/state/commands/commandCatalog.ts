@@ -1,16 +1,24 @@
 import type { BrowserCommand } from "../../platform/commands";
+import type { Settings } from "../settings/settings";
 import { parseShortcut, type ShortcutSource } from "./shortcuts";
+import { defaultKeys, profileSwitchKey } from "./keyNotation";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
+import { splitViewAvailable } from "../splits/splits";
 
 type Keys = readonly string[];
 type Scope = "page" | "window";
 type InLittleArdia = "page" | "off";
 type Variant = { title?: string; barTitle?: string; symbol?: string; keys?: Keys };
-type CommandSpec = Variant & {
+type BooleanSetting = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+type ChoiceSetting = { [K in keyof Settings]: Settings[K] extends string ? K : never }[keyof Settings];
+export type CommandSpec = Variant & {
   scope?: Scope;
   onInternalPages?: true;
   app?: true;
   littleArdia?: InLittleArdia;
   variants?: Readonly<Record<string, Variant>>;
+  toggles?: BooleanSetting;
+  chooses?: ChoiceSetting;
 };
 
 const inWindow = { scope: "window" } as const;
@@ -19,7 +27,7 @@ const pageInLittleArdia = { scope: "page", littleArdia: "page" } as const;
 const offInLittleArdia = { littleArdia: "off" } as const;
 const windowOffInLittleArdia = { scope: "window", littleArdia: "off" } as const;
 
-export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
+export const COMMANDS = {
   newTab: { title: "New Tab", symbol: "plus", keys: ["⌘T"] },
   newWindow: { title: "New Window", symbol: "macwindow", keys: ["⌘N"] },
   newIncognitoWindow: { title: "New Incognito Window", symbol: "eyeglasses", keys: ["⇧⌘N"] },
@@ -28,6 +36,7 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   reopenClosedTab: { title: "Reopen Closed Tab", symbol: "arrow.uturn.backward", keys: ["⇧⌘T"], littleArdia: "page" },
   reopenClosedWindow: { title: "Reopen Closed Window" },
   restoreClosed: { littleArdia: "page" },
+  clearRecentlyClosed: { title: "Clear Recently Closed", symbol: "trash", ...appWide },
   focusCommandBar: { title: "Open Command Bar", keys: ["⌘L", "⌃F5"], ...inWindow },
   closeTab: { title: "Close Tab", symbol: "xmark", keys: ["⌘W"], ...inWindow },
   closeAllTabs: { title: "Close All Tabs", symbol: "xmark.square", keys: ["⇧⌘K"], ...windowOffInLittleArdia },
@@ -37,7 +46,10 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   findInPage: { title: "Find…", barTitle: "Find in Page", symbol: "text.magnifyingglass", keys: ["⌘F"], ...pageInLittleArdia },
   findNext: { title: "Find Next", keys: ["⌘G"], ...pageInLittleArdia },
   findPrevious: { title: "Find Previous", keys: ["⇧⌘G"], ...pageInLittleArdia },
+  hideElement: { title: "Hide Element…", barTitle: "Hide an Element on This Page", symbol: "eye.slash", keys: ["⇧⌘H"], ...pageInLittleArdia },
+  showHiddenElements: { title: "Hidden Elements on This Site…", barTitle: "Show Hidden Elements on This Site", symbol: "eye", keys: ["⇧⌘U"], ...pageInLittleArdia },
   setAppearance: {
+    chooses: "appearance",
     variants: {
       auto: { title: "Automatic", barTitle: "Use System Appearance", symbol: "circle.lefthalf.filled" },
       light: { title: "Light", barTitle: "Light Appearance", symbol: "sun.max" },
@@ -47,6 +59,7 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   reload: { title: "Refresh", barTitle: "Reload Page", symbol: "arrow.clockwise", keys: ["⌘R"], ...pageInLittleArdia },
   forceReload: { title: "Force Refresh the Page", barTitle: "Force Reload Page", symbol: "arrow.clockwise", keys: ["⇧⌘R"], ...pageInLittleArdia },
   toggleTabLayout: { title: "Show Tabs in Sidebar", keys: ["⇧⌘S"], ...windowOffInLittleArdia },
+  toggleSidebarSide: { title: "Sidebar on Right", symbol: "sidebar.right", ...offInLittleArdia },
   toggleSidebar: { title: "Auto-Hide Tabs", symbol: "sidebar.left", keys: ["⌘S", "⇧⌘L", "⇧⌘F"], ...windowOffInLittleArdia },
   openSplitPane: { title: "Open Split Pane", keys: ["⌃⇧=", "⌃+"], ...windowOffInLittleArdia },
   useSelectionForFind: { title: "Use Selection for Find", keys: ["⌘E"], ...pageInLittleArdia },
@@ -54,9 +67,10 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   jumpToSelection: { title: "Jump to Selection", keys: ["⌘J"], ...pageInLittleArdia },
   focusNextPane: { title: "Focus Next Split Pane", keys: ["⌃⇧]", "⌃}"], ...offInLittleArdia },
   focusPreviousPane: { title: "Focus Previous Split Pane", keys: ["⌃⇧[", "⌃{"], ...offInLittleArdia },
-  toggleFullUrl: { title: "Show Full URL", symbol: "text.alignleft" },
-  toggleJavaScriptFromAppleEvents: { title: "Allow JavaScript from Apple Events" },
+  toggleFullUrl: { title: "Show Full URL", symbol: "text.alignleft", toggles: "showFullUrl" },
+  toggleJavaScriptFromAppleEvents: { title: "Allow JavaScript from Apple Events", toggles: "allowJavaScriptFromAppleEvents" },
   toggleAddressBar: { title: "Show Address Bar in Sidebar", ...offInLittleArdia },
+  toggleMinimalism: { title: "Minimalism Mode", barTitle: "Toggle Minimalism Mode", symbol: "rectangle.leftthird.inset.filled", keys: ["⌃⌘M"], toggles: "minimalismMode", ...offInLittleArdia },
   cast: { title: "Cast…", littleArdia: "page" },
   zoomReset: { title: "Zoom to Actual Size", barTitle: "Actual Size", symbol: "1.magnifyingglass", keys: ["⌘0"], ...pageInLittleArdia },
   zoomIn: { title: "Zoom In", symbol: "plus.magnifyingglass", keys: ["⌘+", "⌘="], ...pageInLittleArdia },
@@ -68,8 +82,8 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   viewSource: { title: "View Source", keys: ["⌥⌘U"], ...pageInLittleArdia },
   back: { title: "Go Back", keys: ["⌘[", "⌘←"], scope: "window", littleArdia: "page" },
   forward: { title: "Go Forward", keys: ["⌘]", "⌘→"], scope: "window", littleArdia: "page" },
-  nextTab: { title: "Next Tab", keys: ["⇧⌘]", "⌘}", "⌥⌘→", "⌃⇟", "⌥⌘↓"], ...windowOffInLittleArdia },
-  previousTab: { title: "Previous Tab", keys: ["⇧⌘[", "⌘{", "⌥⌘←", "⌃⇞", "⌥⌘↑"], ...windowOffInLittleArdia },
+  nextTab: { title: "Next Tab", keys: ["⇧⌘]", "⌘}", "⌃⇥", "⌃⇟", "⌥⌘↓"], ...windowOffInLittleArdia },
+  previousTab: { title: "Previous Tab", keys: ["⇧⌘[", "⌘{", "⌃⇧⇥", "⌃⇞", "⌥⌘↑"], ...windowOffInLittleArdia },
   selectTab: {
     ...windowOffInLittleArdia,
     variants: Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [String(n), { title: `Select Tab ${n}`, keys: [`⌘${n}`] }])),
@@ -79,7 +93,7 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
     title: "Move to Top Apps",
     symbol: "pin",
     ...windowOffInLittleArdia,
-    variants: { tile: { title: "Move Pinned Tab to Top Apps" } },
+    variants: { tile: { title: "Move Pinned Tab to Top Apps" }, row: {} },
   },
   togglePinnedRow: { title: "Move to Pinned", keys: ["⌥⇧⌘D"], ...windowOffInLittleArdia },
   duplicateTab: { title: "Duplicate", barTitle: "Duplicate Tab", symbol: "plus.square.on.square", ...windowOffInLittleArdia },
@@ -92,11 +106,12 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   restoreArcFolders: {},
   toggleMute: { title: "Mute Tab", symbol: "speaker.slash", ...pageInLittleArdia },
   togglePageEngine: { title: "Open Page in WebKit" },
+  toggleReader: { title: "Show Reader", barTitle: "Toggle Reading Mode", symbol: "doc.plaintext", keys: ["⌥⌘R"], ...pageInLittleArdia },
   downloads: { title: "Downloads", symbol: "arrow.down.circle", keys: ["⇧⌘J", "⌥⌘L"], scope: "window", littleArdia: "page" },
   mergeAllWindows: { title: "Merge All Windows", symbol: "rectangle.stack", ...windowOffInLittleArdia },
   switchProfile: inWindow,
-  nextProfile: { title: "Next Profile", ...inWindow },
-  previousProfile: { title: "Previous Profile", ...inWindow },
+  nextProfile: { title: "Next Profile", keys: ["⌥⌘→"], ...inWindow },
+  previousProfile: { title: "Previous Profile", keys: ["⌥⌘←"], ...inWindow },
   newProfile: { title: "New Profile…", symbol: "person.crop.circle.badge.plus" },
   openSettings: { title: "Settings…", symbol: "gearshape", keys: ["⌘,"] },
   importBrowserData: { title: "Import from Another Browser…", barTitle: "Import Browser Data", symbol: "square.and.arrow.down" },
@@ -105,7 +120,7 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   manageBookmarks: { title: "Manage Bookmarks", barTitle: "Bookmarks", symbol: "book", keys: ["⌥⌘B"] },
   exportBookmarks: { title: "Export Bookmarks…", symbol: "square.and.arrow.up" },
   bookmarkAllTabs: { title: "Bookmark All Tabs…", keys: ["⇧⌘D"], ...offInLittleArdia },
-  setBookmarksBar: { variants: { always: { title: "Always" }, newTab: { title: "On New Tab Only" }, never: { title: "Never" } } },
+  setBookmarksBar: { chooses: "bookmarksBar", variants: { always: { title: "Always" }, newTab: { title: "On New Tab Only" }, never: { title: "Never" } } },
   toggleBookmarksBar: { title: "Toggle Bookmarks Bar", symbol: "menubar.rectangle", keys: ["⇧⌘B"] },
   newTabInGroup: { title: "New Tab in Group", keys: ["⌥⌘T", "⌃⌘C"], ...windowOffInLittleArdia },
   newGroupWithTabs: { title: "New Group with Tab", symbol: "folder.badge.plus", keys: ["⌃⌘N", "⌃⌘P"], ...windowOffInLittleArdia },
@@ -118,15 +133,15 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   tabSwitcher: {
     ...windowOffInLittleArdia,
     variants: {
-      forward: { title: "Tab Switcher (forward)", keys: ["⌃⇥"] },
-      backward: { title: "Tab Switcher (backward)", keys: ["⌃⇧⇥"] },
+      forward: { title: "Tab Switcher (forward)" },
+      backward: { title: "Tab Switcher (backward)" },
     },
   },
-  share: { title: "Share", symbol: "square.and.arrow.up", ...pageInLittleArdia },
-  sendFeedback: { title: "Send Feedback…", keys: ["⌥⇧⌘I"], ...appWide },
+  share: { title: "Share…", symbol: "square.and.arrow.up", keys: ["⌥⌘S"], ...pageInLittleArdia },
+  reportProblem: { title: "Report a Problem…", keys: ["⌥⇧⌘I"], ...appWide },
   keyboardShortcuts: { title: "Keyboard Shortcuts", symbol: "keyboard" },
   copyDiagnostics: { title: "Copy Diagnostics", ...appWide },
-  recordPerformanceIssue: { title: "Record Performance Issue…", ...appWide },
+  copyLastFreeze: { title: "Copy Last Freeze", ...appWide },
   toolTour: { title: "Tool Tour", ...appWide },
   videoTour: { title: "Video Tour", ...appWide },
   releaseNotes: { title: "Release Notes", ...appWide },
@@ -151,7 +166,13 @@ export const COMMANDS: Readonly<Record<BrowserCommand, CommandSpec>> = {
   moveTabUp: { title: "Move Tab Up", keys: ["⌃⇧⇞"], ...windowOffInLittleArdia },
   closeTabGroup: { title: "Close Group", keys: ["⌃⌘W"], ...windowOffInLittleArdia },
   openProfileMenu: { title: "Show Profiles Menu", keys: ["⇧⌘M"], ...inWindow },
-};
+} as const satisfies Record<BrowserCommand, CommandSpec>;
+
+const SPECS: Readonly<Record<BrowserCommand, CommandSpec>> = COMMANDS;
+
+type Specs = typeof COMMANDS;
+export type AppCommand = { [C in BrowserCommand]: Specs[C] extends { app: true } ? C : never }[BrowserCommand];
+export type VariantOf<C extends BrowserCommand> = Specs[C] extends { variants: infer V } ? keyof V & string : never;
 
 export const STANDARD_ITEMS: Readonly<Record<string, { keys?: Keys }>> = {
   "std:quit:": { keys: ["⌘Q"] },
@@ -193,17 +214,49 @@ export const STANDARD_ITEMS: Readonly<Record<string, { keys?: Keys }>> = {
 };
 
 const ALL_COMMANDS = Object.keys(COMMANDS) as BrowserCommand[];
-const commandsWhere = (test: (spec: CommandSpec) => boolean) => ALL_COMMANDS.filter((command) => test(COMMANDS[command]));
+const commandsWhere = (test: (spec: CommandSpec) => boolean) => ALL_COMMANDS.filter((command) => test(SPECS[command]));
 
 export const PAGE_COMMANDS = commandsWhere((c) => c.scope === "page");
 export const PAGE_COMMANDS_OFF_INTERNAL_PAGES = commandsWhere((c) => c.scope === "page" && !c.onInternalPages);
 export const WINDOW_COMMANDS = commandsWhere((c) => c.scope !== undefined);
 export const LITTLE_ARDIA_DISABLED_COMMANDS = commandsWhere((c) => c.littleArdia === "off");
-export const APP_COMMANDS: ReadonlySet<string> = new Set(commandsWhere((c) => !!c.app));
+export const SPLIT_VIEW_COMMANDS: readonly BrowserCommand[] = ["openSplitPane", "focusNextPane", "focusPreviousPane"];
+export const EXPORT_COMMANDS: readonly BrowserCommand[] = ["exportBookmarks"];
+export const WEBKIT_COMMANDS: readonly BrowserCommand[] = ["togglePageEngine"];
+export const HIDING_COMMANDS: readonly BrowserCommand[] = ["hideElement", "showHiddenElements"];
+export const UNAVAILABLE_COMMANDS: ReadonlySet<string> = new Set([
+  ...(splitViewAvailable ? [] : SPLIT_VIEW_COMMANDS),
+  ...(PLATFORM_FEATURES.exportsBookmarksAndPasswords ? [] : EXPORT_COMMANDS),
+  ...(PLATFORM_FEATURES.webKit ? [] : WEBKIT_COMMANDS),
+  ...(PLATFORM_FEATURES.contentBlocker ? [] : HIDING_COMMANDS),
+]);
 export const LITTLE_ARDIA_PAGE_COMMANDS: ReadonlySet<string> = new Set(commandsWhere((c) => c.littleArdia === "page"));
 
+const APP_COMMANDS: ReadonlySet<string> = new Set(commandsWhere((c) => !!c.app));
+export const isAppCommand = (command: BrowserCommand): command is AppCommand => APP_COMMANDS.has(command);
+
+export function variantArg<C extends BrowserCommand>(command: C, arg: string | null | undefined): VariantOf<C> | undefined {
+  const variants = SPECS[command].variants;
+  return arg && variants && Object.hasOwn(variants, arg) ? (arg as VariantOf<C>) : undefined;
+}
+
+export function settingChange(command: BrowserCommand, arg: string | null | undefined, settings: Settings): Partial<Settings> | undefined {
+  const { toggles, chooses } = SPECS[command];
+  if (toggles) return { [toggles]: !settings[toggles] };
+  const choice = variantArg(command, arg);
+  return chooses && choice ? { [chooses]: choice } : undefined;
+}
+
+export function settingChecks(settings: Settings): string[] {
+  return ALL_COMMANDS.flatMap((command) => {
+    const { toggles, chooses } = SPECS[command];
+    if (toggles) return settings[toggles] ? [command] : [];
+    return chooses ? [`${command}:${settings[chooses]}`] : [];
+  });
+}
+
 const variantOf = (command: BrowserCommand, arg: string | undefined): Variant => {
-  const spec = COMMANDS[command];
+  const spec = SPECS[command];
   return (arg && spec.variants?.[arg]) || spec;
 };
 
@@ -212,7 +265,7 @@ export function commandBarTitle(command: BrowserCommand, arg?: string): string {
   return barTitle ?? title.replace(/…$/, "");
 }
 
-export const commandSymbol = (command: BrowserCommand, arg?: string): string | undefined => variantOf(command, arg).symbol ?? COMMANDS[command].symbol;
+export const commandSymbol = (command: BrowserCommand, arg?: string): string | undefined => variantOf(command, arg).symbol ?? SPECS[command].symbol;
 
 const PROFILE_SHORTCUT_COUNT = 9;
 const OVERRIDABLE_PER_ITEM_COMMANDS: readonly BrowserCommand[] = ["openExtension"];
@@ -222,11 +275,11 @@ const source = (id: string, keys: Keys = []): ShortcutSource => ({ id, keys: key
 export function staticShortcutSources(): ShortcutSource[] {
   const sources: ShortcutSource[] = [];
   for (const command of ALL_COMMANDS) {
-    const spec = COMMANDS[command];
-    sources.push(source(command, spec.keys));
-    for (const [arg, variant] of Object.entries(spec.variants ?? {})) sources.push(source(`${command}:${arg}`, variant.keys));
+    const spec = SPECS[command];
+    sources.push(source(command, defaultKeys(command, spec.keys)));
+    for (const [arg, variant] of Object.entries(spec.variants ?? {})) sources.push(source(`${command}:${arg}`, defaultKeys(`${command}:${arg}`, variant.keys)));
   }
-  for (const [id, item] of Object.entries(STANDARD_ITEMS)) sources.push(source(id, item.keys));
+  for (const [id, item] of Object.entries(STANDARD_ITEMS)) sources.push(source(id, defaultKeys(id, item.keys)));
   return sources;
 }
 
@@ -237,7 +290,7 @@ export function shortcutSources(profileIds: readonly string[], overriddenIds: re
   return [
     ...STATIC_SOURCES,
     ...profileIds.flatMap((id, i) => [
-      source(`switchProfile:${id}`, i < PROFILE_SHORTCUT_COUNT ? [`⌃${i + 1}`] : []),
+      source(`switchProfile:${id}`, i < PROFILE_SHORTCUT_COUNT ? [profileSwitchKey(i + 1)] : []),
       source(`newLittleArdia:${id}`),
     ]),
     ...perItem.map((id) => source(id)),

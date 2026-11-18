@@ -1,15 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+globalThis.acTestNativeModules = { ArdiaSharedFolders: { location: () => ({ path: "/scratch", iCloudAvailable: true, iCloudPath: "/scratch" }) } };
 const { useBrowser } = await import("../browser/store.ts");
 const { tabMenuItems } = await import("./tabMenu.ts");
 const { multiTabMenuItems } = await import("./multiTabMenu.ts");
 const { groupMenuItems } = await import("./groupMenu.ts");
 const { sidebarMenuItems } = await import("./sidebarMenu.ts");
 const { tileFolderContextItems } = await import("./tileFolderUi.ts");
+const { addToTileFolder } = await import("../pins/tileFolders.ts");
 const { openTabMenu } = await import("./tabMenu.ts");
 const { openMultiMenu } = await import("./multiTabMenu.ts");
 const { openGroupMenu } = await import("./groupMenu.ts");
 const { shellNativeModules } = await import("../../test-native/shell.ts");
+const { splitTabIdsOf } = await import("../splits/splits.ts");
+const { useMedia } = await import("../media/media.ts");
+const { webviews } = await import("../../platform/webviews.ts");
+const lifecycle = await import("../tabs/tabLifecycle.ts");
+const { takeTabSleepCounts } = await import("../telemetry/tabSleepCounts.ts");
+const { setConsentPeriod } = await import("../telemetry/consentPeriod.ts");
+setConsentPeriod(true, "menus-test");
 
 const S = () => useBrowser.getState();
 const MODS = [
@@ -111,11 +120,22 @@ test("a tab in a group leaves it from the menu, and Move to Group lists pinned g
   assert.ok(S().groups[pinned].pinned);
 });
 
+test("a Top Apps tile with folders off has no New Folder…, and keeps Remove from Folder for one already in a folder", () => {
+  const { w, ids } = windowWith("a", "b");
+  S().pinTabs([ids[0], ids[1]], true);
+  S().updateSettings({ topAppFolders: false });
+  assert.equal(top(tabMenuItems(S(), w, S().tabs[ids[0]])).includes("New Folder… [folder.badge.plus]"), false);
+  useBrowser.setState(addToTileFolder(S(), [ids[1]], ids[0]), true);
+  assert.equal(top(tabMenuItems(S(), w, S().tabs[ids[0]])).includes("Remove from Folder [folder.badge.minus]"), true);
+});
+
 test("a Top Apps tile: unpin first, folders instead of groups, Open in New Window, no close section", () => {
   const { w, ids } = windowWith("a", "b");
   S().pinTabs([ids[0]], true);
+  S().updateSettings({ topAppFolders: true });
   assert.deepEqual(top(tabMenuItems(S(), w, S().tabs[ids[0]])), [
     "Unpin from Top Apps [pin.slash]",
+    "Reset Pinned Tab [arrow.uturn.backward] (off)",
     "Move to Pinned in Personal",
     "Edit Pinned Page ›",
     "---",
@@ -139,7 +159,6 @@ test("a Top Apps tile: unpin first, folders instead of groups, Open in New Windo
     "Mute Site [speaker.slash] ⌥ (alt)",
   ]);
   assert.deepEqual(sub(tabMenuItems(S(), w, S().tabs[ids[0]]), "pinnedPage"), [
-    "Back to Pinned URL [arrow.uturn.backward] (off)",
     "Replace Pinned URL with Current (off)",
     "---",
     "Edit Pinned URL…",
@@ -150,11 +169,30 @@ test("a pinned row offers Top Apps as its other place, and a pinned group's tab 
   const { w, ids } = windowWith("a", "b", "c");
   S().pinTabs([ids[0]], true, true);
   const row = top(tabMenuItems(S(), w, S().tabs[ids[0]]));
-  assert.deepEqual(row.slice(0, 3), ["Unpin [pin.slash]", "Move to Top Apps", "Edit Pinned Page ›"]);
+  assert.deepEqual(row.slice(0, 4), ["Unpin [pin.slash]", "Reset Pinned Tab [arrow.uturn.backward] (off)", "Move to Top Apps", "Edit Pinned Page ›"]);
   S().groupTabs([ids[1]], { name: "P" });
   const member = top(tabMenuItems(S(), w, S().tabs[ids[1]]));
-  assert.deepEqual(member.slice(0, 2), ["Unpin [pin.slash]", "Edit Pinned Page ›"]);
+  assert.deepEqual(member.slice(0, 3), ["Unpin [pin.slash]", "Reset Pinned Tab [arrow.uturn.backward] (off)", "Edit Pinned Page ›"]);
   assert.ok(!member.some((l) => l.startsWith("Remove from Group") || l.startsWith("New Group with Tab") || l.startsWith("Close")));
+});
+
+test("every hover card action is in the menu: Reset Pinned Tab once a pinned tab is away, Remove Bookmark on a saved page, Exit Picture in Picture", () => {
+  const { w, ids } = windowWith("a", "b");
+  S().pinTabs([ids[0]], true);
+  S().updateTab(ids[0], { url: "https://a.com/elsewhere" });
+  const tile = top(tabMenuItems(S(), w, S().tabs[ids[0]]));
+  assert.equal(tile[1], "Reset Pinned Tab [arrow.uturn.backward]");
+  assert.ok(!sub(tabMenuItems(S(), w, S().tabs[ids[0]]), "pinnedPage").some((l) => l.startsWith("Back to Pinned URL") || l.startsWith("Reset")), "not twice");
+  S().toggleBookmark(S().windows[w].profileId, { url: S().tabs[ids[1]].url, title: "b", favicon: null });
+  const saved = top(tabMenuItems(S(), w, S().tabs[ids[1]]));
+  const edit = saved.findIndex((l) => l.startsWith("Edit Bookmark… [bookmark.fill]"));
+  assert.ok(edit > 0);
+  assert.equal(saved[edit + 1], "Remove Bookmark");
+  assert.ok(!saved.some((l) => l.startsWith("Add to Bookmarks")));
+  assert.ok(!saved.some((l) => l.startsWith("Exit Picture in Picture")));
+  useMedia.setState((m) => ({ pipOpen: { ...m.pipOpen, [ids[1]]: "video" } }));
+  assert.ok(top(tabMenuItems(S(), w, S().tabs[ids[1]])).includes("Exit Picture in Picture [pip.exit]"));
+  useMedia.setState((m) => ({ pipOpen: {} }));
 });
 
 test("a split pane offers Remove from Split View in place of Open as Split", () => {
@@ -213,6 +251,7 @@ test("a group header: pin, open, move, customise, copy, then the ways to end it"
     "---",
     "Ungroup [folder.badge.minus]",
     "Move to Bookmarks Bar [bookmark]",
+    "Sleep Tabs [moon.zzz] (off)",
     "Close Group [xmark] ⌃⌘W",
     "Delete Group [trash]",
   ]);
@@ -229,7 +268,7 @@ test("a group's colour menu: None, Neutral, the site's colour, then the palette;
   const g = S().groupTabs([ids[1]], { name: "G", pinned: false });
   const items = groupMenuItems(S(), w, g);
   assert.deepEqual(sub(items, "color").slice(0, 4), ["None", "Neutral ✓", "Match Site Color (off)", "---"]);
-  const shell = shellNativeModules.ArdiaShell;
+  const shell = shellNativeModules.ArdiaMenus;
   const real = shell.showMenu;
   shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "color").children.find((it) => it.title === "Blue").id);
   try {
@@ -242,7 +281,7 @@ test("a group's colour menu: None, Neutral, the site's colour, then the palette;
 
 test("Move to Window › New Window moves the tab to a new window", async () => {
   const { w, ids } = windowWith("a", "b");
-  const shell = shellNativeModules.ArdiaShell;
+  const shell = shellNativeModules.ArdiaMenus;
   const real = shell.showMenu;
   shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "moveToWindow").children.at(-1).id);
   try {
@@ -262,6 +301,7 @@ test("the sidebar background menu: new things, then the sidebar toggles, Close A
     "---",
     "New Group [folder.badge.plus]",
     "New Live Folder ›",
+    "Add Shared Folder… [person.2]",
     "---",
     "New Profile… [plus]",
     "---",
@@ -269,10 +309,14 @@ test("the sidebar background menu: new things, then the sidebar toggles, Close A
     "---",
     "Collapse Pinned Tabs [rectangle.compress.vertical] (off)",
     "Show Tabs in Sidebar [sidebar.left] ⇧⌘S ✓",
+    "Sidebar on Right [sidebar.right]",
     "Auto-Hide Tabs ⌘S",
     "---",
     "Close All Tabs [xmark] ⇧⌘K",
   ]);
+  S().updateSettings({ sidebarSide: "right" });
+  assert.ok(top(sidebarMenuItems(S(), w)).includes("Sidebar on Right [sidebar.right] ✓"));
+  S().updateSettings({ sidebarSide: "left" });
   S().closeTabs([ids[1]]);
   assert.ok(top(sidebarMenuItems(S(), w)).includes("Reopen Closed Tab ⇧⌘T"));
 });
@@ -291,7 +335,7 @@ test("a rebound key moves the hint with it, and an alternate keeps its pair only
 });
 
 async function whileMenuIsUp(open, meanwhile, choice) {
-  const shell = shellNativeModules.ArdiaShell;
+  const shell = shellNativeModules.ArdiaMenus;
   const real = shell.showMenu;
   let pick;
   shell.showMenu = () => new Promise((resolve) => (pick = resolve));
@@ -309,8 +353,8 @@ test("Open as Split splits the tab the menu was opened on, even if another tab c
   const { w, ids } = windowWith("a", "b", "c");
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[0]), "split");
   const split = Object.values(S().splits)[0];
-  assert.ok(split?.tabIds.includes(ids[2]), "c is a pane");
-  assert.equal(split.tabIds.includes(ids[0]), false, "a, now in front, is left alone");
+  assert.ok(splitTabIdsOf(split).includes(ids[2]), "c is a pane");
+  assert.equal(splitTabIdsOf(split).includes(ids[0]), false, "a, now in front, is left alone");
 });
 
 test("a tab menu whose tab left the window meanwhile does nothing, and Close Other Tabs spares tabs that left", async () => {
@@ -359,14 +403,90 @@ test("Open as Split on a tab that came to the front while its menu was up opens 
   S().activate(ids[0]);
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[2]), "split");
   const split = Object.values(S().splits)[0];
-  assert.ok(split?.tabIds.includes(ids[2]), "c is a pane");
-  assert.equal(split.tabIds.length, 2);
-  assert.equal(split.tabIds.includes(ids[0]), false, "a isn't");
+  assert.ok(splitTabIdsOf(split).includes(ids[2]), "c is a pane");
+  assert.equal(splitTabIdsOf(split).length, 2);
+  assert.equal(splitTabIdsOf(split).includes(ids[0]), false, "a isn't");
 });
 
 test("Open as Split on a background tab pairs it with the tab in front when the choice lands", async () => {
   const { w, ids } = windowWith("a", "b", "c");
   S().activate(ids[0]);
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[1]), "split");
-  assert.deepEqual(Object.values(S().splits).map((v) => [...v.tabIds].sort()), [[ids[1], ids[2]].sort()]);
+  assert.deepEqual(Object.values(S().splits).map((v) => [...splitTabIdsOf(v)].sort()), [[ids[1], ids[2]].sort()]);
+});
+
+test("a Top App whose page runs in another window offers Unload here too while Keep Top Apps running is on, and Unload puts that page to sleep", async () => {
+  S().hydrate({});
+  const a = S().createWindow({ url: "https://app.com/" });
+  const [app] = S().windows[a].tabIds;
+  S().newTab(a, { url: "https://x.com/" });
+  S().pinTabs([app], true);
+  const b = S().createWindow({ url: "https://y.com/" });
+  const copy = Object.values(S().tabs).find((t) => t.windowId === b && t.pin?.as === "tile");
+  assert.notEqual(copy.page.kind, "loaded");
+  const ids = () => tabMenuItems(S(), b, S().tabs[copy.id]).map((i) => i.id);
+  assert.ok(!ids().includes("unloadTopApp"), "off: no Unload");
+  S().updateSettings({ keepTopAppsRunning: true });
+  assert.ok(ids().includes("unloadTopApp"));
+  await whileMenuIsUp(() => openTabMenu(b, S().tabs[copy.id]), () => {}, "unloadTopApp");
+  assert.equal(S().tabs[app].page.kind, "asleep");
+  assert.ok(!ids().includes("unloadTopApp"), "nothing left to unload");
+  S().updateSettings({ keepTopAppsRunning: false });
+});
+
+function sleepableViews(ids, kept = []) {
+  const asked = [];
+  webviews.clear();
+  for (const id of ids) webviews.set(id, { sleepIfHidden: async (seconds) => (asked.push([id, seconds]), kept.includes(id) ? [26] : []) });
+  return asked;
+}
+
+test("Sleep Tab is offered for a loaded tab only while nothing shows it, and asks Chrome to sleep it with its protections", async () => {
+  const { w, ids } = windowWith("a", "b", "c", "d");
+  const [a, b, c, d] = ids;
+  const asked = sleepableViews(ids);
+  const offers = (id) => tabMenuItems(S(), w, S().tabs[id]).some((i) => i.id === "sleep");
+  assert.equal(offers(d), false, "the tab in front");
+  S().createSplit([c, d]);
+  assert.equal(offers(c), false, "a pane of the shown split");
+  assert.equal(offers(b), true);
+  assert.ok(top(tabMenuItems(S(), w, S().tabs[b])).includes("Sleep Tab [moon.zzz]"));
+  webviews.delete(a);
+  assert.equal(offers(a), false, "no page to sleep");
+  takeTabSleepCounts();
+  await whileMenuIsUp(() => openTabMenu(w, S().tabs[b]), () => {}, "sleep");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(asked, [[b, 0]]);
+  assert.equal(takeTabSleepCounts().tabs_slept_from_menu, 1);
+  lifecycle.noteDiscarded(b);
+  assert.equal(offers(b), false, "already asleep");
+  lifecycle.noteReady(b);
+  S().pinTabs([b], true, true);
+  assert.equal(offers(b), true, "a pinned tab sleeps too");
+  webviews.clear();
+});
+
+test("Sleep Tabs on a group asks Chrome about its hidden loaded tabs, nested groups included, and counts the ones it kept", async () => {
+  const { w, ids } = windowWith("a", "b", "c", "d", "e");
+  const [a, b, c, d, e] = ids;
+  const outer = S().groupTabs([a, b], { name: "Outer", pinned: false });
+  const inner = S().groupTabs([c, e], { name: "Inner", pinned: false });
+  S().moveGroup(inner, { pinned: false, parentId: outer });
+  S().activate(e);
+  const asked = sleepableViews([a, b, c, d, e], [c]);
+  S().updateLive(b, { playingAudio: true });
+  assert.ok(top(groupMenuItems(S(), w, outer)).includes("Sleep Tabs [moon.zzz]"));
+  takeTabSleepCounts();
+  await whileMenuIsUp(() => openGroupMenu(w, outer), () => {}, "sleep");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(asked.map(([id]) => id).sort(), [a, c].sort(), "b plays through Ardia's own player, e is shown and d is outside the group");
+  assert.ok(asked.every(([, seconds]) => seconds === 0));
+  const counts = takeTabSleepCounts();
+  assert.equal(counts.groups_slept_from_menu, 1);
+  assert.equal(counts.menu_sleeps_kept_awake, 2, "Ardia kept b and Chrome kept c");
+  S().updateLive(b, { playingAudio: false });
+  for (const id of [a, b, c]) lifecycle.noteDiscarded(id);
+  assert.ok(top(groupMenuItems(S(), w, inner)).includes("Sleep Tabs [moon.zzz] (off)"), "nothing left to sleep");
+  for (const id of [a, b, c]) lifecycle.noteReady(id);
+  webviews.clear();
 });

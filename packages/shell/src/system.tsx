@@ -3,17 +3,10 @@ import { forwardRef, type Ref } from "react";
 import type { View, ViewProps } from "react-native";
 import { nativeModule } from "./nativeModules";
 
-export type MenuShortcut = {
-  id: string;
-  title: string;
-  path: string[];
-  key: string;
-  modifiers: ShortcutModifier[];
-  defaultKey: string;
-  defaultModifiers: ShortcutModifier[];
-  remappable: boolean;
-  aliases?: string[][];
-};
+export type MenuShortcut = { id: string; title: string; path: string[] } & (
+  | { remappable: true }
+  | { remappable: false; key: string; modifiers: ShortcutModifier[] }
+);
 
 export type ShortcutModifier = "control" | "option" | "shift" | "command" | "function";
 
@@ -31,11 +24,8 @@ export type SystemNative = {
   revealFile(path: string): Promise<boolean>;
   moveToTrash(path: string): Promise<boolean>;
   fileIcon(path: string, size: number): Promise<string | null>;
-  appIcon(pid: number, size: number): Promise<string | null>;
+  runningAppIcon(pid: number, size: number): Promise<string | null>;
   hapticTick(): void;
-  menuShortcuts(): Promise<MenuShortcut[]>;
-  recordShortcut(): Promise<{ key: string; modifiers: ShortcutModifier[] } | null>;
-  cancelRecording(): Promise<void>;
   setThinScrollBars(thin: boolean): Promise<void>;
 };
 
@@ -53,11 +43,8 @@ export const installWebApp = (name: string, url: string, profile: string, icon: 
 export const revealFile = (path: string) => System.revealFile(path);
 export const moveToTrash = (path: string) => System.moveToTrash(path);
 export const fileIcon = (path: string, size = 32) => System.fileIcon(path, size);
-export const runningAppIcon = (pid: number, size = 32) => System.appIcon(pid, size);
+export const runningAppIcon = (pid: number, size = 32) => System.runningAppIcon(pid, size);
 export const hapticTick = () => System.hapticTick();
-export const menuShortcuts = () => System.menuShortcuts();
-export const recordShortcut = () => System.recordShortcut();
-export const cancelShortcutRecording = () => System.cancelRecording();
 export const setThinScrollBars = (thin: boolean) => System.setThinScrollBars(thin);
 
 export type MiddleClickEvent = { shiftKey: boolean; altKey: boolean; metaKey: boolean };
@@ -67,7 +54,7 @@ export type MouseAreaProps = ViewProps & {
   onMiddleClick?: (e: MiddleClickEvent) => void;
 };
 
-type NativeMouseAreaProps = Omit<MouseAreaProps, "onMiddleClick"> & { onMiddleClick?: (e: { nativeEvent: MiddleClickEvent }) => void };
+export type NativeMouseAreaProps = Omit<MouseAreaProps, "onMiddleClick"> & { onMiddleClick?: (e: { nativeEvent: MiddleClickEvent }) => void };
 
 const NativeMouseArea = requireNativeViewManager<NativeMouseAreaProps>("ArdiaFileDrag");
 
@@ -78,11 +65,15 @@ export function MouseArea({ path, onMiddleClick, ...props }: MouseAreaProps) {
 export type DroppedItem = { kind: "file"; url: string } | { kind: "url"; url: string } | { kind: "text"; text: string };
 export type DropUpdate = { phase: "enter" | "move" | "exit" | "drop"; x: number; y: number; count: number; items: DroppedItem[] };
 export type FileDropAreaProps = ViewProps & {
+  accepts?: "links" | "linksAndText" | "extensionPackages";
+  enabled?: boolean;
   onDropUpdate?: (e: DropUpdate) => void;
 };
 
-type NativeFileDropAreaProps = ViewProps & {
-  ref?: (instance: { nativeRef?: { current: View | null } } | null) => void;
+export type FileDropHandle = { nativeRef?: { current: View | null } };
+
+export type NativeFileDropAreaProps = Omit<FileDropAreaProps, "onDropUpdate"> & {
+  ref?: (instance: FileDropHandle | null) => void;
   onDropUpdate?: (e: { nativeEvent: DropUpdate }) => void;
 };
 
@@ -95,7 +86,7 @@ export type MagnifyAreaProps = ViewProps & {
   onMagnify?: (e: MagnifyUpdate) => void;
 };
 
-type NativeMagnifyAreaProps = ViewProps & { enabled?: boolean; onMagnify?: (e: { nativeEvent: MagnifyUpdate }) => void };
+export type NativeMagnifyAreaProps = Omit<MagnifyAreaProps, "onMagnify"> & { onMagnify?: (e: { nativeEvent: MagnifyUpdate }) => void };
 
 const NativeMagnifyArea = requireNativeViewManager<NativeMagnifyAreaProps>("ArdiaMagnifyArea");
 export type MagnifyAreaNative = {

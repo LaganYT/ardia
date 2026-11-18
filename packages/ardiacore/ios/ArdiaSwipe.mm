@@ -1,9 +1,5 @@
 #import "ArdiaSwipeInternal.h"
 
-#import <dlfcn.h>
-#import <objc/message.h>
-#import <objc/runtime.h>
-
 using namespace ardia_swipe;
 
 namespace {
@@ -84,10 +80,18 @@ void ReleasePrepared(NSTimeInterval timestamp) {
   [prepared pagerInput:@"abandon" distance:0 direction:0 timestamp:timestamp];
 }
 
+CGFloat TargetPointsPerWindowPoint(NSView *target) {
+  const NSSize unit = [target convertSize:NSMakeSize(100, 100) fromView:nil];
+  return unit.width != 0 ? fabs(unit.width) / 100 : 1;
+}
+
 void Emit(NSString *phase, CGFloat velocity) {
   NSView<ArdiaSwipeTarget> *target = gGesture.target;
   if (!target) return;
-  CGFloat distance = gGesture.dx * gGesture.direction;
+  const CGFloat perWindowPoint = TargetPointsPerWindowPoint(target);
+  const CGFloat distance = gGesture.dx * gGesture.direction * perWindowPoint;
+  const CGFloat dy = gGesture.dy * perWindowPoint;
+  velocity *= perWindowPoint;
   Diag(@{
     @"diag" : @"emit",
     @"seq" : @(gGesture.seq),
@@ -97,6 +101,7 @@ void Emit(NSString *phase, CGFloat velocity) {
     @"distance" : @(distance),
     @"dx" : @(gGesture.dx),
     @"dy" : @(gGesture.dy),
+    @"perWindowPoint" : @(perWindowPoint),
     @"velocity" : @(velocity * gGesture.direction),
     @"available" : @(gGesture.available),
     @"width" : @(NSWidth(target.bounds)),
@@ -110,7 +115,7 @@ void Emit(NSString *phase, CGFloat velocity) {
     @"phase" : phase,
     @"direction" : gGesture.direction > 0 ? @"back" : @"forward",
     @"distance" : @(distance),
-    @"dy" : @(gGesture.dy),
+    @"dy" : @(dy),
     @"velocity" : @(velocity * gGesture.direction),
     @"available" : @(gGesture.available),
     @"width" : @(NSWidth(target.bounds)),
@@ -145,7 +150,7 @@ NSEvent *HandleWheel(NSEvent *event, NSWindow *window, NSPoint location) {
     Diag(@{@"diag" : @"wheel", @"reject" : target ? @"notPager" : @"noTarget", @"hit" : HitChain(hit)});
     return event;
   }
-  BOOL back = (dx > 0) == event.isDirectionInvertedFromDevice;
+  BOOL back = dx > 0;
   if (NativeContentScrolls(hit, target.superview, back ? 1 : -1)) {
     Diag(@{@"diag" : @"wheel", @"reject" : @"nativeContentScrolls", @"scrollers" : NativeScrollReport(hit, target.superview)});
     return event;
@@ -153,7 +158,7 @@ NSEvent *HandleWheel(NSEvent *event, NSWindow *window, NSPoint location) {
   [target swipeEvent:@{
     @"phase" : @"wheel",
     @"direction" : back ? @"back" : @"forward",
-    @"distance" : @(fabs(dx)),
+    @"distance" : @(fabs(dx) * TargetPointsPerWindowPoint(target)),
     @"dy" : @0,
     @"velocity" : @0,
     @"available" : @(back ? target.canSwipeBack : target.canSwipeForward),
@@ -214,10 +219,10 @@ void Begin(NSWindow *window, NSPoint location, BOOL ignoreSystemPreference, NSTi
   gGesture.state = State::Pending;
   gGesture.target = target;
   gGesture.hit = hit;
-  ArdiaRendererScrollObserver *renderer = ObserverFor(hit);
+  ArdiaRendererScroll *renderer = RendererScrollFor(hit);
   [renderer reset];
   gGesture.renderer = renderer;
-  gGesture.rendererHit = InRenderer(hit);
+  gGesture.rendererHit = PageViewOf(hit) != nil;
 }
 
 BOOL Reject(NSString *reason, NSDictionary *extra = nil) {
@@ -245,7 +250,7 @@ BOOL ShouldTrack() {
   if (below || kStartDominance * fabs(dx) < fabs(dy)) return Wait(@"belowStart");
   int direction = dx > 0 ? 1 : -1;
 
-  ArdiaRendererScrollObserver *renderer = gGesture.renderer;
+  ArdiaRendererScroll *renderer = gGesture.renderer;
   if (renderer) {
     switch (renderer.scroll) {
       case RendererScroll::FirstUpdateConsumed:

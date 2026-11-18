@@ -12,6 +12,12 @@ import { useBrowser } from "../browser/store";
 import { focus, switchToTab } from "../browser/actions";
 import { webviews } from "../../platform/webviews";
 import { withDeadline } from "../../lib/deadline";
+import { isSilenced } from "../tabs/mute";
+import { noteNotificationShown } from "../automation/notificationEvents";
+import { noteWebNotificationFromShim } from "../telemetry/webNotificationCounts";
+import { recordWebNotificationPost } from "../telemetry/webNotificationFailures";
+import { consentToken } from "../telemetry/choice";
+import { noteWebNotificationClicked } from "../telemetry/notificationRequestCounts";
 
 const shown = new Map<string, string>();
 
@@ -31,11 +37,13 @@ function noteReceived(n: WebNotification) {
 }
 
 export function showWebNotification(tabId: string, n: WebNotification) {
+  const consent = consentToken();
   if (__DEV__) noteReceived(n);
+  noteWebNotificationFromShim();
   const s = useBrowser.getState();
   const tab = s.tabs[tabId];
   const window = tab ? s.windows[tab.windowId] : undefined;
-  if (!tab || !window || window.incognito) return void webviews.get(tabId)?.notificationAction(n.id, "close");
+  if (!tab || !window || window.kind === "private") return void webviews.get(tabId)?.notificationAction(n.id, "close");
   const id = macId(n);
   shown.set(id, n.id);
   let site = n.origin;
@@ -46,19 +54,26 @@ export function showWebNotification(tabId: string, n: WebNotification) {
     if (!allowed || shown.get(id) !== n.id) return;
     const icon = n.icon ? await iconFor(tabId, n.icon) : undefined;
     if (shown.get(id) !== n.id) return;
-    void postNotification({
-      id,
-      title: n.title,
-      body: n.body,
-      subtitle: site,
-      silent: n.silent,
-      icon,
-      tabId,
-      windowId: tab.windowId,
-      origin: n.origin,
-      dismissible: true,
-      data: { engineId: n.id },
-    });
+    const now = useBrowser.getState();
+    const current = now.tabs[tabId];
+    noteNotificationShown(tabId, n);
+    void recordWebNotificationPost(
+      postNotification({
+        id,
+        title: n.title,
+        body: n.body,
+        subtitle: site,
+        silent: n.silent || (!!current && isSilenced(now, current)),
+        icon,
+        tabId,
+        windowId: tab.windowId,
+        origin: n.origin,
+        dismissible: true,
+        data: { engineId: n.id },
+      }),
+      { titleLength: n.title.length, bodyLength: n.body.length, iconRequested: !!n.icon, iconSent: !!icon },
+      consent,
+    );
   });
 }
 
@@ -88,6 +103,7 @@ export function handleWebNotificationResponse({ id, action, tabId, data }: Notif
   const tab = tabId ? useBrowser.getState().tabs[tabId] : undefined;
   if (!tab) return true;
   if (action === "click") {
+    noteWebNotificationClicked();
     switchToTab(tab.id);
     focus(tab.windowId);
   }

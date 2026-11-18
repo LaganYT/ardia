@@ -1,19 +1,22 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Animated } from "react-native";
 import { spring, curve } from "../ui/motion";
 import type { Anchor } from "../../state/sidebar/sidebarUi";
-import { SIDEBAR_MOTION } from "./tokens";
+import { hoverCardAt, hoverCardBox, type HoverCardAt, type HoverCardFrame } from "./hoverPlacement";
+import { HOVER_CARD_IN_SPRING, HOVER_CARD_OUT_SPRING, SIDEBAR_MOTION } from "./tokens";
 
-export const HOVER_CARD_GAP = 8;
 export const HOVER_CARD_FROM_SCALE = 0.92;
 export const HOVER_CARD_FADE_MS = SIDEBAR_MOTION.hoverCardFade;
-export const HOVER_CARD_IN_SPRING = { response: 0.25, damping: 0.75 } as const;
-export const HOVER_CARD_OUT_SPRING = { response: 0.2, damping: 0.6 } as const;
 
 const fade = curve.fade;
 
-export function hoverCardOrigin(anchor: Anchor, edge = anchor.x + anchor.width): { left: number; top: number } {
-  return { left: edge + HOVER_CARD_GAP, top: Math.max(8, anchor.y - 6) };
+const HoverCardFrameContext = createContext<HoverCardFrame>({ side: "left", windowWidth: 0, sidebarEdge: 0 });
+export const HoverCardFrameProvider = HoverCardFrameContext.Provider;
+export const useHoverCardFrame = () => useContext(HoverCardFrameContext);
+
+export function useHoverCardOrigin(anchor: Anchor) {
+  const frame = useHoverCardFrame();
+  return hoverCardBox(hoverCardAt(anchor, frame), frame);
 }
 
 function createMotion() {
@@ -96,14 +99,24 @@ export function useHoverCardMotion<T>(key: string, target: T | null) {
   return { drawn, leaving, entering, motion };
 }
 
+export function useHoverFade(shown: boolean) {
+  const [opacity] = useState(() => new Animated.Value(shown ? 1 : 0));
+  useEffect(() => {
+    const fade = Animated.timing(opacity, { toValue: shown ? 1 : 0, duration: HOVER_CARD_FADE_MS, easing: curve.fade, useNativeDriver: true });
+    fade.start();
+    return () => fade.stop();
+  }, [shown]);
+  return opacity;
+}
+
 export function useHoverCardPlacement(
   motion: ReturnType<typeof createMotion>,
-  at: { left: number; top: number } | null,
+  at: HoverCardAt | null,
   size: { width: number; height: number },
 ) {
   useLayoutEffect(() => {
     if (!at) return;
-    motion.dx.setValue(at.left - size.width / 2);
+    motion.dx.setValue(at.x - size.width / 2);
     motion.dy.setValue(at.top - size.height / 2);
-  }, [motion, at?.left, at?.top, size.width, size.height]);
+  }, [motion, at?.x, at?.top, size.width, size.height]);
 }

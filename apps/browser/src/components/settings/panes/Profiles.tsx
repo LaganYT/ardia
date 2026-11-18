@@ -1,55 +1,96 @@
-import { ContextMenuArea, Symbol, Box, Button, font, PopUp, TextField, Toggle, useHover } from "../../ui";
-import { hapticTick } from "../../../state/app/system";
-import { chooseFromMenu } from "../../../state/app/menuChoice";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { Box, Button, PopUp, Segmented, space, Text, TextField, Toggle } from "../../ui";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { deleteProfile } from "../../../state/browser/actions";
-import { requestCreateProfile } from "../../../state/profiles/createProfileRequest";
-import { hex, profileAccent, useTheme } from "../../ui/theme";
-import { useProfileDataStats, useProfileOrder, useProfileRecords } from "../../../state/profiles/hooks";
-import { currentProfileOrder, currentProfiles } from "../../../state/browser/current";
-import { reorderProfiles, setDefaultProfile, updateProfile } from "../../../state/profiles/actions";
+import { profileAccent } from "../../ui/theme";
+import { useDataSharingProfileIds, useProfileDataStats, useProfileOrder, useProfileRecords, useTopAppSiblingNames } from "../../../state/profiles/hooks";
+import { currentEngineProfile, currentProfiles } from "../../../state/browser/current";
+import { commitProfileName, setDefaultProfile, setShareTopApps } from "../../../state/profiles/actions";
+import { openProfileIconPicker } from "../../../state/profiles/iconPicker";
 import { updateSettings } from "../../../state/settings/actions";
 import { useProfile, useProfiles, useSettings } from "../../../state/browser/hooks";
-import { sharingProfiles } from "../../../state/profiles/profiles";
-import type { Profile } from "../../../state/browser/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
-import { Group, Row, SectionHeader } from "../Form";
+import { Anchor, Group, Row, SectionHeader, SettingToggle, useHiddenSetting } from "../Form";
 import { ColorStack } from "../../profiles/CreateProfile";
-import { iconMenuItems, PROFILE_SYMBOLS, ProfileBadge, profileSymbol } from "../../profiles/ProfileIcons";
+import { PROFILE_SYMBOLS, ProfileBadge } from "../../profiles/ProfileIcons";
+import { iconSymbol } from "../../../lib/customIcon";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
 import { ThemeSection } from "../ThemeEditor";
-import { goToSettingsPane, SETTINGS_WINDOW_ID } from "../../../state/settings/settingsWindows";
-import { openProfileItemMenu } from "../../profiles/profileMenu";
-import { curve } from "../../ui/motion";
-import { settingsType, settingsMotion } from "../tokens";
+import { detailValue, goToSettingsPane, replaceSettingsPlace, SETTINGS_DETAIL, SETTINGS_WINDOW_ID, type SettingsPlace } from "../../../state/settings/settingsWindows";
+import { setOpenTabsSynced, setProfileSynced, useSync } from "../../../state/sync/engine";
+import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
+import { PLATFORM_TERMS } from "../../../lib/platformTerms";
+import { pickFolder } from "../../../state/app/system";
+import { downloadSettings, setDownloadsFor } from "../../../state/settings/paneData";
+import { useResource } from "../../../state/settings/resources";
+import { findSetting, setting } from "../settingsIndex";
+import { ExportBookmarksRow } from "./ExportBookmarksRow";
+import { PreloadPagesRow } from "./PreloadPagesRow";
+import { listOf, ProfileBar, useSharedWith } from "./ProfileSwitcher";
+import { useSelectedProfile } from "./ProfileSubPage";
+import { OtherEnginesPage, SearchSection } from "./ProfileSearch";
+import { PasswordsPage, PasswordsSection } from "./ProfilePasswords";
+import { AddressesPage, CardsPage } from "./ProfileAutofill";
+import { ExtensionPage, ExtensionsSection } from "./ProfileExtensions";
+import { SitePage, SitesPage } from "./SiteSettings";
 
-const listOf = (names: string[]) => (names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`);
+type SwitcherShows = "dots" | "icons" | "nothing";
+const SWITCHER_SHOWS: { value: SwitcherShows; title: string }[] = [
+  { value: "dots", title: "Dots" },
+  { value: "icons", title: "Icons" },
+  { value: "nothing", title: "Nothing" },
+];
+const SWITCHER_SETTINGS: Record<SwitcherShows, { showProfileDots: boolean; profileSwitcherIcons?: boolean }> = {
+  dots: { showProfileDots: true, profileSwitcherIcons: false },
+  icons: { showProfileDots: true, profileSwitcherIcons: true },
+  nothing: { showProfileDots: false },
+};
 
-function useSharedWith(profileId: string): string[] {
-  const order = useProfileOrder();
-  const profiles = useProfileRecords();
-  return useMemo(() => {
-    const others = sharingProfiles({ profiles, profileOrder: order }, profileId);
-    return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
-  }, [order, profiles, profileId]);
+export function ProfilesPane({ profileId: chosen, detail }: SettingsPlace) {
+  const profileId = useSelectedProfile(chosen);
+  if (detail === SETTINGS_DETAIL.otherEngines) return <OtherEnginesPage profileId={profileId} />;
+  if (detail === SETTINGS_DETAIL.passwords) return <PasswordsPage profileId={profileId} />;
+  if (detail === SETTINGS_DETAIL.addresses) return <AddressesPage profileId={profileId} />;
+  if (detail === SETTINGS_DETAIL.cards) return <CardsPage profileId={profileId} />;
+  if (detail === SETTINGS_DETAIL.sites) return <SitesPage profileId={profileId} />;
+  const site = detailValue(detail, "site");
+  if (site) return <SitePage key={site} profileId={profileId} origin={site} />;
+  const extension = detailValue(detail, "extension");
+  if (extension) return <ExtensionPage key={extension} profileId={profileId} extensionId={extension} />;
+  return <ProfileOverview profileId={profileId} />;
 }
 
-export function ProfilesPane() {
-  const theme = useTheme();
-  const profiles = useProfiles();
-  const defaultId = useSettings((s) => s.defaultProfileId);
-  const switcherIcons = useSettings((s) => s.profileSwitcherIcons);
-
+function ProfileOverview({ profileId }: { profileId: string }) {
   return (
     <View>
-      <Text style={{ marginTop: 20, ...settingsType.lead, lineHeight: 17, color: theme.textSecondary }}>
-        Profiles keep your browsing organized. Each keeps its own history, logins, cookies, and extensions, unless you turn on Share data
-        when you create it: then it uses another profile's, and only the tabs are its own.
-      </Text>
+      <AllProfilesSection />
+      <Anchor id="profiles.profiles" keep shape="card">
+        <ProfileBar selectedId={profileId} />
+      </Anchor>
+      <View key={profileId}>
+        <ThisProfileSection profileId={profileId} />
+        <SearchSection profileId={profileId} />
+        <PasswordsSection profileId={profileId} />
+        <ExtensionsSection profileId={profileId} />
+        <DataSection profileId={profileId} />
+      </View>
+    </View>
+  );
+}
 
-      <SectionHeader title="New windows open with" />
+function AllProfilesSection() {
+  const profiles = useProfiles();
+  const defaultId = useSettings((s) => s.defaultProfileId);
+  const switcher = useSettings((s): SwitcherShows => (!s.showProfileDots ? "nothing" : s.profileSwitcherIcons ? "icons" : "dots"));
+  const shareable = useDataSharingProfileIds();
+
+  return (
+    <>
+      <SectionHeader
+        title="All profiles"
+        description="Each profile keeps its own history, logins, cookies and extensions, unless it was created to share another's data."
+      />
       <Group>
         <Row anchor="profiles.defaultProfile">
           <PopUp
@@ -57,220 +98,125 @@ export function ProfilesPane() {
             options={profiles.map((p) => ({ value: p.id, title: p.name }))}
             onChange={(id) => setDefaultProfile(id)}
             minWidth={160}
+            accessibilityLabel={setting("profiles.defaultProfile").title}
           />
         </Row>
-      </Group>
-
-      <SectionHeader title="Profile switcher" />
-      <Group>
-        <Row anchor="profiles.switcherIcons">
-          <Toggle value={switcherIcons} onChange={(profileSwitcherIcons) => updateSettings({ profileSwitcherIcons })} />
+        <Row anchor="profiles.switcherShows">
+          <Segmented options={SWITCHER_SHOWS} value={switcher} onChange={(shows) => updateSettings(SWITCHER_SETTINGS[shows])} />
         </Row>
+        <Row
+          anchor="profiles.shareTopApps"
+          description={shareable.length ? "For profiles that share data: the same Top Apps, one live page each." : "For profiles that share data with another. None do yet."}
+        />
+        {shareable.map((id) => (
+          <ShareTopAppsRow key={id} profileId={id} />
+        ))}
+        <SettingToggle anchor="profiles.spacesFollowAppearance" />
       </Group>
-
-      <SectionHeader
-        anchor="profiles.list"
-        action={<Button title="Create Profile" icon="plus" onPress={() => void requestCreateProfile()} />}
-      />
-      <ProfileList />
-    </View>
+    </>
   );
 }
 
-const ROW_HEIGHT = 46;
-const settle = (value: Animated.Value, toValue: number) =>
-  Animated.timing(value, { toValue, duration: settingsMotion.profileRowSettle, easing: curve.outCubic, useNativeDriver: true });
-
-function ProfileList() {
-  const order = useProfileOrder();
-  const offsets = useRef(new Map<string, Animated.Value>()).current;
-  const offsetOf = (id: string) => {
-    let v = offsets.get(id);
-    if (!v) offsets.set(id, (v = new Animated.Value(0)));
-    return v;
-  };
-  const [dragging, setDragging] = useState<string | null>(null);
-  const drag = useRef({ id: "", from: 0, to: 0, reorderPending: false });
-
-  useLayoutEffect(() => {
-    if (!drag.current.reorderPending) return;
-    drag.current.reorderPending = false;
-    offsets.forEach((v) => v.setValue(0));
-  }, [order]);
-
-  const controller = useRef({
-    start(id: string) {
-      const ids = currentProfileOrder();
-      const from = ids.indexOf(id);
-      drag.current = { id, from, to: from, reorderPending: false };
-      setDragging(id);
-    },
-    move(dy: number) {
-      const { id, from } = drag.current;
-      const ids = currentProfileOrder();
-      const max = ids.length - 1;
-      offsetOf(id).setValue(Math.max(-from * ROW_HEIGHT - 6, Math.min((max - from) * ROW_HEIGHT + 6, dy)));
-      const to = Math.max(0, Math.min(max, Math.round(from + dy / ROW_HEIGHT)));
-      if (to === drag.current.to) return;
-      drag.current.to = to;
-      hapticTick();
-      ids.forEach((other, j) => {
-        if (other === id) return;
-        settle(offsetOf(other), from < j && j <= to ? -ROW_HEIGHT : to <= j && j < from ? ROW_HEIGHT : 0).start();
-      });
-    },
-    end(commit: boolean) {
-      const { id, from, to } = drag.current;
-      setDragging(null);
-      if (!commit || from === to) {
-        offsets.forEach((v) => settle(v, 0).start());
-        return;
-      }
-      const ids = currentProfileOrder().filter((x) => x !== id);
-      ids.splice(to, 0, id);
-      drag.current.reorderPending = true;
-      reorderProfiles(ids);
-    },
-  }).current;
-
-  return (
-    <Box fill="groupFill" border="groupBorder" radius="card">
-      {order.map((id, i) => (
-        <ProfileRow key={id} profileId={id} first={i === 0} offset={offsetOf(id)} lifted={dragging === id} controller={controller} />
-      ))}
-    </Box>
-  );
-}
-
-type DragController = { start(id: string): void; move(dy: number): void; end(commit: boolean): void };
-
-function ProfileRow({
-  profileId,
-  first,
-  offset,
-  lifted,
-  controller,
-}: {
-  profileId: string;
-  first: boolean;
-  offset: Animated.Value;
-  lifted: boolean;
-  controller: DragController;
-}) {
-  const theme = useTheme();
-  const profile = useProfile(profileId, (p) => p);
-  const isDefault = useSettings((s) => s.defaultProfileId === profileId);
+function useTopAppsDescription(profileId: string): string {
+  const own = useProfile(profileId, (p) => !p?.shareTopApps);
+  const sharing = useTopAppSiblingNames(profileId);
   const shared = useSharedWith(profileId);
-  const names = useProfileRecords(useShallow((profiles) => shared.filter((id) => id !== profileId).map((id) => profiles[id]?.name ?? "")));
-  const { hovered, hoverProps } = useHover();
-  const pan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
-      onPanResponderGrant: () => controller.start(profileId),
-      onPanResponderMove: (_, g) => controller.move(g.dy),
-      onPanResponderRelease: () => controller.end(true),
-      onPanResponderTerminate: () => controller.end(false),
-      onPanResponderTerminationRequest: () => false,
-    }),
-  ).current;
+  const others = useProfileRecords(useShallow((profiles) => shared.filter((id) => id !== profileId).map((id) => profiles[id]?.name ?? "")));
+  if (own) return "Keeps its own Top Apps.";
+  return sharing.length ? `Same Top Apps as ${listOf(sharing)}, one live page each.` : `Shares once ${listOf(others, "or")} does.`;
+}
+
+function ShareTopAppsRow({ profileId }: { profileId: string }) {
+  const profile = useProfile(profileId, (p) => p);
+  const description = useTopAppsDescription(profileId);
   if (!profile) return null;
-
-  const description = [isDefault ? "Default" : null, names.length ? `Shares data with ${listOf(names)}` : null].filter(Boolean).join(" · ");
-  const openMenu = () => openProfileItemMenu(profileId, "settings", SETTINGS_WINDOW_ID);
-
   return (
-    <Animated.View
-      {...pan.panHandlers}
-      style={{
-        zIndex: lifted ? 1 : 0,
-        transform: [{ translateY: offset }],
-        borderRadius: lifted ? 8 : 0,
-        backgroundColor: lifted ? hex(theme.panel) : undefined,
-        borderWidth: lifted ? StyleSheet.hairlineWidth * 2 : 0,
-        borderColor: theme.groupBorder,
-      }}
-    >
-      {!first && !lifted && <View style={{ height: StyleSheet.hairlineWidth * 2, marginHorizontal: 12, backgroundColor: theme.divider }} />}
-      <ContextMenuArea onContextMenu={() => void openMenu()}>
-        <View {...hoverProps}>
-          <Pressable onPress={() => goToSettingsPane("profiles", profileId)}>
-            <View
-              style={{
-                height: ROW_HEIGHT - (first ? 0 : StyleSheet.hairlineWidth * 2),
-                paddingLeft: 8,
-                paddingRight: 12,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-                backgroundColor: hovered && !lifted ? theme.rowHover : undefined,
-              }}
-            >
-              <View tooltip="Drag to reorder">
-                <Symbol name="line.3.horizontal" size={11} color={theme.textTertiary} style={{ width: 14, height: 14 }} />
-              </View>
-              <ProfileBadge profile={profile} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ ...font.body, color: theme.textPrimary }}>{profile.name}</Text>
-                {description ? <Text style={{ ...font.footnote, marginTop: 2, color: theme.textSecondary }}>{description}</Text> : null}
-              </View>
-              <Symbol name="chevron.right" size={11} weight="semibold" color={theme.textTertiary} style={{ width: 12, height: 14 }} />
-            </View>
-          </Pressable>
-        </View>
-      </ContextMenuArea>
-    </Animated.View>
+    <Row icon={<ProfileBadge profile={profile} size={20} />} title={profile.name} description={description}>
+      <Toggle value={!!profile.shareTopApps} accessibilityLabel={`Share Top Apps in ${profile.name}`} onChange={(share) => setShareTopApps(profileId, share)} />
+    </Row>
   );
 }
 
 function iconTitle(icon: string | null): string {
-  const symbol = profileSymbol(icon);
+  const symbol = iconSymbol(icon);
   if (symbol) return PROFILE_SYMBOLS.find((s) => s.name === symbol)?.title ?? "Symbol";
   return icon ?? "Initial";
 }
 
-export function ProfileDetailsPane({ profileId }: { profileId: string }) {
-  const theme = useTheme();
+const homeRelative = (path: string) => path.replace(/^\/Users\/[^/]+(?=\/|$)/, "~");
+
+function ThisProfileSection({ profileId }: { profileId: string }) {
   const profile = useProfile(profileId, (p) => p);
-  const isDefault = useSettings((s) => s.defaultProfileId === profileId);
-  const only = useProfileOrder((o) => o.length <= 1);
   const shared = useSharedWith(profileId);
   const sharedNames = useProfileRecords(useShallow((profiles) => shared.map((id) => profiles[id]?.name ?? "")));
   const sharedColors = useProfileRecords(useShallow((profiles) => shared.map((id) => profileAccent(profiles[id]))));
   const stats = useProfileDataStats(profileId);
-  const [name, setName] = useState(profile?.name ?? "");
+  const syncLink = useSync((s) => s.profiles[profileId]);
+  const synced = useSync((s) => s.enabled && !!s.profiles[profileId]?.enabled);
+  const syncsTabs = useSync((s) => s.types.tabs);
+  const engineProfile = currentEngineProfile(profileId);
+  const [downloads] = useResource(downloadSettings, engineProfile);
+  const savedName = profile?.name ?? "";
+  const [name, setName] = useState(savedName);
+  const typed = useRef(name);
+  typed.current = name;
+  const edited = useRef(false);
+  useEffect(() => {
+    if (!edited.current) setName(savedName);
+  }, [savedName]);
+  useEffect(
+    () => () => {
+      if (edited.current) commitProfileName(profileId, typed.current);
+    },
+    [profileId],
+  );
+  const badge = useRef<View>(null);
+  const changeButton = useRef<View>(null);
   if (!profile) return null;
-  const update = (patch: Partial<Pick<Profile, "name" | "icon">>) => updateProfile(profileId, patch);
-  const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
+  const editName = (text: string) => {
+    edited.current = true;
+    setName(text);
+  };
+  const commitName = () => {
+    edited.current = false;
+    setName(commitProfileName(profileId, name) ? name.trim() : profile.name);
+  };
   const sharing = shared.length > 1;
-
-  const pickIcon = async () => {
-    const choice = await chooseFromMenu(iconMenuItems(profile.icon));
-    if (choice && typeof choice === "object") update({ icon: choice.icon });
+  const pickIcon = (anchor: View | null) => void openProfileIconPicker(profileId, SETTINGS_WINDOW_ID, "settings", anchor);
+  const changeDownloads = async () => {
+    if (!downloads) return;
+    const folder = await pickFolder(downloads.folder, "Use Folder");
+    if (folder) void setDownloadsFor({ folder }, [engineProfile]);
   };
 
   return (
-    <View>
-      <View style={{ alignItems: "center", marginTop: 24, gap: 10 }}>
-        <Pressable onPress={() => void pickIcon()} tooltip="Change Icon">
-          <ProfileBadge profile={profile} size={64} />
+    <>
+      <Box gap="ml" style={DETAILS_HEAD}>
+        <Pressable onPress={() => pickIcon(badge.current)} tooltip="Change Icon">
+          <View ref={badge} collapsable={false}>
+            <ProfileBadge profile={profile} size={64} />
+          </View>
         </Pressable>
-        <Text style={{ ...font.small, color: theme.textSecondary }}>{stats}</Text>
-      </View>
+        <Box center gap="xxs">
+          <Text size="title" weight="semibold">
+            {profile.name}
+          </Text>
+          <Text size="small" tone="textSecondary">
+            {stats}
+          </Text>
+        </Box>
+      </Box>
 
-      <SectionHeader title="Profile" />
+      <SectionHeader title="This profile" />
       <Group>
         <Row title="Name">
-          <TextField value={name} onChangeText={setName} onSubmit={commitName} onBlur={commitName} style={{ width: 220 }} />
+          <TextField value={name} onChangeText={editName} onSubmit={commitName} onBlur={commitName} width={220} />
         </Row>
         <Row title="Icon" description={iconTitle(profile.icon)}>
-          <Button title="Change…" onPress={() => void pickIcon()} />
+          <View ref={changeButton} collapsable={false}>
+            <Button title="Change…" onPress={() => pickIcon(changeButton.current)} />
+          </View>
         </Row>
-      </Group>
-
-      <ThemeSection profileId={profileId} />
-
-      <SectionHeader title="Data" />
-      <Group>
         {sharing ? (
           <Row
             icon={<ColorStack colors={sharedColors} size={14} />}
@@ -278,17 +224,47 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
             description={`${listOf(sharedNames)} share Cookies, Passwords, Extensions, Bookmarks, and History. Each keeps its own tabs.`}
           />
         ) : null}
-        <Row title="Make Default Profile" description={isDefault ? "New windows already open with this profile." : "Open new windows with this profile."}>
-          <Button title="Make Default" disabled={isDefault} onPress={() => setDefaultProfile(profileId)} />
+        <Row anchor="profiles.syncThisProfile" description={sharing ? "Its tabs sync here; the data it shares syncs with the profile that owns it." : undefined}>
+          <Toggle value={!!syncLink?.enabled} disabled={!syncLink} accessibilityLabel={setting("profiles.syncThisProfile").title} onChange={(on) => setProfileSynced(profileId, on)} />
         </Row>
+        {synced ? (
+          <Row title="Sync All Open Tabs" description={`Every open tab in this profile, not just pinned ones, is the same on all your ${PLATFORM_TERMS.syncedComputer}s.`}>
+            <Toggle value={!!profile.syncTabs} disabled={!syncsTabs} accessibilityLabel="Sync All Open Tabs" onChange={(on) => setOpenTabsSynced(profileId, on)} />
+          </Row>
+        ) : null}
         <Row
-          title="Clear Browsing Data"
+          anchor="profiles.profileDownloadsFolder"
+          description={downloads ? (downloads.managed ? `${homeRelative(downloads.folder)}, set by your organization.` : homeRelative(downloads.folder)) : undefined}
+        >
+          <Button title="Change…" disabled={!downloads || downloads.managed} onPress={() => void changeDownloads()} />
+        </Row>
+        {PLATFORM_FEATURES.preloadPages ? <PreloadPagesRow profileId={profileId} /> : null}
+        <Row anchor="profiles.siteSettings" onPress={() => goToSettingsPane("profiles", profileId, SETTINGS_DETAIL.sites)} />
+      </Group>
+
+      <ThemeSection profileId={profileId} />
+    </>
+  );
+}
+
+function DataSection({ profileId }: { profileId: string }) {
+  const hidden = useHiddenSetting();
+  const only = useProfileOrder((o) => o.length <= 1);
+  const sharing = useSharedWith(profileId).length > 1;
+
+  return (
+    <>
+      <SectionHeader title="Data" />
+      <Group>
+        {hidden(findSetting("profiles.exportBookmarks")) ? null : <ExportBookmarksRow key={profileId} profileId={profileId} />}
+        <Row
+          anchor="profiles.clearBrowsingData"
           description={sharing ? "History, cookies, site data and cached files, for every profile that shares them." : "History, cookies, site data and cached files for this profile."}
         >
           <Button title="Clear…" onPress={() => showSettingsSheet(<ClearDataDialog profileId={profileId} onClose={closeSettingsSheet} />)} />
         </Row>
         <Row
-          title="Delete Selected Profile"
+          title="Delete profile"
           description={only ? "You can't delete your only profile." : sharing ? "Removes its tabs. The data it shares stays." : "Removes its tabs, history, bookmarks and site data."}
         >
           <Button
@@ -297,12 +273,14 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
             disabled={only}
             onPress={() =>
               void deleteProfile(profileId).then(() => {
-                if (!currentProfiles()[profileId]) goToSettingsPane("profiles");
+                if (!currentProfiles()[profileId]) replaceSettingsPlace(null);
               })
             }
           />
         </Row>
       </Group>
-    </View>
+    </>
   );
 }
+
+const DETAILS_HEAD = { alignItems: "center", marginTop: space.xxl } as const;

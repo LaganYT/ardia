@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chosenEngine, engineForUrl, engineMark, protectedVideoSite, recommendedEngineFor, ruleFor, siteOf, tabEngine, typedNavigationEngine, visitRecorder } from "./engines.ts";
+import { chosenEngine, engineForUrl, engineMark, offersEngineChoice, protectedVideoSite, recommendedEngineFor, ruleFor, siteOf, tabEngine, typedNavigationEngine, visitRecorder } from "./engines.ts";
 import { makeTab, snapshotTab } from "../browser/model.ts";
+import { carriableCookies, cookieAddresses } from "./signInCookies.ts";
 
-const tab = (id, patch = {}) => ({ id, url: "", navigation: null, openerId: null, ...patch });
+const tab = (id, patch = {}) => ({ id, url: "", page: { kind: "idle" }, openerId: null, ...patch });
 const state = (tabs, settings = {}) => ({
   tabs: Object.fromEntries(tabs.map((t) => [t.id, t])),
   settings: { pageEngine: "chromium", websiteEngines: {}, ...settings },
@@ -31,12 +32,12 @@ test("a tab keeps its engine, else follows its adoption, its opener, then rules"
   const s = state(
     [
       tab("fixed", { engine: "chromium", url: "https://www.netflix.com/" }),
-      tab("popup", { adoptId: "webkit:3" }),
-      tab("chrome", { adoptId: "ardiacore:9", url: "https://www.netflix.com/" }),
+      tab("popup", { page: { kind: "adopted", adopt: "webkit:3", nav: null } }),
+      tab("chrome", { page: { kind: "adopted", adopt: "ardiacore:9", nav: null }, url: "https://www.netflix.com/" }),
       tab("opener", { engine: "webkit", url: "https://www.netflix.com/" }),
       tab("link", { openerId: "opener", url: "https://example.com/" }),
       tab("typed", { url: "https://www.netflix.com/" }),
-      tab("copy", { adoptId: "clone:opener" }),
+      tab("copy", { page: { kind: "adopted", adopt: "clone:opener", nav: null } }),
     ],
     rules,
   );
@@ -76,6 +77,16 @@ test("streaming sites open in WebKit when the setting is on, over https, subdoma
   assert.equal(recommendedEngineFor(on, "https://example.com/"), "chromium");
 });
 
+test("Spotify's player opens in WebKit with the streaming sites, and a rule still wins", () => {
+  const spotify = "https://open.spotify.com/track/1";
+  assert.equal(engineForUrl(state([], { protectedVideoInWebKit: true }), spotify), "webkit");
+  assert.equal(recommendedEngineFor(state([], { protectedVideoInWebKit: true }), spotify), "webkit");
+  assert.equal(engineForUrl(state([], { protectedVideoInWebKit: true }), "http://open.spotify.com/"), "chromium");
+  assert.equal(engineForUrl(state([], { protectedVideoInWebKit: true }), "https://www.spotify.com/"), "chromium");
+  assert.equal(engineForUrl(state([], { protectedVideoInWebKit: true, websiteEngines: { "https://open.spotify.com": "chromium" } }), spotify), "chromium");
+  assert.equal(engineForUrl(state([], { protectedVideoInWebKit: false }), spotify), "chromium");
+});
+
 test("a website rule wins over the streaming default", () => {
   const s = state([], { protectedVideoInWebKit: true, websiteEngines: { "https://www.netflix.com": "chromium" } });
   assert.equal(chosenEngine(s, "https://www.netflix.com/"), "chromium");
@@ -101,7 +112,7 @@ test("the mark shows only on web pages away from the default engine", () => {
 test("a closed WebKit tab reopens in WebKit, whatever restore id it carries", () => {
   const closed = snapshotTab({ ...makeTab("w1", "default", "https://www.netflix.com/"), engine: "webkit" });
   assert.equal(closed.engine, "webkit");
-  const reopened = { ...makeTab("w1", "default", closed.url, closed), adoptId: "restore:old", navigation: null };
+  const reopened = { ...makeTab("w1", "default", closed.url, closed), page: { kind: "adopted", adopt: "restore:old", nav: null } };
   const s = state([reopened]);
   assert.equal(tabEngine(s, reopened.id), "webkit");
   assert.equal(snapshotTab(makeTab("w1", "default", "https://a.com/")).engine, undefined);
@@ -213,4 +224,38 @@ test("many tabs don't make an open tab record its page again", () => {
   advance(1500);
   assert.equal(written.filter((v) => v.url === "https://keep.com/").length, 1);
   assert.equal(visits.size(), 1);
+});
+
+const cookie = (patch = {}) => ({
+  name: "NetflixId",
+  value: "v",
+  domain: ".netflix.com",
+  path: "/",
+  expires: 2_000_000_000,
+  session: false,
+  httpOnly: true,
+  secure: true,
+  ...patch,
+});
+
+test("cookies are read for the page's own address and its site root, nothing else", () => {
+  assert.deepEqual(cookieAddresses("https://www.netflix.com/watch/1?t=2#x"), ["https://www.netflix.com/watch/1?t=2", "https://www.netflix.com/"]);
+  assert.deepEqual(cookieAddresses("https://open.spotify.com/"), ["https://open.spotify.com/"]);
+  assert.deepEqual(cookieAddresses("file:///Users/a/b.html"), []);
+  assert.deepEqual(cookieAddresses("not a url"), []);
+});
+
+test("partitioned, nameless and expired cookies stay behind; session cookies come along", () => {
+  const now = 1_900_000_000;
+  const kept = cookie();
+  const session = cookie({ name: "s", session: true, expires: -1 });
+  const partitioned = cookie({ name: "p", partitionKey: { topLevelSite: "https://a.com", hasCrossSiteAncestor: false } });
+  const opaque = cookie({ name: "o", partitionKeyOpaque: true });
+  const expired = cookie({ name: "e", expires: now - 1 });
+  const nameless = cookie({ name: "" });
+  assert.deepEqual(carriableCookies([kept, session, partitioned, opaque, expired, nameless], now), [kept, session]);
+});
+
+test("the Mac always offers a page engine choice, so Site Controls keeps Opens in for every page, local files included", () => {
+  assert.equal(offersEngineChoice(), true);
 });

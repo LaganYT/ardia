@@ -1,6 +1,7 @@
-import { openFile } from "../../platform/files";
+import { openDownload } from "../downloads/openDownload";
 import { useBrowser, type BrowserState } from "../browser/store";
-import { downloadVisibleIn } from "./ui";
+import { downloadVisibleIn } from "../downloads/downloadsSlice";
+import { focusedWindowOf } from "./ui";
 
 const openWhenDone = new Set<string>();
 
@@ -12,7 +13,7 @@ export function startOpenWhenDone() {
   useBrowser.subscribe((s, prev) => {
     if (s.downloads === prev.downloads || !openWhenDone.size) return;
     for (const d of s.downloads) {
-      if (d.state !== "downloading" && openWhenDone.delete(d.id) && d.state === "finished") void openFile(d.path);
+      if (d.state !== "downloading" && openWhenDone.delete(d.id) && d.state === "finished") void openDownload(d.path);
     }
   });
 }
@@ -35,7 +36,7 @@ export function watchNewDownloads(windowId: string, onFresh: (download: BrowserS
     if (s.downloads === prev.downloads) return;
     const fresh = s.downloads.find((d) => !seen.has(d.id));
     s.downloads.forEach((d) => seen.add(d.id));
-    if (!fresh || s.ui.focusedWindowId !== windowId || !downloadVisibleIn(s, fresh, s.windows[windowId])) return;
+    if (!fresh || focusedWindowOf(s) !== windowId || !downloadVisibleIn(s, fresh, s.windows[windowId])) return;
     onFresh(fresh);
   });
 }

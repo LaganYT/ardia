@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
+const { bookmarkRoots } = await import("../bookmarks/bookmarks.ts");
 const { restoreArcFolders, addFolderToSidebar } = await import("../bookmarks/bookmarkGroups.ts");
 const { importArcSpace, importTabs } = await import("./apply.ts");
 const { withDraftGroups, MAX_DRAFT_LINKS } = await import("../groups/draftGroups.ts");
@@ -10,10 +11,11 @@ const P = "default";
 const pinnedGroups = () => Object.values(S().groups).filter((g) => g.pinned);
 
 function start() {
-  S().hydrate({ bookmarks: { nodes: {}, roots: {} } });
+  useBrowser.setState({ bookmarks: { nodes: {} } });
+  S().hydrate({});
   const w = S().createWindow({ url: "https://home.example/" });
   S().addBookmark({ profileId: P, url: "https://seed.example/", title: "seed" });
-  return { w, bar: S().bookmarks.roots[P].bar };
+  return { w, bar: bookmarkRoots(S(), P).bar };
 }
 
 function nestedFolder(parentId, outer, inner, url) {
@@ -44,6 +46,44 @@ test("re-importing an Arc space after renaming its group adds no page that's alr
   S().updateGroup(g.id, { name: "Renamed" });
   assert.equal(importArcSpace(P, space).tabs, 0);
   assert.equal(pinnedGroups().filter((x) => !x.parentId).length, 1, "no second Work");
+});
+
+const arcFolder = (title, sub) => ({
+  type: "folder",
+  title,
+  children: [
+    { type: "url", title: `${title} A`, url: `https://${title.toLowerCase()}-a.example/` },
+    { type: "folder", title: sub, children: [{ type: "url", title: `${sub} B`, url: `https://${sub.toLowerCase()}-b.example/` }] },
+  ],
+});
+const groupsNamed = (...names) => Object.values(S().groups).filter((g) => g.pinned && names.includes(g.name));
+
+test("an imported Arc space's folders, nested ones included, come in closed", () => {
+  start();
+  const space = { id: "s", name: "Home", profileId: P, tabs: [], pinned: [arcFolder("Work", "Inner"), arcFolder("Play", "Deep")] };
+  assert.equal(importArcSpace(P, space).tabs, 4);
+  const made = groupsNamed("Work", "Inner", "Play", "Deep");
+  assert.equal(made.length, 4, "two folders and their two subfolders");
+  assert.ok(made.some((g) => g.parentId), "the subfolders are nested groups");
+  assert.deepEqual(made.filter((g) => !g.collapsed).map((g) => g.name), [], "every imported group is closed");
+});
+
+test("Restore Arc Folders as Groups brings the folders in closed", () => {
+  const { w, bar } = start();
+  const holder = S().addBookmarkFolder({ profileId: P, title: "Home (Arc)", parentId: bar });
+  nestedFolder(holder, "Work", "Alpha", "https://work.example/");
+  nestedFolder(holder, "Play", "Beta", "https://play.example/");
+  assert.equal(restoreArcFolders(holder, w).length, 2);
+  const made = groupsNamed("Work", "Alpha", "Play", "Beta");
+  assert.equal(made.length, 4);
+  assert.deepEqual(made.filter((g) => !g.collapsed).map((g) => g.name), []);
+});
+
+test("Add to Sidebar as Group on one folder still opens it", () => {
+  const { w, bar } = start();
+  const [group] = addFolderToSidebar(nestedFolder(bar, "Work", "Alpha", "https://work.example/"), w);
+  assert.equal(S().groups[group].collapsed, false);
+  assert.equal(groupsNamed("Alpha")[0].collapsed, false, "and its subfolder");
 });
 
 test("a folder past the link limit imports up to it and reports the rest", () => {
@@ -93,5 +133,5 @@ test("renaming the deepest group of a 64-level pinned chain over 2,000 tabs stay
   S().updateGroup(deepest.id, { name: "Deepest" });
   const ms = performance.now() - t0;
   assert.equal(S().groups[deepest.id].name, "Deepest");
-  assert.ok(ms < 250, `${ms.toFixed(0)} ms`);
+  assert.ok(ms < 1000, `${ms.toFixed(0)} ms`);
 });

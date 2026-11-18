@@ -2,6 +2,17 @@ import AppKit
 import WebKit
 
 extension WebKitTab {
+  @objc(_webViewFullscreenMayReturnToInline:)
+  func webViewFullscreenMayReturnToInline(_ webView: WKWebView) {
+    guard !closed, webView === self.webView else { return }
+    if LaunchConfig.shared.background {
+      NSLog("[webkit] back to tab from Picture in Picture (background mode, not activated)")
+    } else {
+      NSApp.activate()
+    }
+    emit("activateRequest", ["reason": "pictureInPicture"])
+  }
+
   func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo,
                type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
     let kinds: [String]
@@ -11,7 +22,7 @@ extension WebKitTab {
     default: kinds = ["camera", "microphone"]
     }
     let originString = Origins.of(origin)
-    WebKitHub.shared.requestPermission(browserId: browserId, tabId: transferKey, profile: profile, origin: originString, kinds: kinds) { [weak webView] allowed in
+    WebKitHub.shared.permissions.request(browserId: browserId, tabId: transferKey, profile: profile, origin: originString, kinds: kinds) { [weak webView] allowed in
       if allowed, let view = webView as? WebKitWebView {
         for kind in kinds { view.captureOrigins[kind, default: []].insert(originString) }
       }

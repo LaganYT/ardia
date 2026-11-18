@@ -1,6 +1,8 @@
 import type { ProfileColor } from "../browser/types";
 import type { Preset } from "../onboarding/onboarding";
 import type { Settings } from "../settings/settings";
+import { PLATFORM_TERMS } from "../../lib/platformTerms";
+import { keyText } from "../commands/keyText";
 
 export const SETUP_CODE_VERSION = 1;
 export const SETUP_CODE_PREFIX = `ardia${SETUP_CODE_VERSION}-`;
@@ -9,6 +11,7 @@ export const SETUP_CODE_MAX_INPUT = SETUP_CODE_MAX_LENGTH * 8;
 
 export const SETUP_SETTING_KEYS = [
   "tabLayout",
+  "sidebarSide",
   "addressBar",
   "commandBarPlacement",
   "newTabOpens",
@@ -44,8 +47,9 @@ const BOOL = [false, true] as const;
 
 export const SETTING_FIELDS: { [K in SetupSettingKey]: Field<Settings[K]> } = {
   tabLayout: { key: "t", values: ["sidebar", "top"] },
+  sidebarSide: { key: "d", values: ["left", "right"] },
   addressBar: { key: "a", values: ["toolbar", "sidebar"] },
-  commandBarPlacement: { key: "c", values: ["field", "centred"] },
+  commandBarPlacement: { key: "c", values: ["field", "centred", "centredOnClick"] },
   newTabOpens: { key: "n", values: ["page", "commandBar"] },
   newTabPosition: { key: "o", values: ["top", "bottom", "nextToCurrent"] },
   newTabButtonPosition: { key: "b", values: ["top", "bottom"] },
@@ -62,7 +66,7 @@ export const SETTING_FIELDS: { [K in SetupSettingKey]: Field<Settings[K]> } = {
   bookmarksBar: { key: "v", values: ["always", "newTab", "never"] },
 };
 
-const PRESET_FIELD: Field<Preset> = { key: "p", values: ["arc", "dia", "chrome", "safari", "firefox", "zen", "brave", "edge", "fresh"] };
+const PRESET_FIELD: Field<Preset> = { key: "p", values: ["arc", "dia", "chrome", "safari", "firefox", "zen", "brave", "edge", "fresh", "helium", "chromium", "vivaldi", "opera"] };
 const COLOR_FIELD: Field<ProfileColor> = { key: "x", values: ["plum", "blue", "purple", "pink", "red", "orange", "yellow", "green", "neutral"] };
 const PINS_KEY = "f";
 
@@ -180,14 +184,15 @@ export function decodeSetupCode(input: string): SetupCodeResult {
   return { ok: true, choices };
 }
 
-const APPEARANCE_LINE = { auto: "Appearance follows your Mac", light: "Always light", dark: "Always dark" } as const;
+const APPEARANCE_LINE = { auto: `Appearance follows your ${PLATFORM_TERMS.computer}`, light: "Always light", dark: "Always dark" } as const;
 
 export function describeSetupChoices(choices: SetupChoices): string[] {
   const s = choices.settings;
   const lines: string[] = [];
   if (s.tabLayout) lines.push(s.tabLayout === "top" ? "Tabs along the top" : "Tabs in the sidebar");
+  if (s.sidebarSide === "right" && s.tabLayout !== "top") lines.push("Sidebar on the right");
   if (s.addressBar && s.tabLayout !== "top") lines.push(s.addressBar === "sidebar" ? "Address in the sidebar" : "Address in the toolbar");
-  if (s.newTabOpens) lines.push(s.newTabOpens === "commandBar" ? "⌘T opens the command bar" : "⌘T opens the New Tab page");
+  if (s.newTabOpens) lines.push(s.newTabOpens === "commandBar" ? `${keyText("⌘T")} opens the command bar` : `${keyText("⌘T")} opens the New Tab page`);
   if (s.appearance) lines.push(APPEARANCE_LINE[s.appearance]);
   if (choices.color) lines.push(`${choices.color[0]!.toUpperCase()}${choices.color.slice(1)} theme`);
   if (choices.pins?.length) lines.push(`${choices.pins.length} ${choices.pins.length === 1 ? "app" : "apps"} pinned`);

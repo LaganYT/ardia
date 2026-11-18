@@ -1,6 +1,6 @@
-import { PowerUp, hex, ink, reduceMotion, spring as springOf, Surface, useTheme } from "../ui";
+import { PowerUp, hex, ink, reduceMotion, springs, Surface, useTheme } from "../ui";
 import { TOOLBAR_ROWS } from "../../lib/toolbarRow";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 import { useWindow, useWindowId } from "../../state/browser/hooks";
 import { useCardAnchors } from "../../state/windows/layout";
@@ -10,6 +10,8 @@ import { DIA_OFFSET, MARK_ABOVE_BAR, newTabBarTop } from "./newTabLayout";
 import { useOnboarding } from "../../state/onboarding/onboarding";
 import { Omnibox } from "../omnibox/Omnibox";
 import { NTP_BAR } from "./tokens";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
+import { markNewTabBar } from "../../state/omnibox/newTabMarks";
 
 const BAR_HEIGHT = 112;
 const MARKS = {
@@ -26,12 +28,12 @@ const MARKS = {
 const MARK_SIZE = 100;
 const SUN_DELAY = 250;
 const MARK_LAYERS = [
-  { name: "sun", hidden: 56, delay: SUN_DELAY, spring: springOf({ response: 0.56, damping: 0.9 }) },
-  { name: "back", hidden: 40.5, delay: 170, spring: springOf({ response: 0.46, damping: 0.84 }) },
-  { name: "front", hidden: 34, delay: 80, spring: springOf({ response: 0.42, damping: 0.76 }) },
+  { name: "sun", hidden: 56, delay: SUN_DELAY, spring: springs.smooth },
+  { name: "back", hidden: 40.5, delay: 170, spring: springs.smooth },
+  { name: "front", hidden: 34, delay: 80, spring: springs.smooth },
 ] as const;
 const SUN_DRIFT = 6;
-const SUN_DRIFT_SPRING = springOf({ response: 0.6, damping: 1 });
+const SUN_DRIFT_SPRING = springs.smooth;
 
 type Size = { width: number; height: number };
 let lastSize: { card: Size; size: Size } | null = null;
@@ -50,7 +52,7 @@ export function barWidth(viewWidth: number) {
 export function NewTabPage({ tabId, toolbar = true }: { tabId: string; toolbar?: boolean }) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const incognito = useWindow(windowId, (w) => !!w?.incognito);
+  const incognito = useWindow(windowId, (w) => w?.kind === "private");
   const onboarding = useOnboarding((s) => s.windowId === windowId);
   const card = useCardAnchors((s) => s[windowId]);
   const [size, setSizeState] = useState<Size | null>(() => (lastSize && (!card || sameSize(lastSize.card, card)) ? lastSize.size : null));
@@ -62,6 +64,15 @@ export function NewTabPage({ tabId, toolbar = true }: { tabId: string; toolbar?:
   const [headingHeight, setHeadingHeight] = useState(0);
   const heading = !onboarding && incognito;
   const [playIntro] = useState(() => !introPlayed.has(tabId));
+  const [restShown, setRestShown] = useState(() => !PLATFORM_FEATURES.newTabBarFirst || !playIntro);
+  const showRest = () => void (restShown || requestAnimationFrame(() => setRestShown(true)));
+  useLayoutEffect(() => {
+    markNewTabBar("page", tabId);
+    return () => markNewTabBar("gone", tabId);
+  }, [tabId]);
+  useLayoutEffect(() => {
+    if (restShown && PLATFORM_FEATURES.newTabBarFirst) markNewTabBar("rest", tabId);
+  }, [restShown]);
   const [rise] = useState(() => {
     const intro = playIntro && !reduceMotion();
     const layers = MARK_LAYERS.map((l) => ({ ...l, y: new Animated.Value(intro ? l.hidden : 0) }));
@@ -72,7 +83,7 @@ export function NewTabPage({ tabId, toolbar = true }: { tabId: string; toolbar?:
   }, [tabId]);
   useEffect(() => {
     if (!playIntro || reduceMotion()) return;
-    const spring = (value: Animated.Value, delay: number, params: ReturnType<typeof springOf>) =>
+    const spring = (value: Animated.Value, delay: number, params: typeof springs.smooth) =>
       Animated.spring(value, { toValue: 0, delay, ...params, useNativeDriver: true });
     const intro = Animated.parallel([
       ...rise.layers.map((l) => spring(l.y, l.delay, l.spring)),
@@ -93,7 +104,7 @@ export function NewTabPage({ tabId, toolbar = true }: { tabId: string; toolbar?:
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      {playIntro && theme.powerUpPalette && (
+      {restShown && playIntro && theme.powerUpPalette && (
         <PowerUp
           style={StyleSheet.absoluteFill}
           palette={theme.powerUpPalette}
@@ -104,7 +115,7 @@ export function NewTabPage({ tabId, toolbar = true }: { tabId: string; toolbar?:
         />
       )}
       {heading && <IncognitoHeading left={x} barTop={top} width={width} onHeight={setHeadingHeight} />}
-      <View
+      {restShown && <View
         pointerEvents="none"
         style={{
           position: "absolute",
@@ -127,9 +138,9 @@ export function NewTabPage({ tabId, toolbar = true }: { tabId: string; toolbar?:
             }}
           />
         ))}
-      </View>
-      <View onLayout={(e) => setPanelHeight(e.nativeEvent.layout.height)} style={{ position: "absolute", left: x, top, width }}>
-        {NTP_BAR.shadows.map((level, i) => (
+      </View>}
+      <View onLayout={(e) => (setPanelHeight(e.nativeEvent.layout.height), showRest())} style={{ position: "absolute", left: x, top, width }}>
+        {restShown && NTP_BAR.shadows.map((level, i) => (
           <Surface
             key={i}
             style={StyleSheet.absoluteFill}
@@ -141,11 +152,12 @@ export function NewTabPage({ tabId, toolbar = true }: { tabId: string; toolbar?:
             shadowOffset={level.offset}
           />
         ))}
-        <Surface fill={hex(theme.ntpBarSolid)} cornerRadius={NTP_BAR.radius} borderColor={hex(theme.ntpBarBorder)} borderWidth={NTP_BAR.border}>
-          {onboarding ? <View style={{ height: BAR_HEIGHT - 2 * NTP_BAR.border }} /> : <Omnibox variant="hero" tabId={tabId} />}
+        <Surface fill={hex(theme.ntpBarSolid)} cornerRadius={NTP_BAR.radius} style={{ padding: NTP_BAR.contentInset }}>
+          {onboarding ? <View style={{ height: BAR_HEIGHT - 2 * NTP_BAR.contentInset }} /> : <Omnibox variant="hero" tabId={tabId} />}
+          <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, borderRadius: NTP_BAR.radius, borderWidth: NTP_BAR.border, borderColor: theme.ntpBarBorder }} />
         </Surface>
       </View>
-      <NewTabExtras size={size} bar={bar} />
+      {restShown && <NewTabExtras size={size} bar={bar} />}
     </View>
   );
 }

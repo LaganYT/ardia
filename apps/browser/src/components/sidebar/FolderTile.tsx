@@ -1,27 +1,31 @@
 import { memo, useRef } from "react";
 import { Animated, Pressable, View } from "react-native";
-import { ContextMenuArea, radius, Symbol } from "../ui";
-import { useTheme } from "../ui/theme";
-import { sidebarTokens } from "./tokens";
-import { useTab, useWindowId } from "../../state/browser/hooks";
+import { ContextMenuArea, space, Symbol } from "../ui";
+import { layout, useTheme } from "../ui/theme";
+import { usePageProfileId, useTab, useWindowId, useWindowProfileId } from "../../state/browser/hooks";
 import { useShownFolderTab, useTileFolderMembers } from "../../state/pins/hooks";
 import { useDragItem, useFolderTarget } from "./DragProvider";
-import { dismissHover, useRowHover } from "../../state/sidebar/hover";
+import { dismissHover } from "../../state/sidebar/hover";
+import { useRowHover } from "./hoverController";
 import { registerRow } from "../../state/sidebar/sidebarUi";
 import { TabIcon } from "./TabIcon";
 import { FolderDropRing, RestingTile, TileFace, useSlotPosition } from "./TileFace";
 import { closedByPress, openTileFolderMenu, toggleFolderPanel, useFolderPanel } from "../../state/sidebar/tileFolderUi";
 import { entryKey } from "../../state/sidebar/entryKey";
+import { TILE_STATUS } from "./tokens";
 
-const MOSAIC_CELL = 9;
-const MOSAIC_GAP = 2;
-const MOSAIC_PAD = 3.5;
-const MOSAIC = MOSAIC_PAD * 2 + MOSAIC_CELL * 2 + MOSAIC_GAP;
+const MOSAICS = {
+  tile: { cell: 9, gap: space.xxs, pad: space.xs },
+  strip: { cell: 7, gap: space.xxs, pad: space.xxs },
+};
+const ROW_CELL = 14;
+const ROW_MAX = 4;
 
 export const FolderTile = memo(function FolderTile({ folderId, width, sliding, x, y }: { folderId: string; width: number; sliding: boolean; x: number; y: number }) {
   const theme = useTheme();
   const windowId = useWindowId();
   const members = useTileFolderMembers(windowId, folderId);
+  const onScreen = usePageProfileId() === useWindowProfileId();
   const shown = useShownFolderTab(windowId, folderId);
   const open = useFolderPanel((u) => u.open?.windowId === windowId && u.open.folderId === folderId);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "folder", id: folderId });
@@ -30,12 +34,16 @@ export const FolderTile = memo(function FolderTile({ folderId, width, sliding, x
   const position = useSlotPosition(x, y, width, sliding, dragging);
   const pressedAt = useRef<number | undefined>(undefined);
   if (!members.length) return null;
-  const glyph = <Symbol name="folder.fill" size={7} color={theme.textSecondary} style={{ position: "absolute", bottom: 3, right: 4, width: 10, height: 9 }} />;
+  const glyph = (
+    <View pointerEvents="none" style={{ position: "absolute", bottom: TILE_STATUS.inset.y, right: TILE_STATUS.inset.x }}>
+      <Symbol name="folder" size={TILE_STATUS.speaker} color={theme.textSecondary} style={TILE_STATUS.box} />
+    </View>
+  );
 
   return (
     <Animated.View ref={wrapper.ref} style={[{ position: "absolute", ...position.getLayout() }, wrapper.style]} {...handle}>
       <FolderDropRing on={target} />
-      <View ref={(v) => registerRow(windowId, folderId, v)} {...hoverProps}>
+      <View ref={onScreen ? (v) => registerRow(windowId, folderId, v) : undefined} {...hoverProps}>
         <ContextMenuArea onContextMenu={() => void openTileFolderMenu(windowId, folderId)}>
           <Pressable
             onPressIn={(e) => void (pressedAt.current = e.nativeEvent.timestamp)}
@@ -49,7 +57,7 @@ export const FolderTile = memo(function FolderTile({ folderId, width, sliding, x
                 <TileFace tabId={shown} width={width} active selected={false} hovered={hovered} pressed={pressed} badge={glyph} />
               ) : (
                 <RestingTile width={width} selected={open} hovered={hovered} pressed={pressed}>
-                  <FolderMosaic tabIds={members} />
+                  <FolderMosaic tabIds={members} width={width} />
                 </RestingTile>
               )
             }
@@ -60,34 +68,50 @@ export const FolderTile = memo(function FolderTile({ folderId, width, sliding, x
   );
 });
 
-export function FolderMosaic({ tabIds }: { tabIds: string[] }) {
-  const theme = useTheme();
+export function FolderMosaic({ tabIds, scale = "tile", width }: { tabIds: string[]; scale?: keyof typeof MOSAICS; width?: number }) {
+  if (width) {
+    const shown = tabIds.slice(0, ROW_MAX);
+    const rows = shown.length > 2 ? [shown.slice(0, 2), shown.slice(2)] : [shown];
+    return (
+      <View style={{ width, height: layout.pinnedHeight, justifyContent: "space-evenly" }}>
+        {rows.map((row) => (
+          <View key={row[0]} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-evenly" }}>
+            {row.map((id) => (
+              <MosaicIcon key={id} tabId={id} cell={ROW_CELL} />
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }
+  const { cell, gap, pad } = MOSAICS[scale];
+  const side = pad * 2 + cell * 2 + gap;
   return (
     <View
       style={{
-        width: MOSAIC,
-        height: MOSAIC,
-        borderRadius: radius.button,
-        padding: MOSAIC_PAD,
+        width: side,
+        height: side,
+        padding: pad,
         flexDirection: "row",
         flexWrap: "wrap",
-        gap: MOSAIC_GAP,
-        backgroundColor: sidebarTokens(theme).folderMosaic,
+        alignContent: "center",
+        justifyContent: "center",
+        gap,
       }}
     >
       {tabIds.slice(0, 4).map((id) => (
-        <MosaicIcon key={id} tabId={id} />
+        <MosaicIcon key={id} tabId={id} cell={cell} />
       ))}
     </View>
   );
 }
 
-function MosaicIcon({ tabId }: { tabId: string }) {
+function MosaicIcon({ tabId, cell }: { tabId: string; cell: number }) {
   const tab = useTab(tabId);
-  if (!tab) return <View style={{ width: MOSAIC_CELL, height: MOSAIC_CELL }} />;
+  if (!tab) return <View style={{ width: cell, height: cell }} />;
   return (
-    <View style={{ width: MOSAIC_CELL, height: MOSAIC_CELL, alignItems: "center", justifyContent: "center" }}>
-      <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={MOSAIC_CELL} />
+    <View style={{ width: cell, height: cell, alignItems: "center", justifyContent: "center" }}>
+      <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={cell} />
     </View>
   );
 }

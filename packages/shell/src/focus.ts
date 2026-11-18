@@ -1,13 +1,22 @@
-import { Shell } from "./shellNative";
+export type KeyHoldDrop = "modified" | "edit" | "character" | "dead" | "ime" | "mouse" | "window" | "command" | "cancelled" | "focus" | "reload" | "site" | "capacity" | "timeout";
 
-export const setSwitcherCapture = (active: boolean) => Shell.setSwitcherCapture(active);
-export const setDragEscapeCapture = (active: boolean) => void Shell.setDragEscapeCapture(active);
-export const cancelFocusMove = (generation: number, restoringSource: boolean) =>
-  void Shell.cancelFocusMove(generation, restoringSource);
-export const claimFocus = (generation: number, tag: number) => void Shell.claimFocus(generation, tag);
-export const saveKeyResponder = (windowId: string): Promise<number> => Shell.saveKeyResponder(windowId);
-export const restoreKeyResponder = (token: number): Promise<boolean> => (token ? Shell.restoreKeyResponder(token) : Promise.resolve(false));
-export const discardKeyResponder = (token: number): void => {
-  if (token) void Shell.discardKeyResponder(token);
+export type KeyHoldCounts = { holds: number; replayed: number; drops: Partial<Record<KeyHoldDrop, number>> };
+
+export type KeyHoldNative = { keyHoldCounts(): KeyHoldCounts };
+
+export type FocusNative = {
+  setSwitcherCapture(active: boolean): Promise<void>;
+  takeEditKeyAcks?(): Record<string, number>;
+  takeInputSourceKeys?(): number;
+  setDragEscapeCapture(active: boolean): Promise<void>;
+  cancelFocusMove(generation: number, restoringSource: boolean): Promise<void>;
+  claimFocus(generation: number, tag: number): Promise<void>;
+  saveKeyResponder(windowId: string): Promise<number>;
+  restoreKeyResponder(token: number): Promise<boolean>;
+  discardKeyResponder(token: number): Promise<void>;
+  switcherPointerMoved(): boolean;
+  pressesWithoutRelease(): number;
+  takeFocusHandoffCounts?(): Record<string, Record<string, number>>;
+  setConsentEpoch?(epoch: string): void;
+  pressRepeated(): Promise<{ landedOn: string; ms: number } | null>;
 };
-export const switcherPointerMoved = () => Shell.switcherPointerMoved();

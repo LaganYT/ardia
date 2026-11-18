@@ -1,25 +1,32 @@
 import type { BrowserState } from "../browser/store";
 import { isWindowClosing } from "./closingWindows";
-import { engineProfile } from "../browser/model";
-import type { BrowserWindow } from "../browser/types";
+import { engineProfile, incognitoOriginal } from "../browser/model";
+import type { BrowserWindow, MainWindow } from "../browser/types";
+import { WINDOW_CHROME } from "../../lib/windowChrome";
 
 export const SMALL_BAR_HEIGHT = 38;
 export const SMALL_LIGHTS_CENTER: [number, number] = [20, SMALL_BAR_HEIGHT / 2];
+export const SMALL_WINDOW_BAR_HEIGHT = Math.max(SMALL_BAR_HEIGHT, WINDOW_CHROME.titleBarHeight);
 
 export const isSmallWindow = (w: BrowserWindow | undefined): boolean => w?.kind === "small";
+
+export const isRegularWindow = (w: BrowserWindow | undefined): w is MainWindow => w?.kind === "main";
 
 export const isSmall = (s: Pick<BrowserState, "windows">, windowId?: string | null): boolean =>
   !!windowId && s.windows[windowId]?.kind === "small";
 
-const isMain = (w: BrowserWindow | undefined): w is BrowserWindow => !!w && !w.incognito && w.kind !== "small" && !isWindowClosing(w.id);
+export const isOpenRegularWindow = (w: BrowserWindow | undefined): boolean => isRegularWindow(w) && !isWindowClosing(w.id);
+
+export const isLastRegularWindow = (s: Pick<BrowserState, "windows">, id: string): boolean =>
+  isRegularWindow(s.windows[id]) && !Object.values(s.windows).some((o) => o.id !== id && isOpenRegularWindow(o));
 
 export function mainWindowFor(s: BrowserState, profileId?: string): string | undefined {
-  const order = [...new Set([...s.ui.focusOrder, ...s.windowOrder])].filter((id) => isMain(s.windows[id]));
+  const order = [...new Set([...s.ui.focusOrder, ...s.windowOrder])].filter((id) => isOpenRegularWindow(s.windows[id]));
   return (profileId ? order.find((id) => s.windows[id]!.profileId === profileId) : undefined) ?? order[0];
 }
 
 export function originalProfile(s: Pick<BrowserState, "profiles">, w: BrowserWindow | undefined): string | undefined {
-  const id = w?.incognito ? w.originalProfileId : w?.profileId;
+  const id = w?.kind === "private" ? incognitoOriginal(w.profileId) : w?.profileId;
   return id && s.profiles[id] ? id : undefined;
 }
 
@@ -30,6 +37,9 @@ export function privateWindowProfile(s: Pick<BrowserState, "profiles" | "profile
   const named = engineName !== undefined ? s.profileOrder.find((p) => engineProfile(s, p) === engineName) : undefined;
   return named ?? originalProfile(s, w);
 }
+
+export const newWindowProfile = (s: BrowserState, windowId?: string | null): string =>
+  originalProfile(s, windowId ? s.windows[windowId] : undefined) ?? lastActiveProfile(s);
 
 export function lastActiveProfile(s: Pick<BrowserState, "profiles" | "windows" | "windowOrder" | "ui" | "settings">): string {
   const last = s.ui.lastProfileId;

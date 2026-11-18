@@ -3,6 +3,7 @@ import { Animated, Pressable, StyleSheet, View, type EasingFunction } from "reac
 import { curve, duration } from "./motion";
 import { useTheme } from "./theme";
 import { ink, opacity } from "./tokens";
+import { useNativeForm } from "./nativeForm";
 
 export type SwitchLook = {
   width: number;
@@ -16,23 +17,25 @@ export type SwitchLook = {
   easing: EasingFunction;
 };
 
-export function Switch({
+function Switch({
   value,
   onChange,
   disabled,
   look,
-  hitSlop = 6,
   animateExternalChanges = true,
+  accessibilityLabel,
 }: {
   value: boolean;
-  onChange: (value: boolean) => void;
+  onChange: (value: boolean) => void | Promise<unknown>;
   disabled?: boolean;
   look: SwitchLook;
-  hitSlop?: number;
   animateExternalChanges?: boolean;
+  accessibilityLabel?: string;
 }) {
   const progress = useRef(new Animated.Value(value ? 1 : 0)).current;
   const target = useRef(value);
+  const shown = useRef(value);
+  shown.current = value;
   const pressedAt = useRef(0);
 
   const slideTo = (on: boolean) => {
@@ -55,12 +58,16 @@ export function Switch({
   return (
     <Pressable
       disabled={disabled}
-      hitSlop={hitSlop}
+      hitSlop={SWITCH_HIT_SLOP}
+      accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ checked: value, disabled: !!disabled }}
       onPress={() => {
         const next = !target.current;
         pressedAt.current = Date.now();
         slideTo(next);
-        onChange(next);
+        const settled = onChange(next);
+        if (settled instanceof Promise) void settled.finally(() => slideTo(shown.current));
       }}
       style={{ opacity: disabled ? opacity.disabled : 1 }}
     >
@@ -86,16 +93,33 @@ export function Switch({
 }
 
 const USER_CHANGE_WINDOW_MS = 2000;
+const FORM_SWITCH = { width: 32, height: 18, knob: 15, inset: 1.5 } as const;
+const NATIVE_FORM_SWITCH = { width: 26, height: 15, knob: 13, inset: 1 } as const;
+const SWITCH_HIT_SLOP = 6;
 
-export function Toggle({ value, onChange, disabled, look = "form" }: { value: boolean; onChange: (value: boolean) => void; disabled?: boolean; look?: "form" | "panel" }) {
+export function Toggle({
+  value,
+  onChange,
+  disabled,
+  look = "form",
+  accessibilityLabel,
+}: {
+  value: boolean;
+  onChange: (value: boolean) => void | Promise<unknown>;
+  disabled?: boolean;
+  look?: "form" | "panel";
+  accessibilityLabel?: string;
+}) {
   const theme = useTheme();
+  const native = useNativeForm();
   if (look === "panel")
     return (
       <Switch
         value={value}
         onChange={onChange}
         disabled={disabled}
-        look={{ width: 30, height: 17, knob: 14, inset: 1.5, offColor: theme.toggleOff, onColor: theme.accent, duration: duration.quick, easing: curve.outQuad }}
+        accessibilityLabel={accessibilityLabel}
+        look={{ width: 30, height: 17, knob: 14, inset: 1.5, offColor: theme.toggleOff, onColor: theme.accent, duration: duration.base, easing: curve.enter }}
       />
     );
   return (
@@ -103,8 +127,9 @@ export function Toggle({ value, onChange, disabled, look = "form" }: { value: bo
       value={value}
       onChange={onChange}
       disabled={disabled}
+      accessibilityLabel={accessibilityLabel}
       animateExternalChanges={false}
-      look={{ width: 32, height: 18, knob: 15, inset: 1.5, offColor: theme.switchOff, onColor: theme.formAccent, knobBorder: theme.knobBorder, duration: duration.toggle, easing: curve.outCubic }}
+      look={{ ...(native ? NATIVE_FORM_SWITCH : FORM_SWITCH), offColor: theme.switchOff, onColor: theme.formAccent, knobBorder: theme.knobBorder, duration: duration.base, easing: curve.enter }}
     />
   );
 }

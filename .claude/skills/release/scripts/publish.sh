@@ -34,10 +34,54 @@ for file in "$dmg" "$zip" "$feed" "$cli" "$cli.sha256"; do
   [ -f "$file" ] || die "no $file (scripts/release.sh $version first)"
   assets+=("$file")
 done
+linux="$dist/linux"
+if [ -d "$linux" ]; then
+  linux_package="$linux/Ardia-$version-linux-x64.tar.xz"
+  linux_cli="$linux/ardia-cli-$version-linux-x64.tar.gz"
+  linux_deb="$linux/Ardia-$version-linux-x64.deb"
+  linux_appimage="$linux/Ardia-$version-linux-x64.AppImage"
+  for file in "$linux_package" "$linux_package.sha256" "$linux_deb" "$linux_deb.sha256" "$linux_appimage" "$linux_appimage.sha256" "$linux_cli" "$linux_cli.sha256"; do
+    [ -f "$file" ] || die "$linux has no $(basename "$file") (scripts/linux/release.sh $version first, or remove $linux to publish without Linux)"
+    assets+=("$file")
+  done
+  provenance="$linux/provenance.txt"
+  [ -f "$provenance" ] || die "$linux has no provenance.txt"
+  grep -q '^engine key [0-9a-f]\{40\} (exact)' "$provenance" && ! grep -q 'uncommitted changes' "$provenance" \
+    || die "$linux is a Linux test build (an inexact engine or uncommitted changes, $provenance), not a release"
+  (cd "$linux" && shasum -a 256 -c --quiet "${linux_package##*/}.sha256" "${linux_deb##*/}.sha256" "${linux_appimage##*/}.sha256" "${linux_cli##*/}.sha256") \
+    || die "the Linux assets in $linux don't match their .sha256 files"
+  echo "PASS  the Linux tarball, .deb, AppImage and CLI join the release"
+else
+  echo "note: no $linux: the release ships without the Linux tarball"
+fi
+windows="$dist/windows"
+if [ -d "$windows" ]; then
+  windows_assets=()
+  for cpu in x64 arm64; do
+    windows_setup="Ardia-$version-windows-$cpu-setup.exe"
+    for file in "$windows/$windows_setup" "$windows/$windows_setup.sha256"; do
+      [ -f "$file" ] || die "$windows has no $(basename "$file") (the Release workflow's windows job makes them, or remove $windows to publish without Windows)"
+    done
+    windows_assets+=("$windows_setup")
+  done
+  windows_source="Ardia-$version-windows-source.tar.xz"
+  for file in "$windows/$windows_source" "$windows/$windows_source.sha256"; do
+    [ -f "$file" ] || die "$windows has no $(basename "$file"): the installers ship only beside their engine's source"
+  done
+  windows_assets+=("$windows_source")
+  stamped_version="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$windows/Ardia.build.json" 2>/dev/null)" \
+    || die "$windows has no readable Ardia.build.json"
+  [ "$stamped_version" = "$version" ] || die "the Windows installers in $windows are Ardia $stamped_version, not $version"
+  (cd "$windows" && for file in "${windows_assets[@]}"; do shasum -a 256 -c --quiet "$file.sha256" || exit 1; done) \
+    || die "the Windows files in $windows don't match their .sha256 files"
+  for file in "${windows_assets[@]}"; do assets+=("$windows/$file" "$windows/$file.sha256"); done
+  echo "PASS  the Windows installers and their engine's source join the release"
+else
+  echo "note: no $windows: the release ships without the Windows installers"
+fi
 item_channel="$(appcast channel "$feed" "$version")"
 [ "$item_channel" = "$channel" ] || die "$version's item in $feed is on the $item_channel channel, not $channel"
 [ -f "$dist/release-notes.md" ] || die "no $dist/release-notes.md"
-for archive in "$dist"/ArdiaCore-*.tar.xz; do [ -f "$archive" ] && assets+=("$archive"); done
 if ! git -C "$root" ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
   [ "$dry" = 1 ] && echo "note: v$version isn't on origin yet (git tag v$version && git push origin main v$version)" \
     || die "push the tag first: git tag v$version && git push origin main v$version"
@@ -76,14 +120,14 @@ fi
 run gh release create "v$version" -R "$REPO" "${release_flags[@]}" --verify-tag --title "Ardia $version" \
   --notes-file "$dist/release-notes.md" "${assets[@]}"
 if [ "$channel" = nightly ]; then
-  nightly_notes="The newest nightly, always as Ardia-Nightly.dmg (https://ardia.dev/nightly). Now $version: its notes and source are at $REPO_URL/releases/tag/v$version. Every nightly's notes: https://ardia.dev/release-notes"
+  nightly_notes="The newest nightly, always as Ardia-Nightly.dmg (https://ardia.dev/nightly). Now $version: its notes and source are at $REPO_URL/releases/tag/v$version. Every nightly's notes: $RELEASE_NOTES_URL"
   if ! gh release view nightly -R "$REPO" >/dev/null 2>&1; then
     run gh release create nightly -R "$REPO" --prerelease --latest=false --title "Ardia Nightly" --notes "$nightly_notes"
   fi
   cp -c "$dmg" "$work/Ardia-Nightly.dmg"
   run gh release upload nightly -R "$REPO" --clobber "$work/Ardia-Nightly.dmg"
   run gh release edit nightly -R "$REPO" --notes "$nightly_notes"
-  run gh release upload "$stable_tag" -R "$REPO" --clobber "$feed"
+  run gh release upload "$stable_tag" -R "$REPO" --clobber "$merged"
 fi
 
 tap() { [ "${PUBLISH_TAP:-1}" = 0 ] && { echo "note: the Homebrew tap is left alone (PUBLISH_TAP=0): run update-tap.sh $version"; return 0; }; "$here/update-tap.sh" "$@"; }

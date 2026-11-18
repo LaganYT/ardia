@@ -27,7 +27,7 @@ export function editBookmark(
   const node = id ? s.bookmarks.nodes[id] : undefined;
   if (id && !node) return;
   const profileId =
-add.profileId || (id ? ownerOfBookmark(s.bookmarks, id) : null) || s.settings.defaultProfileId;
+add.profileId || (id ? ownerOfBookmark(s, id) : null) || s.settings.defaultProfileId;
   useBookmarkEditor.setState({
     open: {
       windowId: w,

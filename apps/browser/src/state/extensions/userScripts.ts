@@ -12,6 +12,9 @@ import { engineProfile, isIncognitoProfile } from "../browser/model";
 import { parseSaved, unchanged, versionedJson, type Migrations } from "../../lib/savedDocument";
 import { errorText } from "../../lib/errors";
 import { singleFlight, type Flight } from "../../lib/singleFlight";
+import { onProfilesOpened, profileOpened } from "../profiles/profileLoading";
+import { consentToken } from "../telemetry/client";
+import { warnFor } from "../telemetry/logs";
 
 export type ScriptsOutcome = { ok: true } | { disabled: true } | { removed: true } | { error: string };
 type Status = { generation: number; profiles: Record<string, ScriptsOutcome> };
@@ -35,6 +38,8 @@ export function scriptsTargets(s: Pick<BrowserState, "profileOrder" | "profiles"
 }
 
 const targetsKey = (targets: Map<string, string[]>) => JSON.stringify([...targets]);
+
+const openedTargets = (targets: Map<string, string[]>) => new Map([...targets].filter(([engine]) => profileOpened(engine)));
 
 const withoutPrivate = (path: string) => path.replace(/^\/private(?=\/(tmp|var|etc)\/)/, "");
 const loadedFrom = (ext: InstalledExtension, path: string) => !!ext.path && withoutPrivate(ext.path) === withoutPrivate(path);
@@ -83,6 +88,7 @@ const STATUS_MIGRATIONS: Migrations = { 0: unchanged };
 async function seed() {
   if (seeded) return;
   seeded = true;
+  const consent = consentToken();
   try {
     lastStatus = await readUserScriptsStatus();
     const status = parseSaved(lastStatus, STATUS_VERSION, STATUS_MIGRATIONS) as Status | null;
@@ -94,7 +100,7 @@ async function seed() {
       applied.set(engine, { generation: status.generation, wanted: wantedBy(outcome), outcome });
     }
   } catch (error) {
-    console.warn("[scripts] couldn't read status.json", error);
+    warnFor(consent, "[scripts] couldn't read status.json", error);
   }
 }
 
@@ -105,7 +111,7 @@ async function reconcile(flight: Flight) {
   if (!enabled() || flight.again) return;
   if (folder.state === "empty" || folder.state === "busy" || folder.state === "pending") return;
   const generation = folder.generation ?? 0;
-  const targets = scriptsTargets(useBrowser.getState());
+  const targets = openedTargets(scriptsTargets(useBrowser.getState()));
   const outcomes = new Map<string, ScriptsOutcome>();
   const refused = folder.state === "invalid" ? folder.error : null;
   const loadPath = folder.state === "ready" ? folder.path : null;
@@ -139,10 +145,11 @@ async function reconcile(flight: Flight) {
 }
 
 const schedule = singleFlight(async (flight) => {
+  const consent = consentToken();
   try {
     await reconcile(flight);
   } catch (error) {
-    console.warn("[scripts] couldn't apply the ardia scripts", error);
+    warnFor(consent, "[scripts] couldn't apply the ardia scripts", error);
   }
 }, enabled);
 
@@ -156,7 +163,7 @@ export function startUserScripts() {
   let key = "";
   const sync = (s: BrowserState) => {
     const on = s.settings.cliControl;
-    const nextKey = on ? targetsKey(scriptsTargets(s)) : "";
+    const nextKey = on ? targetsKey(openedTargets(scriptsTargets(s))) : "";
     if (on === watching && nextKey === key) return;
     watching = on;
     key = nextKey;
@@ -167,6 +174,7 @@ export function startUserScripts() {
   useBrowser.subscribe((s, prev) => {
     if (s.settings.cliControl !== prev.settings.cliControl || s.profileOrder !== prev.profileOrder || s.profiles !== prev.profiles) sync(s);
   });
+  onProfilesOpened(() => sync(useBrowser.getState()));
 }
 
 if (__DEV__) (globalThis as { acUserScripts?: unknown }).acUserScripts = { schedule, applied, scriptsTargets };

@@ -6,6 +6,8 @@ final class WindowProfileView: ExpoView {
   var profile = ""
   var neighbours: [String] = []
   var selection = ""
+  var switchId = 0
+  let onSwapped = EventDispatcher()
   private var applied: (profile: String, neighbours: [String], selection: String)?
   private var observer: CFRunLoopObserver?
 
@@ -28,11 +30,19 @@ final class WindowProfileView: ExpoView {
 
   private func apply() {
     guard let window else { return }
-    if applied?.profile != profile { ChromeWindows.showProfile(profile, in: window) }
-    if let applied, applied.profile != profile || applied.selection != selection {
-      NotificationCenter.default.post(name: .ardiaPagerActivity, object: window)
+    if applied?.profile != profile {
+      let shownSelection = selection
+      let shownSwitch = switchId
+      ArdiaChromeWindowHost.showProfile(profile, in: window, report: { [weak self] profileLoaded, activeMs, swapMs, heldTimedOut in
+        self?.onSwapped(["selection": shownSelection, "switchId": shownSwitch, "profileLoaded": profileLoaded, "activeMs": activeMs, "swapMs": swapMs, "heldTimedOut": heldTimedOut])
+      })
     }
-    if applied?.neighbours != neighbours, let current = self.window { ChromeWindows.prepare(neighbours, for: current) }
+    if let applied, applied.profile != profile || applied.selection != selection {
+      ArdiaWebView.wakeNeighbourPages(in: window)
+    }
+    if applied?.neighbours != neighbours, !neighbours.isEmpty, let current = self.window {
+      ArdiaChromeWindowHost.prepareProfiles(neighbours, for: current)
+    }
     applied = (profile, neighbours, selection)
   }
 }

@@ -7,10 +7,13 @@ import {
   type PermissionResult,
 } from "../../platform/permissions";
 import { ensureNotificationPermission } from "./webNotifications";
+import { ensureLocationPermission } from "./locationAccess";
 import { useBrowser } from "../browser/store";
 import { patchPage, pageOf, usePages } from "../tabs/pageState";
 import { startDeviceChoosers } from "./deviceChoosers";
 import { originForSecurityDisplay } from "../../lib/url";
+import { permissionGate } from "./permissionGate";
+import { noteNotificationRequestAutoDenied } from "../telemetry/notificationRequestCounts";
 
 const queues = new Map<string, PermissionRequest[]>();
 let started = false;
@@ -20,12 +23,47 @@ export function startPermissionPrompts() {
   started = true;
   startDeviceChoosers();
   onPermission((request) => {
-    if (request.tabId) enqueue(request.tabId, request);
+    if (request.tabId) gated(request.tabId, request);
   });
-  onPermissionDismissed(({ id }) => drop(id));
+  onPermissionDismissed(({ id }) => {
+    deciding.get(id)?.controller.abort();
+    deciding.delete(id);
+    drop(id);
+  });
+}
+
+const deciding = new Map<string, { controller: AbortController; tabId: string }>();
+
+const turnedDownUnasked = (request: PermissionRequest) =>
+  useBrowser.getState().settings.blockNotificationRequests && request.permissions.length > 0 && request.permissions.every((kind) => kind === "notifications");
+
+function gated(tabId: string, request: PermissionRequest) {
+  if (turnedDownUnasked(request)) {
+    noteNotificationRequestAutoDenied();
+    return void resolvePermission(request.id, "deny", true);
+  }
+  const gate = permissionGate();
+  if (!gate) return enqueue(tabId, request);
+  const controller = new AbortController();
+  const settle = (verdict: "deny" | "ask") => {
+    if (controller.signal.aborted) return;
+    deciding.delete(request.id);
+    if (verdict === "deny") void resolvePermission(request.id, "deny", false);
+    else enqueue(tabId, request);
+  };
+  let verdict: ReturnType<typeof gate>;
+  try {
+    verdict = gate(request, controller.signal);
+  } catch {
+    verdict = "ask";
+  }
+  if (!(verdict instanceof Promise)) return settle(verdict);
+  deciding.set(request.id, { controller, tabId });
+  void verdict.then(settle, () => settle("ask"));
 }
 
 function enqueue(tabId: string, request: PermissionRequest) {
+  if (pageOf(tabId).permission?.id === request.id || queues.get(tabId)?.some((r) => r.id === request.id)) return;
   if (!pageOf(tabId).permission) patchPage(tabId, { permission: request });
   else queues.set(tabId, [...(queues.get(tabId) ?? []), request]);
 }
@@ -51,10 +89,19 @@ export function answerPermission(tabId: string, requestId: string, result: Permi
   if (result === "accept" && request.permissions.includes("notifications")) {
     void ensureNotificationPermission(useBrowser.getState().tabs[tabId]?.windowId);
   }
+  if (result === "accept" && request.permissions.includes("location")) {
+    void ensureLocationPermission(useBrowser.getState().tabs[tabId]?.windowId);
+  }
   next(tabId);
 }
 
 export function dismissPermissions(tabId: string) {
+  for (const [id, entry] of [...deciding]) {
+    if (entry.tabId !== tabId) continue;
+    deciding.delete(id);
+    entry.controller.abort();
+    void resolvePermission(id, "dismiss");
+  }
   for (const r of queues.get(tabId) ?? []) void resolvePermission(r.id, "dismiss");
   queues.delete(tabId);
   const current = pageOf(tabId).permission;

@@ -120,6 +120,13 @@ test("the card radius follows the native window radius minus the frame, and the 
   assert.equal(dm.toolbarLightsCenter(false, 4), dm.toolbarLightsCenter(false, 4), "one array per frame, so effects keyed on it settle");
 });
 
+test("on a window drawn at 16 pt, a thin frame's corner nests in the window's and the default frame keeps its 10 pt", () => {
+  const peek = dm.peekRadius();
+  assert.ok(Math.abs(pageFrameOf(1, 19, peek, 16).radius - 46 / 3) < 1e-9, "1 pt in from a 16 pt corner: 15 pt concentric, plus a ninth of the 3 pt the default frame adds");
+  for (const inset of [9, 12]) assert.equal(pageFrameOf(inset, 19, peek, 16).radius, pageFrameOf(inset, 19, peek).radius);
+  assert.equal(pageFrameOf(0, 19, peek, 16).radius, 0);
+});
+
 test("the motion flag is per window, and ending it twice is harmless", () => {
   dm.setDockMoving("a", true);
   assert.equal(dm.dockMoving("a"), true);

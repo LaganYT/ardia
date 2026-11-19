@@ -5,6 +5,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface ArdiaChromeWindowHost : NSObject
 
 @property(class, nonatomic, readonly) CGFloat windowCornerRadius;
+@property(class, nonatomic, readonly) CGFloat drawnWindowCornerRadius;
 
 + (CGFloat)frameCornerRadiusOfWindow:(NSWindow *)window;
 

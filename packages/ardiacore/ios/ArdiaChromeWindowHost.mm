@@ -128,6 +128,10 @@ NSView *ArdiaWindowRootView(NSWindow *window) {
   return WindowCornerRadius(nil);
 }
 
++ (CGFloat)drawnWindowCornerRadius {
+  return DrawnWindowCornerRadius(nil);
+}
+
 + (CGFloat)frameCornerRadiusOfWindow:(NSWindow *)window {
   if (window.styleMask & NSWindowStyleMaskFullScreen) return 0;
   NSView *frame = window.contentView.superview;

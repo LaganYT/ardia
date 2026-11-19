@@ -911,8 +911,8 @@ right split"; the numbers are from the pixels.
   one Chrome strip command, and the tab settles into its place on the same spring, the store moving it as it lands.
   The dragged item draws over its neighbours: React Native macOS's `zIndex` sets the layer's zPosition, which AppKit
   ignores between sibling views, so `raiseView` (packages/shell) puts its view and layer last among its siblings while
-  dragged. The sidebar's rows make room and close up on the same spring, and the dropped row's ghost settles into its
-  place before the row shows. With nothing pinned, the pin target is an overlay in room the sidebar already has (the
+  dragged. The sidebar's rows hold still instead (2026-11-19, Arc's drop marks below), and the dropped row's ghost
+  settles into its place before the row shows there. With nothing pinned, the pin target is an overlay in room the sidebar already has (the
   band above the first row, or over the address field) instead of a grid that pushed every row down ~45 pt as a drag
   began and back up as it ended.
 - **In the strip** (both layouts): an item takes its neighbour's place once its leading edge passes the neighbour's
@@ -924,6 +924,24 @@ right split"; the numbers are from the pixels.
   `performWindowDrag`. The region now ignores presses that came through a view with `mouseDownCanMoveWindow` off
   (the strip's tabs, pinned tiles, splits, group chips and buttons), and the strip's icons take no hits (an image view
   under a press in an inactive window lets AppKit move the window itself).
+
+#### Arc's sidebar drop marks (Arc, the owner's 120 fps 2x recording, 2026-11-19)
+
+Measured in pixels from 2x frames (3456 × 2234), divided by 2. Rows never move during a drag: the dragged row stays
+in its place at full strength while a translucent copy follows the pointer.
+- **Insertion line**: 2 pt (4 px, no antialiasing) near-white (238/255 over a 52/255 sidebar), at the midpoint between
+  the two rows the drop lands between. An open ring at its left end: 8 pt across, 2 pt stroke, a 4 pt hole, its left
+  edge 7 pt inside the row's left edge (the row 9 … 218.5 pt, the ring 16 … 24 pt, the favicon from 19 pt); the line
+  runs from the ring to 2 pt short of the row's right edge. It jumps between slots.
+- **Split halves**: over a row's middle a lighter rounded rect covers the half under the pointer: the row's height and
+  corner radius, 97.5 pt wide on a 209.5 pt row, its inner edge 7 pt past the row's middle (so 14 pt between the
+  halves). Ardia draws it in the row's pressed fill.
+- **Top Apps**: over the tiles the copy is a tile of the grid's tile size (the grid already reflowed for it) with the
+  icon centred, under the pointer.
+- **The ghost** is see-through, with no border: one white alpha fits it over every background it crosses (sidebar
+  59 → 88, a selected row 94 → 115, a lit half 141 → 157: white at 0.15), its text at full strength (234 against the
+  rows' 212), and a soft shadow that shows only on the page. As a tile it is white at 0.40 (26/28/60 → 117/117/138, a
+  tile 44 → 125). A lit split half alone is white at 0.42 (59 → 141).
 
 ### Menus (1.50.1, menu builder `0x10000f000`–`0x10001c8f4`)
 - View: Appearance ▸ (Automatic, Light, Dark; still there although the Appearance pane is gone), Refresh ⌘R, Force

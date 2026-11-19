@@ -12,7 +12,7 @@ import {
   menuReload,
   menuStop,
   openInDefaultBrowser,
-  openSiteSettingsRoute,
+  openSiteSettingsSheet,
   pinCurrentToMac,
   printCurrentPage,
   resetZoom,
@@ -80,7 +80,7 @@ export function PageMenuWords({ tabId, model, onTranslate }: { tabId: string; mo
           {model.pageRows ? (
             <ToggleRow title="Block Ads and Trackers" value={model.blockersEnabled} enabled={model.isWebPage} detail={model.blockedCount} onChange={setBlockersOn} />
           ) : null}
-          <Row title="Site Settings" enabled onPress={() => openSiteSettingsRoute({ page: "siteSettings" })} />
+          <Row title="Site Settings" enabled onPress={openSiteSettingsSheet} />
         </Group>
         {model.pageRows && model.offersDefaultBrowser ? (
           <Group>

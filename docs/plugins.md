@@ -96,6 +96,30 @@ builds on; `programs.test.mjs` and `adoption.test.mjs` pin it.
   `{ ok: true }`.
 - `PluginConsentSheet({ name, hash, onClosed })` (`components/plugins/PluginConsentSheet.tsx`) is the sheet itself, and
   `usePluginConsent()` says which plugin's sheet is open.
+
+### Official plugins: where they're offered
+
+Both surfaces read the seam above and nothing else; `state/plugins/officialView.ts` maps a plugin's state, its link
+state and the attempt in progress to what a row shows (`officialView.test.mjs`).
+
+- **Settings › Plugins › Official** (`components/settings/panes/OfficialPlugins.tsx`), above the other plugins, which no
+  longer list an official one twice. Text is kept to a minimum: a heading, and per row the icon, the seam's title and
+  its blurb on one line. **Install…** opens the consent sheet in place and the row turns to installed with no reload;
+  installed reads "Installed · <version>" beside the title, with a first command in mono and **Copy** (where the
+  command lives is on the plugin's own page, behind the chevron); a failure shows its reason with **Try Again**;
+  coming soon is the title and "Coming soon"; unsupported shows nothing. The list below has one short line, and its
+  empty state is "None yet" with **How to add one**, which shows the folder and the `ardia plugins install` hint.
+  Settings search finds it as "Command Line" and "Official plugins".
+- **Onboarding** has a step between Make it home and the outro (`components/onboarding/PluginsStep.tsx`,
+  `state/onboarding/pluginsStep.ts`). The command line starts ticked. **Install** shows the same consent lines inside
+  onboarding (`consentLines`, with the same changed-while-open guard) and nothing is installed until **Install** there
+  is pressed; **Cancel** returns to the offer; **Skip** installs nothing. A failure shows its reason and never blocks
+  Continue. When everything is already installed the step says so, and when nothing can be offered (Linux, Windows,
+  the web demo, a build with no bundled copy) the step is left out.
+- **Counts** (`state/telemetry/officialPluginCounts.ts`, in the hourly `usage_counts`):
+  `official_plugin_<onboarding|settings>_<shown|installed|skipped|failed>_<cli|ai|other>`. `shown` counts a plugin that
+  could still be chosen, `skipped` is onboarding only, and a closed consent counts as nothing. Watch
+  `…_onboarding_installed_cli` against `…_onboarding_shown_cli` for the take-up, and `…_failed_cli` for a regression.
 - On the control socket, `plugins.official` returns the same list; `plugins.enable` on an official plugin opens its
   sheet and answers `{"waiting": true}`.
 

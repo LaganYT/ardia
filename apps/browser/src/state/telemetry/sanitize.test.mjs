@@ -300,6 +300,7 @@ test("the settings snapshot reports borderless mode and its default without chan
   assert.equal(snap.default_borderlessMode, "false");
   assert.equal(snap.setting_pageFrame, "6");
   assert.equal(snap.default_pageFrame, "9");
+  assert.equal(snap.window_corner_radius, "19");
   assert.deepEqual(cleanProperties(snap), snap);
 });
 

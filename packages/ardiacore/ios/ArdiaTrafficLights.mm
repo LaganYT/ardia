@@ -7,6 +7,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
+#include <atomic>
 #include <cmath>
 #include <initializer_list>
 
@@ -37,6 +38,13 @@ CGFloat WindowCornerRadius(NSWindow *window) {
     if (std::isfinite(measured) && measured > 0) radius = measured;
   });
   return radius;
+}
+
+CGFloat DrawnWindowCornerRadius(NSWindow *window) {
+  static std::atomic<CGFloat> drawn{0};
+  if (window && drawn.load() <= 0) drawn.store([ArdiaChromeWindowHost frameCornerRadiusOfWindow:window]);
+  const CGFloat measured = drawn.load();
+  return measured > 0 ? measured : WindowCornerRadius(nil);
 }
 
 }
@@ -505,6 +513,7 @@ void ConfigureWindow(NSWindow *window) {
   window.tabbingMode = NSWindowTabbingModeDisallowed;
   InsetTrafficLights(window);
   WindowCornerRadius(window);
+  DrawnWindowCornerRadius(window);
 }
 
 void InsetUtilityTrafficLights(NSWindow *window) {

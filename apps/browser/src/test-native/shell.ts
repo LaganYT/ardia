@@ -79,6 +79,7 @@ const shell: Modules["ArdiaShell"] = {
 
 const windowsModule: Modules["ArdiaAppWindows"] & { requestClose(id: string): Promise<void> } = {
   windowCornerRadius: () => 19,
+  drawnWindowCornerRadius: () => 19,
   addListener: shellEvents.addListener,
   openWindow: (id, options) => {
     windows.open.set(id, { ...options });
@@ -497,6 +498,7 @@ export const shellNativeModules: Modules = {
   ArdiaInlineCompletion: { complete: () => Promise.resolve(0), copyFieldAs: () => Promise.resolve() },
   ArdiaTranslate: translate,
   ArdiaMagnifyArea: magnifyArea,
+  ArdiaPeekStage: { devState: () => Promise.resolve([]), devPageFrames: () => Promise.resolve([]) },
   ArdiaFileDrop: fileDrop,
   ArdiaCli: cli,
   ArdiaUserScripts: userScripts,

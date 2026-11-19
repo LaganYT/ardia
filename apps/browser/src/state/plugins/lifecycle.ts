@@ -99,6 +99,8 @@ export function rescanPlugins(consent: ConsentToken | null): Promise<void> {
         return null;
       });
       if (entries) applyListings(listingsOf(entries), asked);
+      closeChangedConsent();
+      if (!currentPlugins().scanned) usePlugins.setState({ scanned: true });
       scan = nextScan;
     }
   })().finally(() => {
@@ -107,12 +109,21 @@ export function rescanPlugins(consent: ConsentToken | null): Promise<void> {
   return scanning;
 }
 
+let lastConsentId = 0;
+
+export const ALREADY_ASKING = "Ardia is already asking about a plugin. Answer that first, then try again.";
+
+function closeChangedConsent() {
+  const asked = currentPlugins().consent;
+  if (!asked || currentPlugins().listings[asked.name]?.hash === asked.hash) return;
+  usePlugins.setState({ consent: null });
+  settleInstall(asked.name, { ok: false, reason: "It changed while installing. Try again." });
+}
+
 export function requestPluginConsent(name: string): boolean {
   const listing = currentPlugins().listings[name];
-  if (!listing?.manifest || !listing.hash || isInstalled(currentPlugins(), name)) return false;
-  const before = currentPlugins().consent;
-  if (before && before.name !== name) settleInstall(before.name, { ok: false, reason: "Another install started." });
-  usePlugins.setState({ consent: { name, hash: listing.hash } });
+  if (currentPlugins().consent || !listing?.manifest || !listing.hash || isInstalled(currentPlugins(), name)) return false;
+  usePlugins.setState({ consent: { id: ++lastConsentId, name, hash: listing.hash } });
   return true;
 }
 
@@ -122,6 +133,16 @@ export function dismissPluginConsent(name?: string): boolean {
   usePlugins.setState({ consent: null });
   if (before) settleInstall(before.name, { ok: false, reason: "Cancelled.", cancelled: true });
   return true;
+}
+
+export function dismissConsentRequest(id: number): boolean {
+  const asked = currentPlugins().consent;
+  return asked?.id === id && dismissPluginConsent(asked.name);
+}
+
+export function confirmConsentRequest(id: number): boolean {
+  const asked = currentPlugins().consent;
+  return asked?.id === id && enablePlugin(asked.name, asked.hash);
 }
 
 export function enablePlugin(name: string, hash: string): boolean {

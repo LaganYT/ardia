@@ -53,6 +53,12 @@ export function openSettings(route: SettingsRoute = { page: "root" }) {
   useSettingsNav.setState({ open: true, stack, popping: false });
 }
 
+export function openSettingsPage(route: SettingsRoute) {
+  if (!settingsRouteOffered(route)) return;
+  scrolls.clear();
+  useSettingsNav.setState({ open: true, stack: [route], popping: false });
+}
+
 export const pushSettings = (route: SettingsRoute) => {
   if (settingsRouteOffered(route)) useSettingsNav.setState((s) => ({ stack: [...s.stack, route], popping: false }));
 };

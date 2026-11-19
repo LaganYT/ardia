@@ -20,6 +20,7 @@ export { screenReaderActions, type ScreenReaderAction } from "./screenReaderActi
 export { PageView, type PageNavigationState, type PageTone, type PageViewHandle } from "./Page";
 export { PressScale } from "./PressScale";
 export { Symbol } from "./Symbol";
+export { IncognitoSpecs } from "./IncognitoSpecs";
 export { SystemGlyph, systemGlyphsAvailable, type SystemGlyphWeight } from "./SystemGlyph";
 export { placeholderTint, TabFace, tabFill } from "./TabFace";
 export { isSymbolName, type SymbolName } from "./symbolPaths";

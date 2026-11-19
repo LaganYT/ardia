@@ -16,7 +16,7 @@ import { tabsInSpace } from "../../state/tabs/spaces";
 import { useTabs } from "../../state/tabs/store";
 import { recencyOrder, type BrowserTab } from "../../state/tabs/tabModels";
 import { countUsage } from "../../state/telemetry/telemetry";
-import { capsule, ChromeSurface, ConfirmDialog, Favicon, font, rolesFor, startInk, startLayout, Symbol, tabsInk, tabsLayout, useTheme, type Confirmation, type MenuItem } from "../ui";
+import { capsule, ChromeSurface, ConfirmDialog, Favicon, font, IncognitoSpecs, rolesFor, startInk, startLayout, Symbol, tabsInk, tabsLayout, useTheme, type Confirmation, type MenuItem } from "../ui";
 import { confirmInSheet, MenuTrigger, spaceSystemImage } from "../ui/MenuTrigger";
 import { barAddress, spokenAddress } from "../browsing/FloatingBar";
 import { spaceMenuSymbol, SpaceTitle } from "../search/StartSpaces";
@@ -275,7 +275,7 @@ function TabRow({ tab, dark, selected, onOpen, onCloseTab }: { tab: BrowserTab; 
             onLongPress={onLongPress}
             style={styles.rowHit}
           >
-            <View style={styles.rowIcon}>{tab.isPrivate ? <Symbol name="eyeglasses" size={DUO.sidebarPrivateGlyph} color={roles.secondaryLabel} /> : <Favicon iconUrl={tab.faviconUrl} pageUrl={tab.url || null} size={DUO.sidebarRowIcon} />}</View>
+            <View style={styles.rowIcon}>{tab.isPrivate ? <IncognitoSpecs size={DUO.sidebarPrivateGlyph} color={roles.secondaryLabel} /> : <Favicon iconUrl={tab.faviconUrl} pageUrl={tab.url || null} size={DUO.sidebarRowIcon} />}</View>
             <Text numberOfLines={1} style={[font.body, styles.rowTitle, { color: roles.foregroundPrimary }]}>
               {title}
             </Text>

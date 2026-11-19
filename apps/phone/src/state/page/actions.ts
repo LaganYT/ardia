@@ -16,7 +16,7 @@ import { findTab } from "../tabs/tabsState";
 import { blockersToast, searchQuery, translationUrl, type NightShadeMode } from "./pageMenu";
 import { backLayer, downloadedToast, downloadFailedToast, downloadingToast, pressPlan, stoppedPrivateDownloadsToast, type PressAction, type Request } from "./pagePrompts";
 import { onboardingBack } from "../onboarding/store";
-import { openSettings, popSettings, type SettingsRoute } from "../settings/nav";
+import { openSettings, openSettingsPage, popSettings, type SettingsRoute } from "../settings/nav";
 import { pinToMac, sendTab } from "../sync/actions";
 import type { SyncedDevice } from "../../platform/sync";
 import { pageUi, usePageUi, type Press } from "./store";
@@ -119,6 +119,11 @@ export function sendCurrentTab(device: SyncedDevice) {
 export const openSiteSettings = () => usePageUi.setState({ menuPage: "siteSettings" });
 
 export const closeMenuSubpage = () => usePageUi.setState({ menuPage: "main" });
+
+export function openSiteSettingsSheet() {
+  closePageMenu();
+  openSettingsPage({ page: "siteSettings" });
+}
 
 export function openSiteSettingsRoute(route: SettingsRoute) {
   closePageMenu();

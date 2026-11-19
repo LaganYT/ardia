@@ -9,7 +9,7 @@ import { useSelectedProfile, useSyncStatus, useSyncView } from "../../state/sync
 import { useCanReopen, useIncognito } from "../../state/tabs/hooks";
 import { prepareArchive } from "../../state/tabs/store";
 import { countUsage } from "../../state/telemetry/telemetry";
-import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, SystemGlyph, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
+import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, IncognitoSpecs, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
 import { MenuTrigger, spaceSystemImage } from "../ui/MenuTrigger";
 import { SpaceTitle, spaceMenuSymbol } from "../search/StartSpaces";
 import { FadingGlyphs, GlassCircleButton, type ChromeFade } from "./ChromeButtons";
@@ -17,6 +17,7 @@ import { FadingGlyphs, GlassCircleButton, type ChromeFade } from "./ChromeButton
 type Props = {
   safeTop: number;
   safeSide: number;
+  sideInset: number;
   privateCount: number;
   hasTabs: boolean;
   onCloseIncognito: () => void;
@@ -43,7 +44,7 @@ export function deckMoreMenuItems({ syncEnabled, canReopen, hasTabs, onCloseAll 
   ];
 }
 
-export function DeckHeader({ safeTop, safeSide, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, showsMore = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
+export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, showsMore = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
   const theme = useTheme();
   const status = useSyncStatus();
   const view = useSyncView();
@@ -52,7 +53,7 @@ export function DeckHeader({ safeTop, safeSide, privateCount, hasTabs, onCloseIn
   const incognito = useIncognito();
   const spaces = status.isEnabled ? view.profiles : [];
   const current = shown ?? spaces[0] ?? null;
-  const side = safeSide + deckChromeLayout.headerSide;
+  const side = safeSide + sideInset;
   const below = safeTop + deckHeaderBottom() + deckChromeLayout.menuGap;
   const opened = () => onMenu?.(true);
   const closed = () => onMenu?.(false);
@@ -123,7 +124,7 @@ function IncognitoPill({ count, onPress }: { count: number; onPress: () => void 
       style={styles.pillHit}
     >
       <View pointerEvents="none" style={[styles.pill, { backgroundColor: tabsInk.incognitoCard, borderRadius: capsule(deckChromeLayout.pillHeight) }]}>
-        <SystemGlyph systemName="eyes" pointSize={deckChromeLayout.pillEyes} weight="semibold" fitted name="eyes" size={deckChromeLayout.pillGlyph} color={deckChromeInk.pill} />
+        <IncognitoSpecs size={deckChromeLayout.pillSpecs} color={deckChromeInk.pill} />
         <Text style={[font.subheadline, styles.count]}>{count}</Text>
       </View>
     </Pressable>

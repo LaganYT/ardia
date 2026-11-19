@@ -14,7 +14,7 @@ type ExperimentDef = {
   removeBy: string;
 };
 
-export const MAX_SWITCHES = 8;
+export const MAX_SWITCHES = 9;
 
 export const SWITCHES = {
   newTabPrewarm: {
@@ -64,6 +64,12 @@ export const SWITCHES = {
     owner: "window",
     removeBy: "2026-12-15",
     live: false,
+  },
+  peekGenie: {
+    about: "A Peek opens and closes with the Genie warp, a private Core Animation mesh; off, it zooms from the link and the mesh runtime is never inspected (packages/shell PeekStage.swift, ArdiaPeekMesh.m).",
+    owner: "peek",
+    removeBy: "2027-02-15",
+    live: true,
   },
 } as const satisfies Record<string, SwitchDef>;
 

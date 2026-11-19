@@ -53,10 +53,10 @@ test.each(DESIGNS)("the %s design draws its own page bar and only that one", (de
   unmount(root);
 });
 
-test("the redesigned bar is three glass pieces, 48 points tall, 8 apart and 12 in from the sides, their bottom 21.5 points above the screen's edge on iPhone and 8 above Android's 3-button bar", () => {
+test("the redesigned bar is three glass pieces, 48 points tall, 8 apart and 24 in from the sides, their bottom 21.5 points above the screen's edge on iPhone and 8 above Android's 3-button bar", () => {
   const root = page("redesigned");
   const row = StyleSheet.flatten(host(root, "floatingBar")!.props.style);
-  expect(row).toMatchObject({ gap: 8, paddingHorizontal: 12, height: 48 });
+  expect(row).toMatchObject({ gap: 8, paddingHorizontal: 24, height: 48 });
   let place = host(root, "floatingBar")!.parent;
   while (place && (typeof place.type !== "string" || StyleSheet.flatten(place.props.style)?.bottom === undefined)) place = place.parent;
   expect(StyleSheet.flatten(place!.props.style).bottom).toBe(Platform.OS === "android" ? 34 + 8 : 21.5);

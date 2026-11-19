@@ -6,12 +6,13 @@ import { movingTabsFrom } from "../../state/sidebar/current";
 import type { TabPlacement } from "../../state/pins/placing";
 import { SLIDE } from "../tabstrip/tokens";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag } from "../../state/drag/tabDrag";
-import { noteDragWithoutDrop } from "../../state/telemetry/tabPresses";
+import { noteDragWithoutDrop, noteSidebarDrop } from "../../state/telemetry/tabPresses";
+import { dropTabOnRow } from "../../state/splits/actions";
 import { arrangeLive } from "../../state/sidebar/pinnedOrder";
 import { suppressHover } from "../../state/sidebar/hover";
 import { closeFolderPanel } from "../../state/sidebar/tileFolderUi";
 import { dragMarksOf, markDrag } from "../../state/sidebar/dragMarks";
-import { boxed, type Drop, EDGE, type Item, measure, spring, tabCell } from "./dragModel";
+import { boxed, type Drop, EDGE, type Item, measure, tabCell, tailKey } from "./dragModel";
 import { DragTargeting } from "./dragTargeting";
 import { type DragSession, newDragSession } from "./dragGeometry";
 import { captureEscape } from "../../state/drag/dragNative";
@@ -21,7 +22,7 @@ import { tabPlace } from "../../state/sidebar/actions";
 
 export class DragController extends DragTargeting {
   create(key: string): Item {
-    return { key, kind: "row", tabIds: [], section: "list", view: null, header: null, gap: new Animated.Value(0), size: new Animated.Value(0), frame: null, headerFrame: null };
+    return { key, kind: "row", tabIds: [], section: "list", view: null, header: null, gap: new Animated.Value(0), frame: null, headerFrame: null };
   }
 
   get active() {
@@ -57,15 +58,12 @@ export class DragController extends DragTargeting {
       count,
       width: frame.w,
       height,
+      grab,
       position: new Animated.ValueXY({ x: frame.x - this.rootFrame.x, y: frame.y - this.rootFrame.y }),
     };
-    const closing = sources.filter((s) => s.kind !== "tile");
-    for (const s of closing) s.size.setValue(s.frame?.h ?? 0);
     this.setLanding(null);
     this.setSources(new Set(sources.map((s) => s.key)));
     this.setGhost(session.ghost);
-    if (boxed(item) && !item.collapsed) markDrag(this.marks, { folded: item.key });
-    Animated.parallel(closing.map((s) => spring(s.size, 0))).start();
     session.measured = true;
     this.move(session.pointer.x, session.pointer.y);
   }
@@ -135,49 +133,49 @@ export class DragController extends DragTargeting {
     if (!session?.sources.length) return endHeldTabPress([], null);
     const { sources, drop, ghost, measured, into } = session;
     const splitDrop = commit ? endTabDrag() : (cancelTabDrag(), false);
-    const folded = dragMarksOf(this.marks).folded;
-    const leftPanel = sources[0]?.section === "folder" && dragMarksOf(this.marks).folderAway;
-    const unfold = () => {
-      if (folded && dragMarksOf(this.marks).folded === folded) markDrag(this.marks, { folded: null });
-    };
+    const marks = dragMarksOf(this.marks);
+    const leftPanel = sources[0]?.section === "folder" && marks.folderAway;
     const spot =
-      !splitDrop && measured && ghost && sources.length === 1 && sources[0]!.kind !== "tile" && sources[0]!.section !== "folder" && !into && drop.type !== "onto" && drop.type !== "folder"
-        ? this.landingSpot(commit ? drop : { type: "none" })
+      !splitDrop && measured && ghost && sources.length === 1 && sources[0]!.kind !== "tile" && sources[0]!.section !== "folder" && !into && drop.type !== "split" && drop.type !== "folder"
+        ? this.landingSpot(commit ? drop : NO_DROP)
         : null;
     const dragged = sources.flatMap((i) => i.tabIds);
     const places = dragged.map(tabPlace).join();
-    if (commit && !splitDrop && measured && drop.type === "none") noteDragWithoutDrop();
-    if (commit && !splitDrop && measured && sources.length) {
+    const dropped = commit && !splitDrop && measured && sources.length > 0;
+    if (dropped && drop.type === "none") noteDragWithoutDrop();
+    if (dropped && drop.type === "split") {
+      const made = dropTabOnRow(dragged[0]!, drop.targetId, drop.side);
+      if (made) noteSidebarDrop(drop.side === "left" ? "split_left" : "split_right");
+      if (made?.adopted === "row") noteSidebarDrop("split_pinned");
+      else if (made?.adopted === "list") noteSidebarDrop("split_unpinned");
+    } else if (dropped) {
+      const kind = marks.tile ? "tile" : marks.line ? "line" : null;
+      if (kind && drop.type !== "none") noteSidebarDrop(kind);
       dropTabs(dragged, drop);
       if (drop.sequence) arrangeLive(drop.sequence);
     }
     this.reset();
-    const stayed = commit && !splitDrop && !into && dragged.map(tabPlace).join() === places;
+    const moved = dragged.map(tabPlace).join() !== places;
+    const stayed = commit && !splitDrop && !into && !moved;
     endHeldTabPress(dragged, stayed ? release : null);
     if (leftPanel) closeFolderPanel();
     if (!spot || !ghost) {
       this.token = null;
       this.setLanding(null);
       this.setGhost(null);
-      unfold();
       return;
     }
     const token = (this.token = {});
-    this.setLanding(ghost.item.key);
+    this.setLanding(moved ? ghost.item.key : null);
     this.setGhost({ ...ghost, landing: true });
     const done = () => {
-      unfold();
       if (this.token !== token) return;
       this.token = null;
       this.setLanding(null);
       this.setGhost(null);
     };
-    void spot.then((at) => {
-      if (this.token !== token) return unfold();
-      if (__DEV__) this.landed = at && { key: ghost.item.key, x: at.x, y: at.y };
-      if (!at) return done();
-      Animated.spring(ghost.position, { toValue: { x: at.x - this.rootFrame.x, y: at.y - this.rootFrame.y }, ...SLIDE }).start(done);
-    });
+    if (__DEV__) this.landed = spot && { key: ghost.item.key, x: spot.x, y: spot.y };
+    Animated.spring(ghost.position, { toValue: { x: spot.x - this.rootFrame.x, y: spot.y - this.rootFrame.y }, ...SLIDE }).start(done);
   }
 
   protected stopTimers() {
@@ -192,40 +190,31 @@ export class DragController extends DragTargeting {
       i.gap.stopAnimation();
       i.gap.setValue(0);
     }
-    for (const i of session?.sources ?? []) i.size.stopAnimation();
     this.session = null;
     if (session?.escapable) captureEscape("sidebarDrag", false);
     suppressHover(false);
     this.setSources(new Set());
-    markDrag(this.marks, { dropInto: null, onto: null, pins: false, pinCount: 0, pinBefore: null, folderTarget: null, folderAway: false });
+    markDrag(this.marks, { dropInto: null, split: null, line: null, tile: null, row: null, pins: false, pinCount: 0, pinBefore: null, folderTarget: null, folderAway: false });
   }
 
-  protected landingSpot(drop: Drop): Promise<{ x: number; y: number } | null> | null {
+  protected landingSpot(drop: Drop): { x: number; y: number } | null {
     const { sources, gapKey } = this.drag;
     const source = sources[0]!;
     if (drop.type === "tabs" && drop.placement.pinned && !drop.placement.row) return null;
     const target = drop.type !== "none" && gapKey ? this.items.get(gapKey) : undefined;
-    const ref = target ?? source;
-    const top = ref.frame?.y;
-    if (top === undefined) return null;
-    const now = (v: Animated.Value) => {
-      let value = 0;
-      v.stopAnimation((x) => (value = x));
-      return value;
-    };
-    let closing = 0;
-    for (const i of this.items.values()) if (i.frame && i.section !== "tiles" && (i === ref || i.frame.y < top)) closing += now(i.gap);
+    const home = this.at(source.frame, this.still(source));
+    const to = target && this.at(target.frame, this.still(target));
+    if (!target?.frame || !to) return home && { x: home.x, y: home.y };
     const group = source.parentGroup ? this.items.get(entryKey("group", source.parentGroup)) : undefined;
-    const emptied = !!group && group.tabIds.every((id) => source.tabIds.includes(id)) && !!group.frame && group.frame.y < top && group !== ref;
-    if (!emptied && source !== ref && source.frame && source.frame.y < top)
-      closing += source.parentGroup ? Math.max(0, now(source.size) - layout.rowGap) + layout.rowGap : now(source.size);
-    const container = ref.kind === "tail" ? [...this.items.values()].find((i) => i !== source && i.kind !== "tail" && i.frame && i.section === ref.section && i.parentGroup === ref.parentGroup) : ref;
-    const home = target ? null : this.at(source.frame, this.still(source));
-    if (home) return Promise.resolve({ x: home.x, y: home.y });
-    return Promise.all([measure(ref.view), emptied ? measure(group!.view) : null]).then(([f, gone]) => {
-      if (!f) return null;
-      return { x: container?.frame?.x ?? f.x, y: f.y - closing - (gone ? gone.h + layout.rowGap : 0) + (ref.kind === "tail" ? layout.rowGap : 0) };
-    });
+    const insideGroup = !!source.parentGroup && (target.parentGroup === source.parentGroup || target.key === tailKey({ group: source.parentGroup }));
+    const emptied = !!group?.frame && group !== target && !insideGroup && group.tabIds.every((id) => source.tabIds.includes(id));
+    const leaving = emptied ? group! : source;
+    const above = !!leaving.frame && leaving.frame.y < target.frame.y;
+    const container = target.kind === "tail" ? [...this.items.values()].find((i) => i !== source && i.kind !== "tail" && i.frame && i.section === target.section && i.parentGroup === target.parentGroup) : target;
+    return {
+      x: (container?.frame && this.at(container.frame, this.still(container))?.x) ?? to.x,
+      y: to.y + (target.kind === "tail" ? layout.rowGap : 0) - (above ? leaving.frame!.h + layout.rowGap : 0),
+    };
   }
 
   protected autoScroll(y: number) {

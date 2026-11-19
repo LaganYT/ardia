@@ -19,13 +19,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t4",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:t3"
@@ -234,20 +236,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:c"
    ],
-   "gaps": {
-    "tail:list": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 60,200"
@@ -263,8 +269,10 @@
     "sequence": []
    },
    "gapKey": "t:a",
-   "gaps": {
-    "t:a": 37
+   "line": {
+    "x": 6,
+    "y": 119.5,
+    "w": 180
    }
   },
   {
@@ -281,6 +289,11 @@
    },
    "gapKey": "tail:tiles",
    "pitch": 47,
+   "line": null,
+   "tile": {
+    "w": 180,
+    "h": 41
+   },
    "pins": true,
    "pinCount": 1,
    "pinBefore": "tail:tiles",
@@ -303,12 +316,16 @@
    },
    "gapKey": "tail:list",
    "pitch": 37,
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
+   },
+   "tile": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
-   "gaps": {
-    "tail:list": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 60,70",
@@ -324,6 +341,11 @@
    },
    "gapKey": "tail:tiles",
    "pitch": 47,
+   "line": null,
+   "tile": {
+    "w": 180,
+    "h": 41
+   },
    "pins": true,
    "pinCount": 1,
    "pinBefore": "tail:tiles",
@@ -338,6 +360,7 @@
    },
    "gapKey": null,
    "pitch": 0,
+   "tile": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
@@ -396,13 +419,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:c"
@@ -421,8 +446,10 @@
    },
    "gapKey": "tail:list",
    "pitch": 37,
-   "gaps": {
-    "tail:list": 37
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
    }
   },
   {
@@ -431,7 +458,7 @@
     "type": "none"
    },
    "gapKey": null,
-   "gaps": {}
+   "line": null
   },
   {
    "step": "move 100,220"
@@ -447,8 +474,10 @@
     "sequence": []
    },
    "gapKey": "tail:list",
-   "gaps": {
-    "tail:list": 37
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
    }
   },
   {
@@ -458,8 +487,8 @@
    },
    "gapKey": null,
    "pitch": 0,
-   "sources": [],
-   "gaps": {}
+   "line": null,
+   "sources": []
   },
   {
    "step": "committed",
@@ -562,13 +591,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t3",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "tf:TF9"
@@ -714,13 +745,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t4",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "tf:TF9"
@@ -760,12 +793,14 @@
    "gapKey": "tail:list",
    "pitch": 105,
    "gridGrowth": -47,
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
+   },
    "pins": false,
    "pinCount": 0,
-   "pinBefore": null,
-   "gaps": {
-    "tail:list": 105
-   }
+   "pinBefore": null
   },
   {
    "step": "move 14,127.5",
@@ -778,8 +813,10 @@
     "sequence": []
    },
    "gapKey": "t:a",
-   "gaps": {
-    "t:a": 105
+   "line": {
+    "x": 6,
+    "y": 164,
+    "w": 180
    }
   },
   {
@@ -790,8 +827,8 @@
    "gapKey": null,
    "pitch": 0,
    "gridGrowth": 0,
-   "sources": [],
-   "gaps": {}
+   "line": null,
+   "sources": []
   },
   {
    "step": "committed",
@@ -898,13 +935,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t2",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:t1"
@@ -1088,13 +1127,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t2",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:t1"
@@ -1277,20 +1318,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 26,
+    "y": 192.5,
+    "w": 150
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "fm:t2"
    ],
-   "gaps": {
-    "fm:t3": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 60,300",
@@ -1303,18 +1348,29 @@
     "sequence": []
    },
    "gapKey": "tail:list",
-   "folderAway": true,
-   "gaps": {
-    "tail:list": 37
-   }
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
+   },
+   "folderAway": true
   },
   {
    "step": "move 101,137",
    "drop": {
-    "type": "onto",
-    "targetId": "a"
+    "type": "tabs",
+    "placement": {
+     "pinned": false,
+     "beforeId": "a"
+    },
+    "sequence": []
    },
-   "onto": "t:a"
+   "gapKey": "t:a",
+   "line": {
+    "x": 6,
+    "y": 119.5,
+    "w": 180
+   }
   },
   {
    "step": "end false",
@@ -1323,10 +1379,9 @@
    },
    "gapKey": null,
    "pitch": 0,
-   "onto": null,
+   "line": null,
    "folderAway": false,
-   "sources": [],
-   "gaps": {}
+   "sources": []
   },
   {
    "step": "committed",
@@ -1425,20 +1480,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 26,
+    "y": 155.5,
+    "w": 150
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "fm:t1"
    ],
-   "gaps": {
-    "fm:t2": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 101,184",
@@ -1448,8 +1507,10 @@
     "beforeId": "t3"
    },
    "gapKey": "fm:t3",
-   "gaps": {
-    "fm:t3": 37
+   "line": {
+    "x": 26,
+    "y": 192.5,
+    "w": 150
    }
   },
   {
@@ -1463,10 +1524,12 @@
     "sequence": []
    },
    "gapKey": "tail:list",
-   "folderAway": true,
-   "gaps": {
-    "tail:list": 37
-   }
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
+   },
+   "folderAway": true
   },
   {
    "step": "move 101,184",
@@ -1479,20 +1542,14 @@
     "sequence": []
    },
    "gapKey": "t:c",
-   "gaps": {
-    "t:c": 37
+   "line": {
+    "x": 6,
+    "y": 193.5,
+    "w": 180
    }
   },
   {
    "step": "move 101,241",
-   "drop": {
-    "type": "onto",
-    "targetId": "c"
-   },
-   "onto": "t:c"
-  },
-  {
-   "step": "move 60,300",
    "drop": {
     "type": "tabs",
     "placement": {
@@ -1502,10 +1559,14 @@
     "sequence": []
    },
    "gapKey": "tail:list",
-   "onto": null,
-   "gaps": {
-    "tail:list": 37
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
    }
+  },
+  {
+   "step": "move 60,300"
   },
   {
    "step": "end true",
@@ -1514,9 +1575,9 @@
    },
    "gapKey": null,
    "pitch": 0,
+   "line": null,
    "folderAway": false,
-   "sources": [],
-   "gaps": {}
+   "sources": []
   },
   {
    "step": "committed",
@@ -1613,20 +1674,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 26,
+    "y": 155.5,
+    "w": 150
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "fm:t1"
    ],
-   "gaps": {
-    "fm:t2": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 101,184",
@@ -1636,8 +1701,10 @@
     "beforeId": "t3"
    },
    "gapKey": "fm:t3",
-   "gaps": {
-    "fm:t3": 37
+   "line": {
+    "x": 26,
+    "y": 192.5,
+    "w": 150
    }
   },
   {
@@ -1648,8 +1715,10 @@
     "beforeId": null
    },
    "gapKey": "tail:folder",
-   "gaps": {
-    "tail:folder": 37
+   "line": {
+    "x": 26,
+    "y": 229.5,
+    "w": 150
    }
   },
   {
@@ -1662,8 +1731,8 @@
    },
    "gapKey": null,
    "pitch": 0,
-   "sources": [],
-   "gaps": {}
+   "line": null,
+   "sources": []
   },
   {
    "step": "committed",
@@ -1765,20 +1834,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:c"
    ],
-   "gaps": {
-    "tail:list": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 14,80.5",
@@ -1795,10 +1868,14 @@
    "gapKey": "t:t1",
    "pitch": 47,
    "gridGrowth": 10,
+   "line": null,
+   "tile": {
+    "w": 56,
+    "h": 41
+   },
    "pins": true,
    "pinCount": 1,
-   "pinBefore": "t:t1",
-   "gaps": {}
+   "pinBefore": "t:t1"
   },
   {
    "step": "move 178,80.5",
@@ -1828,12 +1905,15 @@
    "gapKey": "tail:list",
    "pitch": 37,
    "gridGrowth": 0,
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
+   },
+   "tile": null,
    "pins": false,
    "pinCount": 0,
-   "pinBefore": null,
-   "gaps": {
-    "tail:list": 37
-   }
+   "pinBefore": null
   },
   {
    "step": "end true",
@@ -1842,8 +1922,8 @@
    },
    "gapKey": null,
    "pitch": 0,
-   "sources": [],
-   "gaps": {}
+   "line": null,
+   "sources": []
   },
   {
    "step": "committed",
@@ -1924,20 +2004,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 26,
+    "y": 192.5,
+    "w": 150
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:c"
    ],
-   "gaps": {
-    "fm:t3": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 60,300",
@@ -1950,8 +2034,10 @@
     "sequence": []
    },
    "gapKey": "tail:list",
-   "gaps": {
-    "tail:list": 37
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
    }
   },
   {
@@ -1962,8 +2048,10 @@
     "beforeId": "t1"
    },
    "gapKey": "fm:t1",
-   "gaps": {
-    "fm:t1": 37
+   "line": {
+    "x": 26,
+    "y": 118.5,
+    "w": 150
    }
   },
   {
@@ -1971,11 +2059,13 @@
    "drop": {
     "type": "folder",
     "ontoId": "t1",
-    "beforeId": "t2"
+    "beforeId": "t3"
    },
-   "gapKey": "fm:t2",
-   "gaps": {
-    "fm:t2": 37
+   "gapKey": "fm:t3",
+   "line": {
+    "x": 26,
+    "y": 192.5,
+    "w": 150
    }
   },
   {
@@ -1983,11 +2073,13 @@
    "drop": {
     "type": "folder",
     "ontoId": "t1",
-    "beforeId": "t3"
+    "beforeId": null
    },
-   "gapKey": "fm:t3",
-   "gaps": {
-    "fm:t3": 37
+   "gapKey": "tail:folder",
+   "line": {
+    "x": 26,
+    "y": 229.5,
+    "w": 150
    }
   },
   {
@@ -2001,8 +2093,10 @@
     "sequence": []
    },
    "gapKey": "tail:list",
-   "gaps": {
-    "tail:list": 37
+   "line": {
+    "x": 6,
+    "y": 230.5,
+    "w": 180
    }
   },
   {
@@ -2012,8 +2106,8 @@
    },
    "gapKey": null,
    "pitch": 0,
-   "sources": [],
-   "gaps": {}
+   "line": null,
+   "sources": []
   },
   {
    "step": "committed",
@@ -2115,20 +2209,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 6,
+    "y": 277.5,
+    "w": 180
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:c"
    ],
-   "gaps": {
-    "tail:list": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 60,260"
@@ -2144,8 +2242,10 @@
     "sequence": []
    },
    "gapKey": "t:b",
-   "gaps": {
-    "t:b": 37
+   "line": {
+    "x": 6,
+    "y": 203.5,
+    "w": 180
    }
   },
   {
@@ -2163,10 +2263,14 @@
    "gapKey": "t:t1",
    "pitch": 47,
    "gridGrowth": 47,
+   "line": null,
+   "tile": {
+    "w": 56,
+    "h": 41
+   },
    "pins": true,
    "pinCount": 1,
-   "pinBefore": "t:t1",
-   "gaps": {}
+   "pinBefore": "t:t1"
   },
   {
    "step": "move 54,80.5"
@@ -2257,6 +2361,7 @@
    "gapKey": null,
    "pitch": 0,
    "gridGrowth": 0,
+   "tile": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
@@ -2373,20 +2478,24 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": {
+    "x": 6,
+    "y": 203.5,
+    "w": 180
+   },
+   "tile": null,
+   "row": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:a"
    ],
-   "gaps": {
-    "t:b": 37
-   }
+   "gaps": {}
   },
   {
    "step": "move 34,80.5",
@@ -2397,6 +2506,11 @@
    "hold": {
     "key": "tf:TF9",
     "ready": "tf:TF9"
+   },
+   "line": null,
+   "tile": {
+    "w": 56,
+    "h": 41
    },
    "pins": true,
    "pinCount": 1,
@@ -2414,12 +2528,12 @@
    "gapKey": null,
    "pitch": 0,
    "hold": null,
+   "tile": null,
    "pins": false,
    "pinCount": 0,
    "pinBefore": null,
    "folderTarget": null,
-   "sources": [],
-   "gaps": {}
+   "sources": []
   },
   {
    "step": "committed",
@@ -2534,13 +2648,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t2",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:t1"
@@ -2604,12 +2720,18 @@
    },
    "gapKey": "tail:list",
    "pitch": 37,
+   "line": {
+    "x": 6,
+    "y": 247.5,
+    "w": 180
+   },
+   "row": {
+    "w": 180,
+    "h": 34
+   },
    "pins": false,
    "pinCount": 0,
-   "pinBefore": null,
-   "gaps": {
-    "tail:list": 37
-   }
+   "pinBefore": null
   },
   {
    "step": "end true",
@@ -2618,8 +2740,9 @@
    },
    "gapKey": null,
    "pitch": 0,
-   "sources": [],
-   "gaps": {}
+   "line": null,
+   "row": null,
+   "sources": []
   },
   {
    "step": "committed",
@@ -2721,13 +2844,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t5",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:t4"
@@ -2874,13 +2999,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t2",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:t1"
@@ -3042,13 +3169,15 @@
    "gridGrowth": 0,
    "hold": null,
    "dropInto": null,
-   "onto": null,
+   "split": null,
+   "line": null,
+   "tile": null,
+   "row": null,
    "pins": true,
    "pinCount": 1,
    "pinBefore": "t:t4",
    "folderTarget": null,
    "folderAway": false,
-   "folded": null,
    "landing": null,
    "sources": [
     "t:t3"

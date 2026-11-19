@@ -322,6 +322,7 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | | `fakeFullScreenMs=<ms>` | Length of the acted-out full-screen transition |
 | | `shadersKeyWindow` | Metal views act as in the key window (the New Tab intro) |
 | | `peekStrict` | Peek's test hooks stop relaxing its click checks |
+| | `peekMesh=unavailable\|throws` · `peekReady=never` · `peekReduceMotion` · `peekSlow=<n>` | Peek's motion (`docs/peek-motion.md`): the Genie mesh reported missing or throwing on build, a page that never reports a drawn frame (the 150 ms timeout), Reduce Motion, and the Genie <n> times slower for captures |
 | | `importSecret=<s>` · `importDiaBundleId=<id>` · `importDiaWindows=<json>` | Import's Safe Storage secret · the app Dia's tabs come from (opened hidden and quit by the import) · fixture windows answering for it, with no Automation prompt |
 | | `cliInstallScript=<path>` | Another `ardia` installer script (the Linux and Windows hosts' installer; macOS no longer runs one) |
 | | `bundledPlugins=<dir>` | Built-in plugins come from this folder instead of `Ardia.app/Contents/Resources/Plugins` (`docs/plugins.md` › Built-in plugins) |

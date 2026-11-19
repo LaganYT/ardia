@@ -1676,6 +1676,7 @@ class ShellHostView : public views::View,
   void OnCompositingShuttingDown(ui::Compositor* compositor) override { presentation_observation_.Reset(); }
   void ReportWindowGeometry();
   void LayoutOverlay();
+  void RoundUtilityCorners();
   void HideCaptionButtons();
   void ShellPainted();
   void LiftCurtain();
@@ -1706,6 +1707,7 @@ class ShellHostView : public views::View,
   std::vector<gfx::Rect> shell_pass_;
   std::unique_ptr<ShellTransparency> shell_transparency_;
   raw_ptr<views::View> curtain_ = nullptr;
+  gfx::RoundedCornersF utility_corners_;
   base::OneShotTimer curtain_timer_;
   raw_ptr<HostMessageHandler> handler_ = nullptr;
   uint64_t renderer_generation_ = 0;
@@ -3333,10 +3335,22 @@ void ShellHostView::LayoutOverlay() {
   shell_->SetBoundsRect(GetLocalBounds());
   if (glass_) glass_->SetBoundsRect(GetLocalBounds());
   if (curtain_) curtain_->SetBoundsRect(GetLocalBounds());
+  RoundUtilityCorners();
   browser_view_->GetActiveContentsWebView()->SetVisible(false);
   if (extension_surfaces_) extension_surfaces_->Relayout();
   Restack();
   HideCaptionButtons();
+}
+
+void ShellHostView::RoundUtilityCorners() {
+  if (!is_utility() || !browser_view_->browser_widget()) return;
+  BrowserFrameView* frame = browser_view_->browser_widget()->GetFrameView();
+  const gfx::RoundedCornersF corners = frame ? frame->GetWindowRoundedCorners() : gfx::RoundedCornersF();
+  if (corners == utility_corners_) return;
+  utility_corners_ = corners;
+  SetBackground(views::CreateRoundedRectBackground(kColorWebContentsBackground, corners));
+  shell_->holder()->SetNativeViewCornerRadii(corners);
+  if (curtain_) curtain_->layer()->SetRoundedCornerRadius(corners);
 }
 
 void ShellHostView::ShellPainted() {
@@ -3365,6 +3379,7 @@ void ShellHostView::HideCaptionButtons() {
 
 void ShellHostView::OnWidgetThemeChanged(views::Widget*) {
   HideCaptionButtons();
+  if (browser_view_) RoundUtilityCorners();
 }
 
 void ShellHostView::OnViewIsDeleting(views::View*) {

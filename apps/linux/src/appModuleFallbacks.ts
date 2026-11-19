@@ -104,7 +104,7 @@ const MODULE_FALLBACKS: Record<string, Record<string, Fallback>> = {
   },
 };
 
-const DEVELOPER_MODULES = new Set(["ArdiaApp", "ArdiaMagnifyArea", "ArdiaFileDrop", "ArdiaLocation"]);
+const DEVELOPER_MODULES = new Set(["ArdiaApp", "ArdiaMagnifyArea", "ArdiaPeekStage", "ArdiaFileDrop", "ArdiaLocation"]);
 
 export function appModuleFallback(host: ArdiaHost, name: string, method: string): Fallback | undefined {
   if (hostSupports(`${name}.${method}`, host)) return undefined;

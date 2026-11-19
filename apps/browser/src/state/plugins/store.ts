@@ -35,16 +35,18 @@ export type PluginRecord = {
 
 export type PluginsStore = {
   loaded: boolean;
+  scanned: boolean;
   listings: Record<string, PluginListing>;
   order: string[];
   records: Record<string, PluginRecord>;
   processes: Record<string, ProcessState>;
   programs: Record<string, ProgramsState>;
-  consent: { name: string; hash: string } | null;
+  consent: { id: number; name: string; hash: string } | null;
 };
 
 export const usePlugins = create<PluginsStore>()(() => ({
   loaded: false,
+  scanned: false,
   listings: {},
   order: [],
   records: {},

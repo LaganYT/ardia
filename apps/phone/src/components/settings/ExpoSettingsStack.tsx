@@ -21,6 +21,7 @@ import { ExpoClearDataPage } from "./ExpoClearDataPage";
 import { ExpoAboutPage, ExpoLicensesPage } from "./ExpoAboutPages";
 import { ExpoDefaultBrowserPage, ExpoWhatsSentPage } from "./ExpoInfoPages";
 import { ExpoSettingsRoot } from "./ExpoSettingsRoot";
+import { ExpoSettingsDone } from "./ExpoSettingsDone";
 import { SettingsHostedContext } from "./SettingsKit";
 import { SettingsPageFor } from "./SettingsView";
 
@@ -106,13 +107,23 @@ function SettingsNavigation() {
   const path = settingsPath(open ? stack : kept.current);
   return (
     <NavigationStack path={path} onPathChange={followSettingsPath} modifiers={modifierList(profileLook({ ...nativeLookColors(look), usesGlass: glass }))}>
-      <ExpoSettingsRoot />
+      <StackRoot route={(open ? stack : kept.current)[0]} />
       {path.map((key) => (
         <NavigationDestination key={key} value={key}>
           <Destination routeKey={key} />
         </NavigationDestination>
       ))}
     </NavigationStack>
+  );
+}
+
+function StackRoot({ route }: { route: SettingsRoute | undefined }) {
+  const Converted = route && route.page !== "root" ? CONVERTED[route.page] : undefined;
+  if (!route || !Converted) return <ExpoSettingsRoot />;
+  return (
+    <ExpoSettingsDone>
+      <Converted route={route} />
+    </ExpoSettingsDone>
   );
 }
 

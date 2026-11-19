@@ -19,6 +19,8 @@ test("where sync is offered, What's Sent keeps its Mac lines, and only iPhone li
   assert.ok(texts("ios", true).some((text) => /pinned to your Mac/.test(text)));
   assert.ok(texts("ios", true).some((text) => /first backdrop/.test(text)));
   assert.ok(!texts("android", true).some((text) => /first backdrop/.test(text)));
+  assert.ok(texts("ios", false).some((text) => /Browse for Me/.test(text)));
+  assert.ok(!texts("android", true).some((text) => /Browse for Me/.test(text)));
   const fields = shownWhatsSent("android", false).flatMap((section) => section.items.flatMap((item) => item.fields));
   assert.ok(fields.includes("interface_style"));
   assert.ok(fields.includes("pins_to_mac"));

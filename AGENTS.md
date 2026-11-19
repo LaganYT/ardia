@@ -84,6 +84,8 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   code. AI ships as a first-party plugin on the plugin host (#2462, #2463), off until the user enables it, and
   whatever it needs from the browser becomes a public extension point any plugin can use, never a private hook.
   Dia's AI rows in `docs/dia-feature-parity.md` stay ⏸ until the plugin ships them.
+  The one exception is the iPhone's Browse for Me (`docs/phone.md`), which runs on Apple's on-device model, or on
+  the user's own ChatGPT plan when they connect it, with no account and no server of ours.
 
 ## Platforms
 One browser UI (`apps/browser/src` and `packages/*/src`) runs on three platforms, each with its own native layer and
@@ -122,6 +124,12 @@ rules are for the owner's Mac.
   remembers (positions, sizes), its animations and their timing in frames, and what keeps running.
   Obvious UX holds everywhere: dismissing something never pauses playback or drags you to another tab;
   going back to the source ends a temporary view (the mini player); nothing reopens right after you close it.
+- **Motion follows how often a thing is used.** What people touch all day (tab rows, pinned tiles, folders and
+  groups, toolbar buttons, menus, the command bar, switching tabs) is tactile, fast and snappy: it answers on the
+  press, with no bounce, squish, overshoot or other flourish, and nothing that delays or moves the thing being
+  aimed at. Rare, larger moves (the sidebar opening and closing, onboarding, a sheet arriving) may feel premium:
+  a longer curve, a soft spring, glass. When unsure, treat it as high-frequency and keep it plain. This is the
+  owner's rule and it beats matching Dia: a Dia effect that bounces on something used all day is not copied.
 - **Owner recordings and screenshots.** Copy a recording out of its temp folder at once (it vanishes, and
   the name has a narrow no-break space: use a glob). Extract 30 fps frames with ffmpeg, find events by
   frame difference, and measure positions and timings from the pixels. A position or size in the owner's
@@ -148,7 +156,7 @@ rules are for the owner's Mac.
 - **Instrument what you ship.** Every feature and fix ships with the telemetry that shows it working in the field
   and catches its regression: a use count for a feature, a counter or timing on the path a fix touched, an error
   event where it used to fail. Add it to an existing event before inventing a new one (`apps/browser/src/state/telemetry`,
-  `apps/cli/ardia_cli/telemetry.py`). It stays inside the consent model: sharing on only, counts, timings, enums and
+  `plugins/cli/ardia_cli/telemetry.py` in ardia-browser/plugins). It stays inside the consent model: sharing on only, counts, timings, enums and
   flags, never URLs, page content, titles or free text. List new events and fields in the "What's Sent" copy, and
   say in the commit and the parity row what to watch on the dashboard. Skip it only when nothing measurable exists,
   and say so.
@@ -220,7 +228,8 @@ app (`docs/windows.md`), and `apps/linux` the Linux UI with `scripts/linux` for 
 the Windows packaging, checks and engine build. The native Expo modules are in `packages/{ardiacore,shell,shaders,import,sync}`; `engine/chromium` is our Chrome-services code (the `ac_*` C calls) and `engine/ardiacore` ArdiaCore's window and tab layer
 (`engine/ardiacore-linux` on Linux),
 and `packages/core` holds the omnibox logic and its tests. `packages/demo` is the app on the web (the site's demo).
-`apps/cli` is the `ardia` command, `apps/phone` the Expo app for iPhone and Android (its native module is `packages/phone`; `docs/phone.md`) and `apps/dashboard` the telemetry and triage dashboard.
+The `ardia` command lives in ardia-browser/plugins (`plugins/cli`, its own CI and releases); this repo bundles the
+version pinned in `apps/browser/official-plugins.json` as the Command Line plugin (`docs/cli.md`, `docs/plugins.md`). `apps/phone` the Expo app for iPhone and Android (its native module is `packages/phone`; `docs/phone.md`) and `apps/dashboard` the telemetry and triage dashboard.
 `apps/site` is ardia.dev and `apps/videos` holds the Remotion videos. `infra/` holds each service's deploy setup and
 `extras/` the add-ons (the Raycast extension). Ardia's own source files are Apache-2.0; the app as distributed is
 GPL-3.0, because its engine carries Helium's patches (`NOTICE`).

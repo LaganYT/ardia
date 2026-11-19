@@ -72,6 +72,8 @@ export function SettingsPageFor({ route }: { route: SettingsRoute }) {
       return <LicensesPage />;
     case "whatsSent":
       return <WhatsSentPage />;
+    case "browseForMe":
+      return null;
   }
 }
 

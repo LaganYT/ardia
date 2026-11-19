@@ -19,22 +19,25 @@ import { useLibrary } from "./state/library/store";
 import { SettingsView } from "./components/settings/SettingsView";
 import { SpacesView } from "./components/sync/SpacesView";
 import { ToastHost } from "./components/toasts/ToastHost";
-import { appDesign, tabsMotion, useTheme, DEFAULT_PROFILE_COLOR, FrostSource, FullSheet, OverlayHost, PROFILE_PRESETS, onNativeMenuOpened, ProfileLookContext, Shade, SheetBackground, SURFACES_FROST } from "./components/ui";
+import { appDesign, tabsMotion, useDesign, useTheme, DEFAULT_PROFILE_COLOR, FrostSource, FullSheet, OverlayHost, PROFILE_PRESETS, onNativeMenuOpened, ProfileLookContext, Shade, SheetBackground, SURFACES_FROST } from "./components/ui";
 import { useLook } from "./state/sync/hooks";
 import { startSettingsSources } from "./state/settings/actions";
 import { startSync } from "./state/sync/actions";
 import { setSpacesDesign } from "./state/sync/store";
 import { setAppearanceDesign, useDarkScheme } from "./state/settings/appearance";
 import { useSettingsNav } from "./state/settings/hooks";
-import { offerSyncPages } from "./state/settings/nav";
+import { offerBrowseForMePage, offerSyncPages } from "./state/settings/nav";
 import { useOnboarding } from "./state/onboarding/hooks";
 import { bootApp, useBoot } from "./state/app/boot";
 import { startLinks } from "./state/links/links";
 import { useBaseSystemBars, useSystemBars } from "./state/app/systemBars";
 import { useSearchOpen } from "./state/search/hooks";
 import { useLeavingTab, useOpeningTab, useSheet, useSurface } from "./state/browse/hooks";
-import { appBecameActive, appWillResignActive, closeArchive, goBackToStartIfEmpty, startBrowser, type Surface } from "./state/browse/store";
+import { appBecameActive, appWillResignActive, closeArchive, deckPullInFlight, goBackToStartIfEmpty, startBrowser, type Surface } from "./state/browse/store";
+import { useColumn } from "./components/column/SideColumn";
 import { refreshHiddenDeck } from "./state/browse/deckHold";
+import { useDeckStandbyWanted } from "./state/browse/deckStandby";
+import { deckPullGrowing } from "./state/browse/deckPull";
 import { noteScreenLayoutName, noteWindowShape } from "./state/app/landscapeCount";
 import { DUO_CANVAS, reportScreenLayout, useScreenLayout } from "./state/app/screenLayout";
 import { DuoBrowsing } from "./components/duo/DuoBrowsing";
@@ -51,11 +54,14 @@ import { countUsage, reportLaunch, startTelemetry } from "./state/telemetry/tele
 import { useIncognito, useSelectedTab } from "./state/tabs/hooks";
 import { setRootSize } from "./state/app/rootSize";
 import { syncOffered } from "./state/sync/offer";
+import { browseForMeOffered } from "./state/browseForMe/offer";
+import { listenForBrowseForMe } from "./state/browseForMe/events";
 
 export default function App() {
   useState(() =>
     bootApp(() => {
       offerSyncPages(syncOffered);
+      offerBrowseForMePage(browseForMeOffered);
       setSpacesDesign(appDesign);
       setAppearanceDesign(appDesign);
       startTelemetry();
@@ -64,6 +70,7 @@ export default function App() {
       startSettingsSources();
       if (syncOffered()) startSync();
       startLinks();
+      listenForBrowseForMe();
       runLaunchScenario();
     }),
   );
@@ -112,6 +119,9 @@ export function Surfaces() {
   const tab = useSelectedTab();
   const opening = useOpeningTab();
   const leaving = useLeavingTab();
+  const design = useDesign();
+  const column = useColumn();
+  const pageOverDeck = PAGE_LAYERED && design === "redesigned" && !column;
   const pageUnderDeck = surface === "deck" && tab !== null && (tab.id === opening || tab.id === leaving);
   const settingsOpen = useSettingsNav((s) => s.open);
   const onboarding = useOnboarding((s) => s.showing);
@@ -129,6 +139,13 @@ export function Surfaces() {
   useEffect(goBackToStartIfEmpty, [tab, surface]);
   const duo = useScreenLayout((s) => s.layout.name === "wide" || s.layout.name === "split");
   const deckMounted = useDeckStandby(surface, surface === "browsing" && tab !== null && opening === null && leaving === null && !searching && !voice && !onboarding && front === null, tab?.id ?? null);
+  const page = !duo && (surface === "browsing" || pageUnderDeck) && tab ? <BrowsingScreen tab={tab} /> : null;
+  const deck = !duo && deckMounted ? <TabDeck key="deck" /> : null;
+  const pageLayer = page && tab ? (
+    <PageLayer key="page" away={surface === "deck"} unseen={pageOverDeck && surface === "deck" && tab.id === opening && deckPullGrowing() !== tab.id}>
+      {page}
+    </PageLayer>
+  ) : null;
   return (
     <>
       <LandscapeCount />
@@ -137,8 +154,12 @@ export function Surfaces() {
           <Shade shaded={searching}>
             <FrostSource name={SURFACES_FROST} style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false}>
               {duo && surface !== "start" ? <DuoBrowsing /> : null}
-              {!duo && (surface === "browsing" || pageUnderDeck) && tab ? <BrowsingScreen tab={tab} /> : null}
-              {!duo && deckMounted ? <TabDeck /> : null}
+              {PAGE_LAYERED ? (pageOverDeck ? [deck, pageLayer] : [pageLayer, deck]) : (
+                <>
+                  {page}
+                  {deck}
+                </>
+              )}
               {surface === "start" ? <StartScreen /> : null}
             </FrostSource>
           </Shade>
@@ -164,6 +185,24 @@ export function Surfaces() {
   );
 }
 
+const PAGE_LAYERED = Platform.OS === "ios";
+const PAGE_UNSEEN_AWAY = 100_000;
+
+function PageLayer({ away, unseen, children }: { away: boolean; unseen: boolean; children: ReactNode }) {
+  return (
+    <View
+      testID="pageLayer"
+      style={[StyleSheet.absoluteFill, unseen ? styles.unseen : null]}
+      pointerEvents={away ? "none" : "box-none"}
+      collapsable={false}
+      importantForAccessibility={unseen ? "no-hide-descendants" : "auto"}
+      accessibilityElementsHidden={unseen}
+    >
+      {children}
+    </View>
+  );
+}
+
 function DuoCanvasFrame({ children }: { children: ReactNode }) {
   const canvas = useScreenLayout((s) => s.canvas);
   if (!canvas) return <>{children}</>;
@@ -186,9 +225,18 @@ function useDeckStandby(surface: Surface, pageSettled: boolean, pageId: string |
   const [standby, setStandby] = useState(false);
   if (surface === "deck" && !standby) setStandby(true);
   if (surface === "start" && standby) setStandby(false);
+  const wanted = useDeckStandbyWanted();
+  const [answered, setAnswered] = useState(wanted);
+  if (answered !== wanted) {
+    setAnswered(wanted);
+    if (surface === "browsing" && !standby) setStandby(true);
+  }
   useEffect(() => {
     if (!pageSettled) return;
-    const settle = setTimeout(() => (standby ? refreshHiddenDeck() : startTransition(() => setStandby(true))), tabsMotion.deckStandby);
+    const settle = setTimeout(() => {
+      if (!standby) startTransition(() => setStandby(true));
+      else if (!deckPullInFlight()) refreshHiddenDeck();
+    }, tabsMotion.deckStandby);
     return () => clearTimeout(settle);
   }, [pageSettled, pageId, standby]);
   return surface !== "start" && (standby || surface === "deck");
@@ -227,6 +275,7 @@ function Layer({ covered, muted = false, children }: { covered: boolean; muted?:
 const styles = StyleSheet.create({
   root: { flex: 1 },
   gone: { display: "none" },
+  unseen: { transform: [{ translateX: PAGE_UNSEEN_AWAY }] },
   canvasBack: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#000000", alignItems: "center", justifyContent: "center" },
   canvas: { borderRadius: DUO_CANVAS.radius, borderCurve: "continuous", overflow: "hidden" },
 });

@@ -4,7 +4,7 @@ const SYNC_ONLY_PHRASES = ["pages you pinned to your Mac, ", "tabs you sent to a
 
 const APPEARANCE_WITHOUT_SYNC = "With each launch, the Appearance you chose: Glass or Classic, and Light, Dark or System";
 
-const IPHONE_ONLY_FIELD = "perf_backdrop";
+const IPHONE_ONLY_FIELDS = ["perf_backdrop", "browse_for_me_opened"];
 
 function shownItem(item: SentItem, offersSync: boolean): SentItem {
   if (offersSync) return item;
@@ -15,7 +15,7 @@ function shownItem(item: SentItem, offersSync: boolean): SentItem {
 export function shownWhatsSent(os: string, offersSync: boolean): { title: string; items: SentItem[] }[] {
   return PHONE_WHATS_SENT.map((section) => ({
     title: section.title,
-    items: section.items.filter((item) => os === "ios" || !item.fields.includes(IPHONE_ONLY_FIELD)).map((item) => shownItem(item, offersSync)),
+    items: section.items.filter((item) => os === "ios" || !IPHONE_ONLY_FIELDS.some((field) => item.fields.includes(field))).map((item) => shownItem(item, offersSync)),
   }));
 }
 

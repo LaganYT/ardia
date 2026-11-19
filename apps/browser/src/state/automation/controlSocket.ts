@@ -22,7 +22,7 @@ import { consentToken, type ConsentToken } from "../telemetry/client";
 import { warnFor } from "../telemetry/logs";
 import { cliTabTargets } from "../../platform/cli";
 import { TAB_IDLE_EVENTS, USER_IDLE_EVENTS, type AutomationEventName } from "./eventNames";
-import { commands, failure, hello, parseRequest, parseSubscription, planRun, type RequestId, type Subscription } from "./automationMethods";
+import { clientProtocolProblem, commands, failure, hello, parseRequest, parseSubscription, planRun, type RequestId, type Subscription } from "./automationMethods";
 import { feedNeeds, stopFeed, updateFeed } from "./automationFeed";
 import { answerDecision, dropResponder, serveHooks, stopResponders } from "./decideSocket";
 import { launchToReplay, recordLaunch, runLaunchActions } from "./lifecycleEvents";
@@ -72,14 +72,32 @@ function deliver(name: AutomationEventName, data: Record<string, unknown>, time 
   if (plain.length) broadcastOnControlSocket(plain, JSON.stringify({ event: name, time, data: minimized(data) }));
 }
 
+export type FeedConsumer = { subscriptions: () => Iterable<Subscription>; deliver: (name: AutomationEventName, data: Record<string, unknown>, time: number) => void };
+
+const consumers = new Map<string, FeedConsumer>();
+
 function broadcast(name: AutomationEventName, data: Record<string, unknown>) {
-  if (generation === null) return;
-  deliver(name, data);
+  if (generation !== null) deliver(name, data);
+  const time = Date.now();
+  for (const consumer of consumers.values()) consumer.deliver(name, data, time);
 }
 
-function refreshFeed() {
-  if (subscriptions.size) updateFeed(feedNeeds(subscriptions.values()), broadcast);
+export function refreshFeed() {
+  const all = [...subscriptions.values(), ...[...consumers.values()].flatMap((c) => [...c.subscriptions()])];
+  if (all.length) updateFeed(feedNeeds(all), broadcast);
   else stopFeed();
+}
+
+type MethodHandler = (method: string, params: Record<string, unknown>) => Body | Promise<Body> | null;
+
+let pluginMethods: MethodHandler | null = null;
+
+export const handlePluginSocketMethods = (handler: MethodHandler | null) => void (pluginMethods = handler);
+
+export function setFeedConsumer(key: string, consumer: FeedConsumer | null) {
+  if (consumer) consumers.set(key, consumer);
+  else consumers.delete(key);
+  refreshFeed();
 }
 
 function replayLaunch(connection: number) {
@@ -93,7 +111,7 @@ function replayLaunch(connection: number) {
   }, 0);
 }
 
-type Body = { result: unknown } | { error: unknown };
+export type Body = { result: unknown } | { error: unknown };
 
 export function handleControlRequest({ connection, generation: tagged, line }: ControlRequest) {
   const request = parseRequest(line);
@@ -135,6 +153,18 @@ export async function windowsWithTargets(windows: AutomationWindow[]): Promise<A
   }));
 }
 
+export function runMethod(params: Record<string, unknown>): Body {
+  const plan = planRun(useBrowser.getState(), params);
+  if ("error" in plan) return plan;
+  try {
+    runCommand({ command: plan.command, arg: plan.arg, windowId: plan.windowId }, { strictWindow: plan.windowId !== null, tabId: plan.tabId });
+  } catch (error) {
+    if (error instanceof NoCommandWindowError) return failure("no_window", error.message);
+    throw error;
+  }
+  return { result: { ok: true } };
+}
+
 function subscribe(connection: number, params: Record<string, unknown>): Body {
   const sub = parseSubscription(params);
   if ("error" in sub) return sub;
@@ -150,6 +180,8 @@ function subscribe(connection: number, params: Record<string, unknown>): Body {
 function answer(connection: number, method: string, params: Record<string, unknown>): Body | Promise<Body> {
   switch (method) {
     case "hello": {
+      const tooOld = clientProtocolProblem(params, systemInfo().appVersion);
+      if (tooOld) return { error: tooOld };
       const caller = parseCliCaller(params.caller);
       if (caller) callers.set(connection, caller);
       return { result: hello(systemInfo().appVersion) };
@@ -177,18 +209,11 @@ function answer(connection: number, method: string, params: Record<string, unkno
       const answered = answerDecision(connection, params);
       return "error" in answered ? failure("bad_request", answered.error) : { result: answered };
     }
-    case "run": {
-      const plan = planRun(useBrowser.getState(), params);
-      if ("error" in plan) return plan;
-      try {
-        runCommand({ command: plan.command, arg: plan.arg, windowId: plan.windowId }, { strictWindow: plan.windowId !== null, tabId: plan.tabId });
-      } catch (error) {
-        if (error instanceof NoCommandWindowError) return failure("no_window", error.message);
-        throw error;
-      }
-      return { result: { ok: true } };
-    }
+    case "run":
+      return runMethod(params);
   }
+  const plugin = pluginMethods?.(method, params);
+  if (plugin) return plugin;
   return failure("unknown_method", `There's no method ${method}.`);
 }
 
@@ -229,7 +254,7 @@ async function stop() {
   launchSent.clear();
   callers.clear();
   stopResponders();
-  stopFeed();
+  refreshFeed();
   await stopControlSocket();
   useControlSocket.setState({ status: null });
 }

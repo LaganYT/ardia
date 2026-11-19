@@ -299,7 +299,7 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | | `updateFeed=<url>` | Sparkle's feed; a scratch instance checks for updates only with one |
 | | `allowAudio` · `allowOcclusion` | Background mode keeps sound · keeps Chrome's occlusion |
 | | `releaseNotes` | Opens the release notes as after an update (works on a Developer ID build: the release smoke) |
-| | `cliHome=<dir>` · `cliBinDir=<dir>` · `cliUrl=<url>` | Where the `ardia` command installs, links and downloads from (`docs/cli.md`); a test instance installs only with the first two |
+| | `cliHome=<dir>` · `cliBinDir=<dir>` · `cliUrl=<url>` | Where the `ardia` command installs, links and downloads from (`docs/cli.md`); a test instance installs only with the first two, and links plugins' programs only into `cliBinDir` (`docs/plugins.md` › programs) |
 | | `syncFolder=<dir>` | The sync folder (`packages/sync/scripts/e2e.mjs`) |
 | | `sharedFolders=<dir>` | Where Share Folder… creates shared folders and where Add Shared Folder… starts (`iCloud Drive › Ardia Shared` otherwise; a scratch data dir uses `<data dir>/Ardia Shared`), `docs/shared-folders.md` |
 | | `importSourceDir=<dir>` · `importSafariHome=<dir>` | Where import looks for other browsers and Safari's home, so a scratch instance never sees the owner's profiles |
@@ -323,7 +323,8 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | | `shadersKeyWindow` | Metal views act as in the key window (the New Tab intro) |
 | | `peekStrict` | Peek's test hooks stop relaxing its click checks |
 | | `importSecret=<s>` · `importDiaBundleId=<id>` · `importDiaWindows=<json>` | Import's Safe Storage secret · the app Dia's tabs come from (opened hidden and quit by the import) · fixture windows answering for it, with no Automation prompt |
-| | `cliInstallScript=<path>` | Another `ardia` installer script |
+| | `cliInstallScript=<path>` | Another `ardia` installer script (the Linux and Windows hosts' installer; macOS no longer runs one) |
+| | `bundledPlugins=<dir>` | Built-in plugins come from this folder instead of `Ardia.app/Contents/Resources/Plugins` (`docs/plugins.md` › Built-in plugins) |
 | | `legacySource=<home>` · `legacyCrashAfter=<step>` | The Netnyahoo → Ardia migration from a scratch home |
 | | `bangsUrl` · `onboarding` · `whatsNew` · `telemetry` · `liveMock=<url>` · `calendarFixture` | Debug builds only: bang list, run onboarding, show What's New, send telemetry, live folders from a mock, the calendar fixture |
 | | `cdpTabsVisible` | A tab that a DevTools-port client (`ARDIA_REMOTE_DEBUGGING_PORT`) attaches to stays visible to its renderer until that session detaches, as on the `ardia` command's token path (`ac_cli_visible_tabs.cc`; `docs/cli.md` › Input) |

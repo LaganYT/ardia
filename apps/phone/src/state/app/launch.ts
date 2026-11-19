@@ -6,6 +6,8 @@ import { captureSnapshot, newTab, openArchive, openPage, openSpaces, openTab, sh
 import { openLibrary } from "../library/store";
 import { openPageMenu, showReader } from "../page/actions";
 import { presentSearch } from "../search/store";
+import { startBrowseForMe } from "../browseForMe/store";
+import { presentHeardVoiceSearch } from "../voice/store";
 import { trustSite } from "../settings/actions";
 import { openSettings, settingsRouteFromKey } from "../settings/nav";
 import { acceptsPreference, type ColorChoice } from "../settings/preferences";
@@ -15,6 +17,8 @@ import { deckOrder } from "../tabs/tabsState";
 import { showToast } from "../toasts/store";
 import { pages } from "../../platform/pages";
 import { launchArguments } from "./launchFlags";
+import { isLabBuild } from "../../platform/lab";
+import { runDeckPullScript } from "../browse/deckPullScript";
 import { DEMO_PRIVATE_URLS, manyTabTitle, sampleToast } from "./launchRules";
 
 
@@ -38,6 +42,7 @@ export function runLaunchScenario() {
   if (args.isDemo) void runDemoScenario(args);
   void runLaunchHooks(args);
   if (args.deckScript) void runDeckScript(args.deckScript);
+  if (isLabBuild && args.browseDeckPull !== null) void runDeckPullScript(args.browseDeckPull);
 }
 
 let demoWarming: Promise<void> | null = null;
@@ -90,8 +95,10 @@ async function runDemoScenario(args: LaunchArguments) {
 
 async function runLaunchHooks(args: LaunchArguments) {
   if (args.trustedSitesSample) for (const host of TRUSTED_SITES_SAMPLE) void trustSite(host, true);
-  if (!args.opensSettings && args.settingsPage === null && args.openSheet === null && args.toast === null) return;
+  if (!args.opensSettings && args.settingsPage === null && args.openSheet === null && args.toast === null && args.browseResearch === null && args.voiceHeard === null) return;
   await wait(LAUNCH_TIMING.sheetMs);
+  if (args.browseResearch !== null) startBrowseForMe(args.browseResearch);
+  if (args.voiceHeard !== null) presentHeardVoiceSearch(args.voiceHeard);
   if (args.opensSettings || args.openSheet === "settings") openSettings();
   const page = args.settingsPage === null ? null : settingsRouteFromKey(args.settingsPage);
   if (page) openSettings(page);

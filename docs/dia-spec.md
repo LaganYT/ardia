@@ -208,7 +208,8 @@ the same as top"), so if a Dia capture ever differs, the owner's equal insets wi
   - Hover: `TabBackgroundHovered` white 16% (dark) or white 55% (light). An `xmark` close button
     appears on the right, with its own ~22pt hover square.
   - Pressed: white 31% (dark) or 70% (light). Dia has no pressed colour for the selected tab, and no row scales or
-    bounces when pressed (2026-10-28 recording); ours matches.
+    bounces when pressed (2026-10-28 recording); ours matches. A tab row is used all day, so the owner's rule
+    (AGENTS.md, "Motion follows how often a thing is used") holds this whatever Dia does later.
   - Selected (regular): dark fill ≈ black 40% (sample `#1B1618` on `#2A1E23`), white title.
   - Audio: a `speaker.wave.2` glyph after the favicon.
 - "+ New Tab" row: label in `secondaryLabelColor` (white 0.55 dark), the `plus` in `tertiaryLabelColor` (white 0.25
@@ -243,13 +244,16 @@ corner**, the corner nearest the row.
 - Show delay: the controller sleeps **0.5 s** or **0.1 s** before presenting (a flag in the hover source picks which;
   not identified) and **0** when another card is already up. A click or key down dismisses it (local event monitor).
   The leave delay comes from the hover source's dismissal behaviour; no value in the binary. Both need a recording.
-- Ours (`components/sidebar/hoverMotion.ts`): the same curve, spring and scale, anchored at the card's top-left. Unlike Dia,
+- Ardia originally used the same curve, spring and scale, anchored at the card's top-left. Unlike Dia,
   since 2026-11-14 (#1584, #1365) it opens only after the pointer rests 0.8 s on one row (Dia: 0.5 s, then 0 for every
   next row), never moves from row to row with the pointer, leaves at once when the pointer leaves away from it (up, out
   of the far edge, or onto another row) and 160 ms after a leave toward it, and never opens for rows a peeking sidebar
   brings under the pointer during its first 0.4 s; Settings › Tabs › Show tab hover menu turns it off. Measured on the native driver's own per-frame values
   (120 Hz, a hidden instance): opacity within 0.007 of Dia's curve over its 12 frames, scale within 0.001 of the spring
   (peak 1.0022 at 180 ms, settled by 340 ms); the fade out takes 12 frames.
+- Ours since 2026-11-19 (the owner's review of 0.2.47-nightly.6): the fade only, in and out on the 0.10 s curve above,
+  with no scale spring either way, for the sidebar card, the top-strip card, live items, the calendar and the mini
+  player (`sidebar/hoverMotion.ts`). The card sits at its final size and position from the first frame.
 
 ### Opening and closing tabs (owner's 2× recording, 120 fps, 2026-10-15)
 
@@ -335,18 +339,19 @@ What it closes (issue #149): the unselected unpinned tabs (`clearOthers`), keepi
 release notes, tabs playing media. Dia's Close All in the sidebar does the same with the selected tab (the issue's
 recording: of three unpinned tabs, the two unselected close and the selected one stays selected).
 
-#### Arc note: press and hover feedback (2026-11-17)
+#### Press and hover feedback (2026-11-18)
 
-Arc, not Dia, at the owner's request ("copy Arc" for the little interactions). Arc isn't installed on the build Mac, so
-these values are set by hand to Arc's behaviour and not traced from a capture: measure them against an Arc recording
-before calling them a match.
-
-- **Press.** The whole thing under the pointer shrinks while the button is down and springs back with a small bounce:
-  a sidebar row (tab, live item, New Tab, the pinned header, a group or live folder header, a row in a folder's
-  panel) to 0.975, a pinned tile or top-strip pin to 0.94, an icon button's plate with its glyph to 0.9, a pill, push
-  or text button to 0.97. A tab in the top strip doesn't shrink: its selected shape joins the toolbar below it. Down: response 0.12 s, critically damped.
-  Back: response 0.28 s, damping 0.55 (about 13 % past rest, over in 0.4 s). A click shorter than 90 ms holds the dip
-  for the rest of the 90 ms, so every click shows it.
+- **Press.** Nothing used all day bounces (AGENTS.md, "Motion follows how often a thing is used"). A sidebar row, a folder or group header, a pinned tile and a top-strip pin hold still
+  and only change colour, as in Dia (see "Pressed" above). An icon button's glyph dips to 0.96 and a pill, push or
+  text button to 0.985 on `springs.snappy`, with no overshoot. The Arc-style squish (rows to 0.975, tiles to 0.94,
+  a bounce back of about 13 %) shipped in 0.2.47-nightly.6 and was removed at the owner's request: with the row
+  scaling about its centre, a folder's icon slid 4 pt sideways and sprang back on every click.
+  A New Tab card's lift and a finished live item's check mark settle on `springs.snappy` too. Since 2026-11-19,
+  pressing Reload highlights the toolbar plate while the glyph stays the same size. `springs.bouncy` stays for rare, larger moves: an unread or
+  live badge appearing, import's check mark, and the sidebar's edge springing back from a resize past its limit.
+- **Toast.** Fades in place: in over `duration.base` on `curve.enter`, out over `duration.slow` on `curve.exit`
+  (`ui/Toast.tsx`). Its 10 pt rise, 0.96 scale and `springs.bouncy` arrival were removed on 2026-11-19 (the owner's
+  review of 0.2.47-nightly.6).
 - **Hover.** A highlight lights in 50 ms and fades out over 200 ms, so the pointer leaves a short trail down a list:
   sidebar rows, top-strip tabs and pins, icon and text buttons, settings and list rows. The pressed colour replaces
   the hover colour at once. A row that becomes selected drops the highlight with no fade (the selected fill is
@@ -354,10 +359,8 @@ before calling them a match.
   cross-fades from that fill to the hover fill on the same timing. The ✕ on a hovered row fades in over 100 ms.
   Menu rows and glass tiles keep their instant highlight.
 - Reduce Motion: no scale, and the highlight switches with no fade.
-- Ours: `components/ui/motion.ts` (`buttonMotion`, `springSpec.press`/`release`, `pressMotion`, `hoverFade`,
-  `usePressScaleMotion`, `useHoverFill`), `ui/HoverFill.tsx` (`HoverFill`, `HoverSwap`), `ui/HoverSlot.tsx`,
-  `sidebar/TabPressArea.tsx` (`squish`);
-  `ui/pressMotion.test.mjs`.
+- Ours: `components/ui/motion.ts` (`buttonMotion`, `hoverFade`, `usePressScaleMotion`, `useHoverFill`),
+  `ui/HoverFill.tsx` (`HoverFill`, `HoverSwap`), `ui/HoverSlot.tsx`; `ui/pressFeedback.test.mjs`.
 
 ## New Tab page
 

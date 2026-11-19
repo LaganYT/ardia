@@ -41,7 +41,7 @@ test("opening one card from the deck renders no card again: the opened card's ro
   expect(Math.max(...cardZ(root))).toBeLessThan(100_000);
   renders = [];
   act(() => sendDeckCommand({ kind: "openFocused" }));
-  act(() => jest.advanceTimersByTime(16 * 18));
+  act(() => jest.advanceTimersByTime(16 * 16));
   expect(cardRenders()).toBe(0);
   expect(Math.max(...cardZ(root))).toBeGreaterThanOrEqual(100_000);
   expect(cardZ(root).filter((z) => z >= 100_000)).toHaveLength(1);
@@ -100,26 +100,30 @@ test("a touch in the band above the deck bar starts no card gesture, the clearan
   unmount(root);
 });
 
-(Platform.OS === "ios" ? test : test.skip)("on iPhone, an opening card grows as one Core Animation move from its deck place to full screen; the page is prepared two frames after it starts, and takes over only once the card has landed", () => {
+(Platform.OS === "ios" ? test : test.skip)("on iPhone, an opened card is the deck's own card growing from its place on the UI thread, the reverse of the swipe, with no second card mounted over it and no card rendered again; the page is made when the card has landed, not while it grows, and takes over then", () => {
   useBrowse.setState({ surface: "deck", sheet: null, deckEntrance: null, frozenOrder: null, opening: null });
   const root = renderSurface(<TabDeck />);
+  renders = [];
   act(() => sendDeckCommand({ kind: "openFocused" }));
   const overlay = () => root.root.findAll((node) => node.props.testID === "openingCard" && typeof node.type === "string")[0];
   act(() => jest.advanceTimersByTime(16));
-  const first = overlay();
-  expect(first).toBeTruthy();
+  expect(overlay()).toBeUndefined();
+  expect(cardZ(root).filter((z) => z >= 100_000)).toHaveLength(1);
   let preparedAt = -1;
   let switchedAt = -1;
   for (let frame = 2; frame <= 40 && switchedAt < 0; frame++) {
     act(() => jest.advanceTimersByTime(16));
-    if (preparedAt < 0 && useBrowse.getState().opening !== null) preparedAt = frame * 16;
+    if (preparedAt < 0 && useBrowse.getState().opening !== null) {
+      preparedAt = frame * 16;
+      expect(cardRenders()).toBe(0);
+    }
     if (useBrowse.getState().surface === "browsing") switchedAt = frame * 16;
   }
-  const [landed, rest] = Platform.OS === "ios" ? [168, 216] : [280, 336];
-  expect(preparedAt).toBeGreaterThan(0);
-  expect(preparedAt).toBeLessThanOrEqual(96);
-  expect(switchedAt).toBeGreaterThanOrEqual(landed);
-  expect(switchedAt).toBeLessThanOrEqual(Math.max(rest, 250 + 64));
+  const landed = 168;
+  expect(preparedAt).toBeGreaterThanOrEqual(landed);
+  expect(preparedAt).toBeLessThanOrEqual(landed + 64);
+  expect(switchedAt).toBeGreaterThanOrEqual(preparedAt);
+  expect(switchedAt).toBeLessThanOrEqual(preparedAt + 250 + 32);
   unmount(root);
 });
 

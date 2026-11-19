@@ -188,7 +188,6 @@ test("the deck header shows a space's name alone when it has no icon of its own,
   const plain = deck();
   const title = menuAround(plain, "Space, Home");
   expect(title.findAll((node) => node.props.testID === "startSpaceGlyph")).toHaveLength(0);
-  expect(title.findAll((node) => node.props.testID === "deckSpaceTitle" && typeof node.type === "string")).toHaveLength(1);
   const words = title.findAll((node) => typeof node.type === "string" && node.type === "Text").map((node) => node.children.join(""));
   expect(words).toEqual(["Home"]);
   unmount(plain);

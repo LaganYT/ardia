@@ -25,6 +25,7 @@ const guards = read("../ios/ArdiaRevealGuards.mm");
 const pageView = read("../ios/PageViewDefinition.swift");
 const menuTarget = read("../../shell/ios/MenuTarget.swift");
 const mainMenu = read("../../shell/ios/MainMenu.swift");
+const ledger = read("../ios/ArdiaRevealLedger.h");
 
 const body = (text, signature) => {
   const start = text.indexOf(signature);
@@ -97,13 +98,12 @@ test("a page shown ahead of JS is pixels only: keys and clicks at the page are s
   assert.ok(install.indexOf("if ([ArdiaWebView swallowsAheadOfSwitch:event]) return nil;") < install.indexOf("[ArdiaWebView revealForPress:event]"), "a swallowed event starts nothing either");
   assert.match(input, /kRevealInputMask = kButtonDowns \| kButtonUps \| kButtonDrags \| kKeys \| kPointer;/);
   const swallow = body(input, "+ (BOOL)swallowsAheadOfSwitch:(NSEvent *)event");
-  assert.match(swallow, /if \(!gOnScreenAhead\) return NO;/, "no pointer event is looked at while no page is ahead of JS");
-  assert.match(swallow, /if \(!\[ArdiaWebView revealGapIn:window\]\) return NO;/, "only in the window showing one");
+  assert.match(swallow, /if \(!gOnScreenAhead && \(!button \|\| gPresses\.Idle\(\)\)\) return NO;/, "no pointer event is looked at while no page is ahead of JS");
+  assert.match(swallow, /const BOOL overCoveredPage = lands && gOnScreenAhead && \[ArdiaWebView revealGapIn:event\.window\] && InTabPage\(HitInWindow\(event\)\);/, "only in the window showing one; clicks, scrolls and hover over a page, the chrome keeps its own");
   assert.match(body(input, "+ (ArdiaWebView *)onScreenAheadIn:(NSWindow *)window"), /if \(!gOnScreenAhead \|\| !window\) return nil;/, "the focus paths that ask on every paint pay nothing while no page is ahead");
   assert.match(swallow, /if \(type & kKeys\) return \[ArdiaWebView swallowsKeyAheadOfSwitch:event\];/);
-  assert.match(body(input, "+ (BOOL)swallowsKeyAheadOfSwitch:(NSEvent *)event"), /const BOOL ahead = \[ArdiaWebView revealGapIn:window\] && InTabPage\(window\.firstResponder\);/, "keys aimed at a page; the sidebar and the toolbar keep theirs");
-  assert.match(swallow, /if \(!InTabPage\(HitInWindow\(event\)\)\) return NO;/, "clicks, scrolls and hover over a page; the chrome keeps its own");
-  assert.match(swallow, /if \(!\(gap->swallowedButtons & button\)\) return NO;/, "a release or drag is swallowed only when its press was, so a press on a row always gets its release");
+  assert.match(body(input, "+ (BOOL)swallowsKeyAheadOfSwitch:(NSEvent *)event"), /const BOOL ahead = gOnScreenAhead && window && \[ArdiaWebView revealGapIn:window\] && InTabPage\(keyboard\);/, "keys aimed at a page; the sidebar and the toolbar keep theirs");
+  assert.match(body(ledger, "struct PressLedger"), /if \(!\(held & bit\) \|\| window\[slot\] != inWindow\) return false;/, "a release or drag is swallowed only when its press was, so a press on a row always gets its release");
   for (const gone of ["pointerEvents", "makeFirstResponder", "method_setImplementation", "objc/runtime"]) assert.equal(input.includes(gone), false, gone);
   for (const gone of ["takeInputIfShown", "takeHitTesting", "giveFocusBack", "takeFocusFrom:", "inputTaken", "storedAtReveal", "nativeRevealFocus"])
     for (const file of [reveals, input, focus, painting]) assert.equal(file.includes(gone), false, gone);
@@ -278,7 +278,7 @@ test("one question, is a page on screen ahead of JS in this window, answers for 
   assert.match(refuses, /\[holder accessibilityParent\]/, "an accessibility element answers for the page that holds it");
   for (const asked of ["swallowsAheadOfSwitch:(NSEvent *)event", "swallowsKeyAheadOfSwitch:(NSEvent *)event", "focusPagesAskedAheadOfSwitch", "acceptDropsIfShown"])
     assert.ok(body(input, asked).includes("[ArdiaWebView revealGapIn:"), asked);
-  assert.equal((guards.match(/Refused\(/g) ?? []).length >= 9, true, "actions, Services, the Touch Bar, drops and accessibility all ask it");
+  assert.equal((guards.match(/Refused\(/g) ?? []).length >= 10, true, "actions, Services, the Touch Bar, drops and accessibility all ask it");
 });
 
 test("a page taken back leaves the screen in the frame its input and address come back", () => {
@@ -288,7 +288,7 @@ test("a page taken back leaves the screen in the frame its input and address com
   assert.ok(paint.indexOf("[self leaveScreen]") < paint.indexOf("_leave.active = NO;") && paint.indexOf("_leave.active = NO;") < paint.indexOf("[self applyPainting]"), "no 100 ms linger above the selected page");
   const settle = body(input, "- (void)settleOnScreenAhead");
   assert.match(settle, /if \(!_reveal\.onScreen \|\| \(_reveal\.active && _reveal\.native\) \|\| self\.leavingScreenAhead\) return;\n  \[self leaveScreenAhead\];/);
-  assert.match(body(input, "- (BOOL)leavingScreenAhead"), /return !_visible && self\.window && \(_leave\.active \|\| _frameHold\.holding\);/, "a page still held up for the next one keeps the window closed to input");
+  assert.match(body(input, "- (BOOL)leavingScreenAhead"), /return !_visible && self\.window && _frameHold\.holding;/, "a page still held up for the next one keeps the window closed to input; one already at alpha 0 does not");
   const applied = body(painting, "- (void)applyPainting");
   assert.ok(applied.indexOf("sub.hidden = !shown") < applied.indexOf("[self settleOnScreenAhead]"), "decided by the paint that hides it");
   const once = body(input, "- (void)leaveScreenAheadOnceGone");
@@ -299,24 +299,47 @@ test("a page taken back leaves the screen in the frame its input and address com
   for (const also of [body(tabFile, "- (void)detach"), body(webView, "- (void)dealloc"), body(webView, "- (void)viewWillMoveToWindow:(NSWindow *)newWindow")]) assert.ok(also.includes("[self leaveScreenAhead]"));
 });
 
-test("a swallowed press belongs to its window and its reveal", () => {
+test("a swallowed press stays swallowed to its release, in its window, until that button is pressed again", () => {
   const swallow = body(input, "+ (BOOL)swallowsAheadOfSwitch:(NSEvent *)event");
-  assert.match(swallow, /ArdiaRevealGap \*gap = GapOf\(window\);/);
-  assert.ok(swallow.indexOf("gap->swallowedButtons &= ~button;\n  if (!InTabPage(HitInWindow(event))) return NO;") > 0, "a press of that button that goes through forgets the swallowed one");
-  assert.match(body(input, "- (void)leaveScreenAhead {"), /gap->swallowedButtons = 0;/);
-  assert.equal(input.includes("gSwallowedButtons"), false);
+  assert.match(swallow, /if \(!gOnScreenAhead && \(!button \|\| gPresses\.Idle\(\)\)\) return NO;/, "one test while no page is ahead and no press is held");
+  assert.match(swallow, /return gPresses\.Swallows\(\(unsigned\)event\.buttonNumber, press, event\.windowNumber, overCoveredPage\);/);
+  const presses = body(ledger, "struct PressLedger");
+  assert.ok(presses.indexOf("held &= ~bit;\n      if (!overCoveredPage) return false;") > 0, "a press of that button that goes through forgets the swallowed one");
+  assert.match(presses, /if \(!\(held & bit\) \|\| window\[slot\] != inWindow\) return false;\n    if \(press == Press::kUp\) held &= ~bit;\n    return true;/);
+  assert.equal(body(input, "- (void)leaveScreenAhead {").includes("gPresses"), false, "the end of the gap does not hand the rest of the gesture to the page");
 });
 
-test("a key swallowed ahead of JS stays swallowed until it is released; one the page already had gets its release", () => {
+test("a key swallowed ahead of JS, or seen repeating there, stays swallowed until it is released", () => {
   const keys = body(input, "+ (BOOL)swallowsKeyAheadOfSwitch:(NSEvent *)event");
-  assert.match(keys, /if \(!\[swallowed containsIndex:code\]\) return ahead && !wentDown;\n    \[swallowed removeIndex:code\];\n    return YES;/, "a release goes through when its press did");
-  assert.match(keys, /if \(!ahead\) \{\n    \[delivered addIndex:code\];\n    return NO;/);
-  assert.match(keys, /if \(repeat\) return ahead \|\| \[swallowed containsIndex:code\];/);
-  assert.ok(keys.indexOf("[swallowed addIndex:code];") < keys.indexOf("gAppWideKeys(event)"), "Quit and Settings are consumed like any other key, then performed");
+  assert.match(keys, /const BOOL down = modifier \? ModifierIsDown\(code, event\.modifierFlags\) : event\.type == NSEventTypeKeyDown;/, "a modifier by its own key, not its pair's");
+  assert.match(keys, /NSWindow \*window = gOnScreenAhead \|\| gKeys\.HeldOver\(code\) \? event\.window : nil;/, "no window lookup while no page is ahead");
+  assert.match(keys, /if \(ahead && repeat\) gKeyHolder = keyboard;/);
+  assert.match(keys, /gKeys\.Swallows\(code, down, repeat, ahead, keyboard && keyboard == gKeyHolder\);/);
+  assert.ok(keys.indexOf("gKeys.Swallows(") < keys.indexOf("gAppWideKeys(event)"), "Quit and Settings are consumed like any other key, then performed");
+  const book = body(ledger, "struct KeyLedger");
+  assert.match(book, /return wentDown \? held && !holderHasKeyboard : held \|\| ahead;/, "a release reaches the page that had the press, and nobody else");
+  assert.match(book, /swallowed\[key\] = held \|\| ahead;/, "a repeat seen ahead of JS is never the next page's first key");
+  assert.match(body(ledger, "constexpr bool ModifierIsDown(unsigned keyCode, uint64_t flags)"), /return either == \(own \|\| paired\) \? own : either;/);
   assert.match(mainMenu, /ArdiaWebView\.setAppWideKeys \{ MainMenu\.performAppWideKey\(\$0\) \}/);
   const appWide = body(mainMenu, "private static func appWideItem(for event: NSEvent, in menu: NSMenu?) -> NSMenuItem?");
   assert.match(appWide, /item\.action == #selector\(MenuTarget\.quit\(_:\)\) \|\| \(item as\? CommandItem\)\?\.command == CommandTable\.Command\.openSettings\.rawValue/, "only these two");
+  assert.match(appWide, /guard appWide, KeyEquivalentMatch\.matches\(item, event\) else \{ continue \}/, "matched as the menu bar matches");
   assert.equal(mainMenu.includes("performKeyEquivalent"), false);
+});
+
+test("keys Chromium sends straight to the key window pass the same gate, once", () => {
+  assert.match(body(ledger, "constexpr bool SkipsEventMonitors(bool keyDown, bool keyUp, unsigned keyCode, uint64_t flags)"), /if \(keyUp\) return \(flags & kCommandFlag\) != 0;\n  return keyDown && \(keyCode == kEisuKeyCode \|\| keyCode == kKanaKeyCode\);/);
+  const install = body(monitors, "+ (void)installSwitchPrewarm");
+  assert.ok(install.indexOf("if ([ArdiaWebView skipsEventMonitors:event]) return event;") < install.indexOf("if ([ArdiaWebView swallowsAheadOfSwitch:event]) return nil;"), "the monitor leaves them to the dispatch guard");
+  assert.match(guards, /const SEL dispatch = @selector\(sendEvent:\);/);
+  assert.match(guards, /if \(\[ArdiaWebView skipsEventMonitors:event\] && \[ArdiaWebView swallowsAheadOfSwitch:event\]\) return;\n        \(\(void \(\*\)\(id, SEL, id\)\)original\)\(application, dispatch, event\);/);
+});
+
+test("a custom accessibility action taken before the gap asks again when it runs", () => {
+  const wrap = body(guards, "NSArray<NSAccessibilityCustomAction *> *GuardedCustomActions(id element, NSArray<NSAccessibilityCustomAction *> *actions)");
+  assert.match(wrap, /return holder && !Refused\(holder\) && perform\(\);/);
+  assert.match(guards, /const SEL customActions = @selector\(accessibilityCustomActions\);/);
+  assert.match(guards, /return GuardedCustomActions\(element, \(\(NSArray \* \(\*\)\(id, SEL\)\)original\)\(element, customActions\)\);/);
 });
 
 test("a focus asked ahead of JS is replayed for its own tab, under its own condition", () => {

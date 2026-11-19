@@ -157,7 +157,7 @@ export const initialDeckScroll = (count: number) => {
   return Math.max(0, count - 2);
 };
 
-export const openingDeckScroll = (index: number, count: number) => (index < count - 1 ? index : Math.max(0, Math.min(index - 1, count - 1)));
+export const openingDeckScroll = (index: number, count: number, centred = false) => (centred || index < count - 1 ? index : Math.max(0, Math.min(index - 1, count - 1)));
 
 export const scrollAfterRemoving = (removed: number, scroll: number, remaining: number) => {
   "worklet";

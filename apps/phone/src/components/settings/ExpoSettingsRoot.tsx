@@ -18,6 +18,7 @@ import { setUsageSharing, useUsageSharing } from "../../state/telemetry/telemetr
 import { contentMargins, modifierList, PROFILE_COLORS, settingsChrome, settingsLayout, SettingsIconTile, SettingsShortcuts, settingsSwitchStyle, settingsTint, settingsUIAvailable, useWarningInk, type ProfileColor } from "../ui";
 import { ExpoRowLabel } from "./ExpoRowLabel";
 import { syncOffered } from "../../state/sync/offer";
+import { browseForMeOffered, refreshChatGPTConnected, useChatGPTConnected } from "../../state/browseForMe/store";
 
 const INTERVALS = (Object.keys(AUTO_ARCHIVE_INTERVALS) as AutoArchiveInterval[]).map((id) => ({ id, title: autoArchiveTitle(id) }));
 const APP_LINKS = [
@@ -48,6 +49,10 @@ export function ExpoSettingsRoot() {
   const synced = useSyncView().search;
   const engineName = syncEnabled && synced ? syncedEngineName(synced, engines) : (engines.find((engine) => engine.id === engineId)?.name ?? "");
   const appearance = useAppearanceSummary(colorName);
+  const chatGPT = useChatGPTConnected();
+  useEffect(() => {
+    void refreshChatGPTConnected();
+  }, []);
   return (
     <Toolbar>
       <Form modifiers={modifierList(navigationTitle("Settings"), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), contentMargins({ edges: "top", length: settingsLayout.expoListTop }))}>
@@ -123,6 +128,15 @@ export function ExpoSettingsRoot() {
             <ExpoRowLabel title="Export Open Tabs" systemImage="square.and.arrow.up.fill" tint="export" />
           </Button>
         </Section>
+        {browseForMeOffered() ? (
+          <Section title="Experimental">
+            <NavigationLink value={link({ page: "browseForMe" })}>
+              <LabeledContent label={<ExpoRowLabel title="Browse for Me" systemImage="sparkle.magnifyingglass" tint="nightShade" />}>
+                <Text>{chatGPT ? "ChatGPT" : "On iPhone"}</Text>
+              </LabeledContent>
+            </NavigationLink>
+          </Section>
+        ) : null}
         <Section footer={<Text>{PHONE_SHARING_COPY.summary}</Text>}>
           <Toggle isOn={sharing} onIsOnChange={(on) => setUsageSharing(on, "settings")} modifiers={modifierList(settingsSwitchStyle())}>
             <ExpoRowLabel title={PHONE_SHARING_COPY.toggle} systemImage="checkmark.shield" tint="neutral" />

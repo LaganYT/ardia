@@ -25,6 +25,14 @@ export function offerArchiveCard(openTabs: number) {
   later(() => useArchiveCard.setState({ showing: true }), ARCHIVE_CARD_DELAY_MS);
 }
 
+export function offerArchiveCardNow(openTabs: number) {
+  if (!offersArchiveCard(currentPreferences().archiveCardShown, openTabs)) return;
+  if (MARKS_ON_OFFER) setPreference("archiveCardShown", true);
+  if (timer) clearTimeout(timer);
+  timer = null;
+  useArchiveCard.setState({ showing: true });
+}
+
 export function showArchiveCardNow() {
   if (MARKS_ON_OFFER) setPreference("archiveCardShown", true);
   later(() => useArchiveCard.setState({ showing: true }), ARCHIVE_CARD_DELAY_MS);

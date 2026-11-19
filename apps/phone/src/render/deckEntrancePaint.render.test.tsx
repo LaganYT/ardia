@@ -1,10 +1,11 @@
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { getAnimatedStyle } from "react-native-reanimated";
 import { act, type ReactTestInstance } from "react-test-renderer";
 import { Surfaces } from "../App";
 import { notePicturePainted, noteSnapshotShown } from "../lib/shownSnapshots";
 import { pages } from "../platform/pages";
 import * as system from "../platform/system";
+import { armDeckPull } from "../state/browse/deckPull";
 import * as browse from "../state/browse/store";
 import * as telemetry from "../state/telemetry/telemetry";
 import { currentTabs, useTabs } from "../state/tabs/store";
@@ -38,7 +39,10 @@ const cards = (root: Root) => root.root.findAll((node) => node.props.testID === 
 const opacity = (node: ReactTestInstance) => (getAnimatedStyle(node).opacity as number | undefined) ?? 1;
 const picture = (root: Root) => cards(root).findAll((node) => node.props.source?.uri === PICTURE && typeof node.props.onLoad === "function" && typeof node.type !== "string")[0]!;
 
+const PAGE_OVER_DECK = Platform.OS === "ios";
+
 async function openDeck(root: Root) {
+  armDeckPull(null);
   await act(async () => {
     const opening = browse.showDeck();
     jest.advanceTimersByTime(450);
@@ -48,7 +52,7 @@ async function openDeck(root: Root) {
   expect(root).toBeDefined();
 }
 
-test("leaving a page for the deck keeps the page on screen, with the deck clear over it, until the leaving card's picture has painted, so no frame is white", async () => {
+test("when the page can't be pulled into the deck, leaving it keeps the page on screen, with the deck clear, until the leaving card's picture has painted, so no frame is white", async () => {
   const root = renderSurface(<Surfaces />);
   await openDeck(root);
   expect(page(root)).toHaveLength(1);
@@ -64,7 +68,7 @@ test("leaving a page for the deck keeps the page on screen, with the deck clear 
   act(() => jest.advanceTimersByTime(40));
   expect(opacity(cards(root))).toBe(1);
   expect(StyleSheet.flatten(picture(root).props.style).aspectRatio).toBeCloseTo(600 / 1300);
-  expect(page(root)).toHaveLength(1);
+  expect(page(root)).toHaveLength(PAGE_OVER_DECK ? 0 : 1);
   for (let frame = 0; frame < 150 && browse.useBrowse.getState().leaving !== null; frame++) act(() => jest.advanceTimersByTime(16));
   expect(browse.useBrowse.getState().leaving).toBeNull();
   expect(page(root)).toHaveLength(0);

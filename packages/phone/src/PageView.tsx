@@ -20,6 +20,7 @@ type NativeProps = ViewProps & {
   obscuredColors?: [NativeColor | null, NativeColor | null];
   topClearance?: number;
   obscuresSafeTop?: boolean;
+  pinsSafeArea?: boolean;
   surfaceColor?: NativeColor;
   coverNativeId?: string;
   onPageEvent?: (event: NativeSyntheticEvent<PageEventPayload>) => void;

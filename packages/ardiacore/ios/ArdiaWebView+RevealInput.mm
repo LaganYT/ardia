@@ -1,19 +1,11 @@
 #import "ArdiaWebViewInternal.h"
 #import "ArdiaFieldTiming.h"
+#import "ArdiaRevealLedger.h"
 
 #import <QuartzCore/QuartzCore.h>
 
 using namespace ardia_web_view;
-
-@interface ArdiaRevealGap : NSObject {
- @public
-  NSUInteger swallowedButtons;
-  NSMapTable<NSView *, NSNumber *> *identityHidden;
-}
-@end
-
-@implementation ArdiaRevealGap
-@end
+using namespace ardia_reveal_ledger;
 
 namespace {
 
@@ -27,46 +19,13 @@ constexpr NSEventMask kPointer = NSEventMaskMouseMoved | NSEventMaskScrollWheel 
 
 NSUInteger gOnScreenAhead = 0;
 BOOL (^gAppWideKeys)(NSEvent *);
+KeyLedger gKeys;
+__weak NSResponder *gKeyHolder;
+PressLedger gPresses;
 
-NSMutableIndexSet *SwallowedKeys() {
-  static NSMutableIndexSet *keys = [NSMutableIndexSet indexSet];
-  return keys;
-}
-
-NSMutableIndexSet *DeliveredKeys() {
-  static NSMutableIndexSet *keys = [NSMutableIndexSet indexSet];
-  return keys;
-}
-
-ArdiaRevealGap *GapOf(NSWindow *window) {
-  static NSMapTable<NSWindow *, ArdiaRevealGap *> *gaps = [NSMapTable weakToStrongObjectsMapTable];
-  if (!window) return nil;
-  ArdiaRevealGap *gap = [gaps objectForKey:window];
-  if (!gap) [gaps setObject:(gap = [ArdiaRevealGap new]) forKey:window];
-  return gap;
-}
-
-NSEventModifierFlags ModifierOf(NSUInteger keyCode) {
-  switch (keyCode) {
-    case 54:
-    case 55:
-      return NSEventModifierFlagCommand;
-    case 56:
-    case 60:
-      return NSEventModifierFlagShift;
-    case 58:
-    case 61:
-      return NSEventModifierFlagOption;
-    case 59:
-    case 62:
-      return NSEventModifierFlagControl;
-    case 57:
-      return NSEventModifierFlagCapsLock;
-    case 63:
-      return NSEventModifierFlagFunction;
-    default:
-      return 0;
-  }
+NSMapTable<NSWindow *, NSMapTable<NSView *, NSNumber *> *> *IdentityHidden() {
+  static NSMapTable *hidden = [NSMapTable weakToStrongObjectsMapTable];
+  return hidden;
 }
 
 void CollectPageIdentity(NSView *root, NSHashTable<NSView *> *found) {
@@ -129,50 +88,35 @@ static BOOL InTabPage(id responder) {
   gAppWideKeys = [perform copy];
 }
 
++ (BOOL)skipsEventMonitors:(NSEvent *)event {
+  const NSEventType type = event.type;
+  return (type == NSEventTypeKeyDown || type == NSEventTypeKeyUp) && SkipsEventMonitors(type == NSEventTypeKeyDown, type == NSEventTypeKeyUp, event.keyCode, event.modifierFlags);
+}
+
 + (BOOL)swallowsKeyAheadOfSwitch:(NSEvent *)event {
-  NSMutableIndexSet *swallowed = SwallowedKeys(), *delivered = DeliveredKeys();
-  const NSUInteger code = event.keyCode;
+  const unsigned code = event.keyCode;
   const BOOL modifier = event.type == NSEventTypeFlagsChanged;
-  const BOOL down = modifier ? (event.modifierFlags & ModifierOf(code)) != 0 : event.type == NSEventTypeKeyDown;
+  const BOOL down = modifier ? ModifierIsDown(code, event.modifierFlags) : event.type == NSEventTypeKeyDown;
   const BOOL repeat = !modifier && down && event.isARepeat;
-  NSWindow *window = event.window;
-  const BOOL ahead = [ArdiaWebView revealGapIn:window] && InTabPage(window.firstResponder);
-  if (!down) {
-    const BOOL wentDown = [delivered containsIndex:code];
-    [delivered removeIndex:code];
-    if (![swallowed containsIndex:code]) return ahead && !wentDown;
-    [swallowed removeIndex:code];
-    return YES;
-  }
-  if (repeat) return ahead || [swallowed containsIndex:code];
-  [swallowed removeIndex:code];
-  if (!ahead) {
-    [delivered addIndex:code];
-    return NO;
-  }
-  [delivered removeIndex:code];
-  [swallowed addIndex:code];
-  if (!modifier && gAppWideKeys) gAppWideKeys(event);
-  return YES;
+  NSWindow *window = gOnScreenAhead || gKeys.HeldOver(code) ? event.window : nil;
+  NSResponder *keyboard = window.firstResponder;
+  const BOOL ahead = gOnScreenAhead && window && [ArdiaWebView revealGapIn:window] && InTabPage(keyboard);
+  if (ahead && repeat) gKeyHolder = keyboard;
+  const BOOL swallows = gKeys.Swallows(code, down, repeat, ahead, keyboard && keyboard == gKeyHolder);
+  if (ahead && down && !repeat && !modifier && gAppWideKeys) gAppWideKeys(event);
+  return swallows;
 }
 
 + (BOOL)swallowsAheadOfSwitch:(NSEvent *)event {
   const NSEventMask type = NSEventMaskFromType(event.type);
   if (type & kKeys) return [ArdiaWebView swallowsKeyAheadOfSwitch:event];
-  if (!gOnScreenAhead) return NO;
-  NSWindow *window = event.window;
-  if (![ArdiaWebView revealGapIn:window]) return NO;
-  ArdiaRevealGap *gap = GapOf(window);
-  const NSUInteger button = type & (kButtonDowns | kButtonUps | kButtonDrags) ? 1u << event.buttonNumber : 0;
-  if (type & (kButtonUps | kButtonDrags)) {
-    if (!(gap->swallowedButtons & button)) return NO;
-    if (type & kButtonUps) gap->swallowedButtons &= ~button;
-    return YES;
-  }
-  gap->swallowedButtons &= ~button;
-  if (!InTabPage(HitInWindow(event))) return NO;
-  gap->swallowedButtons |= button;
-  return YES;
+  const BOOL button = (type & (kButtonDowns | kButtonUps | kButtonDrags)) != 0;
+  if (!gOnScreenAhead && (!button || gPresses.Idle())) return NO;
+  const BOOL lands = !(type & (kButtonUps | kButtonDrags));
+  const BOOL overCoveredPage = lands && gOnScreenAhead && [ArdiaWebView revealGapIn:event.window] && InTabPage(HitInWindow(event));
+  if (!button) return overCoveredPage;
+  const Press press = type & kButtonDowns ? Press::kDown : type & kButtonUps ? Press::kUp : Press::kDrag;
+  return gPresses.Swallows((unsigned)event.buttonNumber, press, event.windowNumber, overCoveredPage);
 }
 
 - (void)noteOnScreenAhead:(BOOL)overAnother {
@@ -217,7 +161,7 @@ static BOOL InTabPage(id responder) {
 }
 
 - (BOOL)leavingScreenAhead {
-  return !_visible && self.window && (_leave.active || _frameHold.holding);
+  return !_visible && self.window && _frameHold.holding;
 }
 
 - (void)settleOnScreenAhead {
@@ -243,10 +187,8 @@ static BOOL InTabPage(id responder) {
   NSWindow *window = _reveal.onScreenIn;
   _reveal.onScreenIn = nil;
   if (!window || [ArdiaWebView revealGapIn:window]) return;
-  ArdiaRevealGap *gap = GapOf(window);
-  gap->swallowedButtons = 0;
-  NSMapTable<NSView *, NSNumber *> *hidden = gap->identityHidden;
-  gap->identityHidden = nil;
+  NSMapTable<NSView *, NSNumber *> *hidden = [IdentityHidden() objectForKey:window];
+  [IdentityHidden() removeObjectForKey:window];
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
   for (NSView *view in hidden.keyEnumerator.allObjects) view.alphaValue = [hidden objectForKey:view].doubleValue;
@@ -273,8 +215,7 @@ static BOOL InTabPage(id responder) {
   NSWindow *window = self.window;
   NSView *content = window.contentView;
   if (!content) return;
-  ArdiaRevealGap *gap = GapOf(window);
-  NSMapTable<NSView *, NSNumber *> *hidden = gap->identityHidden ?: [NSMapTable weakToStrongObjectsMapTable];
+  NSMapTable<NSView *, NSNumber *> *hidden = [IdentityHidden() objectForKey:window] ?: [NSMapTable weakToStrongObjectsMapTable];
   NSHashTable<NSView *> *found = [NSHashTable weakObjectsHashTable];
   CollectPageIdentity(content, found);
   [CATransaction begin];
@@ -284,7 +225,7 @@ static BOOL InTabPage(id responder) {
     view.alphaValue = 0;
   }
   [CATransaction commit];
-  gap->identityHidden = hidden;
+  [IdentityHidden() setObject:hidden forKey:window];
 }
 
 - (void)hidePageIdentityAfterMount {

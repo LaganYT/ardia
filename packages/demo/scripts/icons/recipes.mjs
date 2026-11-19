@@ -4,6 +4,8 @@ const at = (s, dx, dy, x) => ({ init: { s, dx, dy, ...(x ? { x } : {}) } });
 const BADGE = 0.07;
 const badge = (src, s, dx, dy, extra = {}) => L(src, { knockout: BADGE, ...at(s, dx, dy), ...extra });
 const one = (...layers) => ({ recipes: [layers] });
+const PHOSPHOR_SCALE = 1.35;
+const phosphorFill = (id) => ({ exclusive: true, native: true, ...one(L(`phosphor-fill:${id}-fill`, { init: { s: PHOSPHOR_SCALE }, lock: ["s", "a", "dx", "dy", "sw"] })) });
 
 export const RECIPES = {
   tag: { orient: true },
@@ -42,6 +44,14 @@ export const RECIPES = {
   "macwindow.on.rectangle": one(O("frame", at(1.2, -0.12, -0.12)), O("macwindow", { knockout: 0.07, ...at(1.2, 0.12, 0.12) })),
   "plus.rectangle.on.rectangle": one(O("frame", at(1.2, -0.12, -0.12)), O("frame", { knockout: 0.07, ...at(1.2, 0.12, 0.12) }), L("lucide:plus", at(0.55, 0.12, 0.12))),
   "square.on.square": one(O("square", at(1.1, -0.13, -0.13)), O("square", { knockout: 0.07, ...at(1.1, 0.13, 0.13) })),
+  "gearshape.fill": phosphorFill("gear"),
+  "person.2.fill": phosphorFill("users"),
+  "square.on.square.fill": phosphorFill("copy"),
+  "circle.lefthalf.filled": phosphorFill("circle-half"),
+  "wand.and.rays": phosphorFill("magic-wand"),
+  "keyboard.fill": phosphorFill("keyboard"),
+  "puzzlepiece.fill": phosphorFill("puzzle-piece"),
+  "slider.horizontal.2.square": phosphorFill("sliders-horizontal"),
   "plus.square.on.square": one(O("square", at(1.1, -0.13, -0.13)), O("square", { knockout: 0.07, ...at(1.1, 0.13, 0.13) }), L("lucide:plus", at(0.5, 0.13, 0.13))),
   "star.square.on.square": one(O("square", at(1.1, -0.13, -0.13)), O("square", { knockout: 0.07, ...at(1.1, 0.13, 0.13) }), L("phosphor-fill:star-fill", at(0.48, 0.13, 0.13))),
   "rectangle.stack": one(O("frame", at(1.2, 0, 0.12)), O("stack.lines", at(1.2, 0, -0.3))),

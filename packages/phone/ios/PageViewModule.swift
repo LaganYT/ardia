@@ -410,6 +410,10 @@ public final class PageViewModule: Module {
         view.obscuresSafeTop = follows == true
       }
 
+      Prop("pinsSafeArea") { (view: PageView, pins: Bool?) in
+        view.pinsSafeArea = pins == true
+      }
+
       Prop("swipeNavigation") { (view: PageView, mode: String?) in
         view.swipeNavigation = mode.flatMap(PageGestures.Swipe.init(rawValue:)) ?? .anywhere
       }

@@ -83,6 +83,11 @@ export const EXPERIMENTS = {
     owner: "window",
     removeBy: "2026-12-31",
   },
+  officialPluginsAi: {
+    about: "Lists the AI plugin as coming soon among the official plugins (state/plugins/official.ts), for Settings and onboarding.",
+    owner: "plugins",
+    removeBy: "2027-03-31",
+  },
   webkitSignIn: {
     about: "Moving a Chromium page to WebKit first copies the cookies that page's own address gets into the profile's WebKit store, at most 1.5 s (state/engines/engineSignIn.ts).",
     owner: "engines",

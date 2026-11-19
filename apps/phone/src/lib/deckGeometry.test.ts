@@ -91,6 +91,9 @@ test("the deck opens where Compose's DeckOrder does, and keeps focus sensible af
   assert.equal(initialDeckScroll(1), 0);
   assert.equal(openingDeckScroll(4, 5), 3);
   assert.equal(openingDeckScroll(2, 5), 2);
+  assert.equal(openingDeckScroll(4, 5, true), 4);
+  assert.equal(openingDeckScroll(2, 5, true), 2);
+  assert.equal(openingDeckScroll(0, 1, true), 0);
   assert.equal(scrollAfterRemoving(0, 2, 3), 1);
   assert.equal(scrollAfterRemoving(3, 3, 3), 2);
   assert.equal(focusedIndex(-0.4, 3), 0);

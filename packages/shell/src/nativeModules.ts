@@ -13,6 +13,7 @@ import type { CalendarNative, KeychainNative } from "./live";
 import type { MenusNative } from "./menus";
 import type { LocationNative } from "./location";
 import type { NotificationsNative } from "./notifications";
+import type { PluginsNative } from "./plugins";
 import type { ReportNative } from "./report";
 import type { ScriptingNative } from "./scripting";
 import type { SystemSignalsNative } from "./systemSignals";
@@ -50,6 +51,7 @@ export type ShellNativeModules = {
   ArdiaUserScripts: UserScriptsNative;
   ArdiaConfig: ConfigNative;
   ArdiaAutomation: AutomationNative;
+  ArdiaPlugins: PluginsNative;
   ArdiaSystemSignals: SystemSignalsNative;
   ArdiaReport: ReportNative;
   ArdiaTelemetryLocal: TelemetryLocalNative;

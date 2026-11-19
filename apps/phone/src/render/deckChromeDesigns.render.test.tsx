@@ -4,7 +4,7 @@ import { act } from "react-test-renderer";
 import { DeckBar } from "../components/tabs/DeckBar";
 import { IncognitoChip } from "../components/tabs/DeckChrome";
 import { TabDeck } from "../components/tabs/TabDeck";
-import { ConfirmDialog, DesignProvider, Symbol } from "../components/ui";
+import { ConfirmDialog, DesignProvider, SystemGlyph } from "../components/ui";
 import { deckGeometry } from "../lib/deckGeometry";
 import { designFor, type Design } from "../lib/design";
 import { haptics } from "../state/app/haptics";
@@ -239,12 +239,12 @@ test("the bottom bar is the Incognito switch, the Search Tabs capsule and a 48-p
 
 const incognitoSwitch = (root: Root) => root.root.findAll((node) => node.props.accessibilityLabel === "Incognito" && node.props.accessibilityRole === "switch" && typeof node.props.onPress === "function")[0];
 
-test("the bar's left button is an Incognito switch: Ardia's eyes glyph on 48-point glass, read as a switch with a hint, and only in the redesign Android's app doesn't run", () => {
+test("the bar's left button is an Incognito switch: the system's eyes symbol on 48-point glass, read as a switch with a hint, and only in the redesign Android's app doesn't run", () => {
   const root = deck();
   const toggle = incognitoSwitch(root)!;
   expect(toggle.props.accessibilityState).toMatchObject({ checked: false });
   expect(toggle.props.accessibilityHint).toBe("Shows your Incognito tabs.");
-  expect(host(root, "deckBarIncognitoGlyph")!.findAll((node) => node.type === Symbol && node.props.name === "eyes")).toHaveLength(1);
+  expect(host(root, "deckBarIncognitoGlyph")!.findAll((node) => node.type === SystemGlyph && node.props.systemName === "eyes")).toHaveLength(1);
   expect(root.root.findAll((node) => node.props.testID === "deckBarIncognito" && node.props.incognito === true)).toHaveLength(0);
   expect(host(root, "deckBarIncognitoOn")).toBeUndefined();
   unmount(root);

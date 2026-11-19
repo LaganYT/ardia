@@ -12,6 +12,7 @@ import { clipboardOffer } from "../../platform/system";
 import { settled } from "../pages/store";
 import { buildSources, recentSearches, sourcesKey } from "./sources";
 import { spaceTabs } from "../tabs/tabsState";
+import { browseForMeOffered } from "../browseForMe/offer";
 
 export type SearchOrigin = "home" | "start" | "page";
 
@@ -70,12 +71,12 @@ export function feedSources() {
 
 function suggestionsFor(text: string, remoteValues: readonly string[]): { rows: TrayRow[]; completion: string } {
   if (!text.trim()) return { rows: rowsFor(text, remoteValues), completion: "" };
-  return suggest(text, remoteValues, context, macTabIndex(selectedProfile(), syncData().view.devices));
+  return suggest(text, remoteValues, context, macTabIndex(selectedProfile(), syncData().view.devices), browseForMeOffered());
 }
 
 function rowsFor(text: string, remoteValues: readonly string[]): TrayRow[] {
   const profile = selectedProfile();
-  if (text.trim()) return suggest(text, remoteValues, context, macTabIndex(profile, syncData().view.devices)).rows;
+  if (text.trim()) return suggest(text, remoteValues, context, macTabIndex(profile, syncData().view.devices), browseForMeOffered()).rows;
   const idle = useTabs.getState().incognito ? [] : idleRows(recentSearches(history().summary()), idleMacTabs(profile, syncData().view.devices));
   return withPasteRow(idle, text, paste);
 }

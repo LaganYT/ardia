@@ -24,7 +24,7 @@ export function trayRowActions(row: TrayRow): RowAction[] {
     return [{ label: incognito ? "Search in New Tab" : "Search in Incognito Tab", icon, run: () => openSwitchingMode(row.url, "search") }];
   }
   if (row.kind === "calc") return [{ label: "Copy", icon: "docOnDoc", run: () => quietly(() => copyText(row.value)) }];
-  if (row.kind === "paste") return [];
+  if (row.kind === "paste" || row.kind === "browseForMe") return [];
   return [
     { label: incognito ? "Open in New Tab" : "Open in Incognito Tab", icon, run: () => openSwitchingMode(row.url, "typed") },
     { label: "Copy Link", icon: "link", run: () => copyLink(row.url) },

@@ -97,18 +97,22 @@ test("where the system glass exists, the glyphs fade in mid-entrance on the chro
   unmount(root);
 });
 
-test("where the system glass exists, the glass hides as soon as a card is tapped open while on iPhone the glyphs fade over the growing card, and the glass stays hidden while the deck is away", () => {
+test("where the system glass exists, the header's glass hides as soon as a card is tapped open and the glass stays hidden while the deck is away; on iPhone the deck's bar stays whole, glass and glyphs, until the page's own bar takes over, while the header's glyphs fade as the card grows", () => {
   withGlass(true);
   const root = enterDeck();
   act(() => jest.advanceTimersByTime(3000));
   expect(glassShown(root)).toEqual(CHROME.map(() => true));
   act(() => sendDeckCommand({ kind: "openFocused" }));
-  expect(glassShown(root)).toEqual(CHROME.map(() => false));
   if (Platform.OS === "ios") {
+    expect(glassShown(root)).toEqual([false, true, true]);
     const chromeFade = root.root.findAll((node) => node.props.testID === "deckChromeFade" && typeof node.type !== "string" && node.props.to !== undefined)[0]!;
-    expect(chromeFade.props.to.opacity).toBe(0);
-    for (const glyph of GLYPHS) expect(chromeFade.findAll((node) => node.props.testID === glyph && typeof node.type === "string")).toHaveLength(1);
-  }
+    expect(chromeFade.props.to.opacity).toBe(1);
+    frames(6);
+    expect(opacity(host(root, "deckHeaderMoreGlyph"))).toBe(0);
+    expect(opacity(host(root, "deckSwitcher"))).toBe(0);
+    expect(opacity(host(root, "deckSearchTabsContent"))).toBe(1);
+    expect(opacity(host(root, "deckBarPlusGlyph"))).toBe(1);
+  } else expect(glassShown(root)).toEqual(CHROME.map(() => false));
   act(() => useBrowse.setState({ surface: "browsing", opening: null }));
   act(() => jest.advanceTimersByTime(3000));
   expect(glassShown(root)).toEqual(CHROME.map(() => false));

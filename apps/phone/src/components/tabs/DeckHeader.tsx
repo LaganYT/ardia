@@ -9,10 +9,9 @@ import { useSelectedProfile, useSyncStatus, useSyncView } from "../../state/sync
 import { useCanReopen, useIncognito } from "../../state/tabs/hooks";
 import { prepareArchive } from "../../state/tabs/store";
 import { countUsage } from "../../state/telemetry/telemetry";
-import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, rolesFor, startLayout, Symbol, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
+import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, SystemGlyph, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
 import { MenuTrigger, spaceSystemImage } from "../ui/MenuTrigger";
-import { emojiOf, SpaceTitle, spaceMenuSymbol } from "../search/StartSpaces";
-import type { SyncedProfile } from "../../state/sync/store";
+import { SpaceTitle, spaceMenuSymbol } from "../search/StartSpaces";
 import { FadingGlyphs, GlassCircleButton, type ChromeFade } from "./ChromeButtons";
 
 type Props = {
@@ -78,13 +77,13 @@ export function DeckHeader({ safeTop, safeSide, privateCount, hasTabs, onCloseIn
           <MenuTrigger items={spaceItems} {...menu} place={{ top: below, left: side, width: tabsLayout.menuWidth }}>
             {({ onPress }) => (
               <Pressable accessibilityRole="button" accessibilityLabel={`Space, ${current.name}`} accessibilityHint="Shows your Mac’s spaces." onPress={onPress}>
-                <DeckSpaceTitle space={current} dark={theme.dark} showsChevron />
+                <SpaceTitle space={current} dark={theme.dark} showsChevron />
               </Pressable>
             )}
           </MenuTrigger>
         ) : current ? (
           <View accessible accessibilityRole="header" accessibilityLabel={current.name}>
-            <DeckSpaceTitle space={current} dark={theme.dark} showsChevron={false} />
+            <SpaceTitle space={current} dark={theme.dark} showsChevron={false} />
           </View>
         ) : (
           <Text accessibilityRole="header" numberOfLines={1} style={[font.body, styles.fallback, { color: theme.headerText }]}>
@@ -113,21 +112,6 @@ export function DeckHeader({ safeTop, safeSide, privateCount, hasTabs, onCloseIn
 
 const noop = () => undefined;
 
-export const spaceHasIcon = (space: SyncedProfile) => spaceMenuSymbol(space) !== null || emojiOf(space.icon) !== null;
-
-function DeckSpaceTitle({ space, dark, showsChevron }: { space: SyncedProfile; dark: boolean; showsChevron: boolean }) {
-  if (spaceHasIcon(space)) return <SpaceTitle space={space} dark={dark} showsChevron={showsChevron} />;
-  const roles = rolesFor(dark);
-  return (
-    <View testID="deckSpaceTitle" style={styles.title}>
-      <Text style={[font.body, styles.titleText, { color: roles.headerText }]} numberOfLines={1}>
-        {space.name}
-      </Text>
-      {showsChevron ? <Symbol name="chevronDown" size={startLayout.chevron} color={roles.secondaryLabel} /> : null}
-    </View>
-  );
-}
-
 function IncognitoPill({ count, onPress }: { count: number; onPress: () => void }) {
   return (
     <Pressable
@@ -139,7 +123,7 @@ function IncognitoPill({ count, onPress }: { count: number; onPress: () => void 
       style={styles.pillHit}
     >
       <View pointerEvents="none" style={[styles.pill, { backgroundColor: tabsInk.incognitoCard, borderRadius: capsule(deckChromeLayout.pillHeight) }]}>
-        <Symbol name="eyes" size={deckChromeLayout.pillGlyph} color={deckChromeInk.pill} />
+        <SystemGlyph systemName="eyes" pointSize={deckChromeLayout.pillEyes} weight="semibold" fitted name="eyes" size={deckChromeLayout.pillGlyph} color={deckChromeInk.pill} />
         <Text style={[font.subheadline, styles.count]}>{count}</Text>
       </View>
     </Pressable>
@@ -167,8 +151,6 @@ const styles = StyleSheet.create({
   switcher: { flexShrink: 1 },
   spacer: { flex: 1 },
   fallback: { fontWeight: "600" },
-  title: { flexDirection: "row", alignItems: "center", gap: startLayout.titleSpacing, minHeight: browseLayout.hitTarget },
-  titleText: { flexShrink: 1, fontWeight: "600" },
   pillHit: { minHeight: browseLayout.hitTarget, justifyContent: "center" },
   pill: { flexDirection: "row", alignItems: "center", gap: deckChromeLayout.pillSpacing, height: deckChromeLayout.pillHeight, paddingHorizontal: deckChromeLayout.pillPadding },
   count: { fontWeight: "600", fontVariant: ["tabular-nums"], color: deckChromeInk.pill },

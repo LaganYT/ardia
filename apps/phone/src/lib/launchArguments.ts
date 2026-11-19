@@ -12,8 +12,11 @@ export type LaunchArguments = {
   browseDelayMs: number;
   browseDeck: boolean;
   browseDeckOpen: number | null;
+  browseDeckPull: number | null;
   browsePlus: boolean;
   browseOverlay: string | null;
+  browseResearch: string | null;
+  voiceHeard: string | null;
   browseSteps: number[];
   browseStepGapMs: number;
   deckScript: string | null;
@@ -86,8 +89,11 @@ export function parseLaunchArguments(values: Record<string, LaunchValue>): Launc
     browseDelayMs: (number(values, "BrowseDelay") ?? LAUNCH_TIMING.delaySeconds) * 1000,
     browseDeck: flag(values, "BrowseDeck"),
     browseDeckOpen: whole(values, "BrowseDeckOpen"),
+    browseDeckPull: whole(values, "BrowseDeckPull"),
     browsePlus: flag(values, "BrowsePlus"),
     browseOverlay: raw(values, "BrowseOverlay"),
+    browseResearch: text(values, "BrowseResearch"),
+    voiceHeard: text(values, "ArdiaVoiceHeard"),
     browseSteps: (text(values, "BrowseSteps") ?? "")
       .split(",")
       .map((step) => step.trim())

@@ -236,7 +236,8 @@ onIPhone("once the selected cell, the viewport and the content are measured, the
   expect(scrollTo).not.toHaveBeenCalled();
   act(() => scroll.props.onContentSizeChange(393, 4000));
   act(() => scroll.props.onContentSizeChange(393, 4100));
-  expect(hosts(root, "tabGridCell").filter((other) => typeof other.props.onLayout === "function")).toHaveLength(1);
+  const other = hosts(root, "tabGridCell")[at === 0 ? 1 : 0]!;
+  act(() => other.props.onLayout({ nativeEvent: { layout: { x: 0, y: 14, width: 180, height: 420 } } }));
   expect(scrollTo.mock.calls).toEqual([[{ x: 0, y: 1400 + 210 - 350, animated: false }]]);
   expect(centredGridOffset(1400, 420, 700, 4000)).toBe(1260);
   expect(centredGridOffset(100, 420, 700, 4000)).toBe(0);

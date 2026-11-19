@@ -195,6 +195,11 @@ export const SYMBOLS = {
     { d: circle(10.5, 10.5, 6.5), stroke: STROKE },
     { d: line(15.3, 15.3, 20, 20), stroke: 2.2 },
   ],
+  sparkleMagnifyingglass: [
+    { d: circle(10.5, 10.5, 6.5), stroke: STROKE },
+    { d: line(15.3, 15.3, 20, 20), stroke: 2.2 },
+    { d: sparkle(10.5, 10.5, 3.6), fill: true },
+  ],
   globe: [
     {
       d:

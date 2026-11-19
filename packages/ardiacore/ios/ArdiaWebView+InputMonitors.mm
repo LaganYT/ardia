@@ -130,6 +130,7 @@ NSWindow *AppWindowAt(NSPoint screen) {
   if (monitor) return;
   [ArdiaWebView installRevealGuards];
   monitor = [NSEvent addLocalMonitorForEventsMatchingMask:kRevealInputMask handler:^NSEvent *(NSEvent *event) {
+    if ([ArdiaWebView skipsEventMonitors:event]) return event;
     if ([ArdiaWebView swallowsAheadOfSwitch:event]) return nil;
     if (event.type != NSEventTypeLeftMouseDown && event.type != NSEventTypeLeftMouseUp) return event;
     [ArdiaWebView revealForPress:event];

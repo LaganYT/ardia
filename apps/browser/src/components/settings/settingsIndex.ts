@@ -1,3 +1,4 @@
+import { ADVANCED_PANE_SYMBOL } from "../../lib/platformChrome";
 import { prepare, type Searchable } from "./searchMatch";
 import type { paneTints } from "./tokens";
 import { SETTINGS_PANES, type SettingsPane } from "../../state/settings/settingsWindows";
@@ -6,6 +7,7 @@ import { advancedRows } from "./rows/advancedRows";
 import { appearanceRows } from "./rows/appearanceRows";
 import { automationRows } from "./rows/automationRows";
 import { generalRows } from "./rows/generalRows";
+import { pluginRows } from "./rows/pluginRows";
 import { profileRows } from "./rows/profileRows";
 import { shortcutRows } from "./rows/shortcutRows";
 import { tabRows } from "./rows/tabRows";
@@ -19,13 +21,14 @@ const PANE_LOOKS: Record<SettingsPane, { title: string; icon: string; tint: Pane
   tabs: { title: "Tabs", icon: "square.on.square.fill", tint: "orange" },
   appearance: { title: "Appearance", icon: "circle.lefthalf.filled", tint: "indigo" },
   automations: { title: "Automations", icon: "wand.and.rays", tint: "purple" },
+  plugins: { title: "Plugins", icon: "puzzlepiece.fill", tint: "teal" },
   shortcuts: { title: "Shortcuts", icon: "keyboard.fill", tint: "pink" },
-  advanced: { title: "Advanced", icon: "slider.horizontal.3", tint: "gray" },
+  advanced: { title: "Advanced", icon: ADVANCED_PANE_SYMBOL, tint: "gray" },
 };
 
 export const PANES: { id: SettingsPane; title: string; icon: string; tint: PaneTint }[] = SETTINGS_PANES.map((id) => ({ id, ...PANE_LOOKS[id] }));
 
-const ROWS = { ...generalRows, ...profileRows, ...tabRows, ...appearanceRows, ...automationRows, ...shortcutRows, ...advancedRows };
+const ROWS = { ...generalRows, ...profileRows, ...tabRows, ...appearanceRows, ...automationRows, ...pluginRows, ...shortcutRows, ...advancedRows };
 const SECTIONS = ROWS as unknown as Record<SettingsPane, SettingSection[]>;
 
 type RowKeysOf<P extends SettingsPane> = (typeof ROWS)[P][number] extends infer S ? (S extends { rows: infer R } ? keyof R & string : never) : never;

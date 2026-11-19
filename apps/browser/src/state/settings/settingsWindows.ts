@@ -8,7 +8,7 @@ export const IMPORT_WINDOW_ID = "import";
 export const isUtilityWindowId = (id: string | null | undefined) =>
   id === SETTINGS_WINDOW_ID || id === IMPORT_WINDOW_ID;
 
-export const SETTINGS_PANES = ["general", "profiles", "tabs", "appearance", "automations", "shortcuts", "advanced"] as const;
+export const SETTINGS_PANES = ["general", "profiles", "tabs", "appearance", "automations", "plugins", "shortcuts", "advanced"] as const;
 
 export type SettingsPane = (typeof SETTINGS_PANES)[number];
 

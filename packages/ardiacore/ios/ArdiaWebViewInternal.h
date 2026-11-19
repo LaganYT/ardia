@@ -295,6 +295,7 @@ typedef NS_ENUM(NSInteger, ArdiaTransfer) {
 + (ArdiaWebView *)onScreenAheadIn:(NSWindow *)window;
 + (BOOL)anyRevealGap;
 + (BOOL)swallowsAheadOfSwitch:(NSEvent *)event;
++ (BOOL)skipsEventMonitors:(NSEvent *)event;
 + (void)revealGapChangedIn:(NSWindow *)window;
 - (void)noteOnScreenAhead:(BOOL)overAnother;
 - (void)settleOnScreenAhead;

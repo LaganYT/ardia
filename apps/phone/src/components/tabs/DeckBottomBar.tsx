@@ -7,7 +7,7 @@ import { menuOpenedHaptic } from "../../state/browse/tabMenus";
 import { useCanReopen, useIncognito } from "../../state/tabs/hooks";
 import { countUsage } from "../../state/telemetry/telemetry";
 import { noteDeckBarTop, watchDeckBar } from "../../state/toasts/store";
-import { capsule, ChromeSurface, deckChromeLayout, deckChromeMotion, font, ink, iPhoneOr, PressScale, rolesFor, startLayout, Symbol, tabsCurve, tabsInk, tabsLayout, useTheme, type MenuItem, SystemGlyph } from "../ui";
+import { capsule, ChromeSurface, deckChromeLayout, deckChromeMotion, font, ink, iPhoneOr, PressScale, rolesFor, startLayout, tabsCurve, tabsInk, tabsLayout, useTheme, type MenuItem, SystemGlyph } from "../ui";
 import { MenuTrigger } from "../ui/MenuTrigger";
 import { useKeyboardHeight } from "../search/useKeyboardHeight";
 import { FadingGlyphs, GlassPlusButton, type ChromeFade } from "./ChromeButtons";
@@ -49,7 +49,7 @@ export function IncognitoSwitch({ incognito, dark, glassShown, glassShownMs, gly
       <ChromeSurface testID="deckBarIncognito" shape="circle" cornerRadius={capsule(deckChromeLayout.barCircle)} incognito={incognito} dark={dark || incognito} shown={glassShown} shownMs={glassShownMs} style={[styles.centered, size]}>
         <FadingGlyphs testID="deckBarIncognitoGlyph" pointerEvents="none" fade={glyphFade} style={[styles.centered, size]}>
           {incognito ? <View testID="deckBarIncognitoOn" style={[styles.switchOn, { backgroundColor: dark ? ink.white : tabsInk.incognitoCard }]} /> : null}
-          <Symbol name="eyes" size={deckChromeLayout.incognitoGlyph} color={incognito ? (dark ? tabsInk.incognitoCard : ink.white) : rolesFor(dark).label} />
+          <SystemGlyph testID="deckBarIncognitoEyes" systemName="eyes" pointSize={deckChromeLayout.incognitoEyes} weight="medium" name="eyes" size={deckChromeLayout.incognitoGlyph} color={incognito ? (dark ? tabsInk.incognitoCard : ink.white) : rolesFor(dark).label} />
         </FadingGlyphs>
       </ChromeSurface>
     </PressScale>

@@ -53,6 +53,12 @@ final class ControlConnection {
     if !writeArmed { flush() }
   }
 
+  func send(_ data: Data) {
+    guard !closed else { return }
+    guard output.addReply(data, ticket: 0) else { return close() }
+    if !writeArmed { flush() }
+  }
+
   func event(_ data: Data) {
     guard !closed else { return }
     enqueue(output.addEvent(data))

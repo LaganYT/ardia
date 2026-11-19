@@ -53,6 +53,7 @@ export {
   OutsidePressArea,
   PopoverBubble,
   PowerUp,
+  PluginPageView,
   ReportVideo,
   Surface,
   SwipeArea,

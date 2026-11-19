@@ -83,7 +83,7 @@ every copy on Stable sees only stable items. A copy on Nightly allows `nightly` 
 
 ## Every platform
 
-One version string names a release everywhere, and the same two channel names, Stable and Nightly, go with it. On the
+Desktop releases share a version across Mac, Linux and Windows. Ardia uses the Stable and Nightly channels. On the
 phones a build that isn't a release says Dev.
 
 - **Mac.** The channels above. Debug builds (local and agent builds) carry their own icon, `AppIcon-Dev.icon` (the sun
@@ -91,18 +91,13 @@ phones a build that isn't a release says Dev.
   app's defaults, so a Debug build ignores the picked app icon variant and keeps its own in the Dock
   (`IconStyle.shown`); Settings still previews the variants. Release builds, which every release is, keep
   `AppIcon.icon`. A Debug build still shows the committed version in About and Settings, nightly or not.
-- **iPhone.** The Mac's version, with `-nightly.<n>` dropped because Apple takes only `<major>.<minor>.<patch>`
-  (`apple_version_of` in `scripts/lib/releases.sh`); the full version rides in the `ArdiaReleaseVersion` Info.plist key.
-  The same build moves from TestFlight to the App Store, so the channel is read at run time: from TestFlight the app
-  calls itself Nightly ("0.2.47 Nightly 2"), from the App Store it's Stable ("0.2.47"). The Release workflow builds it
-  in the same run when dispatched with `iphone=true`: a dry run builds and signs it, a real run sends it to TestFlight
-  and its public testers after the Mac release publishes. If that job fails after the Mac release is out, re-run the
-  failed jobs of the same run, or dispatch iOS Release with `mode=upload` and the version; never re-run the whole
-  release. Builds already in TestFlight under the iPhone app's old 1.0 don't block the shared version, since nothing
-  was released on the App Store; any App Store version drafted under 1.0 has to move to the shared version before it
-  is submitted. Sending a build to App Store review stays a step a person takes (`docs/phone.md` › TestFlight). On the
-  Expo branch the iPhone app is the Expo app, and an upload with public testers is refused until the owner moves it
-  to them, so a real run with `iphone=true` stops at that job.
+- **iPhone.** TestFlight uses version `1.0.1` until the owner asks to change it. App Store Connect supplies the next
+  build number. Upload only when the owner asks for TestFlight. When it is part of a desktop release,
+  `iphone=true` opts in to the same TestFlight version. The dry run signs the iPhone archive and the real run uploads
+  to Internal after the desktop release publishes. The Public Testers submission is a separate `public-link` run.
+  If the iPhone job fails after the desktop release publishes, rerun the failed job or dispatch iOS Release on the
+  same commit. For a direct install on the owner's iPhone, use a local Xcode development build or the `device` IPA
+  over USB or Xcode's paired wireless connection. See [iPhone release and direct installs](phone.md#testflight-the-workflow-its-certificate-and-its-testers).
 - **Android.** The Expo app's release version is its versionName, and its versionCode is major × 100,000,000 + minor ×
   1,000,000 + patch × 1,000 plus the nightly number, or 999 for a stable (0.2.47-nightly.2 is 2047002, 0.2.47 is
   2047999; `apps/phone/scripts/android-version.ts`). A build without one is Dev. It ships as an APK on GitHub Releases

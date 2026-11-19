@@ -12,7 +12,7 @@ on:
         type: boolean
         default: true
       iphone:
-        description: Also build the iPhone app at this version; a real run sends it to TestFlight after the Mac release publishes
+        description: Also build the pinned iPhone TestFlight version. Enable only when the owner asks for TestFlight. A real run uploads to Internal after the Mac release publishes.
         type: boolean
         default: false
 
@@ -60,7 +60,7 @@ jobs:
             echo "### Ardia $VERSION ($channel)"
             echo "- commit \`$GITHUB_SHA\`, engine tree \`${tree:0:12}\`"
             if [ "$DRY_RUN" = true ]; then echo "- dry run: a release candidate, nothing published"; else echo "- publishes"; fi
-            if [ "$IPHONE" = true ]; then echo "- iPhone: $(apple_version_of "$VERSION"), $([ "$DRY_RUN" = true ] && echo "built and signed, not uploaded" || echo "sent to TestFlight after the Mac release")"; fi
+            if [ "$IPHONE" = true ]; then echo "- iPhone: TestFlight's pinned version, $([ "$DRY_RUN" = true ] && echo "built and signed, not uploaded" || echo "sent to TestFlight's Internal group after the Mac release")"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   checks:
@@ -529,6 +529,4 @@ jobs:
     uses: ./.github/workflows/ios-release.yml
     with:
       mode: ${{ inputs.dry_run && 'dry-run' || 'upload' }}
-      version: ${{ inputs.version }}
-      public_testers: true
     secrets: inherit

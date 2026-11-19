@@ -3204,8 +3204,7 @@ and scroll speed on the root list.
 
 #### The Expo app on TestFlight, internal group first
 
-Nothing here is run by an agent on its own: the coordinator picks the moment, and no agent uploads or touches the
-Apple developer account. This is what the build needs and how the switch is proved.
+This section records the switch from SwiftUI to Expo. The current TestFlight and USB commands are below.
 
 **A commit is uploadable only after a CI dry run at that exact commit** (`ios-release.yml`, `mode=dry-run`). A local `release-ios` run proves the build, not the tree CI sees: CI runs `pnpm install` and `pod install`
 fresh, and its dependencies step now fails, showing the diff, when `pod install` rewrites anything under
@@ -3219,10 +3218,11 @@ d5fbaabc1). After a hand edit to the project, run `pod install` and commit what 
   ids and the same entitlement files, now in `apps/phone/ios/Config`: the app group `group.com.ardia.browser.ios`, and the default
   browser off (`ARDIA_DEFAULT_BROWSER = NO`).
 - **Version and build number:**
-  - The Apple version is the Mac's release version, as `apps/phone/scripts/release-ios --help` has it.
+  - The Apple version is TestFlight's pin, `1.0.1` for now ("TestFlight: the workflow, its certificate and its
+    testers" below). Until 2026-11-19 it was the Mac's release version.
   - The build number goes above the highest one App Store Connect holds. On 15 Nov that is 0.2.47 (9), uploaded that
     day, internal "in testing", external "waiting for review" (`gh workflow run ios-release.yml -f mode=status`).
-  - So the Expo build is 0.2.47 (10) or later, or the next release version's first build.
+  - The first Expo candidate at the time was 0.2.47 (10) or later.
   - The project's committed 0.1.0 (1) is set at archive time on all four targets, as main's `scripts/release-ios.sh` does. It
     is never committed.
 - **The release path** (9ac589838, 6dfe58539):
@@ -3243,9 +3243,8 @@ d5fbaabc1). After a hand edit to the project, run `pod install` and commit what 
     registers that iPhone on the team (`xcrun devicectl list devices` shows the UDID; `asc.mjs register-device` leaves
     one already there as it is) and uploads a development-signed `ios-device-build` .ipa, built from the ref the run
     starts on by `release-ios --development`. It uploads nothing to App Store Connect and takes no build number, so
-    trying a branch on a phone spends no TestFlight build. Install it on the plugged-in iPhone, with Developer Mode
-    on, by `xcrun devicectl device install app --device <udid> Ardia.ipa`. The repository is public, so the job's
-    first step masks the UDID from the event payload, before any step's environment is printed.
+    trying a branch on a phone spends no TestFlight build. Use the device install steps below. The job masks the UDID
+    before any step's environment is printed.
 - **Proved without the Apple account** (2026-11-16): `release-ios 10 --version 0.2.47 --unsigned` on this Mac.
   - Every check passed, at 56.5 MB installed.
   - Every target reads 0.2.47 (10). The stamp gives JS 9ac589838, dirty no, native clean.
@@ -3255,7 +3254,7 @@ d5fbaabc1). After a hand edit to the project, run `pod install` and commit what 
      path. Or merge the branch into `main`.
   2. **A CI dry run**, which signs the archive with the team's stored certificate and sends nothing to App Store
      Connect: `gh workflow run
-     ios-release.yml --ref t3/unify-expo-architecture -f mode=dry-run -f version=<release version>`.
+     ios-release.yml --ref t3/unify-expo-architecture -f mode=dry-run`.
      - It runs from the branch: `ios-release.yml` exists on `main`, so it can be dispatched, and the run uses the
        branch's copy.
      - It needs the repository secrets main's SwiftUI path used: `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and `NOTARY_ISSUER`
@@ -3265,10 +3264,9 @@ d5fbaabc1). After a hand edit to the project, run `pod install` and commit what 
      - It is the first time this project signs with the team's identity. Automatic signing for the same four bundle
        ids as main's app should reuse their profiles. The run's logs show it.
   3. **The upload, the owner's moment:** `gh workflow run ios-release.yml --ref t3/unify-expo-architecture -f
-     mode=upload -f public_testers=false -f version=<release version>`.
+     mode=upload -f public_testers=false`.
      - The build number is taken above App Store Connect's highest, from 10 on, unless `-f build=` sets it.
-     - The release version must be the train the owner wants. 0.2.47 still has builds in review, so the next Mac
-       release version is cleaner.
+     - The version is TestFlight's pin, `1.0.1`; the run refuses any other.
   4. **On the owner's phone:** install it from TestFlight over the SwiftUI app. Settings' footer should read "Ardia
      <version> Nightly (<build>)".
 - **Who uploads, and how 0.2.47 (9) went up:**
@@ -3460,6 +3458,35 @@ core has its own). Not applicable: the default-browser status (no entitlement in
 #### TestFlight: the workflow, its certificate and its testers
 
 This was `docs/ios.md`'s, for main's SwiftUI app; since the clean-up the workflow builds only the Expo app.
+- **The owner's rule** (2026-11-19). The owner asks for TestFlight before the dry run and upload.
+  - **Version:** every TestFlight build is `1.0.1` (`CFBundleShortVersionString`) until the owner changes it. It is
+    `TESTFLIGHT_VERSION` in `ios-release.yml`: `mode=dry-run` and `mode=upload` take it with `version` left empty, and
+    stop at their first step on any other version, such as an old `0.2.47`.
+  - **Build number:** App Store Connect picks it. Leave `build` empty and the run takes the one after the highest it
+    holds.
+  - **Steps:** a dry run at the commit to upload, `gh workflow run ios-release.yml -f mode=dry-run`, then the upload,
+    `gh workflow run ios-release.yml -f mode=upload`, which reaches the Internal group only. In a desktop release,
+    `iphone=true` on the Release workflow runs the same pair: its dry run signs, its real run uploads to Internal after
+    the Mac release publishes. Public Testers stay a separate `mode=public-link -f build=<number>` run on the owner's
+    word.
+- **"Get a build on my phone"** means installing a development-signed build on the owner's iPhone. Use USB or pair
+  the iPhone in Xcode's Devices and Simulators window for wireless debugging on the local network. Turn on Developer
+  Mode and confirm the iPhone is available in `xcrun devicectl list devices`.
+  - **Local Xcode.** When the Mac has development signing set up, build for the connected iPhone using
+    `apps/phone/ios/Ardia.xcworkspace` and the `Ardia` scheme. Install the resulting development-signed `.app` with
+    `xcrun devicectl device install app --device <udid> <path-to-Ardia.app>`. For a debugging session, select the
+    iPhone as the run destination in Xcode.
+  - **CI-signed IPA.** `gh workflow run ios-release.yml --ref <branch> -f mode=device -f udid=<udid>` registers the
+    iPhone and builds the `ios-device-build` IPA from that ref. Its version defaults to the Mac app's
+    `MARKETING_VERSION`. On the Mac connected to the iPhone, download and unpack the IPA, then install the app.
+
+    ```sh
+    gh run download <run-id> -n ios-device-build -D <scratch-dir>
+    ditto -x -k <scratch-dir>/Ardia.ipa <scratch-dir>/unpacked
+    xcrun devicectl device install app --device <udid> <scratch-dir>/unpacked/Payload/Ardia.app
+    ```
+
+  Confirm installation of `com.ardia.browser.ios` on the iPhone.
 - **The app record.** "Ardia", bundle id `com.ardia.browser.ios`, team `U5L5T3NGVV`; the extensions are `.widgets`,
   `.share` and `.open`, sharing the app group `group.com.ardia.browser.ios`.
 - **The workflow** (`.github/workflows/ios-release.yml`). What each mode touches in App Store Connect:
@@ -3474,9 +3501,8 @@ This was `docs/ios.md`'s, for main's SwiftUI app; since the clean-up the workflo
     (`NOTARY_KEY_P8`, `NOTARY_KEY_ID`, `NOTARY_ISSUER`), which opens the upload record and sends the build, and
     waits for processing.
   - The build number is one more than the highest App Store Connect has recorded, builds and upload records alike,
-    unless `build` is set. With (10) and (11) held by empty records, the next upload is 0.2.47 (12). An upload goes to the
-  Internal group only: `public_testers` is off by default, and an upload with it on is refused until the owner moves
-  the Expo app to public testers. On a Mac, `apps/phone/scripts/release-ios` does the same with the account Xcode is
+    unless `build` is set. With (10) and (11) held by empty records, the next upload then was 0.2.47 (12). An upload goes to the
+  Internal group only. Use `public-link` for Public Testers after the upload processes. On a Mac, `apps/phone/scripts/release-ios` does the same with the account Xcode is
   signed in to, or with `ASC_KEY`, `ASC_KEY_ID` and `ASC_ISSUER`; `node apps/phone/scripts/asc.mjs --help` lists the
   App Store Connect client's commands.
 - **CI's certificate.** The archive signs with one development certificate kept in `IOS_DEVELOPMENT_P12` and

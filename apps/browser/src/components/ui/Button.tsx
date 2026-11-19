@@ -1,7 +1,7 @@
 import { ContextMenuArea } from "@ardia/shell";
 import { Symbol, type SymbolProps } from "./Symbol";
 import { memo, type ReactNode } from "react";
-import { Animated, Image, Pressable, Text, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Image, Pressable, Text, View, type GestureResponderEvent, type ImageSourcePropType, type StyleProp, type ViewStyle } from "react-native";
 import { modifiersOf, type ClickModifiers } from "../../lib/keys";
 import { useToolbarRowContext } from "./toolbarRowContext";
 import { useHover, useTooltip } from "./useHover";
@@ -25,6 +25,7 @@ type IconBase = {
   look?: "field" | "row" | "extension";
   capsule?: boolean;
   image?: string;
+  asset?: ImageSourcePropType;
   badge?: ReactNode;
   children?: ReactNode;
   box?: number;
@@ -117,7 +118,7 @@ function useIconMetrics(props: IconProps) {
 }
 
 function IconButtonView(props: IconProps) {
-  const { icon, disabled, active, glyphBox, weight = "regular", tooltip, palette, color, style, hit, image, badge, children } = props;
+  const { icon, disabled, active, glyphBox, weight = "regular", tooltip, palette, color, style, hit, image, asset, badge, children } = props;
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const tip = useTooltip(tooltip);
@@ -127,14 +128,18 @@ function IconButtonView(props: IconProps) {
   const plateBox = hit?.box ?? metrics.box;
   const glyphFrame = glyphBox ?? plateBox;
   const ink = color ?? (disabled ? (palette ? palette.iconDisabled : theme.iconDisabled) : palette ? palette.icon : theme.icon);
-  const face = children ?? (image ? (
+  const face = children ?? (asset ? (
+    <View pointerEvents="none">
+      <Image source={asset} style={{ width: metrics.glyph, height: metrics.glyph, tintColor: ink }} />
+    </View>
+  ) : image ? (
     <View pointerEvents="none">
       <Image source={{ uri: image }} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE, opacity: disabled ? opacity.disabled : 1 }} />
     </View>
   ) : icon ? (
     <Symbol name={icon} size={metrics.glyph} weight={weight} color={ink} style={{ width: glyphFrame, height: glyphFrame }} />
   ) : null);
-  const hasGlyphPressMotion = !children && (!!icon || !!image);
+  const hasGlyphPressMotion = !children && (!!icon || !!image || !!asset);
   const { scale: pressScale, onPressIn, onPressOut } = usePressScaleMotion(hasGlyphPressMotion);
   const handlePressIn = (event: GestureResponderEvent) => {
     onPressIn?.();

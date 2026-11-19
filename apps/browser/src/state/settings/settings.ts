@@ -112,6 +112,7 @@ export const SETTING_SPECS = {
   closedTopAppTiles: flag(true, SYNCED), topAppFolders: flag(true, SYNCED),
   unreadHiddenSites: shaped<string[]>([], isStringList, STRING_LIST, SYNCED),
   neverTranslateSites: shaped<Record<string, string[]>>({}, (v) => isRecordOf(v, isStringList), recordOf(STRING_LIST)),
+  developerModeSites: shaped<Record<string, boolean>>({}, (v) => isRecordOf(v, (on) => typeof on === "boolean"), recordOf({ type: "boolean" }), SYNCED),
   autoPictureInPicture: flag(true, SYNCED),
   playingNowAcrossProfiles: flag(false, SYNCED),
   blockAutoplayEverywhere: flag(false, SYNCED),

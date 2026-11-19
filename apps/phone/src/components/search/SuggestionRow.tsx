@@ -17,7 +17,7 @@ const ROW_LOOK: Record<Design, { glyph: number; favicon: number; switchGlyph: bo
   },
 };
 
-const LEADING: Record<TrayRow["kind"], SymbolName> = { query: "magnifyingglass", page: "globe", calc: "equalCircleFill", paste: "docOnDoc" };
+const LEADING: Record<TrayRow["kind"], SymbolName> = { query: "magnifyingglass", page: "globe", calc: "equalCircleFill", paste: "docOnDoc", browseForMe: "sparkleMagnifyingglass" };
 
 type Props = {
   row: TrayRow;

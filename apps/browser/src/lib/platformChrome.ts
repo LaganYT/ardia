@@ -12,3 +12,5 @@ export type PopUpChrome = {
 export const WINDOW_CHROME: WindowChrome = { leadingWidth: 78, trailingWidth: 0, titleBarHeight: 0 };
 
 export const POP_UP_CHROME: PopUpChrome = { indicator: "accentUpDown", growsToItsTitle: false };
+
+export const ADVANCED_PANE_SYMBOL = "slider.horizontal.3";

@@ -4,6 +4,7 @@ import { descendantIds } from "../groups/groups";
 import { cleanUpCandidates } from "../pins/tabCleanup";
 import { sharedTabsIn, sharesTabs } from "../tabs/tabShare";
 import { addressBarInSidebar } from "../windows/layout";
+import { splitsOnRow } from "../splits/lanes";
 
 const store = () => useBrowser.getState();
 
@@ -14,6 +15,8 @@ export const movingTabsFrom = (lead: string) => movingTabIds(store(), lead);
 export const descendantGroupIds = (groupId: string) => descendantIds(store().groups, groupId);
 
 export const resolveDropNow = (source: DragSource, spot: DropSpot | null) => resolveDrop(store(), source, spot);
+
+export const splitsOnRowNow = (tabId: string, rowTabId: string) => splitsOnRow(store(), tabId, rowTabId);
 
 export const cleanUpCandidateCount = (windowId: string) => cleanUpCandidates(store(), windowId).length;
 

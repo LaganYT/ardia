@@ -105,6 +105,17 @@ test("the space's name opens no menu of the spaces, with one space or several", 
   unmount(root);
 });
 
+test("a space's name stands alone when it has no icon of its own, with no initial in a circle beside it, and its icon shows when it has one", () => {
+  withSpaces([profile("home", "Home")]);
+  const plain = start();
+  expect(plain.root.findAll((node) => node.props.testID === "startSpaceGlyph")).toHaveLength(0);
+  unmount(plain);
+  withSpaces([profile("garden", "Garden", [], "🌱")]);
+  const marked = start();
+  expect(marked.root.findAll((node) => node.props.testID === "startSpaceGlyph" && typeof node.type === "string")).toHaveLength(1);
+  unmount(marked);
+});
+
 test("a folder tile's tap opens a menu of its tabs, a link tile's long press offers Copy Link and Share, and a tile that isn't a web link has none", () => {
   withSpaces([profile("work", "Work", [tile(0), tile(1, [{ key: "f0", title: "Inside", url: "https://inside.example/", icon: null }]), tile(2, null, "file:///notes.txt")])]);
   const open = jest.spyOn(syncActions, "openRemote").mockImplementation(() => undefined);

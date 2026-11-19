@@ -13,15 +13,14 @@ import { useLiveColors } from "../live/tokens";
 import { TabRow } from "./TabRow";
 import { Fold, useFold, type FoldEntry } from "./Fold";
 import { GROUP_BORDER, GROUP_INNER_RADIUS, GROUP_RADIUS, LIVE_FOLDER_PAD } from "./geometry";
-import { useDragFolded, useDragItem } from "./DragProvider";
+import { useDragItem } from "./DragProvider";
 import { dismissHover } from "../../state/sidebar/hover";
 import { useGroupHover } from "./hoverController";
 import { useHoverFade } from "./hoverMotion";
-import { buttonMotion, usePressScaleMotion } from "../ui/motion";
 import { iconButton } from "../ui/tokens";
 import { openLiveFolderMenu } from "../../state/sidebar/liveMenus";
 import { registerRow } from "../../state/sidebar/sidebarUi";
-import { LiveFolderIcon } from "./LiveFolderIcon";
+import { FolderOrIcon } from "./AnimatedFolder";
 import { groupBoxAtRest, groupSurface, TAB_ROW, useSidebarTokens } from "./tokens";
 import { RefreshSpinner } from "./RefreshSpinner";
 import { SidebarRowLabel, SidebarRowSurface } from "./SidebarRow";
@@ -42,8 +41,7 @@ export const LiveFolderBlock = memo(function LiveFolderBlock({ folderId, windowI
   const folder = useLive((s) => s.folders[folderId]);
   const items = useLive((s) => s.items[folderId] ?? EMPTY);
   const showAll = useLive((s) => s.showAll);
-  const folded = useDragFolded(entryKey("live", folderId));
-  const collapsed = folded || !!folder?.collapsed;
+  const collapsed = !!folder?.collapsed;
   const rows = useMemo(() => (folder ? folderRows(folder, items, showAll) : []), [folder, items, showAll]);
   const itemIds = useMemo(() => new Set(items.map((i) => i.id)), [items]);
   const hiddenList = useLive((s) => s.hidden[folderId] ?? EMPTY);
@@ -125,8 +123,6 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
   const refreshShown = hovered && !updating;
   const refreshOpacity = useHoverFade(refreshShown);
   const [restOpacity] = useState(() => Animated.subtract(1, refreshOpacity));
-  const pressMotion = usePressScaleMotion(true, buttonMotion.rowPressScale);
-  const rowScale = pressMotion.scale ? { transform: [{ scale: pressMotion.scale }] } : undefined;
   if (!folder) return null;
 
   return (
@@ -138,21 +134,18 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
         }}
       >
         <Pressable
-          onPressIn={pressMotion.onPressIn}
-          onPressOut={pressMotion.onPressOut}
           onPress={() => {
             dismissHover();
             updateFolder(folderId, { collapsed: !collapsed });
           }}
         >
           {() => (
-            <Animated.View style={rowScale}>
             <SidebarRowSurface
               fill={ink.clear}
               cornerRadius={GROUP_INNER_RADIUS}
               padLeft={TAB_ROW.contentLeft + PAD}
             >
-              <LiveFolderIcon folder={folder} />
+              <FolderOrIcon icon={folder.icon} open={!collapsed} color={folder.color} />
               <SidebarRowLabel text={folder.name} weight="medium" color={tokens.groupTitle} />
               {status?.error ? (
                 <Pressable onPress={() => openSettings("automations")} tooltip={errorText(status.error.kind, status.error.source)} style={{ marginRight: space.xxs }}>
@@ -175,7 +168,6 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
                 )}
               </View>
             </SidebarRowSurface>
-            </Animated.View>
           )}
         </Pressable>
       </ContextMenuArea>

@@ -80,7 +80,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   func open(id: String, _ options: OpenWindowOptions, focus: Bool) {
     if let existing = window(id) {
       managed[id]?.display = options.display
-      if focus { existing.makeKeyAndOrderFront(nil) }
+      if focus { SummonedWindow.makeKeyAndFront(existing, summoned: managed[id]?.summoned == true) }
       return
     }
     let behind = options.behind
@@ -154,6 +154,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       return reportFrame(window)
     }
     let summoned = small && focus && smallPointer == nil && LittleArdiaHotKey.shared.takePress() && !NSApp.isActive
+    entry.summoned = summoned
     if summoned { ArdiaChromeWindowHost.floatOverActiveSpace(window) }
     if focus, entry.isWaitingToReveal {
       window.orderFront(nil)
@@ -162,7 +163,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       entry.whenRevealed { [weak self, weak entry, weak window] in
         guard let self, let entry, let window, self.managed[id] === entry, entry.window === window, self.typeAhead.keyOnReveal === window else { return }
         self.typeAhead.keyOnReveal = nil
-        window.makeKeyAndOrderFront(nil)
+        SummonedWindow.makeKeyAndFront(window, summoned: entry.summoned)
         self.typeAhead.keyed(window)
       }
     } else if focus {
@@ -175,7 +176,11 @@ final class WindowManager: NSObject, NSWindowDelegate {
       window.orderFront(nil)
     }
     if small, focus, smallPointer != nil { linkActivation.openedFromLink(window) }
-    if summoned { bringForwardOverActiveApp(window) }
+    if summoned {
+      linkActivation.openedFromLink(window)
+      SummonedWindow.bringForward(window)
+      entry.whenRevealed { [weak window] in if let window { SummonedWindow.checkLanding(window) } }
+    }
     observeFrame(window)
     reportFrame(window)
     if small { fitToLanding(entry) }
@@ -330,11 +335,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     let fullScreenRoles: NSWindow.CollectionBehavior = [.fullScreenPrimary, .fullScreenNone]
     window.collectionBehavior = window.collectionBehavior.subtracting(fullScreenRoles).union([.moveToActiveSpace, .fullScreenAuxiliary])
   }
-  private func bringForwardOverActiveApp(_ window: NSWindow) {
-    linkActivation.openedFromLink(window)
-    window.orderFrontRegardless()
-    window.makeKey()
-  }
   private func placeSmall(_ window: NSWindow, id: String, size: CGSize?, pointer: NSPoint?) {
     let mouse = pointer ?? NSEvent.mouseLocation
     let screen = (pointer == nil && NSApp.isActive ? NSApp.keyWindow?.screen : nil)
@@ -435,7 +435,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     if let index = pending.firstIndex(where: { $0.id == id }) {
       return open(id: id, pending.remove(at: index).options, focus: true)
     }
-    window(id)?.makeKeyAndOrderFront(nil)
+    if let entry = managed[id] { SummonedWindow.makeKeyAndFront(entry.window, summoned: entry.summoned) }
   }
 
   func setTitle(id: String, title: String) {

@@ -16,10 +16,14 @@ const DARK = {
   multiSelectedStroke: "rgba(255,255,255,0.14)",
   dragBorder: "rgba(255,255,255,0.33)",
   dragSilhouette: "#0F0F14",
+  dropLine: "rgba(255,255,255,0.93)",
+  dragGhostFill: "rgba(255,255,255,0.15)",
+  dragGhostTileLift: "rgba(255,255,255,0.29)",
+  dragGhostBorder: null as string | null,
+  splitDropFill: "rgba(255,255,255,0.42)",
   badge: "rgba(255,255,255,0.9)",
   newTabLabel: "#FFFFFF8C",
   newTabIcon: "#FFFFFF40",
-  folderDropFill: "rgba(255,255,255,0.08)",
   liveDotRing: "rgba(0,0,0,0.3)",
   engineMarkPlate: "#2C2C2E",
   selectedRowPillFill: "#141617",
@@ -47,10 +51,14 @@ const LIGHT: typeof DARK = {
   multiSelectedStroke: "rgba(0,0,0,0.08)",
   dragBorder: "rgba(0,0,0,0.28)",
   dragSilhouette: "#FFFFFF",
+  dropLine: "rgba(0,0,0,0.8)",
+  dragGhostFill: "rgba(255,255,255,0.5)",
+  dragGhostTileLift: "rgba(255,255,255,0.5)",
+  dragGhostBorder: "rgba(0,0,0,0.08)",
+  splitDropFill: "rgba(0,0,0,0.08)",
   badge: "rgba(0,0,0,0.75)",
   newTabLabel: "#00000080",
   newTabIcon: "#00000042",
-  folderDropFill: "rgba(0,0,0,0.05)",
   liveDotRing: "rgba(0,0,0,0.1)",
   engineMarkPlate: "#FFFFFF",
   selectedRowPillFill: "#FFFFFF",
@@ -84,7 +92,7 @@ export function useSidebarTokens(): SidebarTokens {
 
 
 export const SIDEBAR_SHADOW = {
-  dragGhost: { color: ink.black, opacity: { dark: 0.45, light: 0.18 }, radius: 10, offset: [0, 4] },
+  dragGhost: { color: ink.black, opacity: { dark: 0.3, light: 0.14 }, radius: 16, offset: [0, 6] },
   card: shadow.card,
   searchTabs: shadow.dialog,
   tabSwitcher: { ...shadow.dialog, opacity: { dark: 0.45, light: 0.45 }, radius: 32, offset: [0, 14] },
@@ -130,10 +138,15 @@ export const TILE_GLOW = { opacity: { dark: 0.15, light: 0.12 }, radius: 1.5, of
 
 export const SIDEBAR_MOTION = { liveFold: duration.long, fold: duration.base, listSlide: 140, listFade: 100, hoverCardFade: 100 } as const;
 
-export const HOVER_CARD_IN_SPRING = { response: 0.25, damping: 0.75 } as const;
-export const HOVER_CARD_OUT_SPRING = { response: 0.2, damping: 0.6 } as const;
-
 export const SLEEPING_TITLE_OPACITY = 0.6;
+
+export const DROP_LINE = { stroke: 2, ring: 8, inset: 7, trailing: 2 } as const;
+
+export const SPLIT_DROP = { gap: 14 } as const;
+
+export const GHOST_TILE_MORPH = { response: 0.1, damping: 1 } as const;
+
+export const GHOST_ROW_POINTER = 0.37;
 
 export const TAB_ROW = {
   contentLeft: 9,
@@ -189,10 +202,10 @@ export function groupTint(color: GroupColor | null | undefined): string | null {
 
 export const groupBoxAtRest = (color: GroupColor | null | undefined) => groupTint(color) !== null;
 
-const FOLDER_NEUTRAL = { dark: "#FFFFFF", light: "#6E6E73" } as const;
+const FOLDER_ACCENT = "#443AFF";
 
 export function folderPalette(color: GroupColor | null | undefined, dark: boolean) {
-  const tint = groupTint(color) ?? FOLDER_NEUTRAL[dark ? "dark" : "light"];
+  const tint = groupTint(color) ?? FOLDER_ACCENT;
   return dark
     ? { stroke: mix("#FFFFFF", tint, 0.64), face: mix("#211E29", tint, 0.12), insideTop: mix("#211E29", tint, 0.4), insideBottom: mix("#15121E", tint, 0.24) }
     : { stroke: tint, face: mix("#FFFFFF", tint, 0.06), insideTop: mix("#FFFFFF", tint, 0.34), insideBottom: mix("#FFFFFF", tint, 0.64) };

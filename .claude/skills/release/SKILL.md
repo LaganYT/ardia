@@ -204,8 +204,10 @@ and a session whose window was left on its second profile, and checks, over CDP 
 
 - the engine and chrome://version are the Chromium version `engine/patches/build/env.sh` names, and the after-update release-notes tab opened exactly once;
 - the browser's child processes are the bundle's own helpers (Chrome's process checks pass under Developer ID);
-- `ardia browse read <url>`, `open <url>` and `read` work over the real token connection, with the release's own CLI
-  tarball (`apps/cli/scripts/token-smoke.sh`, in a second hidden instance with no DevTools port);
+- a fresh profile is offered the built-in Command Line plugin and gets no `ardia`; an installed one gets `ardia` from
+  the signed copy, at the pinned version (`scripts/release/cli-bootstrap-smoke.sh`);
+- `ardia browse read <url>`, `open <url>` and `read` work over the real token connection, with the app's built-in
+  `ardia` (`scripts/release/token-smoke.sh`, in a second hidden instance with no DevTools port);
 - pages load, uBlock blocks an ad script, H.264/AAC/WebGL2;
 - no hidden full-size Chrome window (since 0.2.0 the app window is Chrome's own; before, a hidden "ghost"
   sat behind it), and the window restores as the Work profile's Chrome window, alone on screen, its pages
@@ -318,7 +320,7 @@ gh run list -R mantrakp04/ardia -w release.yml -L 1        # its id; then gh run
 ```
 
 `publish.sh` runs in the workflow's last job: it tags nothing itself (the job pushes `v<version>`), merges the appcast
-onto the published feed, creates the release as latest with the DMG, zip, appcast and CLI tarball, checks
+onto the published feed, creates the release as latest with the DMG, zip and appcast (the `ardia` command is released from ardia-browser/plugins, `docs/cli.md`), checks
 `releases/latest/download/appcast.xml` and `https://ardia.dev/appcast.xml` list the version, and updates the tap when it has `HOMEBREW_TAP_TOKEN` (else run `update-tap.sh <version>`). Locally:
 `git tag v<version> && git push origin main v<version>`, then `.claude/skills/release/scripts/publish.sh <version>`.
 It holds the `release-lock` branch while it publishes, so
@@ -403,7 +405,7 @@ writes `/Applications/Ardia.app`): `brew audit --cask --online ardia-browser/tap
 The Release workflow builds it in its `linux` job (`scripts/linux/release.sh <version> --engine exact`, smoke gate
 included, then the `.deb` installed and purged on Debian 13 and Ubuntu 24.04), and `publish.sh` attaches
 `Ardia-<version>-linux-x64.tar.xz`, `.deb` and `.AppImage`, `ardia-bin-<version>.src.tar.gz` (the Arch PKGBUILD),
-`ardia-cli-<version>-linux-x64.tar.gz` and their `.sha256` files to the release, nightly or stable. A `.deb` that
+`ardia-cli-<version>-linux-x64.tar.gz` (the pinned `ardia` command, renamed for this version) and their `.sha256` files to the release, nightly or stable. A `.deb` that
 fails the install test is dropped (`deb dropped` in `provenance.txt`) and the rest still ships. That needs the Linux engine for the release commit's engine
 key (`engine/engine-key.sh`) published in ardia-browser/ardia. Without it the `linux` job fails, the Mac release
 still ships, and `publish` warns that Linux was skipped. After a stable release the `aur` job moves the AUR package

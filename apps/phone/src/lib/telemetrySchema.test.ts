@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appVersionOf, backdropProps, launchProps, launchTrayProps, legacyImportOutcome, osVersionOf, parseDaily, pendingUsage, rollOver } from "./telemetrySchema.ts";
+import { appVersionOf, backdropProps, browseForMeCounts, COUNTED, launchProps, launchTrayProps, legacyImportOutcome, osVersionOf, parseDaily, pendingUsage, rollOver } from "./telemetrySchema.ts";
 
 test("launch timings are measured from the process start, and dropped when it is unknown or out of range", () => {
   assert.deepEqual(launchProps(1000, 1300, 1900), { launch_ms: 900, js_ms: 300 });
@@ -27,7 +27,7 @@ test("versions keep only their numbers", () => {
 test("a damaged day of counts starts over rather than sending something odd", () => {
   assert.equal(parseDaily("{"), null);
   assert.equal(parseDaily(JSON.stringify({ day: "yesterday", tabs_opened: 3 })), null);
-  assert.deepEqual(parseDaily(JSON.stringify({ day: "2026-11-13", tabs_opened: -2, searches: 1.5, pins_to_mac: 2 })), { day: "2026-11-13", tabs_opened: 0, searches: 0, pins_to_mac: 2, tabs_sent: 0, page_processes_gone: 0, links_given_up: 0, pages_reloaded_online: 0, find_opened_system: 0, find_opened_bar: 0, spaces_swiped: 0, tray_hidden_rows_opened: 0, deck_pictures_late: 0, tray_back_swiped: 0, search_tabs_opened: 0, spaces_picked: 0, tabs_moved_to_space: 0, pages_printed: 0, pages_translated: 0, pinned_tabs_refound: 0, site_permissions_revoked: 0, card_opens_waited: 0, native_menus_opened: 0, library_opened: 0, deck_grid_shown: 0, landscape_shown: 0, duo_layout_shown: 0, list_sheets_late: 0, list_pages_added: 0, search_reveals_late: 0, address_field_scrolled: 0, deck_bar_swipes: 0, tabs_swiped_closed: 0, tabs_swiped_reopened: 0, page_menu_tapped_away: 0, new_tab_search_opened: 0, deck_incognito_switches: 0, deck_bar_swipes_returned: 0, deck_pulls_hitched: 0 });
+  assert.deepEqual(parseDaily(JSON.stringify({ day: "2026-11-13", tabs_opened: -2, searches: 1.5, pins_to_mac: 2 })), { day: "2026-11-13", tabs_opened: 0, searches: 0, pins_to_mac: 2, tabs_sent: 0, page_processes_gone: 0, links_given_up: 0, pages_reloaded_online: 0, find_opened_system: 0, find_opened_bar: 0, spaces_swiped: 0, tray_hidden_rows_opened: 0, deck_pictures_late: 0, tray_back_swiped: 0, search_tabs_opened: 0, spaces_picked: 0, tabs_moved_to_space: 0, pages_printed: 0, pages_translated: 0, pinned_tabs_refound: 0, site_permissions_revoked: 0, card_opens_waited: 0, native_menus_opened: 0, library_opened: 0, deck_grid_shown: 0, landscape_shown: 0, duo_layout_shown: 0, list_sheets_late: 0, list_pages_added: 0, search_reveals_late: 0, address_field_scrolled: 0, deck_bar_swipes: 0, tabs_swiped_closed: 0, tabs_swiped_reopened: 0, page_menu_tapped_away: 0, new_tab_search_opened: 0, deck_incognito_switches: 0, deck_bar_swipes_returned: 0, deck_pulls_hitched: 0, browse_for_me_opened: 0, browse_answers_chatgpt: 0, browse_answers_on_device: 0, browse_answers_excerpts: 0, browse_answers_failed: 0, browse_chatgpt_fallbacks: 0 });
   assert.deepEqual(rollOver(null, "2026-11-14").due, null);
 });
 
@@ -49,4 +49,13 @@ test("the launch tray's time runs from the process start to the tray being up, a
   assert.deepEqual(launchTrayProps(1000, 1900), { tray_ms: 900 });
   assert.equal(launchTrayProps(null, 1900), null);
   assert.equal(launchTrayProps(3000, 1900), null);
+});
+
+test("a Browse for Me answer counts once under the writer that wrote it, and a ChatGPT answer that fell back counts its fallback too", () => {
+  assert.deepEqual(browseForMeCounts("chatgpt", false), ["browse_answers_chatgpt"]);
+  assert.deepEqual(browseForMeCounts("on_device", false), ["browse_answers_on_device"]);
+  assert.deepEqual(browseForMeCounts("on_device", true), ["browse_answers_on_device", "browse_chatgpt_fallbacks"]);
+  assert.deepEqual(browseForMeCounts("excerpts", true), ["browse_answers_excerpts", "browse_chatgpt_fallbacks"]);
+  assert.deepEqual(browseForMeCounts("failed", false), ["browse_answers_failed"]);
+  for (const field of ["browse_for_me_opened", "browse_answers_chatgpt", "browse_answers_on_device", "browse_answers_excerpts", "browse_answers_failed", "browse_chatgpt_fallbacks"]) assert.ok((COUNTED as readonly string[]).includes(field), field);
 });

@@ -26,7 +26,7 @@ import { startSync } from "./state/sync/actions";
 import { setSpacesDesign } from "./state/sync/store";
 import { setAppearanceDesign, useDarkScheme } from "./state/settings/appearance";
 import { useSettingsNav } from "./state/settings/hooks";
-import { offerSyncPages } from "./state/settings/nav";
+import { offerBrowseForMePage, offerSyncPages } from "./state/settings/nav";
 import { useOnboarding } from "./state/onboarding/hooks";
 import { bootApp, useBoot } from "./state/app/boot";
 import { startLinks } from "./state/links/links";
@@ -54,11 +54,14 @@ import { countUsage, reportLaunch, startTelemetry } from "./state/telemetry/tele
 import { useIncognito, useSelectedTab } from "./state/tabs/hooks";
 import { setRootSize } from "./state/app/rootSize";
 import { syncOffered } from "./state/sync/offer";
+import { browseForMeOffered } from "./state/browseForMe/offer";
+import { listenForBrowseForMe } from "./state/browseForMe/events";
 
 export default function App() {
   useState(() =>
     bootApp(() => {
       offerSyncPages(syncOffered);
+      offerBrowseForMePage(browseForMeOffered);
       setSpacesDesign(appDesign);
       setAppearanceDesign(appDesign);
       startTelemetry();
@@ -67,6 +70,7 @@ export default function App() {
       startSettingsSources();
       if (syncOffered()) startSync();
       startLinks();
+      listenForBrowseForMe();
       runLaunchScenario();
     }),
   );

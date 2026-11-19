@@ -234,6 +234,7 @@ export const CURATED = {
   plus: "L:plus T:plus P:plus I:plus M:plus",
   "plus.magnifyingglass": "L:zoom-in T:zoom-in P:magnifying-glass-plus I:zoom-in M:magnify-plus-outline",
   "play.rectangle": "L:tv-minimal-play T:player-play P:monitor-play M:play-box-outline I:play",
+  "play.tv": "L:tv T:device-tv P:television M:television-play",
   "plus.rectangle.on.rectangle": "L:copy-plus T:copy-plus P:plus-square M:plus-box-multiple-outline L:square-plus",
   "plus.square.on.square": "L:copy-plus T:copy-plus P:plus-square M:plus-box-multiple-outline L:square-plus",
   power: "L:power T:power P:power I:power-off M:power",

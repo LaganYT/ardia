@@ -29,7 +29,7 @@ const HIDE_FALLBACK_MS = 900;
 const DIM_TRAVEL_RADII = 8;
 const AT_TOP_SLOP = 0.5;
 
-export const sheetMaxHeight = (height: number, safeTop: number) => Math.max(Math.min(height - safeTop - menuLayout.sheetTopGap, height * menuLayout.sheetMaxShare), 0);
+export const sheetMaxHeight = (height: number, safeTop: number) => Math.max(height - safeTop - menuLayout.sheetTopGap, 0);
 
 export const sheetPullTranslation = (translationY: number, scrolls: boolean, atTop: boolean) => {
   "worklet";

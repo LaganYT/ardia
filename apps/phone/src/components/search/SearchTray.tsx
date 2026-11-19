@@ -2,8 +2,6 @@ import { createContext, startTransition, useCallback, useContext, useEffect, use
 import { countRender } from "../../state/app/interactionPerf";
 import { AppState, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SheetScrollContext, SheetScrollView, sheetPullTranslation, type SheetScroll } from "../ui/Sheet";
-import { Host, Image as SystemImage } from "@expo/ui/swift-ui";
-import { font as systemFont } from "@expo/ui/swift-ui/modifiers";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, FadeIn, FadeOut, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import type { GestureType } from "react-native-gesture-handler";
@@ -40,7 +38,7 @@ import { useTrayKeyboard } from "./useTrayKeyboard";
 
 const SHEET_ABOVE_KEYBOARD = 274;
 
-export const NEW_TAB_FIELD = { height: 56, fontSize: 22, incognito: 44, gapAbove: 28 } as const;
+export const NEW_TAB_FIELD = { gapAbove: 28 } as const;
 
 type TrayList = { drag: GestureType; scroll: SheetScroll };
 
@@ -459,6 +457,7 @@ function StagedTray() {
   const newTabPanel = mounted !== null && newTabPanelShown(editsPage, phoneLayout, command !== null);
   const preferred = newTabPanel ? Number.POSITIVE_INFINITY : SHEET_ABOVE_KEYBOARD + browseLayout.searchFieldHeight * (window.fontScale - 1);
   const trayHeight = command ? command.maxHeight : trayMaxHeight(preferred, window.height - insets.top - (newTabPanel ? NEW_TAB_FIELD.gapAbove : 0), resting, space.s + floatingPanelLayout.aboveKeyboard);
+  const underKeyboard = newTabPanel ? resting : 0;
   const newTabPanelNow = useRef(newTabPanel);
   newTabPanelNow.current = newTabPanel;
   const morphs = phoneLayout && !reduceMotion && command === null && pills > 0;
@@ -701,7 +700,7 @@ function StagedTray() {
       >
         {newTabPanel && !reduceTransparency ? <LookFrost source={SURFACES_FROST} variant="thin" cornerRadius={0} fill={theme.trayDim} style={StyleSheet.absoluteFill} /> : null}
       </AnimatedPressable>
-      <SearchStagePanel testID="trayPanel" pointerEvents="box-none" style={command ? [styles.stagePanel, { top: command.top }] : [styles.stagePanel, styles.stagePanelBottom]}>
+      <SearchStagePanel testID="trayPanel" pointerEvents="box-none" style={command ? [styles.stagePanel, { top: command.top }] : [styles.stagePanel, { bottom: -underKeyboard }]}>
         <Animated.View testID="trayDrag" collapsable={false} style={dragStyle}>
           {mounted !== null ? (
             <View
@@ -710,10 +709,10 @@ function StagedTray() {
               importantForAccessibility={closing ? "no-hide-descendants" : "auto"}
               accessibilityElementsHidden={closing}
             >
-              <View testID="traySurface" style={[styles.stageSurface, { height: trayHeight, boxShadow: incognito ? floatingPanelLayout.incognitoShadow : floatingPanelLayout.shadow }]}>
+              <View testID="traySurface" style={[styles.stageSurface, { height: trayHeight + underKeyboard, boxShadow: incognito ? floatingPanelLayout.incognitoShadow : floatingPanelLayout.shadow }]}>
                 <ChromeSurface shape="rounded" cornerRadius={floatingPanelLayout.radius} interactive={false} tinted incognito={incognito} style={StyleSheet.absoluteFill} />
                 <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: floatingPanelLayout.radius, backgroundColor: panelTint }]} />
-                <View style={{ height: trayHeight, borderRadius: floatingPanelLayout.radius, overflow: "hidden" }}>
+                <View style={{ height: trayHeight + underKeyboard, borderRadius: floatingPanelLayout.radius, overflow: "hidden" }}>
                   <NewTabPanelContext.Provider value={newTabPanel}>
                     <TrayListContext.Provider value={newTabPanel ? trayList : null}>
                     <StagedFieldContext.Provider value={field}>
@@ -723,7 +722,7 @@ function StagedTray() {
                         </View>
                       </GestureDetector>
                     </StagedFieldContext.Provider>
-                    <View testID="trayRowsReveal" nativeID={SEARCH_ROWS_REVEAL_ID} collapsable={false} style={styles.rows}>
+                    <View testID="trayRowsReveal" nativeID={SEARCH_ROWS_REVEAL_ID} collapsable={false} style={[styles.rows, { paddingBottom: underKeyboard }]}>
                       <TrayRows dismissDrag={dismissDrag} />
                     </View>
                     </TrayListContext.Provider>
@@ -841,7 +840,7 @@ function FieldInput({ first, closing }: { first: boolean; closing: boolean }) {
       <View testID="trayFieldCapsule" onLayout={staged ? (event) => staged.onFieldHeight(event.nativeEvent.layout.height) : undefined} style={[styles.field, panelField ? [styles.panelField, theme.dark || incognitoField ? styles.panelFieldDark : styles.panelFieldLight] : { backgroundColor: theme.fieldFill, borderColor: theme.fieldStroke }, newTab ? styles.newTabField : null]}>
         <View testID="trayFieldReveal" nativeID={staged ? SEARCH_REVEAL_ID : undefined} collapsable={false} style={[styles.fieldContents, panelField ? styles.panelField : null]}>
         {fieldGone ? (
-          <Text testID="trayFieldLeaving" numberOfLines={1} style={[font.title3, styles.input, styles.leavingText, newTab ? styles.newTabInput : null, { color: lastText.current ? theme.foregroundPrimary : theme.foregroundTertiary }]}>
+          <Text testID="trayFieldLeaving" numberOfLines={1} style={[font.title3, styles.input, styles.leavingText, { color: lastText.current ? theme.foregroundPrimary : theme.foregroundTertiary }]}>
             {lastText.current || "Search…"}
           </Text>
         ) : (
@@ -850,7 +849,7 @@ function FieldInput({ first, closing }: { first: boolean; closing: boolean }) {
             input.current = field;
             trayInput = field;
           }}
-          style={[styles.input, panelField ? styles.panelInput : null, newTab ? styles.newTabInput : null]}
+          style={[styles.input, panelField ? styles.panelInput : null]}
           start={start}
           selectsStart={first && Boolean(initialText)}
           color={theme.foregroundPrimary}
@@ -877,10 +876,9 @@ function FieldInput({ first, closing }: { first: boolean; closing: boolean }) {
         ) : (
           <VoiceButton />
         )}
-        {newTab ? null : <IncognitoToggle />}
+        <IncognitoToggle />
         </View>
       </View>
-      {newTab ? <IncognitoToggle beside /> : null}
     </View>
   );
 }
@@ -898,34 +896,25 @@ function VoiceButton() {
   );
 }
 
-const INCOGNITO_GLYPH = { size: 17, frame: 22 } as const;
+const INCOGNITO_GLYPH = 26;
+const INCOGNITO_PLATE = 34;
 
-function IncognitoToggle({ beside = false }: { beside?: boolean }) {
+function IncognitoToggle() {
   const theme = useTrayTheme();
   const on = useIncognito();
   const panelField = useDesign() === "redesigned";
   return (
     <Pressable
-      testID={beside ? "newTabIncognito" : undefined}
+      testID="trayIncognito"
       accessibilityRole="button"
       accessibilityLabel={on ? "Deactivate Incognito" : "Activate Incognito"}
       onPress={toggleTrayIncognito}
-      style={[styles.incognito, panelField ? styles.panelIncognito : null, beside ? [styles.newTabIncognito, theme.dark || on ? styles.panelFieldDark : styles.panelFieldLight] : null]}
+      style={[styles.incognito, panelField ? styles.panelIncognito : null]}
     >
-      {on ? (
-        <Animated.Text entering={modeToggleIn} exiting={modeToggleOut} style={[font.footnote, styles.medium, styles.toggleLabel, { color: tabsInk.onDarkSoft }]}>
-          Incognito
-        </Animated.Text>
-      ) : null}
-      {Platform.OS === "ios" && settingsUIAvailable() ? (
-        <View testID="trayIncognitoGlyph" style={styles.incognitoGlyph}>
-          <Host matchContents>
-            <SystemImage systemName="eyeglasses" size={INCOGNITO_GLYPH.size} color={on ? tabsInk.onDark : theme.foregroundTertiary} modifiers={[systemFont({ weight: "semibold" })]} />
-          </Host>
-        </View>
-      ) : (
-        <Symbol name="eyeglasses" size={INCOGNITO_GLYPH.frame} color={on ? tabsInk.onDark : theme.foregroundTertiary} />
-      )}
+      <View testID="trayIncognitoGlyph" style={styles.incognitoGlyph}>
+        {on ? <Animated.View testID="trayIncognitoPlate" entering={modeToggleIn} exiting={modeToggleOut} style={styles.incognitoPlate} /> : null}
+        <Symbol name="eyeglassesThin" size={INCOGNITO_GLYPH} color={on ? tabsInk.onDark : theme.foregroundTertiary} />
+      </View>
     </Pressable>
   );
 }
@@ -1176,12 +1165,18 @@ const styles = StyleSheet.create({
   panelFieldArea: { paddingHorizontal: floatingPanelLayout.fieldInset, paddingTop: floatingPanelLayout.fieldInset, paddingBottom: space.xs },
   panelField: { gap: space.s },
   newTabFieldRow: { flexDirection: "row", alignItems: "center", gap: space.s },
-  newTabField: { flex: 1, minHeight: NEW_TAB_FIELD.height },
-  newTabInput: { fontSize: NEW_TAB_FIELD.fontSize, minHeight: NEW_TAB_FIELD.height - floatingPanelLayout.fieldEdge * 2 },
-  newTabIncognito: { width: NEW_TAB_FIELD.incognito, height: NEW_TAB_FIELD.incognito, borderRadius: NEW_TAB_FIELD.incognito / 2, alignItems: "center", justifyContent: "center", paddingHorizontal: 0 },
+  newTabField: { flex: 1 },
   panelInput: { minHeight: browseLayout.searchFieldHeight - floatingPanelLayout.fieldEdge * 2 },
   panelIncognito: { paddingRight: space.xs + 2 },
-  incognitoGlyph: { width: INCOGNITO_GLYPH.frame, alignItems: "center", justifyContent: "center" },
+  incognitoGlyph: { width: INCOGNITO_GLYPH, alignItems: "center", justifyContent: "center" },
+  incognitoPlate: {
+    position: "absolute",
+    width: INCOGNITO_PLATE,
+    height: INCOGNITO_PLATE,
+    borderRadius: capsule(INCOGNITO_PLATE),
+    borderCurve: "continuous",
+    backgroundColor: floatingPanelLayout.fieldDark.fill,
+  },
   field: {
     minHeight: browseLayout.searchFieldHeight,
     borderRadius: capsule(browseLayout.searchFieldHeight),
@@ -1197,13 +1192,11 @@ const styles = StyleSheet.create({
   accessory: { width: browseLayout.accessory.width, height: browseLayout.accessory.height, alignItems: "center", justifyContent: "center" },
   rows: { flex: 1 },
   stagePanel: { position: "absolute", left: 0, right: 0 },
-  stagePanelBottom: { bottom: 0 },
   stageCard: { paddingHorizontal: floatingPanelLayout.inset, paddingBottom: floatingPanelLayout.aboveKeyboard },
   stageSurface: { borderRadius: floatingPanelLayout.radius, borderCurve: "continuous" },
   incognito: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xs + 2,
     minWidth: 36,
     minHeight: 40,
     justifyContent: "flex-end",
@@ -1212,8 +1205,6 @@ const styles = StyleSheet.create({
   incognitoNote: { alignItems: "center", justifyContent: "center", paddingHorizontal: space.l },
   semibold: { fontWeight: "600" },
   centered: { textAlign: "center" },
-  toggleLabel: { transformOrigin: "100% 50%" },
-  medium: { fontWeight: "500" },
   rowsContent: { paddingHorizontal: space.s, paddingBottom: space.s },
   highlight: { position: "absolute", borderRadius: radius.row },
 });

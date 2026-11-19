@@ -1,11 +1,11 @@
 import { layout } from "../ui/theme";
 import { currentSettings } from "../../state/browser/current";
 import type { DragSource } from "../../state/drag/drops";
-import { descendantGroupIds, resolveDropNow } from "../../state/sidebar/current";
+import { descendantGroupIds, resolveDropNow, splitsOnRowNow } from "../../state/sidebar/current";
 import { tabDragOutside } from "../../state/drag/tabDrag";
 import { dragMarksOf, markDrag } from "../../state/sidebar/dragMarks";
 import { folderPanel } from "../../state/sidebar/tileFolderUi";
-import { overPins, pinGridHeight } from "./pinZone";
+import { overPins, pinGrid, pinGridHeight } from "./pinZone";
 import { boxed, type Drop, FOLDER_HOLD_MS, folderOf, inside, type Item, pinnedBlock, spring } from "./dragModel";
 import { aimAt, type Pointing } from "./dragZones";
 import { DragGeometry } from "./dragGeometry";
@@ -55,6 +55,7 @@ export class DragTargeting extends DragGeometry {
     const dragged = new Set(sources.flatMap((s) => s.tabIds));
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
+    const splits = this.splitView && tabsDrag && !external && sources.length === 1 && dragged.size === 1 && !folderOf(source);
     const count = external || (folderOf(source) ? 1 : dragged.size);
     const rowPitch = (boxed(source) ? source.foldedHeight() : layout.rowHeight * (source.kind === "split" ? 1 : Math.max(1, session.ghost?.count ?? external ?? 1))) + layout.rowGap;
     const blocks = live.filter(pinnedBlock).sort(byY);
@@ -117,7 +118,12 @@ export class DragTargeting extends DragGeometry {
       kept: { gapKey: session.gapKey, pitch: session.pitch },
       shown: (i) => this.shown(i),
       at: (f) => this.at(f),
-      ontoTarget: (section) => this.ontoTarget(live, y, section),
+      splits,
+      splitTarget: () => {
+        const hit = this.splitTarget(live, x, y);
+        const lead = [...dragged][0];
+        return hit && lead && splitsOnRowNow(lead, this.items.get(hit.key)!.tabIds[0]!) ? hit : null;
+      },
       overPinnedRows: () => this.overPinnedRows(y),
       leadTab: (key) => this.items.get(key)!.tabIds[0]!,
     };
@@ -128,10 +134,16 @@ export class DragTargeting extends DragGeometry {
     const gapKey = dropped ? aim.gapKey : null;
     const pitch = aim.pitch ?? rowPitch;
     const into = dropped ? (aim.into ?? null) : null;
-    const onto = drop.type === "onto" ? (aim.onto ?? null) : null;
+    const split = drop.type === "split" ? (aim.split ?? null) : null;
     const folderTarget = aim.folderTarget ?? null;
+    const line = dropped && !into && drop.type !== "split" && (drop.type !== "folder" || inPanel) && gapKey ? this.lineAt(this.items.get(gapKey)) : null;
 
-    if (folderAway !== dragMarksOf(this.marks).folderAway) markDrag(this.marks, { folderAway });
+    const listRow = live.find((i) => i.kind === "row" && i.section === "list" && !i.parentGroup)?.frame ?? list;
+    const row = source.kind === "tile" && !folderOf(source) && !overTiles && dropped && listRow ? { w: listRow.w, h: layout.rowHeight } : null;
+    const marks = dragMarksOf(this.marks);
+    if (folderAway !== marks.folderAway) markDrag(this.marks, { folderAway });
+    if (JSON.stringify(line) !== JSON.stringify(marks.line)) markDrag(this.marks, { line });
+    if (JSON.stringify(row) !== JSON.stringify(marks.row)) markDrag(this.marks, { row });
     const key = JSON.stringify(drop);
     if (key === session.dropKey && gapKey === session.gapKey) return;
     if (session.dropKey && drop.type !== "none") hapticTick();
@@ -140,12 +152,13 @@ export class DragTargeting extends DragGeometry {
     session.into = into;
     const pins = drop.type === "tabs" && drop.placement.pinned && !drop.placement.row;
     const held = drop.type === "folder" && !inPanel;
-    markDrag(this.marks, { dropInto: into, onto, folderTarget, pins: pins || held, pinCount: pins || held ? count : 0, pinBefore: pins || held ? gapKey : null });
+    const tile = (pins || held) && source.kind === "row" && tiles ? { w: pinGrid(cells.length + count, tiles.w, balanced).width, h: layout.pinnedHeight } : null;
+    markDrag(this.marks, { dropInto: into, split, tile, folderTarget, pins: pins || held, pinCount: pins || held ? count : 0, pinBefore: pins || held ? gapKey : null });
     if (gapKey !== session.gapKey) {
       const prev = session.gapKey && this.items.get(session.gapKey);
-      if (prev && !this.inGrid(prev)) spring(prev.gap, 0).start();
+      if (prev && this.opensGap(prev)) spring(prev.gap, 0).start();
       const next = gapKey && this.items.get(gapKey);
-      if (next && !this.inGrid(next)) spring(next.gap, pitch).start();
+      if (next && this.opensGap(next)) spring(next.gap, pitch).start();
       session.gapKey = gapKey;
       session.pitch = pitch;
     }

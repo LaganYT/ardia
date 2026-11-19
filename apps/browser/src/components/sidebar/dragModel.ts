@@ -26,7 +26,6 @@ export type Item = ItemSpec & {
   view: View | null;
   header: View | null;
   gap: Animated.Value;
-  size: Animated.Value;
   frame: Frame | null;
   headerFrame: Frame | null;
 };
@@ -40,13 +39,12 @@ export const isGroupItem = (i: Item): i is Extract<Item, { kind: "group" }> => i
 export const folderOf = (i: Item): string | undefined => (i.kind === "tile" ? i.folderId : undefined);
 export const tabCell = (i: Item) => (i.kind === "row" || i.kind === "tile") && !folderOf(i);
 export const tailKey = (place: Exclude<Section, "pinnedRows"> | { group: string }) => (typeof place === "string" ? `tail:${place}` : `tail:group:${place.group}`);
-export const apart = (a: Item, b: Item) => a.section !== b.section && (a.section === "folder" || b.section === "folder");
 export const cellKey = (cell: string) => {
   const folderId = folderIdOfCell(cell);
   return folderId ? entryKey("tileFolder", folderId) : entryKey("tab", cell);
 };
 
-export type Ghost = { item: Item; count: number; width: number; height: number; position: Animated.ValueXY; landing?: boolean };
+export type Ghost = { item: Item; count: number; width: number; height: number; grab: { x: number; y: number }; position: Animated.ValueXY; landing?: boolean };
 
 export const restingTail = perLook(() => ({ marginTop: -layout.rowGap }));
 export const pinSlotPitch = () => layout.pinnedHeight + TILE_GAP;

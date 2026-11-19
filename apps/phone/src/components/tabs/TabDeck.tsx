@@ -63,13 +63,15 @@ import {
   openSpaces,
   openTab,
   reopenLastClosed,
+  stopOpeningTab,
   unveilOpeningPage,
+  useBrowse,
   whenPageCoverHidden,
   whenPageLaidOut,
 } from "../../state/browse/store";
 import { menuOpenedHaptic } from "../../state/browse/tabMenus";
 import { useCanReopen, useHasArchivedTabs, useIncognito, usePrivateCount, useShownSpace } from "../../state/tabs/hooks";
-import { archiveCardLayout, ConfirmDialog, deckChromeLayout, deckChromeMotion, DeckLookBackdrop, iPhoneOr, DeckLookBackdropBase, FrostSource, Menu, moveTo, ScrollActions, Shade, space, tabsCurve, tabsLayout, tabsMotion, type Confirmation, type MenuItem, useDesign, useReduceMotion, usesGlass } from "../ui";
+import { archiveCardLayout, chromeLayout, ConfirmDialog, deckChromeLayout, deckChromeMotion, DeckLookBackdrop, iPhoneOr, DeckLookBackdropBase, FrostSource, Menu, moveTo, ScrollActions, Shade, space, tabsCurve, tabsLayout, tabsMotion, type Confirmation, type MenuItem, useDesign, useReduceMotion, usesGlass } from "../ui";
 import { openSettings } from "../../state/settings/hooks";
 import { confirmInSheet, nativeMenus } from "../ui/MenuTrigger";
 import { useSyncEnabled } from "../../state/sync/hooks";
@@ -142,6 +144,7 @@ export const TabDeck = memo(function TabDeck() {
   const gridChosen = useDeckGrid();
   const grid = gridAvailable && gridChosen;
   const column = useColumn();
+  const chromeSideInset = column ? deckChromeLayout.headerSide : chromeLayout.barSideInset;
   const pulls = redesigned && !column && Platform.OS === "ios";
   const deckWidth = column ? columnContentWidth(column, width) : width;
   const contentLeft = column ? columnContentLeft(column) : 0;
@@ -695,7 +698,8 @@ export const TabDeck = memo(function TabDeck() {
   const barBackWithPage = (id: string) => {
     const now = grown.current;
     if (now?.id === id) {
-      if (now.steady && now.opened) settledOpen(id);
+      if (now.steady && now.opened && useBrowse.getState().opening === id && currentTabs().selectedId === id) settledOpen(id);
+      else if (currentTabs().selectedId !== id) stopOpeningTab(id);
       endGrown();
     } else if (deckPullGrowing() === id) endDeckPull();
   };
@@ -1046,10 +1050,10 @@ export const TabDeck = memo(function TabDeck() {
   const plusItems: MenuItem[] = incognito
     ? [
         { label: "New Tab", icon: "plus", onPress: newRegularTab },
-        { label: "New Incognito Tab", icon: "eyes", onPress: newTab },
+        { label: "New Incognito Tab", icon: "eyeglassesThin", onPress: newTab },
       ]
     : [
-        { label: "New Incognito Tab", icon: "eyes", onPress: newIncognitoTab },
+        { label: "New Incognito Tab", icon: "eyeglassesThin", onPress: newIncognitoTab },
         ...(canReopen ? [{ label: "Reopen Closed Tab", icon: "arrowUturnBackward" as const, onPress: reopenLastClosed }] : []),
       ];
   if (count)
@@ -1143,7 +1147,7 @@ export const TabDeck = memo(function TabDeck() {
         {!count && !leavingCards.length && phase.kind === "settled" ? <DeckEmpty centerY={g.cardCenterY} showsArchive={hasArchive} onArchive={openArchive} searching={needle !== ""} incognito={side} /> : null}
         {archiveCard && phase.kind === "settled" && !grid ? (
           redesigned ? (
-            <ArchiveCapsule centerY={g.safeTop + deckChromeLayout.archiveCenter} safeSide={g.safeSide} />
+            <ArchiveCapsule centerY={g.safeTop + deckChromeLayout.archiveCenter} safeSide={g.safeSide} sideInset={chromeSideInset} />
           ) : (
             <ArchiveIntervalCard edgeY={archiveCardEdgeY(g, archiveCardLayout.aboveBarCenter)} />
           )
@@ -1161,6 +1165,7 @@ export const TabDeck = memo(function TabDeck() {
                   <DeckHeader
                     safeTop={g.safeTop}
                     safeSide={g.safeSide}
+                    sideInset={chromeSideInset}
                     privateCount={privateCount}
                     hasTabs={allTabs.length > 0}
                     menusShown={shown && phase.kind === "settled"}

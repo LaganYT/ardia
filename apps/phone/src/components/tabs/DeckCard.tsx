@@ -10,7 +10,7 @@ import { display } from "../../state/search/omnibox";
 import type { BrowserTab } from "../../state/tabs/tabModels";
 import { shownTone } from "../../lib/pageTone";
 import { snapshotPageTop } from "../../lib/shownSnapshots";
-import { barHeight, FadeView, Favicon, font, iPhoneOr, motionReportsNearEnd, MotionView, screenReaderActions, space, Symbol, TabFace, tabsInk, tabsLayout, tabsMotion, useDesign, usePageUnderBars, useTheme, isDarkColor, type MenuItem, type MotionCurve } from "../ui";
+import { barHeight, FadeView, Favicon, font, iPhoneOr, motionReportsNearEnd, MotionView, screenReaderActions, space, Symbol, IncognitoSpecs, TabFace, tabsInk, tabsLayout, tabsMotion, useDesign, usePageUnderBars, useTheme, isDarkColor, type MenuItem, type MotionCurve } from "../ui";
 import { MenuTrigger, nativeMenus, spaceSystemImage, type MenuHandlers } from "../ui/MenuTrigger";
 import { hideArchiveCard } from "../../state/browse/archiveCard";
 import { OPENING_COVER_ID } from "../../state/browse/store";
@@ -376,7 +376,7 @@ export const deckHeaderTitle = (tab: BrowserTab, title: string): string => (tab.
 export function CardIcon({ tab }: { tab: BrowserTab }) {
   return tab.isPrivate ? (
     <View style={[styles.privateIcon, { backgroundColor: tabsInk.incognitoCardRaised }]}>
-      <Symbol name="eyes" size={tabsLayout.faviconSize - 4} color={tabsInk.onDark} />
+      <IncognitoSpecs size={tabsLayout.specsIcon} color={tabsInk.onDark} />
     </View>
   ) : (
     <Favicon iconUrl={tab.faviconUrl} pageUrl={tab.url} size={tabsLayout.faviconSize} />

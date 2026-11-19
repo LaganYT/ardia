@@ -577,7 +577,8 @@ python3 scripts/linux/package.py \
   `~/.cache/ardia-appimage`. It carries no setuid helper and no polkit policy, so reauth falls back to the login
   password, and it needs user namespaces: where they're restricted (Ubuntu 24.04 and later) it refuses to start.
 
-That makes a dev package. A release adds `--version <version>` and `--cli <dist>/ardia-cli-<version>-linux-x64.tar.gz`.
+That makes a dev package. A release adds `--version <version>` and `--cli <ardia-cli-<version>-linux-x64.tar.gz>`, the
+pinned command renamed for this version (`scripts/release/official-plugins.py linux-cli <version> <out>`).
 `scripts/linux/release.sh <version>` runs the whole release build, the smoke gate included, and prints the upload
 command ([linux-ci.md](linux-ci.md) › Linux releases).
 
@@ -606,7 +607,8 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   - `lib/ardia/ardia-ui`;
   - `lib/ardia/extensions/ublock`;
   - `lib/ardia/VERSION` (with `--version`), one line with the Ardia version (`0.2.44`, `0.2.44-nightly.3`);
-  - `lib/ardia/cli/` (with `--cli`): `ardia-cli-install.sh` (a copy of `apps/cli/install.sh`, mode 0755),
+  - `lib/ardia/cli/` (with `--cli`): `ardia-cli-install.sh` (`apps/cli/install.sh`, the pinned installer from
+    ardia-browser/plugins; `scripts/release/official-plugins.py check` holds it to the pin, mode 0755),
     `ardia-cli-<version>-linux-x64.tar.gz` and `ardia-cli.sha256` (the digest is its first token), the `ardia`
     command's installer, tarball and pinned digest. When the CLI is turned on, the browser installs from these files
     with `ardia-cli-install.sh --version <VERSION> --sha256 <digest>` and `ARDIA_CLI_URL=file://…`;
@@ -891,10 +893,21 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
   hit it and the page stopped drawing until the toolbar collapsed (#2390). `usage_counts.toolbar_peeks` counts peeks
   and `toolbar_peek_page_hides` counts a page that stopped drawing while its toolbar peeked; it should stay near 0. Both
   count in the telemetry leader window only, like `toolbar_scroll_hides`, so their ratio holds.
+- **Sidebar peek.** The peeking sidebar is a page overlay region (`SidebarPeekMark.tsx`), reaching past the panel's
+  edge over the half of the resize handle that sticks out. Its dock's outer box takes no hits itself (`box-none`): on a
+  peek's first frame that box already sits over the page's edge while the panel is still off screen, and
+  `plainViewport`'s samples hit it and hid the page for a frame, a white flash on every peek (#2736); the handle's
+  overhang did the same on a frame where it crossed a sample. `usage_counts.sidebar_peek_page_hides` counts a page that
+  stopped drawing while the sidebar peeked, in every window like `sidebar_peeks`; it should stay near 0 against it.
+  It reads the same peek state that mounts the region, which is set in an effect after the commit that places the
+  panel, so a hide in a frame between the two goes uncounted.
 - **Header.** The menu button shows here whenever the window buttons are hidden (full screen); otherwise it is the
   `…` beside them. The profile name beside it follows the Mac's rule
   (`ProfileIndicator.tsx`): only in an Incognito window or with two or more profiles, cut when at least 52 px of it
   fit, a person icon below that, and nothing when not even the icon fits (a 190 px sidebar with the Downloads button).
+  With the address bar in the sidebar the header holds no profile name, as on the Mac: the toggle at the left, back,
+  forward and reload at the right edge, and in full screen the menu button in reload's slot with the three one pitch
+  left of it.
 - **Materials.** `VisualEffect`, `GlassEffect`, popover bubbles and the window's vibrancy take light or dark from the
   theme scope they render in (`useSurfaceDark`), not the app appearance, so an Incognito window is dark in a light
   app and a toast is light there.

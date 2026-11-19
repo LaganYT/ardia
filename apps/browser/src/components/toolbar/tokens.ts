@@ -12,7 +12,6 @@ export const RELOAD_BUTTON_MOTION = {
   stateIn: duration.base,
   stateOut: duration.slow,
   breatheCycle: 1420,
-  pressScale: 0.76,
   hiddenScale: 0.72,
   breatheScale: [0.96, 1.06],
   breatheOpacity: [0.86, 1],

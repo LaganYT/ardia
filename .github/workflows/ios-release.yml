@@ -304,7 +304,9 @@ jobs:
         name: Wait for App Store Connect to process the build
         env:
           BUILD: ${{ steps.plan.outputs.build }}
-        run: node apps/phone/scripts/asc.mjs wait --build "$BUILD" --timeout 2400 | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -euo pipefail
+          node apps/phone/scripts/asc.mjs wait --build "$BUILD" --timeout 2400 | tee -a "$GITHUB_STEP_SUMMARY"
       - if: inputs.mode == 'upload' && inputs.public_testers
         name: Send the build to public testers
         env:

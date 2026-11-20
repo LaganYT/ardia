@@ -48,6 +48,10 @@ export function useSplitPreview(side: SplitDropSide | null, panes: number): Spli
 }
 
 export function PreviewFade({ preview, children }: { preview: SplitPreviewMotion; children: ReactNode }) {
+  return previewFade(preview, children);
+}
+
+export function previewFade(preview: SplitPreviewMotion, children: ReactNode) {
   if (!preview.fades) return <View style={ROW_CONTENT}>{children}</View>;
   return <Animated.View style={[ROW_CONTENT, { opacity: preview.values ? preview.values.hidden : 1 }]}>{children}</Animated.View>;
 }

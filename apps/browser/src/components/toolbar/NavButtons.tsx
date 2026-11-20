@@ -4,7 +4,8 @@ import { webviews } from "../../state/tabs/webviewHandles";
 import { withLivePage } from "../../state/tabs/livePage";
 import { newTab } from "../../state/tabs/actions";
 import type { Tab } from "../../state/browser/types";
-import { Button, curve, MouseArea, nativeLoop, reduceMotion, reduceMotionKnown, springs, Symbol, type ButtonHit } from "../ui";
+import { useScopedTheme } from "../ui/theme";
+import { Button, curve, drawnSymbol, MouseArea, nativeLoop, reduceMotion, reduceMotionKnown, springs, type ButtonHit } from "../ui";
 
 export type NavPlace = { style?: ViewStyle; hit?: ButtonHit };
 import type { ClickModifiers } from "../../lib/keys";
@@ -22,7 +23,8 @@ const SYMBOL_FRAME = { width: SYMBOL_BOX, height: SYMBOL_BOX };
 const ReloadGlyphColor = createContext("");
 
 function ReloadSymbol({ name }: { name: "arrow.clockwise" | "xmark" }) {
-  return <Symbol name={name} size={GLYPH} weight="regular" color={useContext(ReloadGlyphColor)} style={SYMBOL_FRAME} />;
+  useScopedTheme();
+  return drawnSymbol({ name, size: GLYPH, weight: "regular", color: useContext(ReloadGlyphColor), style: SYMBOL_FRAME });
 }
 
 const ReloadGlyph = memo(function ReloadGlyph({ loading, color }: { loading: boolean; color: string }) {
@@ -250,10 +252,10 @@ export const HistoryButton = memo(function HistoryButton({
       >
         <Animated.View style={[ICON_CENTER, { transform: [{ translateX: pressOffsetMotion }] }]}>
           <Animated.View pointerEvents="none" style={[ICON_LAYER, { opacity: handoffFadeOut, transform: [{ translateX: handoffOutX }] }]}>
-            <Symbol name={icon} size={HISTORY_GLYPH.size} weight={HISTORY_GLYPH.weight} color={iconColor} style={SYMBOL_FRAME} />
+            {drawnSymbol({ name: icon, size: HISTORY_GLYPH.size, weight: HISTORY_GLYPH.weight, color: iconColor, style: SYMBOL_FRAME })}
           </Animated.View>
           <Animated.View pointerEvents="none" style={[ICON_LAYER, { opacity: handoffFadeIn, transform: [{ translateX: handoffInX }] }]}>
-            <Symbol name={icon} size={HISTORY_GLYPH.size} weight={HISTORY_GLYPH.weight} color={iconColor} style={SYMBOL_FRAME} />
+            {drawnSymbol({ name: icon, size: HISTORY_GLYPH.size, weight: HISTORY_GLYPH.weight, color: iconColor, style: SYMBOL_FRAME })}
           </Animated.View>
         </Animated.View>
       </Button>

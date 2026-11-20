@@ -11,6 +11,7 @@ import type {
   DiscardReason,
   DisplayMediaRequest,
   DownloadNavigation,
+  FieldProviderOpened,
   FindResult,
   FocusRestoreOutcome,
   LoadError,
@@ -25,10 +26,12 @@ import type {
   PasswordPrompt,
   PictureInPictureState,
   PictureInPictureDrag,
+  PictureInPictureResize,
   PictureInPictureSkip,
   ProtectedMediaRequest,
   ScrollState,
   SecurityInfo,
+  VerificationCodeFound,
   WebNotification,
   WebViewProps,
   ZoomState,
@@ -59,6 +62,7 @@ type NativeEvents = {
   onPictureInPicture: PictureInPictureState;
   onAutoPictureInPictureKept: { appSwitch?: boolean; reason?: string; epoch?: string };
   onPictureInPictureDragged: PictureInPictureDrag;
+  onPictureInPictureResized: PictureInPictureResize;
   onPictureInPictureSkip: PictureInPictureSkip;
   onMediaFault: MediaFault;
   onActivateRequest: ActivateRequest;
@@ -80,6 +84,8 @@ type NativeEvents = {
   onPreferredSize: { width: number; height: number };
   onTransferRefused: { from: string };
   onAppBadge: AppBadge;
+  onFieldProviderOpened: FieldProviderOpened;
+  onVerificationCodeFound: VerificationCodeFound;
 };
 export type Handlers = keyof NativeEvents;
 export type PageEvent = { name: string; data: unknown };
@@ -112,6 +118,7 @@ const PAGE_EVENTS = {
   onPictureInPicture: "pictureInPicture",
   onAutoPictureInPictureKept: "autoPictureInPictureKept",
   onPictureInPictureDragged: "pictureInPictureDragged",
+  onPictureInPictureResized: "pictureInPictureResized",
   onPictureInPictureSkip: "pictureInPictureSkip",
   onMediaFault: "mediaFault",
   onActivateRequest: "activateRequest",
@@ -133,6 +140,8 @@ const PAGE_EVENTS = {
   onPreferredSize: "preferredSize",
   onTransferRefused: "transferRefused",
   onAppBadge: "appBadge",
+  onFieldProviderOpened: "fieldProviderOpened",
+  onVerificationCodeFound: "verificationCodeFound",
 } as const satisfies Record<Handlers, string>;
 export type PageEventName = (typeof PAGE_EVENTS)[Handlers];
 export const pageEventOf = (handler: Handlers): PageEventName => PAGE_EVENTS[handler];
@@ -163,6 +172,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onPictureInPicture: (e) => [e],
   onAutoPictureInPictureKept: (e) => [e.reason === "nothingPlaying" ? "nothingPlaying" : e.appSwitch ? "appSwitch" : "onScreen", typeof e.epoch === "string" ? e.epoch : ""],
   onPictureInPictureDragged: (e) => [{ offCursor: !!e.offCursor, slowMove: !!e.slowMove, epoch: e.epoch }],
+  onPictureInPictureResized: (e) => [{ inside: !!e.inside, cursorShown: !!e.cursorShown, epoch: e.epoch }],
   onPictureInPictureSkip: (e) => [{ seconds: e.seconds, epoch: e.epoch }],
   onMediaFault: (e) => [e],
   onActivateRequest: (e) => [e],
@@ -184,6 +194,8 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onPreferredSize: (e) => [e],
   onTransferRefused: (e) => [e.from],
   onAppBadge: (e) => [e],
+  onFieldProviderOpened: (e) => [{ via: e.via === "menu" ? "menu" : "badge", shown: e.shown === true }],
+  onVerificationCodeFound: (e) => [{ token: String(e.token), app: String(e.app ?? ""), main: e.main === true }],
 };
 
 export const isPageEventProp = (key: string): key is Handlers => key in unwrap;

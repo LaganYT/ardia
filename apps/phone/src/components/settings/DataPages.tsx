@@ -4,12 +4,12 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { appVersion, clearBrowsingData, openFromSettings, websiteDataClearsByTime } from "../../state/settings/actions";
 import { popSettings, pushSettings } from "../../state/settings/nav";
 import { CLEAR_RANGES, clearChoice, clearFooter, clearIsEmpty, clearMessage, clearTitle, type ClearRange } from "../../state/settings/settingsRules";
-import { AppIcon, appIconLayout, ConfirmDialog, font, settingsLayout, space, Symbol, useTheme, type Confirmation, type SymbolName } from "../ui";
+import { AppIcon, appIconLayout, ConfirmSheet, font, settingsLayout, space, Symbol, useTheme, type Confirmation, type SymbolName } from "../ui";
 import { copy } from "../../lib/platformCopy";
 import { libraryCredits } from "../../state/settings/libraryCredits";
 import { ButtonRow, Divider, Group, NavRow, PickerRow, SettingsPage, ToggleRow, ValueRow } from "./SettingsKit";
 
-export function ClearDataPage() {
+export function ClearDataPage({ onBack = popSettings }: { onBack?: () => void }) {
   const [range, setRange] = useState<ClearRange>("today");
   const [history, setHistory] = useState(true);
   const [cache, setCache] = useState(true);
@@ -24,10 +24,10 @@ export function ClearDataPage() {
     setClearing(true);
     await clearBrowsingData(choice, range);
     setClearing(false);
-    popSettings();
+    onBack();
   };
   return (
-    <SettingsPage title="Clear Browsing Data" onBack={popSettings}>
+    <SettingsPage title="Clear Browsing Data" onBack={onBack}>
       <Group>
         <PickerRow title="Time Range" options={CLEAR_RANGES} selected={range} onSelect={setRange} />
       </Group>
@@ -43,10 +43,10 @@ export function ClearDataPage() {
           destructive
           enabled={!clearIsEmpty(choice) && !clearing}
           busy={clearing}
-          onPress={() => setConfirmation({ title: clearTitle(choice, range, byTime), message: clearMessage(choice), action: "Clear Data", run: () => void clear() })}
+          onPress={(event) => setConfirmation({ title: clearTitle(choice, range, byTime), message: clearMessage(choice), action: "Clear Data", run: () => void clear(), opener: event?.currentTarget })}
         />
       </Group>
-      {confirmation ? <ConfirmDialog confirmation={confirmation} onClose={() => setConfirmation(null)} /> : null}
+      {confirmation ? <ConfirmSheet confirmation={confirmation} onClose={() => setConfirmation(null)} /> : null}
     </SettingsPage>
   );
 }

@@ -1,7 +1,7 @@
 # Ardia on Linux
 
-The Linux port runs the same browser UI as the Mac app on the same Chromium (157.0.8103.50) and Helium (0.21.2, with
-helium-linux 0.21.2.1) pins. It targets x86-64 Linux on Wayland, with Hyprland and Omarchy as the main desktop; X11
+The Linux port runs the same browser UI as the Mac app on the same Chromium (158.0.8127.36) and Helium (0.22.1, with
+helium-linux 0.22.1.1) pins. It targets x86-64 Linux on Wayland, with Hyprland and Omarchy as the main desktop; X11
 works, and arm64 builds are configured but untested. It answers upstream issue #1, "Linux Support".
 
 On the Mac, ArdiaCore is a framework that the React Native app hosts. On Linux there is no React Native: Chromium's own
@@ -159,7 +159,8 @@ The acceptance suite is in [linux-acceptance.md](linux-acceptance.md) and CI in 
     behind a panel is blurred by the panel's own CSS backdrop filter. Native extension popups sit above everything
     and are never blurred.
   - **When it's off.** Glass needs `kNativeViewHostManagesLayers` and GPU compositing, as content's own compositing
-    state says (`--disable-gpu-compositing`, a runtime fallback to software, or a software compositor all count).
+    state says (`--disable-gpu-compositing` and a runtime fallback to software both count; Chromium 158 dropped
+    the per-compositor software switch).
     Software compositing, SwiftShader and llvmpipe advertise `glassPanels: false`, and a runtime fallback turns glass
     off at once.
   - **Video.** Glass over playing video, in a page, a side panel or the in-window player, stays live. Viz never
@@ -460,8 +461,8 @@ export PYTHONDONTWRITEBYTECODE=1
 mkdir -p "$AC_CHROMIUM_BUILD"
 
 git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$AC_CHROMIUM_BUILD/depot_tools"
-git clone --depth 1 --branch 0.21.2 https://github.com/imputnet/helium-chromium.git "$AC_CHROMIUM_BUILD/helium"
-git clone --depth 1 --branch 0.21.2.1 https://github.com/imputnet/helium-linux.git "$AC_CHROMIUM_BUILD/helium-linux"
+git clone --depth 1 --branch 0.22.1 https://github.com/imputnet/helium-chromium.git "$AC_CHROMIUM_BUILD/helium"
+git clone --depth 1 --branch 0.22.1.1 https://github.com/imputnet/helium-linux.git "$AC_CHROMIUM_BUILD/helium-linux"
 git -C "$AC_CHROMIUM_BUILD/helium" fetch --depth 1 origin "$(sed -n 's/^helium_chromium_commit = //p' engine/patches/build/helium-pins.ini)"
 
 source engine/patches/build/env.sh
@@ -1329,8 +1330,17 @@ Linux reads calendars from Evolution Data Server, which GNOME Online Accounts, G
 ### Import
 
 - **Sources.** Chromium-family profiles under `$XDG_CONFIG_HOME`: Chrome, Chromium, Brave, Edge, Vivaldi, Opera and
-  Helium, plus Flatpak and Snap variants. Also Firefox (native, Flatpak, Snap), LibreWolf and Zen.
-- **Kinds.** Bookmarks, history, passwords, cookies, addresses, cards, open tabs and favicons.
+  Helium, plus Flatpak and Snap variants. Also Firefox (native, Flatpak, Snap), LibreWolf and Zen (native and
+  Flatpak). Firefox 147 and Zen follow the XDG layout: a new install lives in `$XDG_CONFIG_HOME/mozilla/firefox` or
+  `$XDG_CONFIG_HOME/zen`, and an older one stays in `~/.mozilla/firefox` or `~/.zen`. Import reads the older folder
+  when it holds a `profiles.ini`, which an install from before the change keeps using, and otherwise the XDG one; the Flatpaks have the
+  same pair under `~/.var/app/<app id>/` (`.mozilla/firefox` or `.zen`, then `config/…`).
+- **Kinds.** Bookmarks, history, passwords, cookies, addresses, cards, open tabs and favicons. Zen also brings its
+  sidebar, as on the Mac and Windows (`ac_linux_import_zen.cc`): its spaces, Essentials, pinned tabs and folders, and
+  each space's open tabs. It reads `zen-sessions.jsonlz4`, then `zen-sessions-backup/clean.jsonlz4`, then the dated
+  backups newest first, then the Firefox session store, with `places.sqlite`'s `zen_workspaces` as the fallback for an
+  older Zen. `importData` passes the chosen spaces as `spaceIds` (at most 256 ids of up to 256 bytes each). Tab icons
+  come from the session's PNGs first, then from `favicons.sqlite`.
 - **Copies.** Databases are copied `O_NOFOLLOW` into a private temporary folder. Copies older than an hour are swept.
   Source files are never written.
 - **Passwords never reach the renderer.**
@@ -1594,7 +1604,7 @@ Both are ports of the Mac's native code (`ArdiaWebView+Peek.mm`, `ArdiaWebView+T
   - With the setting off, or in a tab that isn't on the list, the page script never holds a click back and nothing
     here runs. Link clicks have their own message allowance per document (64, refilled at 32 a second), so a page
     that floods the channel can't make a held click vanish.
-- **`webView.setLittleArdiaOpensNewTabLinks {enabled}`** (Settings › General › Keep new-tab links inside a Little
+- **`webView.setLittleArdiaOpensNewTabLinks {enabled}`** (Settings › Tabs › Links › Keep new-tab links inside a Little
   Ardia window). The setting is one for the whole app, as on the Mac. A window is a Little Ardia window when its
   shell opened it with `kind: "small"`.
   - The page script notes each link it expects to open a tab (`newTabLink`: a `target` click or a `window.open` with
@@ -1668,8 +1678,9 @@ Both are ports of the Mac's native code (`ArdiaWebView+Peek.mm`, `ArdiaWebView+T
   `focus` window event the host already sends when a browser window becomes active, which is what the shared UI
   listens for. Advertised as `ArdiaShell.resignActive`.
 - **Small windows.** `ArdiaShell.openWindow` with `kind: "small"` and no `frame` now opens at `size` (`[width,
-  height]`, 900 by 640 without one), at least 420 by 300 and at most the work area of the opener's display, centred
-  in it where the desktop has global coordinates (`RequestedSmallFrame`). A window that is small has the
+  height]`, 900 by 640 without one), at least 420 by 300 and at most 80 % of the work area of the opener's display
+  each way (as on the Mac since #2784; the minimum wins on a smaller one), centred in it where the desktop has
+  global coordinates (`RequestedSmallFrame`, and the shell's `smallWindowFrame` for older engines). A window that is small has the
   Mac's minimum size, 420 by 300, through `chromium-linux-window-minimum-size.patch`
   (`BrowserView::GetMinimumSize` asks the host). The new window's bootstrap carries `windowKind` (`"small"`,
   `"browser"`, or `"settings"`/`"import"`), and, when the opener passed a `smallWindow` object in the options (up

@@ -56,6 +56,7 @@ export type PageViewProps = ViewProps & {
   isPrivate?: boolean;
   savedState?: string;
   toneInsets?: PageToneInsets;
+  bottomInsetTransitionMs?: number;
   obscuredInsets?: PageObscuredInsets;
   obscuredColors?: PageObscuredColors;
   topClearance?: number;
@@ -124,6 +125,12 @@ export type PageRequestAnswer =
   | { type: "takePhoto" }
   | { type: "recordVideo" };
 
+export type PageSummaryTrigger = "pinch" | "menu";
+
+export type PageSummaryOutcome = "chatgpt" | "on_device" | "excerpts" | "failed";
+
+export type PageSummaryProvider = "on_device" | "chatgpt";
+
 export type PressTarget = { kind: "link"; url: string; text: string | null } | { kind: "image"; url: string; linkUrl: string | null };
 
 export type ReadableContent = {
@@ -190,6 +197,8 @@ export type PageEngineEvent =
     }
   | { name: "page.longPress"; pageId: string; target: PressTarget; x: number; y: number }
   | { name: "page.closeRequested"; pageId: string }
+  | { name: "page.summaryOpened"; pageId: string; trigger: PageSummaryTrigger; isPrivate: boolean }
+  | { name: "page.summarySettled"; pageId: string; trigger: PageSummaryTrigger; outcome: PageSummaryOutcome; chatGPTFellBack?: boolean; isPrivate: boolean }
   | { name: "page.snapshotLanded"; pageId: string; uri: string; generation: number }
   | { name: "page.externalAppMissing"; pageId: string; url: string }
   | { name: "page.desktop"; pageId: string; line: string }

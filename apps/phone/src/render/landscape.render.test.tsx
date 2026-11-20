@@ -108,7 +108,7 @@ test("turning to landscape is counted once a launch, and a portrait window never
   forgetLandscapeCount();
 });
 
-test("in landscape the archive capsule shrinks the deck's cards to main's 407.6 by 188, as main's geometry takes the capsule's bottom as the chrome; in portrait on a 402 by 874 iPhone they go from 279.6 to 273.2", () => {
+test("in landscape the archive capsule shrinks the deck's cards to main's 407.6 by 188 on iPhone (smaller on Android, whose deck bar sits where the browsing bar does), as main's geometry takes the capsule's bottom as the chrome; in portrait on a 402 by 874 iPhone they go from 279.6 to 273.2", () => {
   const archive = deckGeometry(852, 393, 0, 21, 59, "ios", "redesigned", deckArchiveBottom());
   expect(archive.cardWidth).toBeCloseTo(407.6, 1);
   expect(archive.cardHeight).toBeCloseTo(188, 1);
@@ -118,8 +118,9 @@ test("in landscape the archive capsule shrinks the deck's cards to main's 407.6 
   act(() => useArchiveCard.setState({ showing: true }));
   const root = redesigned(<TabDeck />);
   const card = root.root.findAll((node) => node.props.testID === "deckCard" && typeof node.type === "string")[0]!;
-  expect(flat(card).width).toBeCloseTo(407.6, 1);
-  expect(flat(card).height).toBeCloseTo(188, 1);
+  const shown = deckGeometry(852, 393, 0, 21, 59, Platform.OS, "redesigned", deckArchiveBottom());
+  expect(flat(card).width).toBeCloseTo(shown.cardWidth, 1);
+  expect(flat(card).height).toBeCloseTo(shown.cardHeight, 1);
   unmount(root);
   act(() => useArchiveCard.setState({ showing: false }));
 });

@@ -79,7 +79,13 @@ FOUNDATION_EXPORT BOOL ArdiaPerformReservedKey(NSEvent *event);
 @interface ArdiaChromeWindowHost (LittleFit)
 
 + (nullable NSValue *)littleFrameFittingLandingOf:(NSWindow *)window
-                                      minimumSize:(NSSize)minimum NS_SWIFT_NAME(littleFrameFittingLanding(of:minimumSize:));
+                                      minimumSize:(NSSize)minimum
+                                       wantedSize:(nullable NSValue *)wanted
+                                      placedFrame:(nullable NSValue *)placed
+    NS_SWIFT_NAME(littleFrameFittingLanding(of:minimumSize:wantedSize:placedFrame:));
++ (NSRect)littleFrameForSize:(NSSize)size
+                  minimumSize:(NSSize)minimum
+                 visibleFrame:(NSRect)visible NS_SWIFT_NAME(littleFrame(for:minimumSize:visibleFrame:));
 
 @end
 

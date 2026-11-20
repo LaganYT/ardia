@@ -1,13 +1,9 @@
 # AGENTS.md
 
-Ardia is a browser for macOS, Linux and Windows: Dia's polish and Arc's sidebar, built on Chrome's own framework (Chromium 157 on Helium) through ArdiaCore, our thin layer,
-with no account. This file is how the owner works; follow it.
-You are the owner and long-term maintainer of this codebase, and its design is up to you.
 For the architecture and the test tooling, read `docs/agent-brief.md`.
 
 ## How work gets done
-- **Move fast.** Don't break work into phases or ask about details you can decide; there are no users to
-  migrate yet. Ask only when the answer changes what you build.
+- **Move fast.** Don't break work into phases or ask about details you can decide. Ask only when the answer changes what you build.
 - **Be thorough in analysis, bold in suggestions.** Read the real code before you judge it, and propose the
   better design even when it means rewriting what exists, not the smallest patch on top of it.
 - **Speed is the point.** Do independent work in parallel: agents, builds, test instances, tool calls. Batch what you
@@ -22,7 +18,7 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   that area (SendMessage) instead of starting a new one, and batch finished fixes into the next release.
 - **Ask Codex for a second opinion** on risky logic (races, lifetimes, security, migrations, sync) and reviews,
   before and after the change. Ask a Codex subagent, not the CLI: T3's `delegate_task` with
-  `target: {providerInstanceId: "codex", model: "gpt-6.1-sol", options: {reasoningEffort: "high", serviceTier: "priority"}}`,
+  `target: {providerInstanceId: "codex", model: "gpt-6.2-sol", options: {reasoningEffort: "high", serviceTier: "priority"}}`,
   `role: "review"`, `mode: "async"`, and a new `clientRequestId` per round. Tell it to review only and edit
   nothing, and give it the full brief each round (it doesn't share your context). It reads more than it runs:
   reproduce each finding before fixing it.
@@ -70,13 +66,12 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   and never run `gclient sync` or `gn clean`: a full rebuild costs about 5 hours. Engine changes are
   incremental builds only, holding the chromium lock (`scripts/agent/locked chromium`,
   `docs/engine-build.md`). When freeing disk space, stay out of `~/chromium-build`.
-- **Never launch or touch `/Applications/Ardia.app`** (`Netnyahoo.app` until the owner updates past the rename). The owner is using it.
 - **Never steal focus.** Run builds only as hidden instances:
   `open -g -n --env ARDIA_BACKGROUND=1 --env ARDIA_DATA_DIR=<throwaway dir> --env ARDIA_REMOTE_DEBUGGING_PORT=<port> <app>`.
   Never use plain `open`. Background mode logs context menus and file panels instead of showing them.
   Keep test data in a scratch dir, not in `~/Documents`.
-- **Dia is a read-only reference.** You may take screenshots and read its app bundle; never click or type
-  in it.
+  You can make exceptions to this rule at your own discretion but dont misuse it. If you can find another way, prefer that and save that strategy for u to reuse later, maintain a skill file for this repo.
+- **Use Dia as reference.** You may take screenshots, read its app bundle and interact with it.
 - **The owner's real browser data is fair game for debugging.** Read the owner's Ardia, Dia and other browser
   profiles when they help reproduce a bug. Copy what you need into a scratch dir and point a hidden instance's
   `ARDIA_DATA_DIR` at the copy; never write to the live profile or open it in a running app.
@@ -84,8 +79,10 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   code. AI ships as a first-party plugin on the plugin host (#2462, #2463), off until the user enables it, and
   whatever it needs from the browser becomes a public extension point any plugin can use, never a private hook.
   Dia's AI rows in `docs/dia-feature-parity.md` stay ⏸ until the plugin ships them.
-  The one exception is the iPhone's Browse for Me (`docs/phone.md`), which runs on Apple's on-device model, or on
-  the user's own ChatGPT plan when they connect it, with no account and no server of ours.
+  The phone app has two exceptions, documented in `docs/phone.md`. Browse for Me uses the phone's model, cited
+  excerpts, or the user's connected ChatGPT plan. Pinch to Summarize reads the open page. iPhone uses Apple
+  Intelligence or excerpts on-device. Android uses Gemini Nano or excerpts on-device by default, and can use
+  the user's connected ChatGPT plan when they choose it in Pinch to Summarize settings.
 
 ## Platforms
 One browser UI (`apps/browser/src` and `packages/*/src`) runs on three platforms, each with its own native layer and
@@ -203,7 +200,10 @@ rules are for the owner's Mac.
 
   The owner has authorized releases to go all the way through. After an update, the app opens the
   release notes on ardia.dev.
-- **No tweet drafts.** Don't write announcement drafts or make tweet images for a release.
+- **iPhone builds.** Upload to TestFlight only when the owner asks, at the version pinned in iOS Release. Let App Store
+  Connect pick the build number. "Get a build on my phone" means installing a development-signed build on the owner's
+  iPhone over USB or through Xcode's paired wireless connection. Use a local Xcode build or an iOS Release `device`
+  IPA. See `docs/phone.md` for both paths.
 - **Other public actions** (a site deploy outside a release, posting anywhere) need the owner's OK first.
 
 ## Site and videos

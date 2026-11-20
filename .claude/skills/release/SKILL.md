@@ -341,9 +341,11 @@ mkdir -p dist/<version>-rc/export && ditto "$mnt/Ardia.app" dist/<version>-rc/ex
 
 The release itself is then a second run with `dry_run=false` on the same commit.
 
-**iPhone in the same release.** Add `-f iphone=true` to both runs when the owner asked for the iPhone build: the dry run
-builds and signs it, the real run sends it to TestFlight and its public testers after the Mac release publishes, at
-the same version (`docs/releasing.md` › Every platform). Never add it unasked: a TestFlight upload goes out to testers.
+**iPhone TestFlight.** Add `-f iphone=true` to both desktop runs only when the owner asks for TestFlight as part of the
+release. Both use the iPhone version pinned in `ios-release.yml`, and the real run uploads to Internal. Use the
+separate `public-link` run for public testers. A request to get a build on the owner's phone means installing a local
+Xcode development build or the iOS Release `device` IPA over USB or Xcode's paired wireless connection. See
+`docs/phone.md` for both paths.
 
 The engine is never packed by a release: when engine/ changed since the last prebuilt engine, release.sh stops and
 asks for `scripts/publish-engine.sh` first, which publishes `engine-<tree:12>` (with the Helium source and the unstripped

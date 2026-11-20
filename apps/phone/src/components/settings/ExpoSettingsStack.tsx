@@ -49,6 +49,7 @@ const TITLES: Record<SettingsRoute["page"], string> = {
   appearance: "Appearance",
   searchEngine: "Search Engine",
   browseForMe: "Browse for Me",
+  pageSummary: "Pinch to Summarize",
   siteSettings: "Site Settings",
   filterLists: "Filter Lists",
   filterList: "Filter List",

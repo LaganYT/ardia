@@ -22,6 +22,7 @@ import { reducedMotionMs, tabsCurve, tabsMotion, trayMotion } from "./motion";
 import { useTheme } from "./theme";
 import { menuLayout } from "./tokens";
 import { useReduceMotion } from "./contrast";
+import { MenuFrostProvider } from "./Menu";
 
 const SHEET_REDUCED_MS = reducedMotionMs(trayMotion.reduced);
 
@@ -220,7 +221,9 @@ export function Sheet({ open, onDismiss, onHidden, fill, onTapAway, children }: 
           ]}
         >
           {fill ? <View testID="sheetFill" style={[StyleSheet.absoluteFill, { backgroundColor: fill }]} /> : <LookBackdrop />}
-          <SheetScrollContext.Provider value={grabber ? scroll : null}>{children}</SheetScrollContext.Provider>
+          <SheetScrollContext.Provider value={grabber ? scroll : null}>
+            <MenuFrostProvider value={null}>{children}</MenuFrostProvider>
+          </SheetScrollContext.Provider>
           {grabber ? (
             <View
               testID="sheetGrabber"

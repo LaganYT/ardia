@@ -12,6 +12,7 @@ export type LiveSource = {
   fetch(folder: LiveFolder, options?: FetchOptions): Promise<LiveItem[]>;
   resolveGone?(items: LiveItem[], options?: FetchOptions): Promise<Record<string, CompletionState>>;
   pausedUntil?(): number | null;
+  warning?(): LiveError | null;
 };
 
 export type FetchOptions = { interactive?: boolean };
@@ -39,6 +40,7 @@ const github: LiveSource = {
     return githubClient.resolveGone(await secret("github"), items, !!options?.interactive);
   },
   pausedUntil: () => githubClient.pausedUntil(),
+  warning: () => githubClient.warning(),
 };
 
 const BITBUCKET_STATE_BATCH = 10;

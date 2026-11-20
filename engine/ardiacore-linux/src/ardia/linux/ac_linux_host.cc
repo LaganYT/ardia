@@ -277,6 +277,7 @@
 #include "ui/views/view_observer.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/view_targeter_delegate.h"
+#include "ui/views/view_constants_aura.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -949,6 +950,14 @@ std::optional<std::string> ReadAsset(base::FilePath directory,
     contents.insert(head + 6, "<script src=\"/host-bootstrap.js\"></script>");
   }
   return contents;
+}
+
+bool HoldsNativeView(views::WebView* view, content::WebContents* contents) {
+  views::NativeViewHost* holder = view->holder();
+  gfx::NativeView native = contents->GetNativeView();
+  if (!native || holder->native_view() != native) return false;
+  if (holder->layer_managed_by_views()) return holder->layer() && native->layer()->parent() == holder->layer();
+  return native->GetProperty(views::kHostViewKey) == holder;
 }
 
 class DevToolsFrontendWatch : public content::WebContentsObserver {
@@ -2757,7 +2766,7 @@ void ShellHostView::OpenStartupTab(linux_startup_tab::StartupTab saved, std::str
       contents->GetController().LoadURLWithParams(params);
     } else {
       NavigateParams navigation(browser_.get(), url, ui::PAGE_TRANSITION_TYPED);
-      navigation.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+      navigation.disposition = WindowOpenDisposition::kNewBackgroundTab;
       navigation.window_action = NavigateParams::WindowAction::kNoAction;
       const auto weak = GetWeakPtr();
       app_operation_ = true;
@@ -5087,6 +5096,11 @@ void ShellHostView::LayoutPane(TabBinding* binding) {
   }
   tools->SetBoundsRect(tools_bounds + origin);
   tools->SetVisible(true);
+  views::FocusManager* focus = GetFocusManager();
+  const bool reattach = tools->web_contents() == devtools && !HoldsNativeView(tools, devtools);
+  const bool reattach_focused = reattach && focus && tools->Contains(focus->GetFocusedView());
+  if (reattach_focused) focus->ClearFocus();
+  if (reattach) tools->SetWebContents(nullptr);
   tools->SetWebContents(devtools);
   if (auto* native = devtools->GetNativeView(); native && !native->IsVisible()) native->Show();
   tools->holder()->SetNativeViewCornerRadii(gfx::RoundedCornersF(12.0f));
@@ -5094,7 +5108,7 @@ void ShellHostView::LayoutPane(TabBinding* binding) {
   const size_t tools_index = GetIndexOf(tools).value();
   if (strategy.hide_inspected_contents() ? tools_index < page_index : tools_index > page_index)
     ReorderChildView(tools, page_index);
-  if ((fresh && DevToolsWindow::AsDevToolsWindow(devtools)) || restore_focus) {
+  if ((fresh && DevToolsWindow::AsDevToolsWindow(devtools)) || restore_focus || reattach_focused) {
     tools->RequestFocus();
     devtools->Focus();
   }
@@ -5637,7 +5651,7 @@ void ShellHostView::CreateTabIn(
     }
     if (!contents) {
       NavigateParams navigation(member, url, ui::PAGE_TRANSITION_TYPED);
-      navigation.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+      navigation.disposition = WindowOpenDisposition::kNewBackgroundTab;
       navigation.window_action = NavigateParams::WindowAction::kNoAction;
       Navigate(&navigation);
       contents = navigation.navigated_or_inserted_contents;
@@ -7746,13 +7760,13 @@ void TabBinding::DidOpenRequestedURL(
   if (!contents_ || !opened) return;
   std::string_view target;
   switch (disposition) {
-    case WindowOpenDisposition::NEW_FOREGROUND_TAB: target = "foreground"; break;
-    case WindowOpenDisposition::NEW_BACKGROUND_TAB: target = "background"; break;
-    case WindowOpenDisposition::NEW_POPUP: target = "popup"; break;
-    case WindowOpenDisposition::NEW_WINDOW: target = "window"; break;
+    case WindowOpenDisposition::kNewForegroundTab: target = "foreground"; break;
+    case WindowOpenDisposition::kNewBackgroundTab: target = "background"; break;
+    case WindowOpenDisposition::kNewPopup: target = "popup"; break;
+    case WindowOpenDisposition::kNewWindow: target = "window"; break;
     default: return;
   }
-  ReportOpened(opened, url, target, disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB);
+  ReportOpened(opened, url, target, disposition == WindowOpenDisposition::kNewForegroundTab);
 }
 
 void TabBinding::ReportOpened(content::WebContents* opened, const GURL& url,

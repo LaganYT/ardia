@@ -8,8 +8,8 @@ icon and no extra top border, so the page meets the frame's edge on all four sid
 window is unchanged. The hook is null outside the Linux host.
 --- a/chrome/browser/ui/views/frame/browser_native_widget_aura_linux.cc
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_aura_linux.cc
-@@ -17,6 +17,8 @@
- #include "ui/ozone/public/ozone_platform.h"
+@@ -20,6 +20,8 @@
+ #include "ui/platform_window/platform_window.h"
  #include "ui/views/widget/widget.h"
  
 +bool ArdiaLinuxFramelessApp(const BrowserWindowInterface* browser);
@@ -17,7 +17,7 @@ window is unchanged. The hook is null outside the Linux host.
  BrowserNativeWidgetAuraLinux::BrowserNativeWidgetAuraLinux(
      BrowserWidget* browser_widget,
      BrowserView* browser_view)
-@@ -82,6 +84,10 @@ bool BrowserNativeWidgetAuraLinux::UseCustomFrame() const {
+@@ -130,6 +132,10 @@
      return false;
    }
  
@@ -30,7 +30,7 @@ window is unchanged. The hook is null outside the Linux host.
    if (!ui::OzonePlatform::GetInstance()
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -434,6 +434,18 @@ bool (*g_ardia_linux_shell_passes_point)(gfx::NativeView child,
+@@ -448,6 +448,18 @@
                                           const gfx::Point& location) = nullptr;
  void (*g_ardia_linux_minimum_size)(const BrowserWindowInterface*,
                                     gfx::Size* minimum) = nullptr;
@@ -49,7 +49,7 @@ window is unchanged. The hook is null outside the Linux host.
  
  namespace {
  
-@@ -4023,11 +4035,17 @@ views::View* BrowserView::GetInitiallyFocusedView() {
+@@ -4727,11 +4739,17 @@
  }
  
  bool BrowserView::ShouldShowWindowTitle() const {

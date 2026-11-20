@@ -4,8 +4,8 @@ import { act } from "react-test-renderer";
 import { DeckBar } from "../components/tabs/DeckBar";
 import { IncognitoChip } from "../components/tabs/DeckChrome";
 import { TabDeck } from "../components/tabs/TabDeck";
-import { ConfirmDialog, DesignProvider, IncognitoSpecs, Symbol, SystemGlyph } from "../components/ui";
-import { deckGeometry } from "../lib/deckGeometry";
+import { ConfirmSheet, DesignProvider, IncognitoSpecs, Symbol, SystemGlyph } from "../components/ui";
+import { deckGeometry, redesignedBarCenterFromBottom } from "../lib/deckGeometry";
 import { designFor, type Design } from "../lib/design";
 import { haptics } from "../state/app/haptics";
 import { useArchiveCard } from "../state/browse/archiveCard";
@@ -110,7 +110,7 @@ test("the redesign drops the old bar and chip for main's header and bottom bar",
   unmount(root);
 });
 
-test("the redesigned cards sit 24 points lower than the original's, centred in the band between main's header and bar", () => {
+test("the redesigned cards sit 24 points lower than the original's on iPhone, centred in the band between main's header and bar; on Android the bar sits where the browsing bar does, so the band's centre rises by half of that lift", () => {
   const { width, height } = Dimensions.get("window");
   const original = deck("original");
   const before = cardCentres(original);
@@ -120,7 +120,9 @@ test("the redesigned cards sit 24 points lower than the original's, centred in t
   expect(after.length).toBeGreaterThan(0);
   const expected = deckGeometry(width, height, SAFE_TOP, SAFE_BOTTOM, 0, Platform.OS, "redesigned", 48).cardCenterY;
   for (const centre of after) expect(centre).toBeCloseTo(expected, 5);
-  for (const centre of before) expect(centre).toBeCloseTo(expected - 24, 5);
+  const barLift = redesignedBarCenterFromBottom(SAFE_BOTTOM, Platform.OS) - (Math.max(SAFE_BOTTOM, 20) + 11);
+  expect(barLift).toBe(Platform.OS === "android" ? 10.5 : 0);
+  for (const centre of before) expect(centre).toBeCloseTo(expected - 24 + barLift / 2, 5);
   unmount(root);
 });
 
@@ -194,9 +196,9 @@ test("each ··· row does its action: the Archive and Spaces sheets, a private 
   expect(settings).toHaveBeenCalledTimes(1);
   choose("Close All Tabs");
   expect(closeAll).not.toHaveBeenCalled();
-  const dialog = root.root.findAll((node) => node.type === ConfirmDialog)[0]!;
-  expect(dialog.props.confirmation.title).toBe("Close 9 Tabs?");
-  act(() => dialog.props.confirmation.run());
+  const sheet = root.root.findAll((node) => node.type === ConfirmSheet)[0]!;
+  expect(sheet.props.confirmation.title).toBe("Close 9 Tabs?");
+  act(() => pressable(root, "Close All Tabs").props.onPress());
   expect(closeAll).toHaveBeenCalledTimes(1);
   unmount(root);
 });
@@ -214,21 +216,24 @@ test("the Incognito pill shows only while there are private tabs, with their cou
   act(() => pressable(root, "Incognito, 2 tabs").props.onPress());
   expect(menuLabels(root)).toEqual(["Close Incognito Tabs"]);
   pickMenu(root, "Close Incognito Tabs");
-  const dialog = root.root.findAll((node) => node.type === ConfirmDialog)[0]!;
-  expect(dialog.props.confirmation.title).toBe("Close Incognito Tabs?");
-  act(() => dialog.props.confirmation.run());
+  const sheet = root.root.findAll((node) => node.type === ConfirmSheet)[0]!;
+  expect(sheet.props.confirmation.title).toBe("Close Incognito Tabs?");
+  act(() => pressable(root, "Close Incognito Tabs").props.onPress());
   expect(leave).toHaveBeenCalledTimes(1);
   unmount(root);
 });
 
-test("the bottom bar is the Incognito switch, the Search Tabs capsule and a 48-point plus, with no grid button, 8 apart, 24 in from the sides, centred 11 points above the safe bottom", () => {
+test("the bottom bar is the Incognito switch, the Search Tabs capsule and a 48-point plus, with no grid button, 8 apart, 24 in from the sides, centred 11 points above the safe bottom on iPhone and where the browsing bar sits on Android", () => {
   const { height } = Dimensions.get("window");
   const root = deck();
   const bar = style(root, "deckBottomBar");
   expect(bar).toMatchObject({ height: 48, gap: 8, paddingHorizontal: 24 });
   let place = host(root, "deckBottomBar")!.parent;
   while (place && StyleSheet.flatten(place.props.style)?.position !== "absolute") place = place.parent;
-  expect((StyleSheet.flatten(place!.props.style).top as number) + 24).toBe(height - Math.max(SAFE_BOTTOM, 20) - 11);
+  const anchor = StyleSheet.flatten(place!.props.style);
+  const centerFromBottom = redesignedBarCenterFromBottom(SAFE_BOTTOM, Platform.OS);
+  if (Platform.OS === "android") expect(anchor).toMatchObject({ bottom: centerFromBottom - 24 });
+  else expect((anchor.top as number) + 24).toBe(height - centerFromBottom);
   expect(host(root, "deckBarGrid")).toBeUndefined();
   expect(style(root, "deckBarIncognito")).toMatchObject({ width: 48, height: 48, borderRadius: 24 });
   expect(style(root, "deckBarPlus")).toMatchObject({ width: 48, height: 48, borderRadius: 24 });
@@ -242,7 +247,7 @@ test("the bottom bar is the Incognito switch, the Search Tabs capsule and a 48-p
 
 const incognitoSwitch = (root: Root) => root.root.findAll((node) => node.props.accessibilityLabel === "Incognito" && node.props.accessibilityRole === "switch" && typeof node.props.onPress === "function")[0];
 
-test("the bar's left button is an Incognito switch: Arc Search's open eyes, 30 points, drawn on 48-point glass, read as a switch with a hint, and only in the redesign Android's app doesn't run", () => {
+test("the bar's left button is an Incognito switch: Arc Search's open eyes, 30 points, drawn on 48-point glass, read as a switch with a hint, on both phones and only in the redesign", () => {
   const root = deck();
   const toggle = incognitoSwitch(root)!;
   expect(toggle.props.accessibilityState).toMatchObject({ checked: false });
@@ -253,10 +258,11 @@ test("the bar's left button is an Incognito switch: Arc Search's open eyes, 30 p
   expect(root.root.findAll((node) => node.props.testID === "deckBarIncognito" && node.props.incognito === true)).toHaveLength(0);
   expect(host(root, "deckBarIncognitoOn")).toBeUndefined();
   unmount(root);
-  const android = deck(designFor("android"));
-  expect(incognitoSwitch(android)).toBeUndefined();
-  expect(host(android, "deckBarIncognito")).toBeUndefined();
-  unmount(android);
+  expect(designFor("android")).toBe("redesigned");
+  const original = deck("original");
+  expect(incognitoSwitch(original)).toBeUndefined();
+  expect(host(original, "deckBarIncognito")).toBeUndefined();
+  unmount(original);
 });
 
 test("a tap on the switch shows only the Incognito tabs, fills the whole switch and closes its eyes, the plus makes Incognito tabs, and a second tap brings the normal deck back; only the switch to Incognito is counted", () => {
@@ -335,9 +341,9 @@ test("closing the last Incognito card from the deck keeps the empty Incognito si
   unmount(root);
 });
 
-test("Android's original deck keeps its private tabs among the others, as before the switch", () => {
+test("the original deck keeps its private tabs among the others, as before the switch", () => {
   withPrivateTabs(2);
-  const root = deck(designFor("android"));
+  const root = deck("original");
   expect(hosts(root, "deckCard")).toHaveLength(11);
   act(() => useTabs.setState({ incognito: true }));
   act(() => jest.advanceTimersByTime(600));

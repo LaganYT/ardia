@@ -15,18 +15,19 @@ import { ExpoSettingsSheet } from "./components/settings/ExpoSettingsStack";
 import { ExpoArchiveSheet } from "./components/tabs/ExpoArchive";
 import { ExpoSpacesSheet } from "./components/sync/ExpoSpaces";
 import { ExpoLibrarySheet } from "./components/library/ExpoLibrary";
-import { useLibrary } from "./state/library/store";
+import { LibraryView } from "./components/library/LibraryView";
+import { closeLibrary, useLibrary } from "./state/library/store";
 import { SettingsView } from "./components/settings/SettingsView";
 import { SpacesView } from "./components/sync/SpacesView";
 import { ToastHost } from "./components/toasts/ToastHost";
-import { appDesign, tabsMotion, useDesign, useTheme, DEFAULT_PROFILE_COLOR, FrostSource, FullSheet, OverlayHost, PROFILE_PRESETS, onNativeMenuOpened, ProfileLookContext, Shade, SheetBackground, SURFACES_FROST } from "./components/ui";
+import { appDesign, tabsMotion, useDesign, useTheme, DEFAULT_PROFILE_COLOR, FrostSource, FullSheet, OverlayHost, PROFILE_PRESETS, onDrawnMenuOpened, onNativeMenuOpened, ProfileLookContext, Shade, SheetBackground, SURFACES_FROST } from "./components/ui";
 import { useLook } from "./state/sync/hooks";
 import { startSettingsSources } from "./state/settings/actions";
 import { startSync } from "./state/sync/actions";
 import { setSpacesDesign } from "./state/sync/store";
 import { setAppearanceDesign, useDarkScheme } from "./state/settings/appearance";
 import { useSettingsNav } from "./state/settings/hooks";
-import { offerBrowseForMePage, offerSyncPages } from "./state/settings/nav";
+import { offerBrowseForMePage, offerPageSummaryPage, offerSyncPages } from "./state/settings/nav";
 import { useOnboarding } from "./state/onboarding/hooks";
 import { bootApp, useBoot } from "./state/app/boot";
 import { startLinks } from "./state/links/links";
@@ -54,7 +55,9 @@ import { countUsage, reportLaunch, startTelemetry } from "./state/telemetry/tele
 import { useIncognito, useSelectedTab } from "./state/tabs/hooks";
 import { setRootSize } from "./state/app/rootSize";
 import { syncOffered } from "./state/sync/offer";
+import { countDrawnMenu, countNativeMenu } from "./state/browse/menuCounts";
 import { browseForMeOffered } from "./state/browseForMe/offer";
+import { pageSummaryChoiceOffered } from "./state/pageSummary/store";
 import { listenForBrowseForMe } from "./state/browseForMe/events";
 
 export default function App() {
@@ -62,6 +65,7 @@ export default function App() {
     bootApp(() => {
       offerSyncPages(syncOffered);
       offerBrowseForMePage(browseForMeOffered);
+      offerPageSummaryPage(pageSummaryChoiceOffered);
       setSpacesDesign(appDesign);
       setAppearanceDesign(appDesign);
       startTelemetry();
@@ -111,7 +115,8 @@ export default function App() {
 
 const SYSTEM_SHEETS = Platform.OS === "ios";
 
-onNativeMenuOpened(() => countUsage("native_menus_opened"));
+onNativeMenuOpened(countNativeMenu);
+onDrawnMenuOpened(countDrawnMenu);
 
 export function Surfaces() {
   const surface = useSurface();
@@ -121,7 +126,7 @@ export function Surfaces() {
   const leaving = useLeavingTab();
   const design = useDesign();
   const column = useColumn();
-  const pageOverDeck = PAGE_LAYERED && design === "redesigned" && !column;
+  const pageOverDeck = design === "redesigned" && !column;
   const pageUnderDeck = surface === "deck" && tab !== null && (tab.id === opening || tab.id === leaving);
   const settingsOpen = useSettingsNav((s) => s.open);
   const onboarding = useOnboarding((s) => s.showing);
@@ -130,7 +135,7 @@ export function Surfaces() {
   const sheetProgress = useSharedValue(0);
   const libraryOpen = useLibrary((s) => s.open);
   const systemSheet = SYSTEM_SHEETS && (settingsOpen || libraryOpen || sheet === "archive" || sheet === "spaces");
-  const front = frontSheet(settingsOpen && !SYSTEM_SHEETS, SYSTEM_SHEETS && (sheet === "archive" || sheet === "spaces") ? null : sheet);
+  const front = frontSheet(settingsOpen && !SYSTEM_SHEETS, SYSTEM_SHEETS && (sheet === "archive" || sheet === "spaces") ? null : sheet, libraryOpen && !SYSTEM_SHEETS);
   const theme = useTheme();
   countRender("Surfaces");
   const incognito = useIncognito();
@@ -154,12 +159,7 @@ export function Surfaces() {
           <Shade shaded={searching}>
             <FrostSource name={SURFACES_FROST} style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false}>
               {duo && surface !== "start" ? <DuoBrowsing /> : null}
-              {PAGE_LAYERED ? (pageOverDeck ? [deck, pageLayer] : [pageLayer, deck]) : (
-                <>
-                  {page}
-                  {deck}
-                </>
-              )}
+              {pageOverDeck ? [deck, pageLayer] : [pageLayer, deck]}
               {surface === "start" ? <StartScreen /> : null}
             </FrostSource>
           </Shade>
@@ -167,8 +167,8 @@ export function Surfaces() {
         </Layer>
       </SheetBackground>
       <Layer covered={onboarding || voice}>
-        <FullSheet sheet={front} progress={sheetProgress} onDismiss={front === "settings" ? closeSettings : closeArchive}>
-          {(shown) => (shown === "settings" ? <SettingsView /> : shown === "archive" ? <ArchiveView /> : <SpacesView />)}
+        <FullSheet sheet={front} progress={sheetProgress} onDismiss={front === "settings" ? closeSettings : front === "library" ? closeLibrary : closeArchive}>
+          {(shown) => (shown === "settings" ? <SettingsView /> : shown === "library" ? <LibraryView /> : shown === "archive" ? <ArchiveView /> : <SpacesView />)}
         </FullSheet>
       </Layer>
       {SYSTEM_SHEETS ? <ExpoSettingsSheet /> : null}
@@ -185,7 +185,6 @@ export function Surfaces() {
   );
 }
 
-const PAGE_LAYERED = Platform.OS === "ios";
 const PAGE_UNSEEN_AWAY = 100_000;
 
 function PageLayer({ away, unseen, children }: { away: boolean; unseen: boolean; children: ReactNode }) {

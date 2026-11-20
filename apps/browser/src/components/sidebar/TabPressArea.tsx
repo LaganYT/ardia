@@ -9,7 +9,7 @@ import { dismissHover } from "../../state/sidebar/hover";
 import { openTabMenu } from "../../state/sidebar/menus";
 import { clickHeldTabPress, holdTabPress, pressOutTabPress, type TabPress } from "../../state/sidebar/heldTabPress";
 import { tabPressTag } from "../../state/tabs/tabReveal";
-import { useSplitOf } from "../../state/windows/card";
+import { useInSplit } from "../../state/windows/card";
 import { ContextMenuArea } from "../ui";
 import { Squish, useSquish, type SquishKind } from "../ui/Squish";
 
@@ -35,7 +35,7 @@ export function TabPressArea({
   children: ReactNode | ((state: { pressed: boolean }) => ReactNode);
 }) {
   const press = useRef<TabPress | null>(null);
-  const inSplit = !!useSplitOf(tab.id);
+  const inSplit = useInSplit(tab.id);
   const plainTooltip = useSettings((s) => !s.showTabHoverMenu);
   const squishMotion = useSquish(squish);
   const scale = squishMotion.scale;

@@ -30,6 +30,7 @@ import { useTabs } from "../../state/tabs/store";
 import { countUsage, reportLaunchTray } from "../../state/telemetry/telemetry";
 import { browseLayout, capsule, FloatingMenu, font, ink, LookFrost, MotionView, moveTo, radius, screenReaderActions, type MotionCurve, type MotionTarget, rolesFor, trayLandingDelayMs, space, stageMotion, barReturnMotion, Symbol, SURFACES_FROST, tabsCurve, tabsInk, tabsLayout, tabsMotion, trayMotion, trayShadow, useTheme, FadeView, fadeIsNative, ChromeSurface, floatingPanelLayout, useDesign, useReduceTransparency, useReduceMotion, settingsUIAvailable, SystemGlyph } from "../ui";
 import { SuggestionRow } from "./SuggestionRow";
+import { MaterialSearchTray } from "./MaterialSearchView";
 import { TrayInput, type TrayInputHandle } from "./TrayInput";
 import { canSearchByVoice, presentVoiceSearch } from "../../state/voice/store";
 import { commandBarMotion, commandPanelPlace, useCommandBar } from "../duo/CommandBar";
@@ -63,6 +64,8 @@ function useTrayTheme() {
 }
 
 export function SearchTray() {
+  const design = useDesign();
+  if (design === "material") return <MaterialSearchTray />;
   return searchStageIsNative() ? <StagedTray /> : <SheetTray />;
 }
 

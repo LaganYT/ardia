@@ -94,6 +94,14 @@ export const ORIGINALS = {
       return rr(C, C, p.W, p.H, p.r) + rr(C, C + p.H / 2 - p.i - ih / 2, iw, ih, p.ir, SOLID);
     },
   },
+  "rectangle.topthird.inset.filled": {
+    paint: "stroke",
+    params: { ...FRAME, i: P(3, 0.2, 1.5, 5), ir: P(1.4, 0.2, 0.3, 4), g: P(0, 0.3, -4, 4) },
+    make: (p) => {
+      const ih = (p.H - 2 * p.i) / 3 - p.g, iw = p.W - 2 * p.i;
+      return rr(C, C, p.W, p.H, p.r) + rr(C, C - p.H / 2 + p.i + ih / 2, iw, ih, p.ir, SOLID);
+    },
+  },
   "rectangle.inset.arrow": {
     paint: "stroke",
     params: { ...FRAME, i: P(3, 0.2, 1.5, 5), ir: P(1.4, 0.2, 0.3, 4), g: P(0, 0.3, -4, 4), al: P(4.5, 0.3, 2, 8), ah: P(2.4, 0.2, 1, 4), ax: P(0, 0.3, -5, 5) },

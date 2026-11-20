@@ -1,6 +1,6 @@
 import type { StripDock, StripEntry, StripGroupEntry, StripMember } from "../../state/tabs/topStrip";
 import type { Dock } from "./model";
-import { COMPACT_CHIP, DOCK_GAP, GAP, MAX_CHIP, NEW_TAB_ROOM, PEEK_BORDER, PEEK_LEFT, PINNED_CELL, PINNED_SPACING, SELECTED_MIN_CHIP, SELECTED_STEPS, TITLED_CHIP, GROUP_OVERFLOW_CHAR, GROUP_OVERFLOW_GAP, GROUP_TITLE_MAX, GROUP_TITLE_TIGHT } from "./tokens";
+import { COMPACT_CHIP, DOCK_GAP, GAP, MAX_CHIP, NEW_TAB_ROOM, PEEK_BORDER, PEEK_LEFT, PINNED_CELL, PINNED_SPACING, SELECTED_MIN_CHIP, SELECTED_STEPS, TITLE_MIN_CHIP, TITLED_CHIP, GROUP_OVERFLOW_CHAR, GROUP_OVERFLOW_GAP, GROUP_TITLE_MAX, GROUP_TITLE_TIGHT } from "./tokens";
 import { font } from "../ui/tokens";
 import { captionRoom, WINDOW_CHROME, type WindowChrome } from "../../lib/windowChrome";
 
@@ -151,6 +151,8 @@ export type StripLayout = {
   tabsEnd: number;
   tabsShrink: boolean;
   wideShown: boolean;
+  compactShown: number;
+  titledShown: number;
 };
 
 const dockEntry = (entries: StripEntry[]) => entries.find((e): e is StripDock => e.kind === "dock");
@@ -162,7 +164,7 @@ export function layoutDock(dock: StripDock | undefined): Dock | null {
   return { ids: dock.ids, left: -dockSpan(dock), geometry: dragGeometry(dock.ids.map((id) => ({ tabIds: dockTabs(dock, id), width: PINNED_CELL })), PINNED_SPACING) };
 }
 
-export function layoutStrip(entries: StripEntry[], activeId: string, pageWidth: number, measured: StripMeasures, dockLayout: Dock | null, held?: TabWidths, wideId: string = activeId, selectedMin: number = SELECTED_MIN_CHIP): StripLayout {
+export function layoutStrip(entries: StripEntry[], activeId: string, pageWidth: number, measured: StripMeasures, dockLayout: Dock | null, held?: TabWidths, wideId: string = activeId, selectedMin: number = SELECTED_MIN_CHIP, titledMin: number = TITLED_CHIP, compactMin: number = COMPACT_CHIP): StripLayout {
   const dock = dockEntry(entries);
   const rows = entries.filter((e): e is StripGroupEntry | StripMember => e.kind !== "dock");
   const groupChip = (g: StripGroupEntry) => measured.groupChip(g.id) ?? 0;
@@ -175,18 +177,20 @@ export function layoutStrip(entries: StripEntry[], activeId: string, pageWidth: 
   const tabUnits = visibleTabs.length;
   const wideShown = visibleTabs.includes(wideId);
   const others = visibleTabs.filter((id) => id !== wideId);
+  const compactShown = others.filter((id) => !needsTitle(id)).length;
+  const titledShown = others.length - compactShown;
   const widths = held ?? stripTabWidths({
     pageWidth,
     dockWidth: dockSpan(dock),
     groups: rows.flatMap((e) => (e.kind === "group" ? [{ chip: groupChip(e), expanded: !e.collapsed && hasVisibleMembers(e), shown: e.members.some((m) => holds(m, activeId)) }] : [])),
-    compactUnits: others.filter((id) => !needsTitle(id)).length,
-    titledUnits: others.filter(needsTitle).length,
+    compactUnits: compactShown,
+    titledUnits: titledShown,
     selectedShown: wideShown,
     fixed: visible.reduce((n, m) => n + (m.kind === "folder" ? folderChip(m) + (holds(m, activeId) ? MEMBERS_INSET : GAP) : 0), 0),
     gap: GAP,
     plus: NEW_TAB_ROOM,
-    min: COMPACT_CHIP,
-    titledMin: TITLED_CHIP,
+    min: compactMin,
+    titledMin,
     selectedMin,
     max: MAX_CHIP,
   });
@@ -223,7 +227,7 @@ export function layoutStrip(entries: StripEntry[], activeId: string, pageWidth: 
     return [left + groupChip(row) + MEMBERS_INSET + offsets[at]!, widths[at]!];
   };
   const end = top.slots.length ? top.lefts.at(-1)! + top.slots.at(-1)!.width : 0;
-  return { chip, selected, widths, tabWidth, top, memberWidth, spanOf, tabsEnd: dockSpan(dock) + end, tabsShrink: tabUnits > 0, wideShown };
+  return { chip, selected, widths, tabWidth, top, memberWidth, spanOf, tabsEnd: dockSpan(dock) + end, tabsShrink: tabUnits > 0, wideShown, compactShown, titledShown };
 }
 
 export function nameGrowth(natural: number | undefined): number {
@@ -263,20 +267,30 @@ export function withoutTabs(entries: StripEntry[], hidden: ReadonlySet<string>):
 
 const NO_OVERFLOW: ReadonlySet<string> = new Set();
 
-export type StripOverflow = { hidden: ReadonlySet<string>; selectedMin: number };
+export type StripOverflow = { hidden: ReadonlySet<string>; selectedMin: number; titledMin: number; compactMin: number };
 
 export function stripOverflow(entries: StripEntry[], activeId: string, pageWidth: number, measured: StripMeasures, dockLayout: Dock | null, wideId: string = activeId): StripOverflow {
   const needsTitle = measured.needsTitle ?? (() => false);
   const limit = pageWidth + 0.5 - GAP - NEW_TAB_ROOM;
   const tight = SELECTED_STEPS.at(-1)!;
-  const layout = (hidden: ReadonlySet<string>, selectedMin: number, held?: TabWidths) =>
-    layoutStrip(withoutTabs(entries, hidden), activeId, pageWidth, withOverflowCounts(measured, entries, hidden), dockLayout, held, wideId, selectedMin);
+  const layout = (hidden: ReadonlySet<string>, selectedMin: number, held?: TabWidths, titledMin: number = TITLED_CHIP, compactMin: number = COMPACT_CHIP) =>
+    layoutStrip(withoutTabs(entries, hidden), activeId, pageWidth, withOverflowCounts(measured, entries, hidden), dockLayout, held, wideId, selectedMin, titledMin, compactMin);
   const fits = (hidden: ReadonlySet<string>, selectedMin: number) => layout(hidden, selectedMin).tabsEnd <= limit;
   const least = layout(NO_OVERFLOW, tight, { chip: COMPACT_CHIP, titled: TITLED_CHIP, selected: tight });
   const tightEnd = least.tabsEnd;
-  const leastEnd = (step: number) => tightEnd + (least.wideShown ? step - tight : 0);
-  const roomy = SELECTED_STEPS.find((step) => leastEnd(step) <= limit && fits(NO_OVERFLOW, step));
-  if (roomy !== undefined) return { hidden: NO_OVERFLOW, selectedMin: roomy };
+  const step = (end: number, selected: number) => end + (least.wideShown ? selected - tight : 0);
+  const readableEnd = tightEnd + least.compactShown * (TITLE_MIN_CHIP - COMPACT_CHIP);
+  const evenEnd = readableEnd - least.titledShown * (TITLED_CHIP - TITLE_MIN_CHIP);
+  const readable = (hidden: ReadonlySet<string>, selectedMin: number, titledMin: number) => layout(hidden, selectedMin, undefined, titledMin, TITLE_MIN_CHIP).tabsEnd <= limit;
+  const even = () => evenEnd <= limit && readable(NO_OVERFLOW, tight, TITLE_MIN_CHIP);
+  if (least.compactShown) {
+    const readableStep = SELECTED_STEPS.find((selected) => step(readableEnd, selected) <= limit && readable(NO_OVERFLOW, selected, TITLED_CHIP));
+    if (readableStep !== undefined) return { hidden: NO_OVERFLOW, selectedMin: readableStep, titledMin: TITLED_CHIP, compactMin: TITLE_MIN_CHIP };
+    if (even()) return { hidden: NO_OVERFLOW, selectedMin: tight, titledMin: TITLE_MIN_CHIP, compactMin: TITLE_MIN_CHIP };
+  }
+  const roomy = SELECTED_STEPS.find((selected) => step(tightEnd, selected) <= limit && fits(NO_OVERFLOW, selected));
+  if (roomy !== undefined) return { hidden: NO_OVERFLOW, selectedMin: roomy, titledMin: TITLED_CHIP, compactMin: COMPACT_CHIP };
+  if (!least.compactShown && even()) return { hidden: NO_OVERFLOW, selectedMin: tight, titledMin: TITLE_MIN_CHIP, compactMin: TITLE_MIN_CHIP };
   const candidates = overflowCandidates(entries, activeId, wideId, needsTitle);
   const order: string[] = [];
   const membersLeft = new Map<string, number>();
@@ -303,25 +317,41 @@ export function stripOverflow(entries: StripEntry[], activeId: string, pageWidth
   } else {
     while (count < candidates.length && !fits(first(++count), tight));
   }
-  return { hidden: first(count), selectedMin: tight };
+  const hidden = first(count);
+  if (least.compactShown) {
+    if (readable(hidden, tight, TITLED_CHIP)) return { hidden, selectedMin: tight, titledMin: TITLED_CHIP, compactMin: TITLE_MIN_CHIP };
+    if (readable(hidden, tight, TITLE_MIN_CHIP)) return { hidden, selectedMin: tight, titledMin: TITLE_MIN_CHIP, compactMin: TITLE_MIN_CHIP };
+  }
+  return { hidden, selectedMin: tight, titledMin: TITLED_CHIP, compactMin: COMPACT_CHIP };
 }
 
-type OverflowCandidate = { id: string; at: number; group: StripGroupEntry | null };
+type OverflowCandidate = { id: string; at: number; group: StripGroupEntry | null; last: number };
 
 function overflowCandidates(entries: StripEntry[], activeId: string, wideId: string, needsTitle: (tabId: string) => boolean): OverflowCandidate[] {
   const order = new Map<string, number>();
   const candidates: OverflowCandidate[] = [];
+  const emptiable: [number, number][] = [];
   const visit = (m: StripMember, group: StripGroupEntry | null) => {
-    if (m.kind === "tab" && m.id !== activeId && m.id !== wideId && needsTitle(m.id)) candidates.push({ id: m.id, at: order.size, group });
+    if (m.kind === "tab" && m.id !== activeId && m.id !== wideId && needsTitle(m.id)) candidates.push({ id: m.id, at: order.size, group, last: 0 });
     for (const id of tabsOf(m)) order.set(id, order.size);
   };
   for (const e of entries) {
     if (e.kind === "dock") continue;
     if (e.kind !== "group") visit(e, null);
-    else if (!e.collapsed) for (const m of e.members) visit(m, e);
+    else if (!e.collapsed) {
+      const from = candidates.length;
+      for (const m of e.members) visit(m, e);
+      if (e.members.length && candidates.length - from === e.members.length) emptiable.push([from, candidates.length]);
+    }
   }
   const anchor = order.get(wideId) ?? 0;
-  return candidates.sort((a, b) => Math.abs(b.at - anchor) - Math.abs(a.at - anchor) || b.at - a.at);
+  const distance = (c: OverflowCandidate) => Math.abs(c.at - anchor);
+  for (const [from, to] of emptiable) {
+    let nearest = candidates[from]!;
+    for (let i = from + 1; i < to; i++) if (distance(candidates[i]!) < distance(nearest)) nearest = candidates[i]!;
+    nearest.last = 1;
+  }
+  return candidates.sort((a, b) => a.last - b.last || distance(b) - distance(a) || b.at - a.at);
 }
 
 export function overflowCountRoom(count: number): number {
@@ -342,11 +372,11 @@ export function withActiveShown(fit: StripOverflow, activeId: string): StripOver
   if (!fit.hidden.has(activeId)) return fit;
   const hidden = new Set(fit.hidden);
   hidden.delete(activeId);
-  return { hidden, selectedMin: fit.selectedMin };
+  return { ...fit, hidden };
 }
 
-export function underPressure({ hidden, selectedMin }: StripOverflow): boolean {
-  return hidden.size > 0 || selectedMin < SELECTED_MIN_CHIP;
+export function underPressure({ hidden, selectedMin, titledMin }: StripOverflow): boolean {
+  return hidden.size > 0 || selectedMin < SELECTED_MIN_CHIP || titledMin < TITLED_CHIP;
 }
 
 export function heldWideTab(entries: StripEntry[], wide: { tabId: string; slot: number }, hidden: ReadonlySet<string> = NO_OVERFLOW): { tabId: string; atEnd: boolean } {

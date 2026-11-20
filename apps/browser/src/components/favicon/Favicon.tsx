@@ -2,7 +2,7 @@ import { displayHost, hostOf } from "@ardia/core";
 import { memo, useState } from "react";
 import { Image, View } from "react-native";
 import { faviconFailed, useAppearanceDark, useFavicon, useFaviconTheme } from "../../state/favicons/favicons";
-import { radius, Symbol, useTheme, weight } from "../ui";
+import { radius, Symbol, tintedImage, useTheme, weight } from "../ui";
 import { CapCenteredLetter } from "../glyph/CapCenteredLetter";
 import { bundledSiteIcon } from "./siteIcons";
 
@@ -32,17 +32,16 @@ export const Favicon = memo(function Favicon({
   const [broken, setBroken] = useState<string | null>(null);
   if (!url && !resolved) return <NewTabIcon size={size} opacity={opacity} />;
   if (!resolved || broken === resolved.uri) return <FaviconFallback url={url} size={size} opacity={opacity} color={fallbackColor} />;
-  return (
-    <Image
-      key={white ? `${resolved.uri} tinted` : resolved.uri}
-      source={{ uri: resolved.uri }}
-      onError={() => {
-        setBroken(resolved.uri);
-        if (resolved.profileId) faviconFailed(resolved.profileId, resolved.uri);
-      }}
-      style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, tintColor: white ? theme.textPrimary : undefined, opacity }}
-    />
-  );
+  return tintedImage({
+    identity: resolved.uri,
+    tint: white ? theme.textPrimary : undefined,
+    source: { uri: resolved.uri },
+    onError: () => {
+      setBroken(resolved.uri);
+      if (resolved.profileId) faviconFailed(resolved.profileId, resolved.uri);
+    },
+    style: { width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, opacity },
+  });
 });
 
 export const SiteFavicon = memo(function SiteFavicon({ host, profileId, size }: { host: string; profileId: string; size?: number }) {
@@ -92,10 +91,6 @@ const NEW_TAB_MARK = require("../../../assets/new-tab-mark.png");
 export function NewTabIcon({ size = 16, opacity = 1 }: { size?: number; opacity?: number }) {
   const theme = useTheme();
   return (
-    <Image
-      key={theme.dark ? "dark" : "light"}
-      source={NEW_TAB_MARK}
-      style={{ width: size, height: size, tintColor: theme.mark, opacity: (theme.dark ? 0.28 : 0.3) * opacity }}
-    />
+    tintedImage({ source: NEW_TAB_MARK, tint: theme.mark, style: { width: size, height: size, opacity: (theme.dark ? 0.28 : 0.3) * opacity } })
   );
 }

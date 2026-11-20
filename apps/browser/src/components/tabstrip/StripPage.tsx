@@ -6,7 +6,7 @@ import { useShownTabIdFor, useStripEntries, useStripTitleNeeds } from "../../sta
 import { setMeasuredWidth, useMeasuredWidths } from "../../state/windows/measuredWidths";
 import { dismissStripHoverIn, stripPageOffstage } from "../../state/tabs/stripHover";
 import { onTabPressEnd, tabPressHeld } from "../../state/sidebar/heldTabPress";
-import { noteTabStripCompact, noteTabStripHeldClose, noteTabStripOverflow, noteTabStripTabsInOverflow, noteTabStripRevealAfterPress, noteTabStripRevealHeldForScroll, noteTabStripScrolled, noteTabStripTitledTabs } from "../../state/telemetry/tabStripCounts";
+import { noteTabStripCompact, noteTabStripReadable, noteTabStripHeldClose, noteTabStripOverflow, noteTabStripTabsInOverflow, noteTabStripRevealAfterPress, noteTabStripRevealHeldForScroll, noteTabStripScrolled, noteTabStripTitledTabs } from "../../state/telemetry/tabStripCounts";
 import { Offstage } from "../ui/useHover";
 import { usePageStyle } from "../../state/windows/profilePager";
 import { ThemeScope } from "../window/ThemeScope";
@@ -79,7 +79,7 @@ export const StripPage = memo(function StripPage({ profileId, slot, pageWidth, c
   tightNames.current = held.current ? tightNames.current : namesStayTight(tightNames.current, fit, () => stripOverflow(entries, activeId, pageWidth, withRoomyNames(measures, nameOf), dock, wideId));
   const parsed = withoutTabs(entries, overflow);
   const groupOverflow = new Map(entries.flatMap((e) => (e.kind === "group" ? [[e.id, overflowIn(e, overflow)] as const] : [])));
-  const { chip, selected, widths, tabWidth, top, memberWidth, spanOf: spanInStrip, tabsEnd, tabsShrink } = layoutStrip(parsed, activeId, pageWidth, withOverflowCounts(measures, entries, overflow), dock, activeReturned ? undefined : held.current?.widths, wideId, fit.selectedMin);
+  const { chip, selected, widths, tabWidth, top, memberWidth, spanOf: spanInStrip, tabsEnd, tabsShrink } = layoutStrip(parsed, activeId, pageWidth, withOverflowCounts(measures, entries, overflow), dock, activeReturned ? undefined : held.current?.widths, wideId, fit.selectedMin, fit.titledMin, fit.compactMin);
   if (held.current && activeReturned) held.current = { ...held.current, overflow: fit, widths };
   const animateWidths = !held.current && !!last.current && last.current.count === count && last.current.pageWidth === pageWidth;
   last.current = { count, pageWidth, widths, overflow: fit, end: stripEnd(top), lastSlot: top.slots.at(-1)?.tabIds[0], wide: { tabId: wideId, slot: Math.max(0, top.slots.findIndex((s) => s.tabIds.includes(wideId))) } };
@@ -220,6 +220,10 @@ export const StripPage = memo(function StripPage({ profileId, slot, pageWidth, c
   useEffect(() => {
     if (compact) noteTabStripCompact();
   }, [compact]);
+  const readable = current && fit.compactMin > COMPACT_CHIP;
+  useEffect(() => {
+    if (readable) noteTabStripReadable();
+  }, [readable]);
   useEffect(() => {
     if (current && pinned) noteTabStripOverflow(count);
   }, [current, pinned, count]);

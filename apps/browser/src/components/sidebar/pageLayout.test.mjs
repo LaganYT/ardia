@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-const { DOCK_SLACK, dockedAfter, pageLayout } = await import("./pageLayout.ts");
+const { clearlyOverflows, DOCK_SLACK, dockedAfter, pageLayout, rowPitch } = await import("./pageLayout.ts");
 
 const ROW = 41;
 const gridHeight = (count) => Math.ceil(count / 3) * ROW;
@@ -42,4 +43,33 @@ test("an expanded Playing now card's growth counts as room, and an expansion tha
   assert.equal(dockedAfter(false, 0, 54), false);
   assert.equal(dockedAfter(true, 10, 54), false);
   assert.equal(dockedAfter(false, 10, 54), false);
+});
+
+test("a page starts with New Tab docked only when its rows clearly overflow it, so a short or borderline list never flips at launch", () => {
+  const height = 600;
+  const rowsFor = (px) => Math.ceil(px / rowPitch());
+  assert.equal(clearlyOverflows(200, height), true, "a 200-tab list starts docked");
+  assert.equal(clearlyOverflows(rowsFor(height * 2) + 1, height), true);
+  assert.equal(clearlyOverflows(rowsFor(height), height), false, "a list about one page tall waits for its layout");
+  assert.equal(clearlyOverflows(rowsFor(height * 2) - 1, height), false);
+  assert.equal(clearlyOverflows(0, height), false);
+  assert.equal(clearlyOverflows(500, 0), false, "no height yet means no guess");
+});
+
+test("the sidebar page makes its first dock guess from the entries once, without subscribing to them", () => {
+  const page = readFileSync(new URL("./SidebarPage.tsx", import.meta.url), "utf8");
+  assert.match(page, /if \(!dockGuessed && canDock && height > 0\) \{/);
+  assert.match(page, /clearlyOverflows\(sidebarListLengthNow\(windowId, profileId\), height\)/);
+});
+
+test("the dock reads its free space from the filler's child, whose frame moves only when that space changes, not with every row added", () => {
+  const page = readFileSync(new URL("./SidebarPage.tsx", import.meta.url), "utf8");
+  assert.match(page, /<ContextMenuArea style=\{\{ flex: 1 \}\} onLayout=\{onSlack\}/);
+  assert.doesNotMatch(page, /<View key=\{[^}]*\}[^>]*onLayout=\{onSlack\}/);
+});
+
+test("a free-space reading that arrives before the sidebar has a height is kept and applied once it does", () => {
+  const page = readFileSync(new URL("./SidebarPage.tsx", import.meta.url), "utf8");
+  assert.match(page, /slack\.current = e\.nativeEvent\.layout\.height;\n\s*applySlack\(\);/);
+  assert.match(page, /useEffect\(applySlack, \[height > 0, canDock, resting\]\);/);
 });

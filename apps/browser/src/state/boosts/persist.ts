@@ -52,7 +52,7 @@ export function startBoosts() {
       if (before) save(key, boosts);
     }
   });
-  const stopProfiles = useBrowser.subscribe((s, prev) => {
+  const stopProfiles = useBrowser.subscribeTo(["profiles"], (s, prev) => {
     if (s.profiles === prev.profiles) return;
     adopt();
     const kept = new Set(profileKeys());

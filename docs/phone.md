@@ -1407,8 +1407,8 @@ JavaScript is shared; it turns on wherever the native module is registered.
   goes through an OkHttp client with no cookies, no cache and no redirects. Closing the page, or disconnecting while
   ChatGPT is writing, cancels the request at once; a disconnect mid-answer rewrites it on the phone.
 - **In Settings.** Settings › Experimental lists Browse for Me. Its row reads "ChatGPT" when connected and "On
-  iPhone" (iPhone) or "On This Phone" (Android) otherwise. On iPhone the page is the native `BrowseForMePage` and shows
-  "Read aloud coming soon"; on Android it is `components/settings/BrowseForMePage.tsx` on the hand-built settings
+  iPhone" (iPhone) or "On This Phone" (Android) otherwise. On iPhone the page is the native `BrowseForMePage` and holds
+  Talk to Me (below); on Android it is `components/settings/BrowseForMePage.tsx` on the hand-built settings
   kit, fed by the module's `account()`, `connect()`, `disconnect()`, `chooseModel()`, `chooseEffort()`,
   `clearProblem()` and `openUsage()`, and the `account` event carries the whole account state.
 - **Testing.** On Android a lab build (`-PardiaLab=true`) takes `--es BrowseResearch <query>` to open the page at
@@ -1416,8 +1416,89 @@ JavaScript is shared; it turns on wherever the native module is registered.
   `-ArdiaResearchWriter excerpts` skips the model; `-ArdiaChatGPTIssuer <url>` and `-ArdiaChatGPTAPI <url>` point
   ChatGPT at a fake server.
   `-ArdiaVoiceHeard <text>` opens voice search as if it had just heard those words, for a capture of its buttons.
-  `-ArdiaSettingsPage browseForMe` opens the settings page.
+  `-ArdiaSettingsPage browseForMe` opens the settings page. Talk to Me's switches are below.
 - **Left for a person.** A real Plus or Pro sign-in.
+
+### Talk to Me
+
+Browse for Me's answers read aloud on iPhone (#2845), by Phonon 31M (Gradium, Apache-2.0, English only), on the
+phone. The owner chose Phonon over Apple's voices and Kokoro, and the model must not grow the app's download.
+
+- **Engine.** `ptts` 0.7.1 from `https://github.com/gradium-ai/xn-ptts.git` (module `PhononTTS`), pinned exactly in
+  the `packages/phone/ios/ArdiaTalk` package's `Package.swift` and `Package.resolved`, wrapped by its `ArdiaTalk`
+  target (`TalkSpeaker`), which the Podfile links into `ArdiaPhoneNative` beside ArdiaBrowser and ArdiaDesign. It is a
+  package of its own, not part of ArdiaKit, so the app project, which loads ArdiaKit for its extensions, never resolves
+  Phonon. `release-ios` archives with `ENABLE_SIGNATURE_AGGREGATION=NO`: otherwise both the
+  package and `ArdiaPhoneNative` collect `PhononCore.xcframework-ios.signature`, and xcodebuild fails copying the second
+  into the archive's Signatures folder. It has to be on the command line, since the package's own targets take no
+  project settings. Phonon's is the only xcframework signature the app has. A local Xcode archive needs the same setting. Its compiled core is a static arm64
+  library; it adds about 13 MB to the app binary uncompressed (13.3 MB against 0.05 MB for an empty iOS dylib,
+  stripped, Release), about 4 MB compressed. `TalkSpeaker` keeps one `Phonon` and its own `AVAudioEngine`: a player
+  node through `AVAudioUnitTimePitch`, whose `rate` is the speed (pitch kept). Voices are the `.safetensors` files in
+  the models' `voices/` folder, switched with `Phonon.setVoice(_:)` (about 0.6 s, applied from the next sentence).
+  Each answer block is one `tts.stream(_:)` call, consumed in order; `pause()` and `resume()` pause the player node,
+  cancelling the consuming task stops generation, `stop()` clears what was scheduled, and when the engine stops on a
+  route change it restarts at the block being heard.
+- **Distribution: our own download from GitHub, on demand.** The voice is one LZFSE Apple Archive,
+  `phonon-31m-en.aar` in the `phonon-31m-en-v0.7.1` release of `ardia-browser/ardia-voices` (132,936,282 bytes, SHA-256
+  `f72408f2…6579`). It unpacks to `TalkToMe/`: the three Core ML models compiled to `.mlmodelc`, `host.safetensors`,
+  `tokenizer.json`, a pruned `bundle.json` and six voices (Harper, Juniper, Miles and Preston, American; Maeve and
+  Hugh, British), 156 MB installed. The models are compiled on the Mac, so the phone never compiles or writes beside
+  them (`Phonon` compiles only a `.mlpackage` with no `.mlmodelc` beside it). The URL, size and SHA-256 are pinned
+  together in `VoiceDownload` in `packages/phone/ios/VoiceDownload.swift`. Turning Talk to Me on downloads it with a
+  foreground `URLSession` download task into `Application Support/TalkToMe-incoming-<uuid>/`, checks the byte count and
+  the SHA-256 (CryptoKit, streamed in 4 MB reads), unpacks it with AppleArchive into the same folder, writes
+  `voice.sha256` into the unpacked `TalkToMe/`, and moves it to `Application Support/TalkToMe` in one step (replacing
+  an older one), excluded from backup; the archive and the incoming folder are then deleted. A wrong size or hash
+  deletes the archive and fails. The voice counts as in only when that folder's `bundle.json` is there and its
+  `voice.sha256` matches the pinned one, so pinning a new voice treats the old folder as absent and deletes it.
+  Nothing downloads before the switch, and the app binary carries no part of the voice. No App ID, extension, App
+  Store Connect upload or TestFlight is involved: development, ad hoc and simulator builds download it the same way.
+  `apps/phone/ios/TalkToMe/build-voice` makes the archive: it fetches `phonon-31m-en-coreml.zip` from xn-ptts' v0.7.1
+  release, checks its SHA-256, every kept file against the zip's `bundle.json` and each voice against `voices.tsv`,
+  compiles with `coremlcompiler`, packs with `aa archive -d <stage> -subdir TalkToMe -o phonon-31m-en.aar -a lzfse`
+  (reproducible: the same stage gives the same bytes) and prints its size and SHA-256. The model files are never
+  committed.
+- **Settings › Browse for Me › Talk to Me.** The switch (off by default) starts the download and shows its progress
+  with Cancel, or the failure with Try Again ("Check your connection" for a network error, "Try again in a moment"
+  for anything else, a wrong hash included); a failure stays until Try Again or the switch. With the voice in: Speed (0.8× to 1.5×), the six voices (a tap chooses one and plays a short sample), the
+  download's size and Remove Voice Download (confirmed; it turns Talk to Me off). The footer says the bar at the end
+  of an answer plays it, or the phone held to the ear does, that Phonon speaks it on this iPhone and nothing leaves it,
+  and that it is English only for now. Settings are in `UserDefaults` (`ArdiaTalkToMeOn`, `ArdiaTalkToMeVoice`,
+  `ArdiaTalkToMeSpeed`). Phonon is the only voice: no system voice is ever used.
+- **Nothing reads on its own.** Reading starts only from the speaker button or from raising the phone to the ear.
+- **The listen bar and hold to your ear** (the SwiftUI app's design from #1724, now with Phonon). While the answer
+  page is open, Talk to Me is on and its voice is in, the proximity sensor is on (`ProximityFeed`). Once the answer is
+  done and English (`NLLanguageRecognizer`; an answer under 40 letters counts as English when every letter is Latin), a glass bar sits at the bottom of the
+  page: an ear, a line ("Hold your iPhone to your ear to listen", "Reading at your ear", "Reading out loud", "Paused.
+  Hold it to your ear to keep listening", "Paused", "Hold it to your ear to hear it again"), the speaker button
+  (Play Out Loud, then Pause) and a fill showing how far it has read. Raising the phone to the ear reads the answer
+  through the earpiece; lowering it pauses, raising it again resumes, and after the end it starts over. Holding it up
+  before the answer is done starts it when it is. The speaker button plays it out loud, and raising the phone moves
+  that to the earpiece. The rules are `EarListening` in ArdiaKit's `ArdiaBrowser/Research` (tested). The text has
+  `[n]` citations, markdown, link targets and list numbers removed (`SpokenAnswer`), one utterance per heading,
+  bullet or paragraph, so a reroute or an engine restart picks up at the block being heard. The earpiece is
+  `.playAndRecord` with `.spokenAudio` and no `.defaultToSpeaker` (the receiver), so iOS can ask for the microphone
+  the first time (the usage string says why); out loud is `.playback` with `.spokenAudio`, ducking other audio, so it
+  plays with the silent switch on. A call, Siri, unplugged headphones or the app leaving the foreground pause it; a
+  new search, opening a source, Search the Web or closing the page stop it and turn the sensor off. In the simulator
+  the page blacks out while "near", as a real screen turns off.
+- **Testing** (test builds only). `-ArdiaTalkToMeModels <folder>` loads the models from a folder instead of the download
+  (`build-voice --models-only --out <dir>` writes `<dir>/stage/TalkToMe`); the simulator can also download the real voice.
+  `-ArdiaTalkToMeRecord <path.wav>` also writes what was generated to a 24 kHz WAV, finished when the answer ends or
+  the page closes, with `<path.wav>.txt` listing each block (time, output, index, text). `-ArdiaProximity
+  "4:near,12:far"` plays proximity changes at those seconds after the page opens, and `xcrun simctl --set <set> spawn
+  <udid> notify_post com.ardia.browser.ios.proximity.near` (or `.far`) sends one by hand. `-ArdiaTalkToMeOn YES`
+  turns Talk to Me on for the run (the setting's own key, through the launch argument domain). The app logs
+  `TALKTOME first audio after … (earpiece|speaker|sample)`, `TALKTOME utterance: …`, `TALKTOME voice installed after …` and
+  `TALKTOME download failed: …`.
+- **Telemetry.** Five counts in `usage_counts`: `talk_to_me_answers_read` (an answer whose first audio played, once per
+  answer, never a sample: the total), `talk_to_me_ear_listens` (those started by raising the phone to the ear), `talk_to_me_voice_downloads` (the voice downloaded, checked and unpacked), `talk_to_me_download_failed`
+  (it failed, not cancelled: offline, a bad status, a wrong size or hash, or an archive that wouldn't unpack) and `talk_to_me_failed` (the models wouldn't load or speech failed). The native side sends
+  `{ name: "talkToMe", count }` on `onBrowseForMe`, and `noteBrowseForMe` counts it outside Incognito.
+- **Left for a person.** The download over a phone's cellular connection, the real proximity sensor and the
+  earpiece route, the microphone prompt, the sound with the silent switch on, ducking under music, a call
+  interrupting it, and the Neural Engine's speed.
 
 ## Pinch to Summarize
 
@@ -1510,11 +1591,11 @@ Events (service `ardia-phone`, `$lib` `ardia-phone-telemetry`, tags `app: phone`
 | Event | Fields | When |
 | --- | --- | --- |
 | `sharing_turned_on` | `source` (settings, onboarding) | turning sharing on |
-| `app_launched` | `legacy_import` (imported, started_fresh, none), `legacy_import_failures` (failed tries before the app opened), `look_mode` (full, no_blur, no_motion, neither: the look this launch shows, after the look's budget and the system's Reduce Motion and Reduce Transparency), `interface_style` (match_mac, glass, classic) and `color_scheme` (match_mac, system, light, dark): the redesign's Appearance choices | each launch with sharing on |
+| `app_launched` | `legacy_import` (imported, started_fresh, none), `legacy_import_failures` (failed tries before the app opened), `look_mode` (full, no_blur, no_motion, neither: the look this launch shows, after the look's budget and the system's Reduce Motion and Reduce Transparency), `interface_style` (match_mac, glass, classic) and `color_scheme` (match_mac, system, light, dark): the redesign's Appearance choices, and `material_colors` (wallpaper, profile, fallback, not_material): where Android's Material design took its colours, from the wallpaper, from a picked profile colour, or from Ardia's own palette on phones that give none; not_material on iPhone and in the original design | each launch with sharing on |
 | `perf_launch` | `launch_ms`, `js_ms` | each launch, once the module gives the process start (`ArdiaPhoneSystem.processStartedAt()`, epoch ms) |
 | `perf_backdrop` | `backdrop_ms` | each launch on iPhone, once the native launch backdrop has shown (`system.launchBackdropShownAt()`, epoch ms on the process start's clock) |
 | `perf_launch_tray` | `tray_ms` | each launch with Auto-Open Keyboard on, once the launch tray is up (process start on `ArdiaPhoneSystem.processStartedAt()`'s clock) |
-| `usage_counts` | `tabs_opened`, `searches`, `pins_to_mac`, `tabs_sent`, `page_processes_gone`, `links_given_up` (a link whose handling passed its 8 s deadline), `pages_reloaded_online` (a failed page reloaded when the phone came back online), `find_opened_system` and `find_opened_bar` (Find on Page opened in WebKit's own panel, or in the app's find bar), `spaces_swiped` (a swipe in Spaces or on the start page that changed the profile), `tray_hidden_rows_opened` (a tray row opened while it peeked or sat under the keyboard), `deck_pictures_late` (a deck opened from a page whose picture hadn't painted within 250 ms, so it shrank without waiting), `search_tabs_opened` (the deck's Search Tabs field focused, in the redesign), `spaces_picked` (a space picked from the deck's switcher menu, or by a VoiceOver adjustment of the start page's dots, that changed the profile, in the redesign), `tabs_moved_to_space` (a tab moved to another space with the deck card menu's Move to Space, in the redesign), `pages_printed` (a page printed from the page menu's Print, counted when the print sheet opened, in the redesign), `pages_translated` (a page sent to Google Translate from the page menu's Translate, never from an Incognito tab), `pinned_tabs_refound` (a pinned site's tile or row switched to the tab it had opened after that tab had left the pinned address, where it used to open a second copy), `site_permissions_revoked` (a site's camera, microphone or location access revoked from Site Settings, by swipe or by its dialog, on iPhone's Expo UI Settings), `tray_back_swiped` (a search tray closed with Android's predictive back swipe), `card_opens_waited` (a card opened from the deck whose growth landed before its page had laid out and its picture painted, so the page waited up to 250 ms to take over), `native_menus_opened` (a menu opened as the system's own: a deck card's long press, the deck's ···, the space switchers, the + menus, Reader's Text Appearance, the page menu's Send to Device, the tabs button's recent tabs, on iPhone), `drawn_menus_opened` (a menu or confirmation card the app draws itself opened: every menu and confirmation card on Android, and on iPhone the few that have no system counterpart, such as a page link's long press; neither menu count is taken on the deck's Incognito side, on an Incognito page or for an Incognito card), `library_opened` (History, Bookmarks or Downloads opened from the page menu), `deck_grid_shown` (Grid picked for the deck in Settings › Appearance › Tabs, on iPhone), `landscape_shown` (a launch in which the phone was turned to landscape at least once, counted once a launch), `duo_layout_shown` (a launch on a Duo in any pose, or that used the wide or split layout at least once, counted once a launch, on iPhone), `list_sheets_late` (an Archive or History sheet whose rows were drawn more than 400 ms after it was asked for, on iPhone), `list_pages_added` (Archive or History adding its next 200 rows as you scroll, on iPhone), `search_reveals_late` (a search panel opened whose content had not laid out within 250 ms, so the stage revealed it on its deadline, on iPhone), `address_field_scrolled` (a long address in the search field scrolled sideways with a swipe, on iPhone), `deck_bar_swipes` (the deck opened by swiping up on the browsing bar, the second way in beside the tabs button), `tabs_swiped_closed` and `tabs_swiped_reopened` (a back swipe on a page with no history that closed its tab, and a forward swipe with no forward history that reopened the last closed tab), `page_menu_tapped_away` (the page menu closed by a tap on the page above it, on iPhone), `new_tab_search_opened` (search opened on a new tab in the iPhone's full-height search panel), `deck_incognito_switches` (a tap on the deck bar's Incognito switch that went from the normal tabs to the Incognito tabs, on iPhone), `deck_bar_swipes_returned` (a swipe up on the browsing bar let go before its commit point, so the page grew back), `deck_pulls_hitched` (a swipe up or a tabs tap during whose shrink into the deck two UI-thread frames were more than 50 ms apart), `browse_for_me_opened` (Browse for Me opened from the tray, voice search or a launch argument), `browse_answers_chatgpt`, `browse_answers_on_device`, `browse_answers_excerpts` and `browse_answers_failed` (a Browse for Me answer by who wrote it, or a page that found or read nothing), `browse_chatgpt_fallbacks` (a ChatGPT answer that failed, so Apple Intelligence, Gemini Nano or the excerpts wrote it instead), `page_summaries_pinched` and `page_summaries_from_menu` (a page summary opened by pinching in or from the page menu's Summarize Page), `page_summaries_chatgpt`, `page_summaries_on_device`, `page_summaries_excerpts` and `page_summaries_failed` (a page summary by who wrote it, or a page it couldn't read or summarize; ChatGPT on Android only), `page_summaries_chatgpt_fallbacks` (a ChatGPT summary that failed, so Gemini Nano wrote it instead, on Android), `paste_and_go_links`, `paste_and_go_texts` and `paste_and_go_unread` (a Paste and Go tap with a link, with text, or that read nothing because the paste prompt was refused or the clipboard emptied; never counted while browsing privately), `search_tile_taps`, `voice_tile_taps` and `incognito_tile_taps` (Ardia opened from its Quick Settings tiles, on Android, counted on the phone and sent with the next day's counts) | at most once a day, for the last UTC day the app was used before today, when anything was counted; private tabs are never counted |
+| `usage_counts` | `tabs_opened`, `searches`, `pins_to_mac`, `tabs_sent`, `page_processes_gone`, `links_given_up` (a link whose handling passed its 8 s deadline), `pages_reloaded_online` (a failed page reloaded when the phone came back online), `find_opened_system` and `find_opened_bar` (Find on Page opened in WebKit's own panel, or in the app's find bar), `spaces_swiped` (a swipe in Spaces or on the start page that changed the profile), `tray_hidden_rows_opened` (a tray row opened while it peeked or sat under the keyboard), `deck_pictures_late` (a deck opened from a page whose picture hadn't painted within 250 ms, so it shrank without waiting), `search_tabs_opened` (the deck's Search Tabs field focused, in the redesign), `spaces_picked` (a space picked from the deck's switcher menu, or by a VoiceOver adjustment of the start page's dots, that changed the profile, in the redesign), `tabs_moved_to_space` (a tab moved to another space with the deck card menu's Move to Space, in the redesign), `pages_printed` (a page printed from the page menu's Print, counted when the print sheet opened, in the redesign), `pages_translated` (a page sent to Google Translate from the page menu's Translate, never from an Incognito tab), `pinned_tabs_refound` (a pinned site's tile or row switched to the tab it had opened after that tab had left the pinned address, where it used to open a second copy), `site_permissions_revoked` (a site's camera, microphone or location access revoked from Site Settings, by swipe or by its dialog, on iPhone's Expo UI Settings), `tray_back_swiped` (a search tray closed with Android's predictive back swipe), `card_opens_waited` (a card opened from the deck whose growth landed before its page had laid out and its picture painted, so the page waited up to 250 ms to take over), `native_menus_opened` (a menu opened as the system's own: a deck card's long press, the deck's ···, the space switchers, the + menus, Reader's Text Appearance, the page menu's Send to Device, the tabs button's recent tabs, on iPhone), `drawn_menus_opened` (a menu or confirmation card the app draws itself opened: every menu and confirmation card on Android, and on iPhone the few that have no system counterpart, such as a page link's long press; neither menu count is taken on the deck's Incognito side, on an Incognito page or for an Incognito card), `library_opened` (History, Bookmarks or Downloads opened from the page menu), `deck_grid_shown` (Grid picked for the deck in Settings › Appearance › Tabs, on iPhone), `landscape_shown` (a launch in which the phone was turned to landscape at least once, counted once a launch), `duo_layout_shown` (a launch on a Duo in any pose, or that used the wide or split layout at least once, counted once a launch, on iPhone), `list_sheets_late` (an Archive or History sheet whose rows were drawn more than 400 ms after it was asked for, on iPhone), `list_pages_added` (Archive or History adding its next 200 rows as you scroll, on iPhone), `search_reveals_late` (a search panel opened whose content had not laid out within 250 ms, so the stage revealed it on its deadline, on iPhone), `address_field_scrolled` (a long address in the search field scrolled sideways with a swipe, on iPhone), `deck_bar_swipes` (the deck opened by swiping up on the browsing bar, the second way in beside the tabs button), `tabs_swiped_closed` and `tabs_swiped_reopened` (a back swipe on a page with no history that closed its tab, and a forward swipe with no forward history that reopened the last closed tab), `page_menu_tapped_away` (the page menu closed by a tap on the page above it, on iPhone), `new_tab_search_opened` (search opened on a new tab in the iPhone's full-height search panel), `deck_incognito_switches` (a tap on the deck bar's Incognito switch that went from the normal tabs to the Incognito tabs, on iPhone), `deck_bar_swipes_returned` (a swipe up on the browsing bar let go before its commit point, so the page grew back), `deck_pulls_hitched` (a swipe up or a tabs tap during whose shrink into the deck two UI-thread frames were more than 50 ms apart), `browse_for_me_opened` (Browse for Me opened from the tray, voice search or a launch argument), `browse_answers_chatgpt`, `browse_answers_on_device`, `browse_answers_excerpts` and `browse_answers_failed` (a Browse for Me answer by who wrote it, or a page that found or read nothing), `browse_chatgpt_fallbacks` (a ChatGPT answer that failed, so Apple Intelligence, Gemini Nano or the excerpts wrote it instead), `talk_to_me_answers_read`, `talk_to_me_ear_listens`, `talk_to_me_voice_downloads`, `talk_to_me_download_failed` and `talk_to_me_failed` (Talk to Me reading a Browse for Me answer aloud once per answer, and of those the ones started by raising the phone to the ear, its voice download finishing or failing, and its models or speech failing, on iPhone), `page_summaries_pinched` and `page_summaries_from_menu` (a page summary opened by pinching in or from the page menu's Summarize Page), `page_summaries_chatgpt`, `page_summaries_on_device`, `page_summaries_excerpts` and `page_summaries_failed` (a page summary by who wrote it, or a page it couldn't read or summarize; ChatGPT on Android only), `page_summaries_chatgpt_fallbacks` (a ChatGPT summary that failed, so Gemini Nano wrote it instead, on Android), `paste_and_go_links`, `paste_and_go_texts` and `paste_and_go_unread` (a Paste and Go tap with a link, with text, or that read nothing because the paste prompt was refused or the clipboard emptied; never counted while browsing privately), `search_tile_taps`, `voice_tile_taps` and `incognito_tile_taps` (Ardia opened from its Quick Settings tiles, on Android, counted on the phone and sent with the next day's counts), `start_logo_taps`, `find_closed_bar` (the app's find bar closed, once per find), `material_you_turned_on` and `material_you_turned_off` (Settings › General › Material You switched, on Android), and, with Material You on: `card_close_tapped` (a deck card closed with its ×), `material_back_swiped` (a back swipe out of a Material sheet, dialog or the library), `archive_bar_opened` (Archive opened from the bottom bar), `site_settings_sheet_opened` and `site_settings_sheet_expanded` (the address bar's page menu opened, and pulled to full screen), `search_sheet_expanded` (the search sheet pulled to full screen) | at most once a day, for the last UTC day the app was used before today, when anything was counted; private tabs are never counted |
 
 On the dashboard they are kept out of every Mac section by source and lib (`PHONE_APP_SOURCE` in `apps/dashboard/src/server/sql.ts`).
 
@@ -1560,12 +1641,16 @@ Every count and timing the phone can send, for the owner to read as one set and 
 | `deck_incognito_switches` | the deck bar's Incognito switch on iPhone (build 16 feedback) | Whether people switch the deck to Incognito from its bar; zero across testers after a release means the switch stopped showing or stopped switching. Taps back to the normal tabs are not counted, since they start in Incognito |
 | `browse_for_me_opened` | Browse for Me on Expo | Whether people use Browse for Me at all; zero across testers after a release means the tray row or the voice button stopped opening it |
 | `browse_answers_chatgpt`, `browse_answers_on_device`, `browse_answers_excerpts`, `browse_answers_failed` | Browse for Me on Expo | Who writes the answers: a share of `excerpts` that grows on phones with Apple Intelligence means the model path broke, and a growing `failed` share against `browse_for_me_opened` means search or page reading broke (DuckDuckGo's page changing is the likely cause) |
+| `talk_to_me_answers_read`, `talk_to_me_ear_listens`, `talk_to_me_voice_downloads`, `talk_to_me_download_failed`, `talk_to_me_failed` | Talk to Me on iPhone (#2845) | Whether people listen: answers read against `browse_for_me_opened`, and how many of them start at the ear (`ear_listens`) rather than from the speaker button; zero ear listens across testers means the proximity sensor stopped starting it. `download_failed` against `voice_downloads` shows whether the GitHub download works; a rising `failed` against answers read means the models stopped loading or speaking |
 | `page_summaries_pinched`, `page_summaries_from_menu` | Pinch to Summarize on iPhone and Android | It is off by default, so opens count only people who turned it on. A drop in pinch opens alongside steady menu opens can point to a gesture regression. A rise in pinch opens relative to `tabs_opened` can indicate accidental summaries |
 | `page_summaries_on_device`, `page_summaries_excerpts`, `page_summaries_failed` | Pinch to Summarize on iPhone | A rising excerpt share can point to problems with Apple Intelligence. A rising failure share can point to problems reading pages |
 | `page_summaries_chatgpt`, `page_summaries_chatgpt_fallbacks` | Pinch to Summarize on Android | Android has no excerpts, so `page_summaries_failed` against `page_summaries_on_device` is the share of phones without a ready Gemini Nano. How many summaries the opt-in ChatGPT choice writes; fallbacks rising against `page_summaries_chatgpt` mean the Responses call or the token refresh broke. On Android, pinch opens against menu opens show the passive pinch watcher working, and zero pinch opens after a release with steady menu opens mean it stopped |
 | `paste_and_go_links`, `paste_and_go_texts`, `paste_and_go_unread` | Paste and Go, now on iPhone too | iPhone taps should appear beside Android's. A high unread share on iPhone means people refuse the paste prompt, or the row shows when nothing can be pasted |
 | `search_tile_taps`, `voice_tile_taps`, `incognito_tile_taps` | Android's Quick Settings tiles | Voice and Incognito should appear once the release is out; a tile that stays at zero while Search counts can point to a broken tile |
 | `browse_chatgpt_fallbacks` | Browse for Me on Expo | How often a connected ChatGPT plan fails to answer; a jump after a release, or against `browse_answers_chatgpt`, means the Responses call or the token refresh broke |
+| `material_you_turned_on`, `material_you_turned_off` | the Material You switch in Android Settings (the owner, 2026-11-20) | How many testers try Material You and how many go back. Read `off` against `on`: a share near one means it is tried and dropped. `app_launched.material_colors` says how many launches run with it on |
+| `card_close_tapped` | the × on a card in Android's Material deck | Whether people close tabs with the card's own button rather than a flick; zero across Android testers after a release means the × stopped closing cards, or its tap zone opens the card instead |
+| `material_back_swiped` | a predictive back swipe on Android's Material sheets, dialogs, menus and library | Whether people swipe back out of Material surfaces; zero across Android testers after a release means the swipe stopped reaching them, or Back goes to the wrong surface |
 
 ## What is left before the Expo app replaces both native apps
 
@@ -1641,6 +1726,45 @@ growth and the Android equivalent (`coveringCard`) is still behind the `ArdiaOpe
 open through the pulled card in the redesign; and the host pill stays mounted with its glass shown at once on Android,
 which the bar's fold needs. No new telemetry: `deck_pulls_hitched` keeps watching the swipe into the deck, and
 `card_opens_waited` the card opens.
+
+### Material You, a switch in Android Settings (the owner, 2026-11-20)
+
+Settings › General › Material You turns the whole Android app to the Material You design and back. It is off by
+default, so Android keeps main's iPhone design with drawn menus. It takes effect at once, with no relaunch: `useDesign()`
+reads the `settings.materialYou` preference (`designFor(os, lab, materialYou)` in `lib/design.ts`), and
+`followDesign` in `components/ui/design.tsx` re-applies the Spaces and Appearance design and starts following the
+wallpaper palette when it turns on. iPhone never offers it. The design itself is our Material You branch of 17 to 18 Nov
+(#2537, #2557) with Sai Charan's work from #2798 on top: the persistent bottom bar, the seamless search sheet,
+Material Symbols, the pitch-black Incognito and the Settings layout.
+
+What the switch changes, and what it leaves alone:
+
+- Menus and confirmations stay main's drawn ones in both designs, already Android's Material 3 look since 2026-11-19.
+  The branch's native Material menus (`MenusModule`, `MaterialMenus.kt`) and their `native_menu_actions` count are not
+  carried over: the owner turned down the native dropdowns on 2026-11-17, and main removed the module.
+- Material Symbols replace Ardia's drawn symbols only while the switch is on (`Symbol` and `MaterialSymbol`); Ardia's
+  eyes, closed eyes and Browse for Me glyph stay its own. The Compose screens (Settings UI, the share sheet, summary cards)
+  keep main's `ArdiaSymbols`, and the app's window colours stay main's, so the launch backdrop is the same with the switch
+  on or off.
+- The deck keeps main's pull and standby pipeline with the switch on; the branch's deferred entrance picture and its
+  cross-fading card pictures are not carried over, since main's deck parity replaced that path.
+- Main's tests run on main's design; the Material tests turn the switch on with `withMaterialYou()` from the render
+  harness.
+- My Filters puts the keyboard away when it is left by its back arrow or unmounted, with Material You on only;
+  main's design is left as it is.
+- Spaces split the tabs with Material You on exactly as they do in main's design (`tabSpacesFor` answers for every
+  design but the original), so the Material deck's Space switcher shows that Space's tabs.
+
+With the switch on:
+
+- Settings › General › Dynamic Colors switches between the wallpaper palette and a custom color (2026-11-18). Turning it off shows the existing color picker; turning it on keeps the custom color saved. The choice is stored in `settings.dynamicColors`, applies immediately to the app, its menus and Incognito, and survives relaunches. Phones without a wallpaper palette use Ardia's fallback when enabled. Existing installs retain their current theme until the switch changes. Watch the existing `app_launched.material_colors` values for adoption; no new telemetry fields.
+- Incognito start, search sheet and tab switcher use pitch-black backgrounds with the selected palette’s dark controls in both light and dark appearance (2026-11-18). They no longer invert the current scheme, which made dark-mode Incognito white. The page address field, native search capsule and tab-switcher search field also use black backgrounds with light text and icons. Incognito activity stays uncounted.
+- The Material bottom bar is one 64 dp capsule, inset 16 dp from the sides and 8 dp above the navigation inset. The page extends behind it, with no full-width background band; touches outside the capsule reach the page. Scrolling down a page slides the capsule out below the bottom edge and scrolling up brings it back; Settings › Site Settings › Collapse Bottom Bar defaults on in Android’s Material design and keeps an explicit off choice. Tabs is on the left, search/address in the center, and add on the right. Hold Tabs for recent tabs, or hold the address for the page menu. In the tab switcher, the same capsule has Archive Tabs on the left, Search Tabs in the center and add on the right. Its 48 dp targets stay above the keyboard while filtering tabs. `Surfaces` mounts one `MaterialBottomBar` above the page and tab switcher. `isTabOverview` switches its controls without replacing the capsule. The page and deck controllers register their actions, page collapse, gestures and keyboard lift with the scoped `MaterialBarProvider`; neither screen nor its transition ghost mounts another bar. Search, fullscreen and overlays disable or hide this same instance. Watch `archive_bar_opened` (the Archive button, never while browsing privately) beside `search_tabs_opened` and `tabs_opened`, and `card_close_tapped` for the × on a deck card.
+- Android's More options and search results use the same Material sheet and docked URL capsule. The docked bar supplies the fill and corners in both modes, including while the URL is editable. Tapping the URL in More options keeps the sheet and bar mounted, switches the body to search suggestions, and moves the bar as the keyboard opens. The existing URL or search query is selected for editing. Direct search uses the same sheet and moves the capsule up from the bottom bar. The Compose field keeps inline completion, clear, voice and Incognito controls inside the capsule. The sheet stays raised when the keyboard closes or becomes shorter, giving results more space. Turning the device resets the retained keyboard height when the width changes. Swipe up to expand the results, down to return to compact height, and down again to dismiss. Results can scroll independently after expansion. Remove animations skips the transition. Watch `search_sheet_expanded` against `searches`, and `site_settings_sheet_expanded` against `site_settings_sheet_opened` for the address bar menu pulled to full screen; none counts Incognito.
+- Android Material Find dismissal uses the sheet's predictive Back handler and ends Find when the keyboard hides, restoring the bottom bar in the same transition. Material sheet rows and bar buttons use Gesture Handler Pressable because the synchronous Reanimated props path moves native views without updating Fabric hit testing. Watch `find_closed_bar` against `find_opened_bar` (counted in both designs, once per non-private find), and `material_back_swiped` for back swipes out of Material sheets, dialogs and the library.
+
+Watch `material_you_turned_on` and `material_you_turned_off` in `usage_counts` for how many testers try it and how many
+go back, and `app_launched.material_colors` (`not_material` while it is off) for how many keep it on.
 
 ### Android motion and menu follow-up
 
@@ -3732,6 +3856,17 @@ This was `docs/ios.md`'s, for main's SwiftUI app; since the clean-up the workflo
   Confirm installation of `com.ardia.browser.ios` on the iPhone.
 - **The app record.** "Ardia", bundle id `com.ardia.browser.ios`, team `U5L5T3NGVV`; the extensions are `.widgets`,
   `.share` and `.open`, sharing the app group `group.com.ardia.browser.ios`.
+- **Talk to Me's voice** is not part of a build or an upload. Only a new voice needs a step, on a Mac:
+
+  ```sh
+  apps/phone/ios/TalkToMe/build-voice --out /private/tmp/ardia-talk-to-me-pack
+  gh release create <tag> /private/tmp/ardia-talk-to-me-pack/phonon-31m-en.aar --repo ardia-browser/ardia-voices \
+    --title <tag> --notes "<model and release it was built from>"
+  ```
+
+  Use a new tag (never replace a published asset, since older apps pin its hash), then update `url`, `bytes` and
+  `sha256` in `VoiceDownload` (`packages/phone/ios/TalkToMe.swift`) with what `build-voice` printed. Phones that had
+  the old voice download the new one the next time Talk to Me is on.
 - **The workflow** (`.github/workflows/ios-release.yml`). What each mode touches in App Store Connect:
   - `mode=status` only reads: the app record, App IDs, devices, certificates, profiles, builds, build uploads and
     tester groups.
@@ -3883,3 +4018,4 @@ the edge) has never triggered it; check it with a finger on a device or with the
 
 The first build takes about 25 minutes on a busy Mac; a native-only change rebuilds in 3 to 5, since the codegen and
 Expo provider phases publish only files that changed.
+

@@ -253,6 +253,7 @@ export const CURATED = {
   "rectangle.lefthalf.inset.filled.arrow.left": "L:panel-left-close T:layout-sidebar-left-collapse P:sidebar-simple M:dock-left",
   "rectangle.on.rectangle": "L:copy T:copy P:copy I:copy M:content-copy",
   "rectangle.portrait.and.arrow.right": "L:log-out T:logout P:sign-out I:log-out M:logout",
+  "rectangle.topthird.inset.filled": "L:panel-top T:layout-navbar M:dock-top TF:layout-navbar",
   "rectangle.leftthird.inset.filled": "L:panel-left T:layout-sidebar P:sidebar-simple M:dock-left TF:layout-sidebar",
   "rectangle.righthalf.filled": "L:panel-right T:layout-sidebar-right P:sidebar-simple M:dock-right TF:layout-sidebar-right",
   "rectangle.righthalf.inset.filled": "L:panel-right T:layout-sidebar-right P:sidebar-simple M:dock-right TF:layout-sidebar-right",

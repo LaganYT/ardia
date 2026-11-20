@@ -86,7 +86,6 @@ export const usePressMotion = (): PressMotion => useSyncExternalStore(subscribeP
 export const hoverFade = {
   show: { duration: 50, easing: curve.fade },
   hide: { duration: 200, easing: curve.fade },
-  appear: { duration: duration.fast, easing: curve.fade },
 } as const;
 
 export type Fade = { duration: number; easing: EasingFunction; delay?: number };

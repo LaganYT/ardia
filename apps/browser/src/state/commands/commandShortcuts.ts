@@ -1,5 +1,6 @@
 import type { MenuItem } from "../../platform/menus";
 import type { MenuShortcut } from "../../platform/commands";
+import { useMemo } from "react";
 import { create } from "zustand";
 import { useBrowser } from "../browser/store";
 import { shortcutSources, UNAVAILABLE_COMMANDS } from "./commandCatalog";
@@ -94,3 +95,18 @@ export function useShortcutHint(id: string): string | undefined {
   useMenuBar(() => shortcutHint(id));
   return useBrowser((s) => shortcutHint(id, s));
 }
+
+const HINT_SEPARATOR = "\u0000";
+const joinedHints = (ids: readonly string[], s?: ShortcutState) => ids.map((id) => shortcutHint(id, s) ?? "").join(HINT_SEPARATOR);
+
+export function useShortcutHints<K extends string>(ids: readonly K[]): Readonly<Record<K, string | undefined>> {
+  useMenuBar(() => joinedHints(ids));
+  const joined = useBrowser((s) => joinedHints(ids, s));
+  return useMemo(() => {
+    const hints = joined.split(HINT_SEPARATOR);
+    return Object.fromEntries(ids.map((id, i) => [id, hints[i] || undefined])) as Record<K, string | undefined>;
+  }, [joined]);
+}
+
+export const NAV_HINTS = ["back", "forward", "reload"] as const;
+export type NavHints = Readonly<Record<(typeof NAV_HINTS)[number], string | undefined>>;

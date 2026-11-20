@@ -1,10 +1,11 @@
-import { startTransition, useEffect, useState, type ReactNode } from "react";
+import { startTransition, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { FrameProbe } from "./components/perf/FrameProbe";
 import { countRender, interactionPerfEnabled } from "./state/app/interactionPerf";
 import { AppState, BackHandler, Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BrowsingScreen } from "./components/browsing/BrowsingScreen";
+import { MaterialBarProvider, PersistentMaterialBar } from "./components/browsing/PersistentMaterialBar";
 import { SearchTray } from "./components/search/SearchTray";
 import { StartScreen } from "./components/search/StartScreen";
 import { ArchiveView } from "./components/tabs/ArchiveView";
@@ -15,12 +16,13 @@ import { ExpoSettingsSheet } from "./components/settings/ExpoSettingsStack";
 import { ExpoArchiveSheet } from "./components/tabs/ExpoArchive";
 import { ExpoSpacesSheet } from "./components/sync/ExpoSpaces";
 import { ExpoLibrarySheet } from "./components/library/ExpoLibrary";
+import { MaterialLibrary } from "./components/library/MaterialLibrary";
 import { LibraryView } from "./components/library/LibraryView";
 import { closeLibrary, useLibrary } from "./state/library/store";
-import { SettingsView } from "./components/settings/SettingsView";
+import { MaterialSettingsScreen, SettingsView } from "./components/settings/SettingsView";
 import { SpacesView } from "./components/sync/SpacesView";
 import { ToastHost } from "./components/toasts/ToastHost";
-import { appDesign, tabsMotion, useDesign, useTheme, DEFAULT_PROFILE_COLOR, FrostSource, FullSheet, OverlayHost, PROFILE_PRESETS, onDrawnMenuOpened, onNativeMenuOpened, ProfileLookContext, Shade, SheetBackground, SURFACES_FROST } from "./components/ui";
+import { followDesign, tabsMotion, useDesign, useTheme, DEFAULT_PROFILE_COLOR, FrostSource, FullSheet, OverlayHost, PROFILE_PRESETS, onDrawnMenuOpened, onNativeMenuOpened, ProfileLookContext, Shade, SheetBackground, SURFACES_FROST } from "./components/ui";
 import { useLook } from "./state/sync/hooks";
 import { startSettingsSources } from "./state/settings/actions";
 import { startSync } from "./state/sync/actions";
@@ -32,7 +34,7 @@ import { useOnboarding } from "./state/onboarding/hooks";
 import { bootApp, useBoot } from "./state/app/boot";
 import { startLinks } from "./state/links/links";
 import { useBaseSystemBars, useSystemBars } from "./state/app/systemBars";
-import { useSearchOpen } from "./state/search/hooks";
+import { useSearchFromDockedMenu, useSearchOpen } from "./state/search/hooks";
 import { useLeavingTab, useOpeningTab, useSheet, useSurface } from "./state/browse/hooks";
 import { appBecameActive, appWillResignActive, closeArchive, deckPullInFlight, goBackToStartIfEmpty, startBrowser, type Surface } from "./state/browse/store";
 import { refreshHiddenDeck, resizeRoot } from "./state/browse/deckHold";
@@ -45,7 +47,7 @@ import { ScreenLayoutProbe } from "@ardia/phone-native";
 import { handleSystemBack, startPageUi } from "./state/page/actions";
 import { VoiceSearchView } from "./components/search/VoiceSearchView";
 import { useVoicePresented } from "./state/voice/store";
-import { useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { closeSettings } from "./state/settings/nav";
 import { applyLaunchSettings, runLaunchScenario } from "./state/app/launch";
 import { frontSheet } from "./state/settings/settingsRules";
@@ -57,6 +59,11 @@ import { countDrawnMenu, countNativeMenu } from "./state/browse/menuCounts";
 import { browseForMeOffered } from "./state/browseForMe/offer";
 import { pageSummaryChoiceOffered } from "./state/pageSummary/store";
 import { listenForBrowseForMe } from "./state/browseForMe/events";
+import { followDynamicScheme } from "./state/app/dynamicScheme";
+import { useMaterialTheme } from "./components/ui/materialTheme";
+import type { Design } from "./lib/design";
+import { onMaterialBackSwiped } from "./components/ui/MaterialSurfaces";
+import { useTabs } from "./state/tabs/store";
 
 export default function App() {
   useState(() =>
@@ -64,8 +71,7 @@ export default function App() {
       offerSyncPages(syncOffered);
       offerBrowseForMePage(browseForMeOffered);
       offerPageSummaryPage(pageSummaryChoiceOffered);
-      setSpacesDesign(appDesign);
-      setAppearanceDesign(appDesign);
+      followDesign(applyDesign);
       startTelemetry();
       startBrowser(applyLaunchSettings);
       startPageUi();
@@ -113,8 +119,18 @@ export default function App() {
 
 const SYSTEM_SHEETS = Platform.OS === "ios";
 
+function applyDesign(design: Design) {
+  setSpacesDesign(design);
+  setAppearanceDesign(design);
+  if (design === "material") followDynamicScheme();
+}
+
 onNativeMenuOpened(countNativeMenu);
 onDrawnMenuOpened(countDrawnMenu);
+
+onMaterialBackSwiped(() => {
+  if (!useTabs.getState().incognito) countUsage("material_back_swiped");
+});
 
 export function Surfaces() {
   const surface = useSurface();
@@ -128,19 +144,26 @@ export function Surfaces() {
   const settingsOpen = useSettingsNav((s) => s.open);
   const onboarding = useOnboarding((s) => s.showing);
   const searching = useSearchOpen();
+  const searchFromMenu = useSearchFromDockedMenu();
   const voice = useVoicePresented();
   const sheetProgress = useSharedValue(0);
   const libraryOpen = useLibrary((s) => s.open);
+  const material = useDesign() === "material";
+  const settingsScreen = material && settingsOpen && !SYSTEM_SHEETS;
+  const libraryCovers = material && libraryOpen;
   const systemSheet = SYSTEM_SHEETS && (settingsOpen || libraryOpen || sheet === "archive" || sheet === "spaces");
-  const front = frontSheet(settingsOpen && !SYSTEM_SHEETS, SYSTEM_SHEETS && (sheet === "archive" || sheet === "spaces") ? null : sheet, libraryOpen && !SYSTEM_SHEETS);
+  const front = settingsScreen ? null : frontSheet(settingsOpen && !SYSTEM_SHEETS, SYSTEM_SHEETS && (sheet === "archive" || sheet === "spaces") ? null : sheet, libraryOpen && !SYSTEM_SHEETS && !libraryCovers);
+  const sheetCovers = front !== null || systemSheet || settingsScreen;
   const theme = useTheme();
   countRender("Surfaces");
   const incognito = useIncognito();
-  const layer = inkLayer({ onboarding, voice, sheet: front !== null || systemSheet, searching, surface });
-  const lightIcons = lightStatusIcons(layer, { cover: theme.backdrop[0], surface: theme.surface, deck: theme.backdrop[0], incognito });
+  const layer = inkLayer({ onboarding, voice, sheet: sheetCovers, searching: searching || libraryCovers, surface });
+  const incognitoScheme = useMaterialTheme(true).scheme;
+  const behind = material && incognito ? incognitoScheme.surface : theme.backdrop[0];
+  const lightIcons = settingsScreen && layer === "sheet" ? theme.dark : lightStatusIcons(layer, { cover: behind, surface: theme.surface, deck: behind, incognito: incognito && !libraryCovers });
   useEffect(goBackToStartIfEmpty, [tab, surface]);
   const duo = useScreenLayout((s) => s.layout.name === "wide" || s.layout.name === "split");
-  const deckMounted = useDeckStandby(surface, surface === "browsing" && tab !== null && opening === null && leaving === null && !searching && !voice && !onboarding && front === null, tab?.id ?? null);
+  const deckMounted = useDeckStandby(surface, surface === "browsing" && tab !== null && opening === null && leaving === null && !searching && !voice && !onboarding && front === null && !settingsScreen, tab?.id ?? null);
   const page = !duo && (surface === "browsing" || pageUnderDeck) && tab ? <BrowsingScreen tab={tab} /> : null;
   const deck = !duo && deckMounted ? <TabDeck key="deck" /> : null;
   const pageLayer = page && tab ? (
@@ -149,15 +172,16 @@ export function Surfaces() {
     </PageLayer>
   ) : null;
   return (
-    <>
+    <MaterialBarProvider enabled={material && !duo}>
       <LandscapeCount />
       <SheetBackground progress={sheetProgress}>
-        <Layer covered={onboarding || voice} muted={front !== null || systemSheet}>
-          <Shade shaded={searching}>
+        <Layer covered={onboarding || voice} muted={sheetCovers || libraryCovers}>
+          <Shade shaded={searching && !(material && searchFromMenu)}>
             <FrostSource name={SURFACES_FROST} style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false}>
               {duo && surface !== "start" ? <DuoBrowsing /> : null}
               {pageOverDeck ? [deck, pageLayer] : [pageLayer, deck]}
               {surface === "start" ? <StartScreen /> : null}
+              {material ? <PersistentMaterialBar /> : null}
             </FrostSource>
           </Shade>
           <SearchTray />
@@ -167,18 +191,20 @@ export function Surfaces() {
         <FullSheet sheet={front} progress={sheetProgress} onDismiss={front === "settings" ? closeSettings : front === "library" ? closeLibrary : closeArchive}>
           {(shown) => (shown === "settings" ? <SettingsView /> : shown === "library" ? <LibraryView /> : shown === "archive" ? <ArchiveView /> : <SpacesView />)}
         </FullSheet>
+        {settingsScreen ? <MaterialSettingsScreen /> : null}
       </Layer>
       {SYSTEM_SHEETS ? <ExpoSettingsSheet /> : null}
       {SYSTEM_SHEETS ? <ExpoArchiveSheet /> : null}
       {SYSTEM_SHEETS ? <ExpoSpacesSheet /> : null}
       {SYSTEM_SHEETS ? <ExpoLibrarySheet /> : null}
+      {material ? <MaterialLibrary /> : null}
       <Layer covered={onboarding}>
         <VoiceSearchView />
       </Layer>
       <OnboardingView />
       <ToastHost />
       {lightIcons !== null ? <LayerInk key={layer} light={lightIcons} /> : null}
-    </>
+    </MaterialBarProvider>
   );
 }
 

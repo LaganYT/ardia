@@ -11,7 +11,7 @@ import type { ClickModifiers } from "../../lib/keys";
 import { closeHistoryMenu, goBack, goForward, historyItems, toggleHistoryMenu } from "../../state/tabs/navigation";
 import { openModeFor, openUrl } from "../../state/bookmarks/actions";
 import type { ToolbarPalette } from "../ui/toolbarColors";
-import { useShortcutHint, withShortcut } from "../../state/commands/commandShortcuts";
+import { withShortcut } from "../../state/commands/commandShortcuts";
 import { GLYPH, HISTORY_GLYPH, HISTORY_BUTTON_MOTION, RELOAD_BUTTON_MOTION, SYMBOL_BOX } from "./tokens";
 import { showReloadMenu } from "../../state/site/reloadMenu";
 
@@ -123,15 +123,16 @@ export const ReloadButton = memo(function ReloadButton({
   palette,
   place,
   onFocus,
+  reloadHint,
 }: {
   tab: Pick<Tab, "id" | "url" | "windowId">;
   loading: boolean;
   palette: ToolbarPalette;
   place?: NavPlace;
   onFocus: () => void;
+  reloadHint: string | undefined;
 }) {
   const web = () => webviews.get(tab.id);
-  const reloadHint = useShortcutHint("reload");
   return (
     <Button variant="icon" toolbar
       style={place?.style}
@@ -165,6 +166,7 @@ export const HistoryButton = memo(function HistoryButton({
   place,
   onFocus,
   closesTab = false,
+  historyHint,
 }: {
   tabId: string;
   windowId: string;
@@ -174,6 +176,7 @@ export const HistoryButton = memo(function HistoryButton({
   place?: NavPlace;
   onFocus: () => void;
   closesTab?: boolean;
+  historyHint: string | undefined;
 }) {
   const handoffMotion = useRef(new Animated.Value(0)).current;
   const pressOffsetMotion = useRef(new Animated.Value(0)).current;
@@ -218,7 +221,6 @@ export const HistoryButton = memo(function HistoryButton({
       handoffMotion.setValue(0);
     });
   };
-  const historyHint = useShortcutHint(direction < 0 ? "back" : "forward");
   const openMenu = () => {
     onFocus();
     toggleHistoryMenu(tabId, direction);

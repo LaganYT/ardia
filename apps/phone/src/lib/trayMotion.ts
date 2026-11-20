@@ -59,6 +59,13 @@ export function trayDragDismisses(translation: number, velocity: number, trayHei
   return translation + Math.max(velocity, 0) * TRAY_DRAG.momentum >= trayDismissDistance(trayHeight);
 }
 
+export function trayExpansionTarget(progress: number, translationY: number, velocityY: number): number {
+  "worklet";
+  if (velocityY < -600 || translationY < -64) return 1;
+  if (velocityY > 600 || translationY > 64) return 0;
+  return progress > 0.5 ? 1 : 0;
+}
+
 export function trayDragReleasesKeyboard(translation: number): boolean {
   "worklet";
   return translation > TRAY_DRAG.keyboardRelease;

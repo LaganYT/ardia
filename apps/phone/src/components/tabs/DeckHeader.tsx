@@ -44,15 +44,27 @@ export function deckMoreMenuItems({ syncEnabled, canReopen, hasTabs, onCloseAll 
   ]);
 }
 
-export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
-  const theme = useTheme();
+export function useDeckSpaces() {
   const status = useSyncStatus();
   const view = useSyncView();
   const shown = useSelectedProfile();
-  const canReopen = useCanReopen();
   const incognito = useIncognito();
   const spaces = status.isEnabled ? view.profiles : [];
   const current = shown ?? spaces[0] ?? null;
+  const choose = (id: string) => {
+    if (id === current?.syncId) return;
+    haptics.selection();
+    if (!incognito) countUsage("spaces_picked");
+    selectProfile(id);
+  };
+  const spaceItems: MenuItem[] = spaces.map((space) => ({ label: space.name, icon: spaceMenuSymbol(space) ?? undefined, systemImage: spaceSystemImage(space.name, space.icon), checked: space.syncId === current?.syncId, onPress: () => choose(space.syncId) }));
+  return { syncEnabled: status.isEnabled, spaces, current, spaceItems };
+}
+
+export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
+  const theme = useTheme();
+  const canReopen = useCanReopen();
+  const { syncEnabled, spaces, current, spaceItems } = useDeckSpaces();
   const side = safeSide + sideInset;
   const below = safeTop + deckHeaderBottom() + deckChromeLayout.menuGap;
   const opened = () => onMenu?.(true);
@@ -62,14 +74,7 @@ export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs
     prepareArchive();
   };
   const menu = { trigger: "tap" as const, fixedOrder: true, haptic: menuOpenedHaptic, disabled: !menusShown, onOpen: opened, onClose: closed };
-  const choose = (id: string) => {
-    if (id === current?.syncId) return;
-    haptics.selection();
-    if (!incognito) countUsage("spaces_picked");
-    selectProfile(id);
-  };
-  const spaceItems: MenuItem[] = spaces.map((space) => ({ label: space.name, icon: spaceMenuSymbol(space) ?? undefined, systemImage: spaceSystemImage(space.name, space.icon), checked: space.syncId === current?.syncId, onPress: () => choose(space.syncId) }));
-  const moreItems = deckMoreMenuItems({ syncEnabled: status.isEnabled, canReopen, hasTabs, onCloseAll });
+  const moreItems = deckMoreMenuItems({ syncEnabled, canReopen, hasTabs, onCloseAll });
   const pillItems: MenuItem[] = [{ label: "Close Incognito Tabs", destructive: true, onPress: onCloseIncognito }];
   return (
     <View testID="deckHeader" pointerEvents="box-none" style={[styles.row, { top: safeTop + deckChromeLayout.headerCenter - browseLayout.hitTarget / 2, paddingHorizontal: side }]}>

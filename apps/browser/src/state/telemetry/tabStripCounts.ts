@@ -1,14 +1,18 @@
 import { takeTabLayoutCounts } from "./tabLayoutCounts";
+import { isSharing, onConsentPeriodChange } from "./choice";
+import { consentedCount } from "./consentedCount";
 
 let groupToggles = 0;
 let textOnlyRows = 0;
-let compactLayouts = 0;
+const compactLayouts = consentedCount();
+const readableLayouts = consentedCount();
 let edgeScrollDrags = 0;
 let revealsAfterPress = 0;
 let mostTabs = 0;
 let heldCloses = 0;
 let mostTitledTabs = 0;
 let mostTabsInOverflow = 0;
+onConsentPeriodChange(() => (mostTabsInOverflow = 0));
 let scrolls = 0;
 let revealsHeldForScroll = 0;
 let scrollStalls = 0;
@@ -27,7 +31,11 @@ export function noteTextOnlyRow() {
 }
 
 export function noteTabStripCompact() {
-  compactLayouts++;
+  compactLayouts.note();
+}
+
+export function noteTabStripReadable() {
+  readableLayouts.note();
 }
 
 export function noteTabStripEdgeScroll() {
@@ -43,7 +51,7 @@ export function noteTabStripOverflow(tabs: number) {
 }
 
 export function noteTabStripTabsInOverflow(tabs: number) {
-  mostTabsInOverflow = Math.max(mostTabsInOverflow, tabs);
+  if (isSharing()) mostTabsInOverflow = Math.max(mostTabsInOverflow, tabs);
 }
 
 export function noteTabStripHeldClose() {
@@ -73,7 +81,8 @@ export function takeTabStripCounts() {
   const taken = {
     tab_strip_group_toggles: groupToggles,
     pinned_rows_made_text_only: textOnlyRows,
-    tab_strip_compact_layouts: compactLayouts,
+    tab_strip_compact_layouts: compactLayouts.take(),
+    tab_strip_readable_layouts: readableLayouts.take(),
     tab_strip_edge_scroll_drags: edgeScrollDrags,
     tab_strip_reveals_after_press: revealsAfterPress,
     tab_strip_most_tabs: mostTabs,
@@ -88,7 +97,6 @@ export function takeTabStripCounts() {
   };
   groupToggles = 0;
   textOnlyRows = 0;
-  compactLayouts = 0;
   edgeScrollDrags = 0;
   revealsAfterPress = 0;
   mostTabs = 0;

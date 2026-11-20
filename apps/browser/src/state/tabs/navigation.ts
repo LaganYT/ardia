@@ -123,7 +123,7 @@ function hideNewTab(tabId: string) {
   store().updateTab(tabId, { url: kept.url, title: kept.title, favicon: kept.favicon });
 }
 
-useBrowser.subscribe((s, prev) => {
+useBrowser.subscribeTo(["tabs"], (s, prev) => {
   for (const id of changedIds(s.tabs, prev.tabs)) {
     const tab = s.tabs[id];
     const before = prev.tabs[id];

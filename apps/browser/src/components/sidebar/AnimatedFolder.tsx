@@ -14,7 +14,7 @@ export const AnimatedFolder = memo(function AnimatedFolder({ open, color, size }
   const folderStyle = useSettings((s) => s.folderStyle);
   const inSidebar = useContext(TextScopeContext) === "sidebar";
   const side = size ?? (inSidebar ? sidebarIconSize(FOLDER_SIDE) : FOLDER_SIDE);
-  return <FolderIcon open={open} {...folderPalette(color, theme.dark, theme.powerUpColor ?? theme.accent, folderStyle)} style={{ width: side, height: side }} />;
+  return <FolderIcon open={open} {...folderPalette(color, theme.dark, theme.powerUpColor ?? theme.accent, folderStyle, theme.windowTint)} style={{ width: side, height: side }} />;
 });
 
 export function FolderOrIcon({ icon, open, color }: { icon: string | null | undefined; open: boolean; color?: GroupColor | null }) {

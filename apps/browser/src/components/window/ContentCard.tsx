@@ -3,7 +3,12 @@ import { View } from "react-native";
 import { startChromeTabs } from "../../state/tabs/chromeTabs";
 import { useIsSmallWindow, useSplitOf } from "../../state/windows/card";
 import { usePeekOpenedFrom } from "../../state/peek/hooks";
-import { useActiveTabId, useSettings, useTab, useWindowFullScreen, useWindowId } from "../../state/browser/hooks";
+import { useActiveTabId, useSettings, useTab, useTabsShown, useWindowFullScreen, useWindowId } from "../../state/browser/hooks";
+import { useThemeLook } from "../../state/config/hooks";
+import { sidebarFieldOf } from "../../state/sidebar/chrome";
+import { useCurrentInterfaceScale } from "../../state/settings/interfaceScale";
+import { newTabOpensOf } from "../../state/settings/settings";
+import { cardFrameOf } from "./cardFrame";
 import { useBookmarksBarHeight } from "../bookmarks/barSize";
 import { useBookmarksBarMode } from "../../state/bookmarks/hooks";
 import { POPOVER_MARGIN } from "../ui";
@@ -48,7 +53,12 @@ export function ContentCard() {
   const barMode = useBookmarksBarMode(windowId);
   const toolbarRow = useToolbarRow();
   const barHeight = useBookmarksBarHeight();
-  const captionRoom = useCardCaptionRoom(usePageFrameInset());
+  const frameInset = usePageFrameInset();
+  const captionRoom = useCardCaptionRoom(frameInset);
+  const frame = cardFrameOf(frameInset, useCurrentInterfaceScale());
+  const sidebarField = sidebarFieldOf(useThemeLook(), addressInSidebar);
+  const sidebarFieldOpen = useTabsShown(windowId) && !!sidebarField;
+  const newTabCard = useSettings((st) => newTabOpensOf(st) === "commandBar");
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   const [windowShape, setWindowShape] = useState<WindowShape | null>(null);
@@ -66,7 +76,7 @@ export function ContentCard() {
     if (fullscreenTab && peekId && !peekFullscreen) dismissPeek(windowId);
   }, [fullscreenTab, peekId, peekFullscreen, windowId]);
 
-  const { mountedIds, panes, dividers, warmPanes, shown, lingerId, lingerRect } = usePaneLayout(windowId, activeId, split, fullscreenTab, size);
+  const { mountedIds, panes, dividers, warmPanes, shown, lingerId, lingerRect } = usePaneLayout(windowId, activeId, split, fullscreenTab, size, frame.splitGap);
 
   const chrome = useMemo(
     () => cardChrome({ addressInSidebar, small, minimal, split: !!split, fullscreen: !!fullscreenTab, hideWhileScrolling }),
@@ -174,6 +184,10 @@ export function ContentCard() {
               peekShown={!!peekId}
               lingering={tabId === lingerId}
               seeThrough={!!lingerId && tabId === activeId}
+              sidebarFieldOpen={sidebarFieldOpen}
+              cardRadius={frame.radius}
+              toolbarHeight={toolbarRow.height}
+              newTabCard={newTabCard}
             />
           );
         })}
@@ -200,6 +214,8 @@ export function ContentCard() {
           width={size.width}
           height={size.height}
           origin={origin}
+          activeTabId={activeId}
+          fullscreenTabId={fullscreenTab}
           page={(tabId, sourceId, width, shown, fullscreen) => <PeekPage tabId={tabId} sourceId={sourceId} windowId={windowId} width={width} shown={shown} fullscreen={fullscreen} />}
         />
       )}

@@ -229,17 +229,25 @@ function CommandKeyRow({ hit, selected, rank }: { hit: CommandKeyHit; selected: 
       }}
     >
       <View style={RESULT_TEXT}>
-        <Text lines={3} color={primary}>
-          {`${hit.item.title} — `}
-          <Text weight="bold" color={primary}>
-            {hit.keys}
-          </Text>
-        </Text>
+        <CommandKeyLine title={hit.item.title} keys={hit.keys} color={primary} />
         <Text size="caption" lines={2} color={secondary}>
           {[paneTitle("shortcuts"), ...hit.item.path].join(" › ")}
         </Text>
       </View>
     </ListRow>
+  );
+}
+
+export function CommandKeyLine({ title, keys, color }: { title: string; keys: string; color: string }) {
+  return (
+    <View style={KEY_LINE}>
+      <Text lines={1} color={color} style={KEY_LINE_TITLE}>
+        {title}
+      </Text>
+      <Text lines={1} weight="bold" color={color} style={KEY_LINE_KEYS}>
+        {`\u00a0\u2014\u00a0${keys}`}
+      </Text>
+    </View>
   );
 }
 
@@ -259,4 +267,7 @@ function Marked({ text, ranges, color }: { text: string; ranges: SearchRange[]; 
   );
 }
 
+const KEY_LINE = { flexDirection: "row", alignItems: "baseline" } as const;
+const KEY_LINE_TITLE = { flexShrink: 1 } as const;
+const KEY_LINE_KEYS = { flexShrink: 0 } as const;
 const RESULT_TEXT = { flex: 1, minHeight: RESULT_MIN_HEIGHT, justifyContent: "center", paddingVertical: space.xs } as const;

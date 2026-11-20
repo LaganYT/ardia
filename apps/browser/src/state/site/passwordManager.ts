@@ -25,7 +25,7 @@ import {
   type PasswordManagerChoice,
 } from "./passwordManagerChoice";
 import { closeVerificationCodePrompts, offerVerificationCode } from "./verificationCodes";
-import { followMode, forgetPendingOfferToSave, passwordAutofill, pendingOfferToSave, writeOfferToSave } from "./offerToSave";
+import { followMode, forgetPendingOfferToSave, passwordAutofill, pendingOfferToSave, watchPendingOfferToSave, writeOfferToSave } from "./offerToSave";
 
 export { forgetPendingOfferToSave, passwordAutofill };
 export { profilesSharingData, type FieldProviderHint, type FieldProviderOpened, type ManagerPlugin, type PasswordManagerChoice, type VerificationCodeFound };
@@ -279,8 +279,17 @@ export function startPasswordManager() {
     if (!ready) return begin();
     if (s.listings !== prev.listings || s.records !== prev.records || s.order !== prev.order) syncModes();
   });
-  usePages.subscribe((s, prev) => s.ready !== prev.ready && syncReady());
-  useBrowser.subscribe((s, prev) => {
+  let stopWatchingReady: (() => void) | null = null;
+  const watchReady = (pending: boolean) => {
+    if (pending && !stopWatchingReady) stopWatchingReady = usePages.subscribe((s, prev) => s.ready !== prev.ready && syncReady());
+    else if (!pending && stopWatchingReady) {
+      stopWatchingReady();
+      stopWatchingReady = null;
+    }
+  };
+  watchPendingOfferToSave(watchReady);
+  watchReady(pendingOfferToSave() > 0);
+  useBrowser.subscribeTo(["profiles", "windows"], (s, prev) => {
     if (s.profiles !== prev.profiles) syncProfiles();
     if (s.windows !== prev.windows) syncWindows();
   });

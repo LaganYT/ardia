@@ -84,8 +84,8 @@ export function LiveItemRow({ folderId, item, windowId, inStack = false }: { fol
             {({ pressed }) => (
               <Squish scale={squish.scale}>
               <HoverFill shown={!active && (hovered || pressed)} instant={active} color={pressed ? pressedFill : hoverFill} radius={radius.chrome} />
-              <SidebarRowSurface fill={fill} selected={active && !quiet} border={border} padLeft={TAB_ROW.contentLeft + indent - border} padRight={TAB_ROW.trailing - border}>
-                {unread ? <Dot size={5} color={theme.accent} style={{ position: "absolute", left: UNREAD_DOT_LEFT + indent - border }} /> : null}
+              <SidebarRowSurface fill={fill} selected={active && !quiet} border={border} padLeft={TAB_ROW.contentLeft + indent}>
+                {unread ? <Dot size={5} color={theme.accent} style={{ position: "absolute", left: UNREAD_DOT_LEFT + indent }} /> : null}
                 <View {...backToPin.hoverProps}>
                   {resettable ? (
                     <Pressable

@@ -282,6 +282,12 @@ export async function sessionSaved(): Promise<boolean> {
   }
 }
 
+export function holdPersistence(): boolean {
+  const saving = flushPersistence();
+  frozen = true;
+  return saving;
+}
+
 export function resumePersistence() {
   frozen = false;
   resume();

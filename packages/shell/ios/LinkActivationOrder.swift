@@ -17,6 +17,7 @@ final class LinkActivationOrder: NSObject {
     case onOpen = "open"
     case released = "released"
     case stageManager = "stageManager"
+    case windowManager = "windowManager"
   }
 
   private static let pairing: TimeInterval = 3
@@ -69,10 +70,11 @@ final class LinkActivationOrder: NSObject {
 
   @objc private func willBecomeActive(_ notification: Notification) {
     release(raising: false)
-    placements = Self.placements()
+    let onScreen = Self.onScreenWindows()
+    placements = Self.placements(onScreen)
     activatedAt = nil
     keptEarly = false
-    holdPending = !littleLinkExpected && activationMayCarryLink && !stageManagerOrdersWindows
+    holdPending = !littleLinkExpected && activationMayCarryLink && !stageManagerOrdersWindows && !windowManagerActivated(onScreen)
     if littleLinkExpected || holdPending { hideBeforeRaise() }
   }
 
@@ -115,6 +117,29 @@ final class LinkActivationOrder: NSObject {
     let domain = "com.apple.WindowManager" as CFString
     CFPreferencesAppSynchronize(domain)
     return CFPreferencesGetAppBooleanValue("GloballyEnabled" as CFString, domain, nil)
+  }
+
+  private static let windowManagerBundles = ["com.apple.dock", "com.apple.WindowManager"]
+
+  private func windowManagerActivated(_ onScreen: [[String: Any]]) -> Bool {
+    guard Self.leftToWindowManager(onScreen) else { return false }
+    Self.report(.windowManager)
+    return true
+  }
+
+  private static func leftToWindowManager(_ onScreen: [[String: Any]]) -> Bool {
+    let list = onScreen.compactMap { entry -> LinkActivationHold.Listed? in
+      guard let number = (entry[kCGWindowNumber as String] as? NSNumber)?.intValue,
+            let owner = (entry[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+            let layer = (entry[kCGWindowLayer as String] as? NSNumber)?.intValue,
+            let bounds = (entry[kCGWindowBounds as String] as? NSDictionary).flatMap({ CGRect(dictionaryRepresentation: $0) })
+      else { return nil }
+      let windowServer = entry[kCGWindowOwnerName as String] as? String == "Window Server"
+      return LinkActivationHold.Listed(number: number, owner: owner, layer: layer, bounds: bounds, windowServer: windowServer)
+    }
+    let managers = Set(windowManagerBundles.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }.map(\.processIdentifier))
+    return LinkActivationHold.leftToWindowManager(
+      pointer: CGEvent(source: nil)?.location, own: ProcessInfo.processInfo.processIdentifier, windowManagers: managers, frontToBack: list)
   }
 
   private var littleLinkExpected: Bool {
@@ -210,9 +235,11 @@ final class LinkActivationOrder: NSObject {
     }
   }
 
-  private static func placements() -> [Placement] {
-    guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
-    else { return [] }
+  private static func onScreenWindows() -> [[String: Any]] {
+    CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+  }
+
+  private static func placements(_ list: [[String: Any]]) -> [Placement] {
     let pid = ProcessInfo.processInfo.processIdentifier
     var above: Int?
     var result: [Placement] = []

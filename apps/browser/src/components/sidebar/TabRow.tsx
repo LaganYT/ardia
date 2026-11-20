@@ -163,9 +163,8 @@ export const TabRow = memo(function TabRow({
       {tabPressView({ windowId, tab, hitSlop: rowGapSlop(0), selected, press, inSplit: !!(flags & IN_SPLIT), plainTooltip, onPressChange: setPressed, children: (
         <>
           <RowHoverFill cell={cell} pressed={pressed} color={pressed ? pressedFill : hoverFill} radius={radius.chrome} />
-          <View style={rowSurfaceFrame(textOnly ? TAB_ROW.contentLeft - TAB_ROW.titleGap : TAB_ROW.contentLeft)}>
-            {surface}
-            {previewFade(preview, <>
+          {surface}
+          {previewFade(preview, <>
             {iconSlot}
             {pip && (
               <StatusIconButton icon="pip" color={theme.textTab} tooltip="Exit Picture in Picture" onPress={togglePip} />
@@ -193,8 +192,7 @@ export const TabRow = memo(function TabRow({
                 </>
               ) : null}
             </RowCloseSlot>
-            </>)}
-          </View>
+            </>, rowSurfaceFrame(textOnly ? TAB_ROW.contentLeft - TAB_ROW.titleGap : TAB_ROW.contentLeft))}
         </>
       ) })}
       {preview.values ? <SplitPreview panes={SINGLE(tabId)} values={preview.values} rowActive={active && !quiet} /> : null}

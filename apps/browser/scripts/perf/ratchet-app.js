@@ -1,7 +1,9 @@
 const P = globalThis.acPerf;
 const bench = globalThis.acBench;
 if (!P || !bench) throw new Error("load bench-app.js first (and turn the perf probe on)");
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(function benchSleep() {
+  resolve();
+}, ms));
 const pageOf = (tab) => tab.page ?? { nav: tab.navigation, adopt: tab.adoptId };
 const sum = (o) => Object.values(o ?? {}).reduce((a, b) => a + (typeof b === "number" ? b : 0), 0);
 

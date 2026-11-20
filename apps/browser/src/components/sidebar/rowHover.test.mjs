@@ -100,3 +100,11 @@ test("a selection change re-renders a row's hover fill only while it shows, and 
   assert.match(row, /cell\.plain = plain;/);
   assert.match(row, /const gapSlops = new Map<number, Insets>\(\);/);
 });
+
+test("a tab row's content fade is its frame: no extra view re-renders with the row", () => {
+  const row = src("./TabRow.tsx");
+  const body = row.slice(row.indexOf("export const TabRow = memo"), row.indexOf("const AWAY_FRAME"));
+  assert.match(body, /\{surface\}\n\s*\{previewFade\(preview, <>/);
+  assert.match(body, /<\/>, rowSurfaceFrame\(textOnly \? TAB_ROW\.contentLeft - TAB_ROW\.titleGap : TAB_ROW\.contentLeft\)\)\}/);
+  assert.doesNotMatch(body, /<View style=\{rowSurfaceFrame/);
+});

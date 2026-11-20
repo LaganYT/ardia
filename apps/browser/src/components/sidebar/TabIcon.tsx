@@ -108,7 +108,7 @@ function tabIconView({
   );
 }
 
-function EngineMark({ mark, size }: { mark: PageEngine; size: number }) {
+export function EngineMark({ mark, size }: { mark: PageEngine; size: number }) {
   const theme = useTheme();
   const box = Math.round(size * 0.6);
   return (
@@ -137,7 +137,7 @@ function TabProfileIcon({ tabId, ...props }: Omit<Parameters<typeof Icon>[0], "p
   return <Icon {...props} profileId={profileId} />;
 }
 
-const SLEEPING_OPACITY = 0.45;
+export const SLEEPING_OPACITY = 0.45;
 const ICON = 16;
 const COMPACT_ICON = 14;
 

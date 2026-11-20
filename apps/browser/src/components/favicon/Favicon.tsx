@@ -2,7 +2,7 @@ import { displayHost, hostOf } from "@ardia/core";
 import { memo, useState } from "react";
 import { Image, View } from "react-native";
 import { faviconFailed, useAppearanceDark, useFavicon, useFaviconTheme } from "../../state/favicons/favicons";
-import { radius, Symbol, tintedImage, useTheme, weight } from "../ui";
+import { drawnSymbol, radius, tintedImage, useTheme, weight } from "../ui";
 import { CapCenteredLetter } from "../glyph/CapCenteredLetter";
 import { bundledSiteIcon } from "./siteIcons";
 
@@ -57,7 +57,7 @@ export const FaviconFallback = memo(function FaviconFallback({ url, size = 16, o
   const bundled = bundledSiteIcon(url, theme.dark);
   if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, opacity }} />;
   const initial = hostInitial(url);
-  if (!initial) return <Symbol name="globe" size={size - 2} color={glyph} style={{ width: size, height: size, opacity }} />;
+  if (!initial) return drawnSymbol({ name: "globe", size: size - 2, color: glyph, style: { width: size, height: size, opacity } });
   const tile = Math.round((size * 14) / 16);
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", opacity }}>

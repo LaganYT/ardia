@@ -6,7 +6,7 @@ import { frameCornerRadius, windowFrame, type LightsPlace } from "../../platform
 import { rootSizeOfFrame } from "../settings/interfaceScale";
 import { DEFAULT_SIDEBAR_WIDTH, pageFrameInsetOf } from "../../lib/windowLayout";
 import { useBrowser, type BrowserState } from "../browser/store";
-import { useWindowId } from "../browser/hooks";
+import { useSettings, useWindowId } from "../browser/hooks";
 import { useWindowSettings, watchWindowRecord } from "../browser/keyedWatch";
 import { useSettingValue } from "../tabs/tabWatch";
 import { BROWSER_WINDOW_BUTTONS, captionClearTop, captionRoom, WINDOW_CHROME, WINDOW_CONTROLS, windowControlsWidth, type WindowChrome } from "../../lib/windowChrome";
@@ -34,7 +34,7 @@ export function onFullScreenLeft(windowId: string, run: () => void): () => void 
 
 export function useTabLayout(): "sidebar" | "top" {
   const windowId = useWindowId();
-  return useBrowser((s) => tabLayoutOf(s, windowId));
+  return useWindowSettings(windowId, (s) => tabLayoutOf(s, windowId));
 }
 
 export const minimalismIn = (s: BrowserState, windowId: string): boolean => s.settings.minimalismMode && s.windows[windowId]?.kind !== "small";
@@ -201,17 +201,17 @@ export const downloadsInSidebarFooter = (s: BrowserState, windowId: string, chro
 
 export function useSidebarCaptionRoom(): number {
   const windowId = useWindowId();
-  return useBrowser((s) => sidebarCaptionRoom(s, windowId));
+  return useWindowSettings(windowId, (s) => sidebarCaptionRoom(s, windowId));
 }
 
 export function useCardCaptionRoom(frame: number): number {
   const windowId = useWindowId();
-  return useBrowser((s) => cardCaptionRoom(s, windowId, frame));
+  return useWindowSettings(windowId, (s) => cardCaptionRoom(s, windowId, frame));
 }
 
 export function useCardTopInset(frame: number): number {
   const windowId = useWindowId();
-  return useBrowser((s) => cardTopInset(s, windowId, frame));
+  return useWindowSettings(windowId, (s) => cardTopInset(s, windowId, frame));
 }
 
 export function useSidebarHeaderCollapsed(): boolean {
@@ -226,25 +226,25 @@ export function useDownloadsInSidebarFooter(): boolean {
 
 export function useWindowControlsCenterY(): number | null {
   const windowId = useWindowId();
-  return useBrowser((s) => windowControlsPlace(s, windowId, pageFrameIn(s, windowId))?.centerY ?? null);
+  return useWindowSettings(windowId, (s) => windowControlsPlace(s, windowId, pageFrameIn(s, windowId))?.centerY ?? null);
 }
 
 export function useWindowControlsSize(): number {
   const windowId = useWindowId();
-  return useBrowser((s) => windowControlsPlace(s, windowId, pageFrameIn(s, windowId))?.size ?? 0);
+  return useWindowSettings(windowId, (s) => windowControlsPlace(s, windowId, pageFrameIn(s, windowId))?.size ?? 0);
 }
 
 export function useWindowControlsBottom(): number {
   const windowId = useWindowId();
-  return useBrowser((s) => windowControlsBottom(windowControlsPlace(s, windowId, pageFrameIn(s, windowId))));
+  return useWindowSettings(windowId, (s) => windowControlsBottom(windowControlsPlace(s, windowId, pageFrameIn(s, windowId))));
 }
 
 export function useWindowControlsLeading(): boolean {
   const windowId = useWindowId();
-  return useBrowser((s) => windowControlsLeading(s, windowId));
+  return useWindowSettings(windowId, (s) => windowControlsLeading(s, windowId));
 }
 
-export const useSidebarControlsRowIn = (windowId: string): number => useBrowser((s) => sidebarControlsRow(s, windowId));
+export const useSidebarControlsRowIn = (windowId: string): number => useWindowSettings(windowId, (s) => sidebarControlsRow(s, windowId));
 
 export function watchSidebarControlsRow(windowId: string, listener: (row: number) => void, chrome: WindowChrome = WINDOW_CHROME): () => void {
   let last = sidebarControlsRow(useBrowser.getState(), windowId, chrome);
@@ -274,10 +274,10 @@ export function watchSidebarFieldPlace(windowId: string, listener: () => void, c
 
 export function useWindowControlsHost(): WindowControlsHost | null {
   const windowId = useWindowId();
-  return useBrowser((s) => windowControlsPlace(s, windowId, pageFrameIn(s, windowId))?.host ?? null);
+  return useWindowSettings(windowId, (s) => windowControlsPlace(s, windowId, pageFrameIn(s, windowId))?.host ?? null);
 }
 
-export const useToolbarLightsCenter = (): readonly [number, number] => toolbarLightsCenter(useBrowser((s) => s.settings.compactToolbar), usePageFrameInset());
+export const useToolbarLightsCenter = (): readonly [number, number] => toolbarLightsCenter(useSettings((st) => st.compactToolbar), usePageFrameInset());
 
 type UrlAnchor = { left: number; top: number; width: number; sidebar?: { height: number } };
 

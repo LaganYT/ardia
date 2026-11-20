@@ -1,6 +1,6 @@
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useContext, useMemo, type ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { FadeLabel, perLook, radius, sidebarLineHeight, Surface, type SurfaceProps } from "../ui";
+import { drawnFadeLabel, perLook, radius, sidebarLineHeight, Surface, TextScopeContext, type SurfaceProps } from "../ui";
 import { hex, layout, useTheme } from "../ui/theme";
 import { useSelectedTabGlow } from "./rowLook";
 import { SELECTED_ROW_SHADOW_OFFSET, SIDEBAR_TYPE, SLEEPING_TITLE_OPACITY, TAB_ROW } from "./tokens";
@@ -59,8 +59,9 @@ export function SidebarRowSurface({
 
 export const SidebarRowLabel = memo(function SidebarRowLabel({ text, color, weight, compact = false, struck = false }: { text: string; color: string; weight?: "medium" | "regular"; compact?: boolean; struck?: boolean }) {
   useTheme();
+  const inSidebar = useContext(TextScopeContext) === "sidebar";
   const frame = compact ? compactTitleFrame() : rowTitleFrame();
-  return <FadeLabel text={text} fontSize={compact ? SIDEBAR_TYPE.compact : SIDEBAR_TYPE.title} weight={weight} color={color} strikethrough={struck} style={struck ? [frame, SLEEPING_TITLE] : frame} />;
+  return drawnFadeLabel({ text, fontSize: compact ? SIDEBAR_TYPE.compact : SIDEBAR_TYPE.title, weight, color, strikethrough: struck, style: struck ? [frame, SLEEPING_TITLE] : frame }, inSidebar);
 });
 
 const SLEEPING_TITLE = { opacity: SLEEPING_TITLE_OPACITY } as const;

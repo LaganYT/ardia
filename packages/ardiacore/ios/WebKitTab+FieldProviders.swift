@@ -1,3 +1,4 @@
+import os
 import WebKit
 
 extension WebKitTab {
@@ -13,10 +14,13 @@ extension WebKitTab {
       guard let view = webView, let field = dict?["field"] as? String, let generation = dict?["generation"] as? Double,
         sameOriginAsTop(frameInfo)
       else { return }
-      let result = visible
-        ? ArdiaWebView.requestSystemPanel(in: view, owner: view, profile: profile, field: field, generation: generation)
-        : ["shown": false, "reason": "hidden"]
-      emitPanelResult(result, via: "badge")
+      guard visible else {
+        os_log("[ardiacore] system passwords panel refused reason=hidden via=badge")
+        return emitPanelResult(["shown": false, "reason": "hidden"], via: "badge")
+      }
+      ArdiaWebView.requestSystemPanel(in: view, owner: view, profile: profile, field: field, generation: generation) { [weak self] result in
+        self?.emitPanelResult(result, via: "badge")
+      }
     case "verificationCode":
       guard main, let view = webView, let generation = dict?["generation"] as? Double, let url = dict?["url"] as? String,
         view.scriptFrames[frame] != nil,
@@ -70,7 +74,9 @@ extension WebKitTab {
   private func emitPanelResult(_ result: [AnyHashable: Any], via: String) {
     let reason = result["reason"] as? String
     guard reason != "noProvider", reason != "stale" else { return }
-    emit("fieldProviderOpened", ["via": via, "shown": result["shown"] as? Bool ?? false])
+    var payload: [String: Any] = ["via": via, "shown": result["shown"] as? Bool ?? false]
+    if let reason { payload["reason"] = reason }
+    emit("fieldProviderOpened", payload)
   }
 
   func showSystemPanel(generation: Double, done: @escaping ([AnyHashable: Any]) -> Void) {

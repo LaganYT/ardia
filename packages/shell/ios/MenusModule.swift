@@ -30,8 +30,10 @@ public class MenusModule: Module {
     }
 
     AsyncFunction("setMenuState") { (state: MenuStateUpdate) in
+      let shortcutWasGlobal = MenuState.current.littleArdiaShortcutFromAnyApp
       MenuState.current = MenuState(state)
       MainMenu.refresh()
+      if MenuState.current.littleArdiaShortcutFromAnyApp != shortcutWasGlobal { LittleArdiaHotKey.shared.shortcutsChanged() }
     }.runOnQueue(.main)
     AsyncFunction("setMenuBookmarks") { (bookmarks: MenuBookmarks) in
       MenuState.setBookmarks(bookmarks)

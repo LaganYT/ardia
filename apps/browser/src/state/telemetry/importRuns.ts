@@ -5,6 +5,7 @@ let runs = 0;
 let kindsDone = 0;
 let kindsFailed = 0;
 let secretsLeft = 0;
+let untitledBookmarks = 0;
 let diaProfilesMatched = 0;
 let diaProfilesWithoutFolder = 0;
 let diaSidebarFiles = 0;
@@ -24,6 +25,12 @@ export function noteImportRun(run: { done: number; failed: number; secretsLeft: 
     kindsFailed += run.failed;
     secretsLeft += run.secretsLeft;
   }, { import_runs: 1, import_kinds_done: run.done, import_kinds_failed: run.failed, import_secrets_left: run.secretsLeft });
+}
+
+export function noteUntitledBookmarks(count: number, consent?: ConsentToken | null) {
+  countFor(consent, () => {
+    untitledBookmarks += count;
+  }, { import_untitled_bookmarks: count });
 }
 
 export function noteDiaTabProfiles(profiles: { matched: number; withoutFolder: number }, consent?: ConsentToken | null) {
@@ -65,6 +72,7 @@ export function takeImportRuns() {
     import_kinds_done: kindsDone,
     import_kinds_failed: kindsFailed,
     import_secrets_left: secretsLeft,
+    import_untitled_bookmarks: untitledBookmarks,
     import_dia_profiles_matched: diaProfilesMatched,
     import_dia_profiles_without_folder: diaProfilesWithoutFolder,
     import_dia_sidebar_files: diaSidebarFiles,
@@ -81,6 +89,7 @@ export function takeImportRuns() {
   kindsDone = 0;
   kindsFailed = 0;
   secretsLeft = 0;
+  untitledBookmarks = 0;
   diaProfilesMatched = 0;
   diaProfilesWithoutFolder = 0;
   diaSidebarFiles = 0;

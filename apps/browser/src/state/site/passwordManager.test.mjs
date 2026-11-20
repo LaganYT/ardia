@@ -117,6 +117,27 @@ test("Edit › AutoFill › Passwords… opens the system panel in a profile who
   native.calls.length = 0;
 });
 
+test("Edit › AutoFill › Passwords… opens Passwords settings only when the panel can't have opened, never after macOS took the request", async () => {
+  const windowId = S().windowOrder[0];
+  const tabId = S().windows[windowId].tabIds[0];
+  markTabReady(tabId);
+  const settingsOpened = async (panel) => {
+    native.panel = panel;
+    stub.windows.open.clear();
+    await requestAutofill(windowId, "passwords", tabId);
+    return [...stub.windows.open.keys()].some((id) => /settings/i.test(id));
+  };
+  try {
+    assert.equal(await settingsOpened({ shown: false, reason: "noPanel" }), false, "macOS took the request; the panel may be up");
+    assert.equal(await settingsOpened({ shown: false, reason: "tabGone" }), false, "the tab went away mid-request");
+    assert.equal(await settingsOpened({ shown: true }), false);
+    assert.equal(await settingsOpened({ shown: false, reason: "notFocused" }), true, "no login field, so Settings explains where passwords live");
+  } finally {
+    native.panel = { shown: true };
+    native.calls.length = 0;
+  }
+});
+
 test("a verification code found in a profile that sets them up is offered, accepted with its token, and closed by navigation or a new provider set", async () => {
   const windowId = S().windowOrder[0];
   const tabId = S().windows[windowId].tabIds[0];

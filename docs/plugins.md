@@ -365,6 +365,9 @@ declare one, and each group of profiles that shares browser data picks at most o
 ```
 
 - `fill` (required): `system` is macOS's own Passwords panel at the field, which types the chosen login into the page.
+  The panel lists every saved login, not the site's first: macOS takes a site to filter by only from apps holding Apple's
+  private `com.apple.textInput.autofillContext` entitlement (AutoFillCore checks it), and AppKit gives native
+  views no site of their own.
   `tool` is reserved (below) and refused for now ("passwordManager.fill: tool isn't available yet; use system").
 - `fields` (required, 1 or 2): which fields get the key: `login` (username, email and current password) and
   `oneTimeCode`.
@@ -775,7 +778,9 @@ it), so a count that finishes after sharing changed stays in the local copy:
 `plugins_installed`, `plugins_enabled` and, among those on, how many use each contribution:
 `plugins_with_settings`, `plugins_with_commands`, `plugins_with_page`, `plugins_with_process`, `plugins_with_programs`,
 `plugins_with_hooks`, `plugins_with_tools`, `plugins_with_passwordManager`. Password managers: hourly
-`password_manager_panel_opens_<badge|menu>`, `password_manager_panel_refused_<badge|menu>`,
+`password_manager_panel_opens_<badge|menu>`, `password_manager_panel_refused_<badge|menu>`, and each refusal's reason
+`password_manager_panel_refusal_<hidden|not_focused|unavailable|not_key|not_editing|throttled|refused|no_panel>` (`no_panel`:
+macOS took the request but no panel window was on screen 0.6 s later),
 `verification_code_setups_<offered|accepted|failed>`, `password_manager_chose_<ardia|none|plugin>`,
 `password_manager_record_failed`, and the daily `password_manager_profiles_<ardia|none|plugin>`. Dashboard: watch `plugin_process_crashes` against
 `plugin_process_starts`, and `program_link_failures` against `program_links`.

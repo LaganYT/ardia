@@ -7,6 +7,7 @@
 #import "ArdiaServices.h"
 
 #import <objc/runtime.h>
+#import <os/log.h>
 
 #include <climits>
 #include <cmath>
@@ -205,11 +206,19 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
     double generation;
     NSString *field = Text(dict, @"field", 16);
     if (!Finite(dict, @"generation", &generation) || !field || ![self sameSiteFrame:main origin:sender]) return;
-    NSDictionary *result = _visible ? [ArdiaWebView requestSystemPanelIn:tab.view owner:tab profile:_profile field:field generation:generation]
-                                    : @{@"shown" : @NO, @"reason" : @"hidden"};
-    NSString *reason = result[@"reason"];
-    if (![reason isEqualToString:@"noProvider"] && ![reason isEqualToString:@"stale"])
-      [self emit:@"fieldProviderOpened" payload:@{@"via" : @"badge", @"shown" : result[@"shown"]}];
+    __weak ArdiaWebView *weakSelf = self;
+    void (^report)(NSDictionary *) = ^(NSDictionary *result) {
+      NSString *reason = result[@"reason"];
+      if ([reason isEqualToString:@"noProvider"] || [reason isEqualToString:@"stale"]) return;
+      NSMutableDictionary *payload = [@{@"via" : @"badge", @"shown" : result[@"shown"] ?: @NO} mutableCopy];
+      if (reason) payload[@"reason"] = reason;
+      [weakSelf emit:@"fieldProviderOpened" payload:payload];
+    };
+    if (!_visible) {
+      os_log(OS_LOG_DEFAULT, "[ardiacore] system passwords panel refused reason=hidden via=badge");
+      report(@{@"shown" : @NO, @"reason" : @"hidden"});
+    }
+    else [ArdiaWebView requestSystemPanelIn:tab.view owner:tab profile:_profile field:field generation:generation completion:report];
   } else if ([kind isEqualToString:@"verificationCode"] && main && dict) {
     double generation;
     if (!Finite(dict, @"generation", &generation)) return;

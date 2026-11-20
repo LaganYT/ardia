@@ -6,7 +6,7 @@ import { useBrowser } from "../browser/store";
 import { MAX_DRAFT_LINKS } from "../groups/draftGroups";
 import { createProfile } from "../profiles/actions";
 import { noteImportedSpaces } from "../telemetry/usage";
-import { noteDiaSidebar, noteDiaTabProfiles, noteFirefoxFavicons, noteImportRun } from "../telemetry/importRuns";
+import { noteDiaSidebar, noteDiaTabProfiles, noteFirefoxFavicons, noteImportRun, noteUntitledBookmarks } from "../telemetry/importRuns";
 import { consentToken, type ConsentToken } from "../telemetry/client";
 import {
   adoptSpaceIdentity,
@@ -22,6 +22,7 @@ import {
   type ImportedExtension,
   type ImportKind,
   type ImportResult,
+  untitledLinks,
 } from "./apply";
 import { diaProfilesFor, diaProfilesWithoutFolder } from "./diaTabs";
 import { importArcSpace, importDiaSpace } from "./sidebarTree";
@@ -341,6 +342,7 @@ async function runImportJob(wanted: ReadonlySet<ImportKind>, withoutKey: boolean
       profileDest = dest;
     }
     if (diaSource && sidebarKinds.length) noteDiaSidebar(diaOutcome, consent);
+    noteUntitledBookmarks(untitledLinks(result.bookmarks), consent);
     if (source.family === "firefox") noteFirefoxFavicons(result.favicons.length, consent);
     if (source.family === "chromium" || source.family === "arc") {
       const list = await api.listExtensions(source.id, profile.id).catch(orWarn([]));

@@ -12,6 +12,7 @@ import type {
   DisplayMediaRequest,
   DownloadNavigation,
   FieldProviderOpened,
+  FieldProviderPanelRefusal,
   FindResult,
   FocusRestoreOutcome,
   LoadError,
@@ -93,6 +94,7 @@ export type Handlers = keyof NativeEvents;
 export type PageEvent = { name: string; data: unknown };
 export type NativeProps = Omit<WebViewProps, Handlers> & { pageEvents: string[]; onPageEvent: (e: NativeSyntheticEvent<PageEvent>) => void };
 
+const FIELD_PROVIDER_REFUSALS: readonly FieldProviderPanelRefusal[] = ["hidden", "notFocused", "unavailable", "notKey", "notEditing", "throttled", "refused", "noPanel"];
 const FOCUS_RESTORE_OUTCOMES: readonly FocusRestoreOutcome[] = ["focused", "kept", "refused", "gaveUp"];
 
 const PAGE_EVENTS = {
@@ -198,7 +200,13 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onZapPicked: (e) => [e],
   onTransferRefused: (e) => [e.from],
   onAppBadge: (e) => [e],
-  onFieldProviderOpened: (e) => [{ via: e.via === "menu" ? "menu" : "badge", shown: e.shown === true }],
+  onFieldProviderOpened: (e) => [
+    {
+      via: e.via === "menu" ? "menu" : "badge",
+      shown: e.shown === true,
+      ...(e.shown !== true && FIELD_PROVIDER_REFUSALS.includes(e.reason as FieldProviderPanelRefusal) ? { reason: e.reason } : {}),
+    },
+  ],
   onVerificationCodeFound: (e) => [{ token: String(e.token), app: String(e.app ?? ""), main: e.main === true }],
 };
 

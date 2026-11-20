@@ -8,7 +8,7 @@ import { isClosedPin } from "../pins/tabCleanup";
 import { adoptedPage, ASLEEP, frozenOn, hasOwnOrSharedPage, hasPage, isAsleep, isLazy, loadedPage, needsPage, withWake, wokenPage } from "./pageSession";
 import { isPeekTab, peekSourceOf, withoutPeek } from "../peek/peek";
 import { resolveTyped } from "../settings/settings";
-import { leavesEmptyWindow } from "../omnibox/newTabBarPolicy";
+import { isEmptyCardTab, leavesEmptyWindow } from "../omnibox/newTabBarPolicy";
 import { holderOf, withSharedFamily } from "../pins/pinShare";
 import { removeFromSplits, splitOf, splitTabIdsOf, withPinnedPanes } from "../splits/splits";
 import { closedTabEntry, MAX_CLOSED_TABS } from "../pins/closedTabs";
@@ -61,7 +61,7 @@ export function closeIntent(s: BrowserState, tabId: string): CloseIntent {
 }
 
 const isTopApp = (t: Tab | undefined) => t?.pin?.as === "tile";
-const keptWithTopApp = (s: BrowserState, id: string) => inPinnedContainer(s, id) && withPinnedPanes(s, [id]).some((pane) => isTopApp(s.tabs[pane]));
+export const keptWithTopApp = (s: BrowserState, id: string) => inPinnedContainer(s, id) && withPinnedPanes(s, [id]).some((pane) => isTopApp(s.tabs[pane]));
 const runningKept = (s: BrowserState, id: string) => keptWithTopApp(s, id) && hasOwnOrSharedPage(s.tabs[id]!);
 
 function withoutTopApps(s: BrowserState, ids: string[]): string[] {
@@ -86,7 +86,7 @@ export function closingTabs(s: BrowserState, ids: string[], { lastClosesWindow =
     const shown = view.filter((id) => goneIds.has(id));
     const keptRunning = keepTopApps && view.some((id) => !goneIds.has(id) && runningKept(next, id));
     if (!shown.length || !view.every((id) => goneIds.has(id) || isAsleep(next.tabs[id]) || (keptRunning && keptWithTopApp(next, id)))) continue;
-    const keepsWindow = keptRunning || !lastClosesWindow || leavesEmptyWindow(shown.length > 1 ? removeTabs(next, shown.slice(1), false) : next, shown[0]!);
+    const keepsWindow = (keptRunning && !shown.every((id) => isEmptyCardTab(next, next.tabs[id]))) || !lastClosesWindow || leavesEmptyWindow(shown.length > 1 ? removeTabs(next, shown.slice(1), false) : next, shown[0]!);
     if (keepsWindow) next = withNewTab(next, w.id)[0];
     else closedWindows.add(w.id);
   }

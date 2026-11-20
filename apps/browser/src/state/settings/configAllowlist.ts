@@ -11,7 +11,7 @@ export const CONFIG_SETTING_KEYS: readonly SettingKey[] = [
   "glassTintAmount", "fadeUnloadedTabs", "strikeSleepingTabs", "warnBeforeClosingTabGroup", "batterySaverWhen", "memorySaver",
   "memorySaverMode", "loadProfilesWhenOpened", "unloadProfilesAfter", "keepActiveSites", "extensionSidePanelWidth", "showFullUrl", "showBookmarks", "bookmarksBar",
   "bookmarksImportDismissed", "appearance", "addressBar", "compactToolbar", "addressBarButtons", "borderlessMode", "tabCornerRadius", "minimalismMode", "pageFrame", "pageFrameZeroInFullScreen", "pageFrameZeroWhenTabsHidden", "commandBarPlacement", "spacesFollowAppearance",
-  "showProfileDots", "profileSwitcherIcons", "compactCliPill", "shortcuts", "openLinksInLittleArdia", "littleArdiaOpensNewTabLinks", "littleArdiaSize",
+  "showProfileDots", "profileSwitcherIcons", "compactCliPill", "shortcuts", "openLinksInLittleArdia", "littleArdiaOpensNewTabLinks", "littleArdiaShortcutFromAnyApp", "littleArdiaSize",
   "omniboxProviders", "launchActions", "commandBarStart", "pressMotion", "folderStyle", "liveFolderIcon", "readerTextSize", "readerFont",
 ];
 

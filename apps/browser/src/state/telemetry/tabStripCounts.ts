@@ -1,3 +1,5 @@
+import { takeTabLayoutCounts } from "./tabLayoutCounts";
+
 let groupToggles = 0;
 let textOnlyRows = 0;
 let compactLayouts = 0;
@@ -76,6 +78,7 @@ export function takeTabStripCounts() {
     tab_strip_scroll_stalls: scrollStalls,
     tab_strip_reveals_held_for_scroll: revealsHeldForScroll,
     tab_strip_commands_refused: commandsRefused,
+    ...takeTabLayoutCounts(),
   };
   groupToggles = 0;
   textOnlyRows = 0;

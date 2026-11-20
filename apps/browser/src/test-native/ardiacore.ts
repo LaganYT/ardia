@@ -372,6 +372,7 @@ export const chosenExtensionFolder: { next: string | null } = { next: null };
 export const crxInstallFailure: { next: string | null } = { next: null };
 export const linkRoute: { next: LinkRoute } = { next: {} };
 export const resolvedPermissions: { id: string; result: string; remember: boolean }[] = [];
+
 export const extensionAnswers = {
   actionStates: async (_tabId: string, _ids: string[], _profile?: string): Promise<Record<string, ActionState>> => ({}),
   sidePanelUrl: async (_tabId: string, _extensionId: string, _profile?: string): Promise<string | null> => null,

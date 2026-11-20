@@ -18,6 +18,7 @@ public class ShellModule: Module {
       _ = installTextFieldSelectAll
       _ = installViewSelectAll
       _ = installSubmenuAction
+      _ = installHoverAfterWindowMoves
       _ = installInputSourceKeys
       _ = installScrollViewInsetFix
       _ = installStripWheel

@@ -189,6 +189,11 @@ const PARAMS = (f) => ({
   "sync.sendTab": { tab: f.other, device: "none" },
   "extensions.install": { webStore: "a".repeat(32) },
   "extensions.configure": { id: "a".repeat(32), incognito: true },
+  "permissions.respond": { id: "pp1", decision: "allow" },
+  "passwords.respond": { tab: f.loose, id: "pw1", decision: "save" },
+  "autofill.respond": { tab: f.loose, id: 1, decision: "accept" },
+  "menus.dismiss": { menu: "m1" },
+  "menus.runBar": { path: [1, 0], ref: "cmd:newTab@File\u001fNew Tab", window: f.w2 },
 });
 
 const stores = () => [S(), useLive.getState(), useAirTraffic.getState()];

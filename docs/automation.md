@@ -280,6 +280,9 @@ clipboard writes, internal pages). That is the point of it, and it is opt-in beh
 | `history.removed` | `profiles` (every profile sharing that history), `all`, `urls` (at most 1000 and 256 KB, minimized without `fullUrls`), `count`, `truncated` |
 | `download.changed` | `id`, `change` (`added`/`updated`/`removed`), `state`, `paused`, `dangerous`, `awaitsKeep`, `filename`, `profile` |
 | `profile.changed` | `profile`, `change` (`created`/`updated`/`removed`), `name`, `keys` (what changed, `default` when it became the default); or `change: "reordered"`, `order` |
+| `permission.prompted` | `windowId`, `tabId`, `id`, `origin`, `permissions`, `queued` |
+| `password.prompted` * | `windowId`, `tabId`, `origin`, `state`, `username`, `usernames` |
+| `menu.opened` | `id`, `kind` (`page`: a context menu a hidden Ardia captured), `windowId`, `tabId`, `items` (a count) |
 
 \* Named-only: `"*"` never includes them; a subscriber names each one. Notification text never goes into a hook's
 environment (no `ARDIA_TITLE`, no `ARDIA_URL`) and the runner never logs it.

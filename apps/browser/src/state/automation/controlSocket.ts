@@ -19,7 +19,7 @@ import { NoCommandWindowError, runCommand } from "../commands/commands";
 import { noteCliCaller, noteSocketRun, noteSocketServing } from "../app/cliControl";
 import { parseCliCaller, type CliCaller } from "../app/cliCaller";
 import { errorText } from "../../lib/errors";
-import { minimizedUrl } from "../../lib/urlParts";
+import { redactedEventData } from "./eventRedaction";
 import { automationWindows, type AutomationWindow } from "./automationWindows";
 import { consentToken, type ConsentToken } from "../telemetry/client";
 import { warnFor } from "../telemetry/logs";
@@ -66,8 +66,6 @@ function runWritten(tickets: readonly number[]) {
   for (const ticket of tickets) if (unwrittenRuns.delete(ticket)) noteSocketRun(-1);
 }
 
-const minimized = (data: Record<string, unknown>) => (typeof data.url === "string" ? { ...data, url: minimizedUrl(data.url) } : data);
-
 export function eventTargets(subs: ReadonlyMap<number, Subscription>, name: AutomationEventName, data: Record<string, unknown>) {
   const full: number[] = [];
   const plain: number[] = [];
@@ -84,7 +82,7 @@ function deliver(name: AutomationEventName, data: Record<string, unknown>, time 
   const { full, plain } = eventTargets(only === undefined ? subscriptions : new Map([[only, subscriptions.get(only)!]]), name, data);
   const consent = consentToken();
   if (full.length) broadcastOnControlSocket(full, fittedEvent(name, time, data, consent));
-  if (plain.length) broadcastOnControlSocket(plain, fittedEvent(name, time, minimized(data), consent));
+  if (plain.length) broadcastOnControlSocket(plain, fittedEvent(name, time, redactedEventData(data), consent));
 }
 
 export type FeedConsumer = { subscriptions: () => Iterable<Subscription>; deliver: (name: AutomationEventName, data: Record<string, unknown>, time: number) => void };

@@ -31,6 +31,10 @@ export const AUTOMATION_EVENTS = [
   "user.idle",
   "user.active",
   "page.error",
+  "bookmarks.changed",
+  "history.removed",
+  "download.changed",
+  "profile.changed",
 ] as const;
 export type AutomationEventName = (typeof AUTOMATION_EVENTS)[number];
 

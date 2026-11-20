@@ -214,7 +214,7 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 
 | Area | What it holds | Where it persists | Socket |
 | --- | --- | --- | --- |
-| Windows | kind, profile shown, frame, maximized, full screen, tab layout, auto-hide, sidebar, focus order | `session.json` (`windows`, `windowOrder`), `launch-layout.json` | ✅ `windows`, `windows.*`; 🗺️ frame, maximize, full screen |
+| Windows | kind, profile shown, frame, maximized, full screen, tab layout, auto-hide, sidebar, focus order | `session.json` (`windows`, `windowOrder`), `launch-layout.json` | ✅ `windows`, `windows.*`, frame, zoom and full screen on macOS (`windows.geometry`, `windows.setFrame`, `windows.setMaximized`, `windows.setFullScreen`) |
 | Tabs | url, title, custom title and icon, pin, muted, zoom, page state, opener, created, last active | `session.json` (`tabs`), Chrome's tab restore | ✅ `apply` ops, `tabs.*` |
 | Groups and folders | name, icon, colour, collapsed, pinned, nesting, members | `session.json` (`groups`), sync (`groupLooks`) | ✅ `apply` `group.*`, `workspace` |
 | Pinned (Top Apps tiles, pinned rows, tile folders) | pin kind, pinned URL, tile folders, Top Apps sharing | `session.json` (`pinChoices`, `pinSync`, `parkedPins`), sync | ✅ `apply` `tab.pin`/`tab.unpin`, `tabs.setPinnedUrl`, `tabs.returnToPinnedUrl`, `pins.*` (tile folders) |
@@ -227,13 +227,13 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 | History | url, title, visits, last visit, visit times | Chrome's History database per profile | ✅ `history.*` |
 | Downloads | file, path, state, progress, profile, dangerous | Chrome's History database, `downloads.json` | ✅ `downloads.*` |
 | Download settings | folder, ask where to save | Chrome prefs | ✅ `downloads.settings`, `downloads.setSettings` |
-| Settings | the 109 keys of `SETTING_SPECS` (every switch and choice in Settings) | `session.json` (`settings`, `settingsMeta`), sync for the synced ones, `config.json` (read only) | ✅ `settings.*` |
+| Settings | the 109 keys of `SETTING_SPECS` (every switch and choice in Settings) | `session.json` (`settings`, `settingsMeta`), sync for the synced ones, `config.json` (read only) | ✅ `settings.*`; 🔍 `extensionSearchEngines` |
 | Search engines | default, custom engines, extension engines | `settings` | ✅ `search.*` |
 | Site settings and permissions | per-origin content settings (camera, location, notifications, popups, JavaScript, sound, …), zoom per host, preload | Chrome prefs per profile | ✅ `sites.*` |
-| Extensions | installed, enabled, pinned, toolbar order, options | Chrome's extension prefs, `sync-extensions.json` | ✅ `extensions.list`, `extensions.setEnabled`, `extensions.setPinned`, `extensions.reload`, `extensions.uninstall` |
+| Extensions | installed, enabled, pinned, toolbar order, options | Chrome's extension prefs, `sync-extensions.json` | ✅ `extensions.list`, `extensions.install` (the user confirms), `extensions.configure`, `extensions.setEnabled`, `extensions.setPinned`, `extensions.reload`, `extensions.uninstall` |
 | Plugins | installed, enabled, consent, tools | `plugins.json`, `Plugins/` | ✅ `plugins`, `plugins.*` (`state/plugins/socketMethods.ts`) |
 | Media sessions | now playing per tab, PiP, shares | memory (`state/media/media.ts`) | ✅ `media.list`, `media.control` |
-| Sync | folder, devices, synced types and profiles, remote tabs | `sync.json`, sealed `sync-*.nns` | 🔍 `sync.status` |
+| Sync | folder, devices, synced types and profiles, remote tabs | `sync.json`, sealed `sync-*.nns` | ✅ `sync.status`, `sync.now`, `sync.setType`, `sync.setProfile`, `sync.setOpenTabs`, `sync.devices`, `sync.sendTab`; ⛔ turning sync on or off, the recovery phrase |
 | Saved passwords | origin, username, password | Chrome's Login Data (keychain-sealed) | 🔍 `passwords.list` (no passwords); ⛔ reveal, see Secrets |
 | Autofill | addresses, cards | Chrome's Web Data | 🔍 `autofill.list` (no card numbers); ⛔ card numbers |
 | Cookies and site data | cookies, storage per origin | Chrome's Cookies and storage | ✅ `sites.clearData`; ⛔ cookie values |
@@ -275,7 +275,7 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 | Area | Read | Write |
 | --- | --- | --- |
 | tabs | `tabs.list {window?, profile?}`, `tabs.get {tab}` | `tabs.navigate {tab, url}`, `tabs.reload`, `tabs.back`, `tabs.forward`, `tabs.duplicate`, `tabs.setPinnedUrl {tab, url?}`, `tabs.returnToPinnedUrl` |
-| windows | `windows.get {window}` | `windows.create {profile?, url?, layout?}`, `windows.close`, `windows.focus`, `windows.setLayout {window, layout?, tabsShown?}`, `windows.switchProfile`, `windows.merge` |
+| windows | `windows.get {window}`, `windows.geometry {window}` | `windows.create {profile?, url?, layout?}`, `windows.close`, `windows.focus`, `windows.setLayout {window, layout?, tabsShown?}`, `windows.switchProfile`, `windows.merge`, `windows.setFrame {window, frame}`, `windows.setMaximized {window, on}`, `windows.setFullScreen {window, on}` |
 | closed | `closed.list {window?}` | `closed.restore {id, window?}`, `closed.clear {window?}` → `{cleared}`; both act on the window's profile, the last focused main window when `window` is left out, and answer `no_window` when there's none |
 | profiles | `profiles.list` | `profiles.create`, `profiles.update`, `profiles.setLook`, `profiles.reorder`, `profiles.setDefault`, `profiles.delete {profile}` (Ardia asks the user first) |
 | splits | `splits.list {window?}` | `splits.create {tabs, orientation?}`, `splits.separate`, `splits.removeTab`, `splits.resize {split, sizes}`, `splits.flip`, `splits.setOrientation` |
@@ -287,9 +287,9 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 | settings | `settings.get {keys?}`, `settings.schema` | `settings.set {values}`, `settings.reset {keys}` |
 | search | `search.engines` (`default` is the engine searches use, an extension's when one controls it, with `controlledBy`) | `search.setDefault {id}` (`refused` while an extension controls it, as Settings disables the picker; so is `settings.set {searchEngine}`), `search.add`, `search.update`, `search.remove` |
 | sites | `sites.origins {profile?}`, `sites.get {origin, profile?}`, `sites.zoomLevels {profile?}` | `sites.set {origin, type, value}`, `sites.reset {origin}`, `sites.setZoom {host, zoom}`, `sites.clearData {site}` |
-| extensions | `extensions.list {profile?}` | `extensions.setEnabled {id, enabled}`, `extensions.setPinned`, `extensions.reload`, `extensions.uninstall` (Ardia asks the user first) |
+| extensions | `extensions.list {profile?}` | `extensions.install {profile?, webStore}` (the user adds it on the store page; `folder` is refused), `extensions.configure {id, siteAccess \| incognito \| userScripts}` (exactly one; `specificSites` is refused), `extensions.setEnabled {id, enabled}`, `extensions.setPinned`, `extensions.reload`, `extensions.uninstall` (Ardia asks the user first) |
 | media | `media.list` | `media.control {tab, action, seconds?}` |
-| sync | `sync.status` | none yet |
+| sync | `sync.status`, `sync.devices {profile?}` | `sync.now`, `sync.setType {type, on}`, `sync.setProfile {profile, on}`, `sync.setOpenTabs {profile, on}`, `sync.sendTab {tab, device}` |
 | passwords, autofill | `passwords.list {profile?}`, `autofill.list {profile?}` | `passwords.remove {origin, username}` |
 | pins (tile folders) | `pins.folders {window?}` | `pins.createFolder {tabs, name?}`, `pins.renameFolder {folder, name}`, `pins.removeFolder {folder}`, `pins.addToFolder {folder, tabs}`, `pins.removeFromFolder {tabs}` |
 | favicons | `favicons.get {url, profile?}` | none |
@@ -303,9 +303,26 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 The keys `config.json` can't set stay off `settings.set` and have their own methods where it makes sense:
 `defaultProfileId` is `profiles.setDefault`, `customSearchEngines` is `search.*`. `cliControl` stays refused (the
 command can't switch control itself on or off), and so does `allowJavaScriptFromAppleEvents` (it would let any
-AppleScript run script in every page). `pageEngine`, `websiteEngines`, `protectedVideoInWebKit`, `newTabUrl`,
-`customSearchUrl` and `extensionSearchEngines` are refused in this first round, as `run` refuses `changesEngine`; they are
-listed under Next.
+AppleScript run script in every page).
+
+Five keys `config.json` can't take are set here with the checks their Settings rows apply
+(`state/automation/socketSettingRules.ts`), and `settings.schema` reports them writable:
+
+| Key | What the socket checks, as Settings does |
+| --- | --- |
+| `pageEngine` | `chromium` or `webkit`; `webkit` only where WebKit ships (macOS). The same write the pop-up in Settings › Advanced makes |
+| `websiteEngines` | `{site: engine}`, each site typed as the Add Rule sheet takes it (`netflix.com` or a full address) and stored as its scheme, host and port; a value that isn't a website address is `bad_request`. The whole map is replaced, as each sheet edit replaces one rule |
+| `protectedVideoInWebKit` | A boolean, the Streaming sites row; macOS only |
+| `newTabUrl` | Empty (Ardia's New Tab), or an `http(s)` address, `about:blank` or an Ardia page: the address Settings marks invalid is refused here, not saved. Stored trimmed |
+| `customSearchUrl` | The legacy one-URL engine that `search.engines` lists as `custom`: empty clears it (and if it was the default, the default goes back to Ardia's, as removing an engine does, unless the same call chooses `searchEngine`); otherwise an `http(s)` URL with `%s`, and only while no other engine uses the keyword `custom` |
+
+One `settings.set` is checked as the settings would end up: adding `customSearchUrl` and choosing `searchEngine:
+"custom"` together works, clearing it while choosing `custom` is `bad_request`, and a `searchEngine` named in the
+same call wins over the fallback.
+
+`extensionSearchEngines` stays read only: it mirrors the engines installed extensions provide, Settings has no
+control for it, and a written value would be overwritten from the extensions on the next refresh. Change it through
+the extension (`extensions.setEnabled`, `extensions.uninstall`).
 
 ### Tile folders, icons, shared and live folders, presets, Air Traffic
 
@@ -393,9 +410,117 @@ Each area is its own file: `socketPins.ts`, `socketFavicons.ts`, `socketSharedFo
 
 ### Events
 
-`subscribe` already sends tab, window, split, peek, pin, profile and settings events (`eventNames.ts`). Writes here
-change the store, so those events fire for them as for a click. Next adds `bookmarks.changed`, `history.removed`,
-`download.changed` and `profile.changed` (each one store watch in `storeEvents.ts`, no protocol change).
+`subscribe` sends tab, window, split, peek, pin, profile and settings events (`eventNames.ts`). Writes here change the
+store, so those events fire for them as for a click. `bookmarks.changed`, `download.changed` and `profile.changed`
+are store watches and `history.removed` listens to the engine's history (`libraryEvents.ts`, started from
+`storeEvents.ts` only while a connection or plugin asks for one of them); their fields are in `docs/automation.md` ›
+Events. No protocol change: an older command never names them.
+
+Every URL an event carries, `url` or the `urls` of `history.removed`, is cut to origin and path for a socket
+connection or plugin without `fullUrls` (`eventRedaction.ts`, used by both delivery paths). `history.removed` keeps
+its whole line, escaped JSON, envelope and newline included (measured with `socketWire.ts`'s `frameBytes`), plus
+the room `socketWire.ts` keeps for a `dropped` marker (`DROPPED_MARKER_ROOM`), under 256 KB: `urls` stops at 1000 entries or where the next one would pass that, `count` stays the full number, and
+`truncated: true` says some were left out. The 1 MiB line limit, the output budgets and the `dropped` marker are the
+socket's own (`socketWire.ts`, `ControlOutput.swift`), the same for every event.
+
+### Sync
+
+The sync methods call `state/sync/engine.ts` as Settings does, and each refuses while sync is off, unavailable or
+locked. The writes (`sync.now` and every `sync.set*` and `sync.sendTab`) also refuse while sync is starting (its
+saved state isn't loaded yet) or turning off (Settings still shows it on during the last pass), so an `ok` is never
+dropped afterwards. `sync.now` answers after a pass that started after the call: when a pass is already running it
+waits for that one, then runs its own. Right where that pass would start it checks again: if sync began turning off
+meanwhile it answers `refused` and starts nothing (the retiring pass is the last), and if control turned off it starts
+nothing. `sync.setProfile` needs the profile's sync link (it appears on the first sync after the profile opens; the
+Settings toggle is disabled until then), and `sync.setOpenTabs` needs the profile on and Open Tabs syncing, as the
+Sync All Open Tabs toggle does. `sync.sendTab` takes an `http(s)` tab and a device from `sync.devices`, the list the
+tab menu's Send to Device shows. Turning sync on or off and the recovery phrase stay in Settings: they choose a
+folder and show or ask for the phrase, which is the user's to see.
+
+### Extensions
+
+`extensions.install` takes a Chrome Web Store link or id (`webStore`, checked as Add from a Link checks it) and
+opens the extension's store page in a window of that profile, where the user adds it; it answers `{waiting: true, id}`,
+or `{installed: true, extensions}` when the profile already has it. Each step after an await re-checks that control
+is still on and the profile still exists, and answers `failed` or `no_window` without changing anything otherwise;
+that covers the store tab and the already-installed answer.
+
+Installing an unpacked folder from the socket isn't supported, on any platform. A string `folder` is `refused`
+("installing an unpacked folder from the socket isn't supported; use Settings › Extensions › Load Unpacked") before the
+path is checked or anything is read; a `folder` that isn't a string (`null`, a number) fails schema validation first
+and is `bad_request`. Settings › Extensions › Load Unpacked loads the chosen folder in place, as on `main`. Its native
+path differs from `main` in exactly two places: the shared manifest reader (`ReadManifest` in
+`ArdiaExtensionPackage.mm`) also reports `incognitoAllowed` (false only for `"incognito": "not_allowed"`), which
+therefore also appears in Load Unpacked's folder inspection, and `listExtensions` in `ArdiaServices.mm` copies it into
+each list row, as `null` when the installed manifest couldn't be read.
+
+*Removed:* earlier revisions of this change installed socket folders from a private hashed copy; that was dropped,
+since Chromium rereads an unpacked extension's folder by path, so only an engine-owned snapshot could make it sound.
+
+The install sheet that Settings and Web Store prompts show keys each request, so its Add button and Return confirm
+that request only. Once Add is pressed the sheet shows Adding… with Cancel greyed out, and nothing else replaces it:
+a Web Store prompt that arrives meanwhile waits and shows after, in its own window if that can still show a sheet and
+isn't private, otherwise in another open main window or Little Ardia window (both host the install sheet) that isn't closing
+(mid-animation or marked for close), or it is declined. If the window under a sheet closes before Chromium
+answers a failed add, no error sheet is left behind for it.
+
+`extensions.configure` changes exactly one setting per call, as an extension's page in Settings does: site access
+(only for an extension that asks for sites), Allow in Incognito, or Allow User Scripts (only when the extension uses
+them). The params schema takes exactly one of them (an `anyOf` of one form per setting), so a request naming none, or
+more than one, fails validation as `bad_request` before anything is read or written; a policy-installed extension is
+`refused`. The expected result is computed from the request before the write. Each call is checked against a list
+read from Chromium for the call, never the cached row, makes its one write, and takes the list that Settings' own
+`configureThenRead` reads once after that write as its only readback: if that read fails, the extension is missing
+from it, or the setting isn't exactly what was asked, the call answers `failed` and nothing else was touched. There is no rollback, so a refused or
+silently declined change can't take a user's site grants or later changes with it.
+
+`siteAccess` takes `allSites` or `onClick`. `specificSites` is `refused` ("changing to specific sites needs engine
+support") before anything is written: turning site access to specific sites makes Chromium withhold host
+permissions, and withholding removes every revocable host grant, so even a request naming exactly the sites already
+granted would lose them, and the engine's configure call can't grant sites back. The follow-up is an `engine/`
+change: `ac_extensions_configure` taking the hosts to grant.
+
+Allow in Incognito is checked first for eligibility: when `incognitoAllowed` is missing (Linux and Windows rows don't
+carry it) or `null` (macOS couldn't read the manifest), any Incognito change is `refused` ("can't confirm incognito
+eligibility"), and that includes an unpacked extension whose eligibility is unknown. An unpacked extension with a
+readable manifest is then `refused` ("needs engine support"): its manifest on disk can differ from the one Chromium
+loaded, and Chromium's own eligibility flag (`incognito_access.is_enabled`) isn't exported by `ac_extensions_list`.
+A packed or Web Store extension whose manifest says `"incognito": "not_allowed"` can't turn it on. Otherwise the
+Incognito write is read back, so a change Chromium declines without an error answers `failed`.
+
+### Window geometry
+
+`windows.geometry`, `windows.setFrame`, `windows.setMaximized` and `windows.setFullScreen` call four public
+functions of the `ArdiaAppWindows` module in `packages/shell` (`WindowGeometry.swift`, typed in
+`packages/shell/src/windows.ts`, wrapped in `platform/windows.ts`): `windowGeometry(id)`, `setWindowFrame(id, frame)`,
+`setWindowZoomed(id, on)` and `setWindowFullScreen(id, on)`, each answering the window's geometry afterwards:
+`{frame, zoomed, fullScreen, pageFullScreen, miniaturized, visible, display}`, plus `refused: "offscreen" |
+"invalid"` when `setWindowFrame` left the window where it was. They are the extension point for anything in the app or
+a plugin (through these socket methods) that moves windows; nothing about them is socket-only. Frames are AppKit's: screen points from the
+bottom-left of the main display, the same as `frame` in `windows`. A frame is kept on the display it overlaps most and at
+least the window's smallest size; a frame that overlaps no display, or isn't finite with a positive size, is refused
+by the native call itself, and the socket also bounds every coordinate to ±100,000 points. Zoom is macOS's (the
+green button with Option, or double-clicking the title bar). `setWindowFullScreen` answers once the transition has
+finished, not when it starts. `FullScreenLifecycle.swift` tracks every window's transitions, whoever starts them (a
+call, the green button, the menu or a keyboard shortcut): `willEnter`/`willExit` opens one and gives it a generation
+number, and the window closing ends it. `didEnter` or `didExit` ends it only when the notification's own direction
+matches the open transition's and the window's real full-screen state (`ArdiaChromeWindowHost.windowIsFullScreen`, the
+style mask, plus the stand-in a background test instance acts out) matches it too; otherwise the notification is stale
+(a late end of an earlier transition) and is ignored and logged. WindowManager's cached full-screen flag takes the same
+decision (`acceptsEnd`), so a stale notification can't set it either. Chromium's failure callbacks don't end one (its exit-failure callback arrives before `didExit`). A
+transition with no ending notification is checked against the same real state from 6 s on, once a second: it ends
+when two checks agree, whichever side that is, and after 30 s it ends regardless and is logged. Either way the
+window's cached full-screen flag is set to that real state (and the store told), so geometry and later calls see
+it. While a transition is open, a call answers `transition: "busy"` (the
+socket's `refused`). A call is settled only by a transition whose generation is newer than the last one when it
+toggled, so a late notification can't answer a newer call. After 6 s a call answers `transition: "timeout"` (the
+socket's `failed`, "Timed out…"), and the window stays busy until that transition ends. The socket runs one full-screen change at a time per window, checks the final geometry
+against the request, waits for the store to follow (`failed` if it doesn't within 4 s), and answers `refused` while a
+page is full screen in the window, `failed` if the window didn't get there. None of the three acts while a page is full screen in the window. The store's `frame` and `fullScreen` follow through the
+window events they already listen to. `PLATFORM_FEATURES.windowGeometry` is on for macOS only: Linux needs the same
+four calls in `engine/ardiacore-linux` (an engine change, so a new engine), and Windows in `WindowManager` of
+`apps/browser/windows` (its maximize already exists as `toggleMaximizeWindow`); until then the methods are `refused`
+there.
 
 ### Clearing site data is per site
 
@@ -447,18 +572,10 @@ same rule: a profile whose passwords a plugin keeps answers `password_manager_pl
 
 Designed, not built in this round, each in its own file under `state/automation/socket<Area>.ts`:
 
+- **Window geometry on Linux and Windows:** the four `ArdiaAppWindows` calls above, then `windowGeometry: true` in
+  their `PLATFORM_FEATURES`.
 - **Shared folder writes:** `sharedFolders.share {group, parent?}`, `sharedFolders.add {path, window?}`,
   `sharedFolders.sync {group}` and `sharedFolders.stop {group}`, in #2836 (`full-control/app-socket-2a-shared`), which is
   parked: review found data-loss bugs in the shared-folder sync engine and its native layer, and fixing them changes the
   sidebar's own shared-folder sync, so they need their own focused PR first. The open findings are listed at the top of
   #2836.
-- **Window geometry:** `windows.setFrame {window, frame}`, `windows.setMaximized`, `windows.setFullScreen`. The store's
-  `frame`, `maximized` and `fullScreen` follow the native window (`windows/windowSync.ts`), so these need a native
-  call that moves the window (`ArdiaWindows`), which doesn't exist yet; `run` covers full screen through its command.
-
-- **Sync:** `sync.now`, `sync.setType {type, on}`, `sync.setProfile {profile, on}`, `sync.sendTab {tab, device}`
-  through `state/sync/engine.ts`.
-- **Extensions:** `extensions.install {webStoreId}` (opens the install prompt the user confirms), `extensions.configure`.
-- **Settings refused today:** `pageEngine` and `websiteEngines` once a socket write can move open pages between engines as
-  the Settings pane does; `newTabUrl` and `customSearchUrl` with the URL checks `apply` uses.
-- **Events:** `bookmarks.changed`, `history.removed`, `download.changed`, `profile.changed`.

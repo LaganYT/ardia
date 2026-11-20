@@ -67,6 +67,8 @@ export async function guarded(id: string, mayWrite: () => boolean) {
 const KNOWN_SAFE = new Map([
   ["automation/controlSocket.ts: listen", "the listener is the socket's entry point: each request it hands to handleControlRequest starts its own socket origin in answer(), so its writes are checked there"],
   ["automation/offscreen.ts: offscreenMethod", "the native move already happened; the store has to follow it whether or not the client is still there, or it would point at a page that left"],
+  ["sync/engine.ts: cycleOnce", "sync.now only starts a cycle, after checking the caller still holds control; the cycle merges other devices' changes into the store as every timed cycle does, and stopping it halfway when control turns off would leave the sync folder and the store out of step"],
+  ["sync/historyAdapter.ts: historyAdapter", "the history adapter is the sync cycle's own write of other devices' history, reached only through cycleOnce, allowed above"],
   ["windows/windowClose.ts: closeAfterAsking", "dropStaleLastWindowMark clears the close's own last-window mark when the close is cancelled or fails; it undoes the close's bookkeeping and has to run whether or not control is still on"],
 ]);
 

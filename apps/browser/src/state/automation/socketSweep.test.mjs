@@ -179,6 +179,16 @@ const PARAMS = (f) => ({
   "airTraffic.removeRule": { id: f.rule },
   "airTraffic.moveRule": { id: f.rule, index: 0 },
   "airTraffic.setFallback": { open: "window" },
+  "windows.setFrame": { window: f.w2, frame: [40, 40, 900, 700] },
+  "windows.setMaximized": { window: f.w2, on: true },
+  "windows.setFullScreen": { window: f.w2, on: true },
+  "sync.now": {},
+  "sync.setType": { type: "history", on: false },
+  "sync.setProfile": { profile: f.p2, on: true },
+  "sync.setOpenTabs": { profile: f.p2, on: true },
+  "sync.sendTab": { tab: f.other, device: "none" },
+  "extensions.install": { webStore: "a".repeat(32) },
+  "extensions.configure": { id: "a".repeat(32), incognito: true },
 });
 
 const stores = () => [S(), useLive.getState(), useAirTraffic.getState()];

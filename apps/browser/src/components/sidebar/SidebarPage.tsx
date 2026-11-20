@@ -178,17 +178,15 @@ export const SidebarPage = memo(function SidebarPage({ profileId, slot, paging, 
           <TintInk>
             <SidebarTextScope>
             <DragPage live={current}>
-              <View style={{ paddingTop: GLOW_ROOM, zIndex: fixedTiles.length ? 1 : 0 }}>
-                <Animated.View style={[{ paddingHorizontal: layout.sidebarInset }, capped ? { maxHeight: topGap + dockRoom, overflow: "hidden" } : null, dockFixed ? sharedTiles : null]}>
-                  {dockFixed ? (
+              <View style={{ paddingTop: GLOW_ROOM, paddingBottom: edgeLift, zIndex: fixedTiles.length ? 1 : 0 }}>
+                {dockFixed ? (
+                  <Animated.View style={[{ paddingHorizontal: layout.sidebarInset }, capped ? { maxHeight: topGap + dockRoom, overflow: "hidden" } : null, sharedTiles]}>
                     <DragScope enabled={current}>
                       <PinnedGrid tabs={fixedTiles} innerWidth={innerWidth} />
                     </DragScope>
-                  ) : null}
-                </Animated.View>
-                <View style={{ height: fixedTiles.length ? SCROLL_EDGE.gap : topGap - SCROLL_EDGE.inset - SCROLL_EDGE.line }} />
-                <ScrollEdgeLine opacity={scrollEdge.opacity} style={edgeLift ? { marginTop: -edgeLift } : undefined} />
-                {edgeLift ? <View style={{ height: edgeLift }} /> : null}
+                  </Animated.View>
+                ) : null}
+                <ScrollEdgeLine opacity={scrollEdge.opacity} style={{ marginTop: (fixedTiles.length ? SCROLL_EDGE.gap : topGap - SCROLL_EDGE.inset - SCROLL_EDGE.line) - edgeLift }} />
               </View>
               <Animated.View
                 style={{ flex: 1, marginTop: -GLOW_ROOM, overflow: "hidden", transform: [{ translateY: edge }] }}
@@ -243,9 +241,7 @@ export const SidebarPage = memo(function SidebarPage({ profileId, slot, paging, 
                   {geometry ? <SelectedRowPill windowId={windowId} tracker={selectedRow} lift={edgeLift} bottomShift={playerMotion.listClip} /> : null}
                 </Animated.View>
               </Animated.View>
-              <Animated.View pointerEvents="none" style={{ height: 0, zIndex: 1, transform: [{ translateY: playerMotion.listClip }] }}>
-                <ScrollEdgeLine opacity={scrollEdgeBelow.opacity} style={{ position: "absolute", left: 0, right: 0, bottom: 0 }} />
-              </Animated.View>
+              <ScrollEdgeLine opacity={scrollEdgeBelow.opacity} style={{ marginTop: -SCROLL_EDGE.line, zIndex: 1, transform: [{ translateY: playerMotion.listClip }] }} />
               {playerTab ? (
                 <View style={{ paddingHorizontal: layout.sidebarInset, paddingTop: docked ? space.m : 0, paddingBottom: docked ? 0 : space.m }}>
                   <SidebarPlayer tabId={playerTab} motion={playerMotion} docked={docked} />

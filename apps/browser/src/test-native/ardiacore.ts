@@ -111,6 +111,8 @@ export const passwordProviders = {
   sessions: [] as unknown[],
   rejectNext: 0,
   handlerGate: null as Promise<void> | null,
+  hints: [] as { tab: string; label: string; side: string }[],
+  hintShown: true,
 };
 const providerFakes = {
   setFieldProviders: async (args: { generation: number; session: string; profiles: { profile: string; fields: string[]; codeSetup: boolean }[] }) => {
@@ -138,6 +140,7 @@ const providerFakes = {
     return { applied: true };
   },
   showSystemPanel: ({ tab, generation }: { tab: string; generation?: number }) => (passwordProviders.calls.push(["showSystemPanel", tab]), (passwordProviders.lastPanelGeneration = generation), { ...passwordProviders.panel }),
+  showPanelHint: ({ tab, label, side }: { tab: string; label: string; side: string }) => (passwordProviders.hints.push({ tab, label, side }), { shown: passwordProviders.hintShown }),
   systemPanelAvailable: () => ({ chromium: true, webkit: true }),
   otpauthHandler: async () => (passwordProviders.calls.push(["otpauthHandler"]), await passwordProviders.handlerGate, { app: passwordProviders.handlerApp }),
   setUpVerificationCode: ({ tab, token, generation }: { tab: string; token: string; generation?: number }) => (passwordProviders.opened.push({ tab, token, generation }), { opened: passwordProviders.openResult }),

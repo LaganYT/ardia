@@ -31,13 +31,19 @@ const CODE_FIELDS: Record<VerificationCodeStep, string> = {
 
 const RECORD_FAILED = "password_manager_record_failed";
 
+export type PanelHintStep = "shown" | "dismissed";
+const HINT_FIELDS: Record<PanelHintStep, string> = {
+  shown: "password_manager_panel_hints_shown",
+  dismissed: "password_manager_panel_hints_dismissed",
+};
+
 const CHOICE_FIELDS: Record<PasswordManagerKind, string> = {
   ardia: "password_manager_chose_ardia",
   none: "password_manager_chose_none",
   plugin: "password_manager_chose_plugin",
 };
 
-const FIELDS = [...Object.values(PANEL_FIELDS).flat(), ...Object.values(PANEL_REFUSALS), ...Object.values(CODE_FIELDS), ...Object.values(CHOICE_FIELDS), RECORD_FAILED];
+const FIELDS = [...Object.values(PANEL_FIELDS).flat(), ...Object.values(PANEL_REFUSALS), ...Object.values(HINT_FIELDS), ...Object.values(CODE_FIELDS), ...Object.values(CHOICE_FIELDS), RECORD_FAILED];
 
 let counts: Record<string, number> = {};
 const bump = (field: string, consent?: ConsentToken | null) => countFor(consent, () => void (counts[field] = (counts[field] ?? 0) + 1), { [field]: 1 });
@@ -50,6 +56,8 @@ export function notePasswordPanel(opener: PanelOpener, shown: boolean, reason?: 
 export const noteVerificationCodeSetup = (step: VerificationCodeStep, consent?: ConsentToken | null) => bump(CODE_FIELDS[step], consent);
 
 export const notePasswordManagerRecordFailed = (consent?: ConsentToken | null) => bump(RECORD_FAILED, consent);
+
+export const notePanelHint = (step: PanelHintStep) => bump(HINT_FIELDS[step]);
 
 export const notePasswordManagerChosen = (kind: PasswordManagerKind) => bump(CHOICE_FIELDS[kind]);
 

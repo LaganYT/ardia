@@ -222,3 +222,51 @@ test("a choice counts only for the plugin approved under that name", async () =>
   lifecycle.disablePlugin("system-passwords", consentToken());
   lifecycle.disablePlugin("other-passwords", consentToken());
 });
+
+test("a panel seen beside the field gets Ardia's hint on the other side, named for the site, until the profile closes it three times", async () => {
+  const hints = await import("./panelHints.ts");
+  const counts = await import("../telemetry/passwordManagerCounts.ts");
+  hints.forgetPanelHintsForTests();
+  stub.docs.delete(hints.PANEL_HINTS_DOCUMENT);
+  counts.takePasswordManagerCounts();
+  const windowId = S().windowOrder[0];
+  const tabId = S().windows[windowId].tabIds[0];
+  const label = hints.panelHintLabel(S().tabs[tabId].url);
+  assert.ok(label, "the test tab has a site label");
+  native.hints.length = 0;
+  pm.fieldProviderOpened(tabId, { via: "badge", shown: true, panel: "below" });
+  pm.fieldProviderOpened(tabId, { via: "menu", shown: true, panel: "above" });
+  pm.fieldProviderOpened(tabId, { via: "badge", shown: true });
+  pm.fieldProviderOpened(tabId, { via: "badge", shown: false, reason: "noPanel" });
+  await settle();
+  assert.deepEqual(native.hints, [
+    { tab: tabId, label, side: "above" },
+    { tab: tabId, label, side: "below" },
+  ]);
+  pm.fieldProviderHint(tabId, { state: "shown" });
+  for (let i = 0; i < 3; i++) pm.fieldProviderHint(tabId, { state: "dismissed" });
+  assert.deepEqual(JSON.parse(stub.docs.get(hints.PANEL_HINTS_DOCUMENT)).dismissals, { [S().tabs[tabId].profileId]: 3 });
+  native.hints.length = 0;
+  pm.fieldProviderOpened(tabId, { via: "badge", shown: true, panel: "below" });
+  await settle();
+  assert.deepEqual(native.hints, [], "three closes quiet it in this profile");
+  hints.forgetPanelHintsForTests();
+  pm.fieldProviderOpened(tabId, { via: "badge", shown: true, panel: "below" });
+  await settle();
+  assert.deepEqual(native.hints, [], "and it stays quiet after a relaunch");
+  const taken = counts.takePasswordManagerCounts();
+  assert.equal(taken.password_manager_panel_hints_shown, 1);
+  assert.equal(taken.password_manager_panel_hints_dismissed, 3);
+  stub.docs.delete(hints.PANEL_HINTS_DOCUMENT);
+  hints.forgetPanelHintsForTests();
+});
+
+test("the hint names one domain label, and nothing for addresses or pages that aren't web pages", async () => {
+  const { panelHintLabel } = await import("./panelHints.ts");
+  assert.equal(panelHintLabel("https://github.com/login"), "github");
+  assert.equal(panelHintLabel("https://www.amazon.co.uk/ap/signin"), "amazon");
+  assert.equal(panelHintLabel("https://accounts.google.com/"), "google");
+  assert.equal(panelHintLabel("http://192.168.1.1/login"), null);
+  assert.equal(panelHintLabel("file:///Users/me/login.html"), null);
+  assert.equal(panelHintLabel(undefined), null);
+});

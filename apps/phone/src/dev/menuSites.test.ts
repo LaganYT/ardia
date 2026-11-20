@@ -23,8 +23,6 @@ const SITES: Record<string, Over[]> = {
   "browsing/PageRequests.tsx": ["card", "page"],
   "browsing/ReaderView.tsx": ["page"],
   "browsing/tabsMenu.tsx": ["page", "page"],
-  "column/DeckColumn.tsx": ["page", "page"],
-  "column/StartColumn.tsx": ["page"],
   "duo/DuoBrowsing.tsx": ["page"],
   "duo/DuoSidebar.tsx": ["page", "page", "card", "page", "page", "page"],
   "library/ExpoLibrary.tsx": ["system", "system", "system", "system"],

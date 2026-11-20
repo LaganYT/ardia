@@ -277,14 +277,14 @@ function withPageFrameDependencies(settings: Settings, patch: Partial<Settings>)
   return patch;
 }
 
-export function choose(s: Pick<BrowserState, "settings" | "settingsMeta">, patch: Partial<Settings>): Pick<BrowserState, "settings" | "settingsMeta"> {
+export function choose(s: Pick<BrowserState, "settings" | "settingsMeta">, patch: Partial<Settings>, { inferring = false } = {}): Pick<BrowserState, "settings" | "settingsMeta"> {
   const { chosen, inferred } = s.settingsMeta;
   if (patch.autoHideTabs !== undefined && patch.autoHideTabs !== s.settings.autoHideTabs) noteAutoHideTabsChosen();
   if (patch.minimalismMode !== undefined && patch.minimalismMode !== s.settings.minimalismMode) noteMinimalismToggled(patch.minimalismMode);
   patch = withPageFrameDependencies(s.settings, patch);
   const next = { ...s.settings, ...patch };
   const added = Object.keys(patch).filter((k) => !chosen.includes(k));
-  const left = inferred.filter((k) => !(k in patch));
+  const left = inferring ? [...new Set([...inferred, ...Object.keys(patch)])] : inferred.filter((k) => !(k in patch));
   const settingsMeta = added.length || left.length !== inferred.length ? { chosen: added.length ? [...chosen, ...added] : chosen, inferred: left } : s.settingsMeta;
   return { settings: next, settingsMeta };
 }
@@ -342,7 +342,7 @@ function windowsFollowingAutoHideTabs(s: Pick<BrowserState, "settings" | "window
 export type SettingsSlice = {
   settings: Settings;
   settingsMeta: SettingsMeta;
-  updateSettings(patch: Partial<Settings>, options?: { fromSync?: boolean }): void;
+  updateSettings(patch: Partial<Settings>, options?: { fromSync?: boolean; inferred?: boolean }): void;
   setSearchEngine(id: string): void;
   addCustomEngine(input: EngineInput): { id: string } | { error: string };
   updateCustomEngine(id: string, input: EngineInput): string | null;
@@ -355,11 +355,11 @@ const newEngineId = () => `engine-${Date.now().toString(36)}-${(++engineCounter)
 export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSlice> = (set, get) => ({
   settings: DEFAULT_SETTINGS,
   settingsMeta: NO_SETTINGS_META,
-  updateSettings(patch, { fromSync = false } = {}) {
+  updateSettings(patch, { fromSync = false, inferred = false } = {}) {
     set((s) => {
       const windows = windowsFollowingAutoHideTabs(s, patch);
       if (fromSync) return { settings: { ...s.settings, ...withPageFrameDependencies(s.settings, patch) }, ...windows };
-      return { ...choose(s, withLinkKeysApart(s.settings, patch)), ...windows };
+      return { ...choose(s, withLinkKeysApart(s.settings, patch), { inferring: inferred }), ...windows };
     });
   },
 

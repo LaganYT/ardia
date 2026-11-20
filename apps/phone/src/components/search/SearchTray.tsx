@@ -12,6 +12,7 @@ import { useSearchEditsPage, useSearchFieldVersion, useSearchInitialText, useSea
 import { SEARCH_ANCHOR_ID, SEARCH_FACE_ID, SEARCH_FIELD_ID, SEARCH_REVEAL_ID, SEARCH_ROWS_REVEAL_ID, setStageMorphs, stageExit, stageOpened, stagePresented, stageSettled, useStageBar } from "../../state/search/stageBar";
 import { SearchStage, SearchStagePanel, searchStageIsNative, type SearchStageHandle, type SearchStageLift } from "../../platform/searchStage";
 import { useScreenLayout } from "../../state/app/screenLayout";
+import { isOpenDuo } from "../../lib/bottomBarSpan";
 import { useChromeStyle } from "../../state/settings/appearance";
 import { withAlpha } from "../../lib/color";
 import { initialPresence, presenceSettled, presenceShown, presenceTarget } from "../../lib/sheetPresence";
@@ -436,6 +437,8 @@ function StagedTray() {
   const reduceTransparency = useReduceTransparency();
   const chrome = useChromeStyle();
   const phoneLayout = useScreenLayout((s) => s.layout.name === "phone");
+  const hinged = useScreenLayout((s) => s.hinge !== "none");
+  const landsDirectly = useScreenLayout((s) => isOpenDuo(window.width, s.hinge));
   const pills = useStageBar((state) => state.pills);
   const stage = useRef<SearchStageHandle>(null);
   const [mounted, setMounted] = useState<number | null>(open ? session : null);
@@ -682,6 +685,7 @@ function StagedTray() {
       rowsRevealNativeId={SEARCH_ROWS_REVEAL_ID}
       fieldCenter={floatingPanelLayout.fieldInset + fieldHeight / 2}
       commandTop={command ? command.top : null}
+      landsDirectly={landsDirectly}
       morphLook={morphLook}
       onLift={lifted}
       onReveal={revealed}
@@ -707,7 +711,7 @@ function StagedTray() {
           {mounted !== null ? (
             <View
               key={presentation}
-              style={command ? { marginLeft: command.left, width: command.width } : styles.stageCard}
+              style={command ? { marginLeft: command.left, width: command.width } : [styles.stageCard, hinged ? { paddingLeft: insets.left + floatingPanelLayout.inset, paddingRight: insets.right + floatingPanelLayout.inset } : null]}
               importantForAccessibility={closing ? "no-hide-descendants" : "auto"}
               accessibilityElementsHidden={closing}
             >

@@ -13,6 +13,7 @@ export const Favicon = memo(function Favicon({
   profileId,
   direct,
   opacity = 1,
+  fallbackColor,
 }: {
   url: string;
   favicon?: string | null;
@@ -20,6 +21,7 @@ export const Favicon = memo(function Favicon({
   profileId?: string;
   direct?: boolean;
   opacity?: number;
+  fallbackColor?: string;
 }) {
   const theme = useTheme();
   useAppearanceDark();
@@ -29,7 +31,7 @@ export const Favicon = memo(function Favicon({
   const white = shape?.kind === "template" && !!shape.stroke;
   const [broken, setBroken] = useState<string | null>(null);
   if (!url && !resolved) return <NewTabIcon size={size} opacity={opacity} />;
-  if (!resolved || broken === resolved.uri) return <FaviconFallback url={url} size={size} opacity={opacity} />;
+  if (!resolved || broken === resolved.uri) return <FaviconFallback url={url} size={size} opacity={opacity} color={fallbackColor} />;
   return (
     <Image
       key={white ? `${resolved.uri} tinted` : resolved.uri}
@@ -50,12 +52,13 @@ export const SiteFavicon = memo(function SiteFavicon({ host, profileId, size }: 
   return <Favicon url={url} favicon={`${url}/favicon.ico`} profileId={profileId} size={size} />;
 });
 
-export const FaviconFallback = memo(function FaviconFallback({ url, size = 16, opacity = 1 }: { url: string; size?: number; opacity?: number }) {
+export const FaviconFallback = memo(function FaviconFallback({ url, size = 16, opacity = 1, color }: { url: string; size?: number; opacity?: number; color?: string }) {
   const theme = useTheme();
+  const glyph = color ?? theme.textSecondary;
   const bundled = bundledSiteIcon(url, theme.dark);
   if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, opacity }} />;
   const initial = hostInitial(url);
-  if (!initial) return <Symbol name="globe" size={size - 2} color={theme.textSecondary} style={{ width: size, height: size, opacity }} />;
+  if (!initial) return <Symbol name="globe" size={size - 2} color={glyph} style={{ width: size, height: size, opacity }} />;
   const tile = Math.round((size * 14) / 16);
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", opacity }}>
@@ -70,7 +73,7 @@ export const FaviconFallback = memo(function FaviconFallback({ url, size = 16, o
           justifyContent: "center",
         }}
       >
-        <CapCenteredLetter box={tile} fontSize={Math.round(tile * 0.64)} fontWeight={weight.semibold} color={theme.textSecondary}>
+        <CapCenteredLetter box={tile} fontSize={Math.round(tile * 0.64)} fontWeight={weight.semibold} color={glyph}>
           {initial}
         </CapCenteredLetter>
       </View>

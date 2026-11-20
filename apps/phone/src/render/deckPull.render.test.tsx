@@ -22,6 +22,7 @@ const { sendDeckCommand } = require("../state/browse/deckCommands") as typeof im
 const deckGrid = require("../state/browse/deckGrid") as typeof import("../state/browse/deckGrid");
 const browse = require("../state/browse/store") as typeof import("../state/browse/store");
 const { setRootSize } = require("../state/app/rootSize") as typeof import("../state/app/rootSize");
+const { resizeRoot } = require("../state/browse/deckHold") as typeof import("../state/browse/deckHold");
 const { writePreference } = require("../state/store/browserDatabase") as typeof import("../state/store/browserDatabase");
 const { browserDatabase } = require("../state/store/database") as typeof import("../state/store/database");
 const telemetry = require("../state/telemetry/telemetry") as typeof import("../state/telemetry/telemetry");
@@ -113,6 +114,19 @@ function swipe(steps: Step[], finish: State = State.END) {
 
 const order = (root: Root) =>
   root.root.findAll((node) => typeof node.type === "string" && (node.props.testID === "tabDeck" || node.props.testID === "pageBar")).map((node) => node.props.testID as string);
+
+test("a Duo opened or closed while the deck waits hidden republishes the pull target at the new size, so the next swipe shrinks the page into a card of the current screen", () => {
+  app();
+  const before = deckPull.target.value!;
+  expect(before.screenWidth).toBe(SCREEN.width);
+  act(() => resizeRoot(951, 669));
+  frame();
+  const after = deckPull.target.value!;
+  expect(after.id).toBe(before.id);
+  expect(after.screenWidth).toBe(951);
+  expect(after.screenHeight).toBe(669);
+  expect(after.width).not.toBe(before.width);
+});
 
 test("on both phones the deck waits under the page, laid out and parked off screen rather than undrawn, so a swipe can show it without a layout pass", () => {
   const root = app();

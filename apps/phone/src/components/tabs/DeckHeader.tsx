@@ -23,7 +23,6 @@ type Props = {
   onCloseIncognito: () => void;
   onCloseAll: () => void;
   menusShown?: boolean;
-  showsMore?: boolean;
   onMenu?: (open: boolean) => void;
 } & ChromeFade;
 
@@ -45,7 +44,7 @@ export function deckMoreMenuItems({ syncEnabled, canReopen, hasTabs, onCloseAll 
   ]);
 }
 
-export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, showsMore = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
+export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
   const theme = useTheme();
   const status = useSyncStatus();
   const view = useSyncView();
@@ -97,17 +96,15 @@ export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs
       {privateCount > 0 ? (
         <Animated.View entering={pillIn} exiting={pillOut}>
           <FadingGlyphs testID="deckIncognitoPillFade" fade={glyphFade}>
-            <MenuTrigger items={pillItems} {...menu} place={{ top: below, right: showsMore ? side + deckChromeLayout.headerCircle + deckChromeLayout.headerGap : side, width: tabsLayout.menuWidth }}>
+            <MenuTrigger items={pillItems} {...menu} place={{ top: below, right: side + deckChromeLayout.headerCircle + deckChromeLayout.headerGap, width: tabsLayout.menuWidth }}>
               {({ onPress }) => <IncognitoPill count={privateCount} onPress={onPress ?? noop} />}
             </MenuTrigger>
           </FadingGlyphs>
         </Animated.View>
       ) : null}
-      {showsMore ? (
-        <MenuTrigger items={moreItems} {...menu} onOpen={Platform.OS === "ios" ? openedMore : opened} place={{ top: below, right: side, width: tabsLayout.menuWidth }}>
-          {({ onPress }) => <GlassCircleButton icon="ellipsis" label="More" testID="deckHeaderMore" diameter={deckChromeLayout.headerCircle} dark={theme.dark} glassShown={glassShown} glassShownMs={glassShownMs} glyphFade={glyphFade} onPress={onPress ?? noop} />}
-        </MenuTrigger>
-      ) : null}
+      <MenuTrigger items={moreItems} {...menu} onOpen={Platform.OS === "ios" ? openedMore : opened} place={{ top: below, right: side, width: tabsLayout.menuWidth }}>
+        {({ onPress }) => <GlassCircleButton icon="ellipsis" label="More" testID="deckHeaderMore" diameter={deckChromeLayout.headerCircle} dark={theme.dark} glassShown={glassShown} glassShownMs={glassShownMs} glyphFade={glyphFade} onPress={onPress ?? noop} />}
+      </MenuTrigger>
     </View>
   );
 }

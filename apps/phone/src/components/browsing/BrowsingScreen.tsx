@@ -26,7 +26,7 @@ import {
   barCenterFromBottom,
   barHeight,
   browseLayout,
-  ink,
+  chromeLayout,
   isDarkColor,
   LoadingLine,
   type LoadWatch,
@@ -62,10 +62,9 @@ import { useDemoMotion } from "./DemoMotion";
 import { PagerBackdrop, PagerNeighbour, useTabPager } from "./TabPager";
 import { launchArguments } from "../../state/app/launchFlags";
 import { labTrace } from "../../platform/lab";
-import { columnContentWidth, SCREEN_COLUMN, type ScreenColumn } from "../../state/app/screenLayout";
-import { BrowsingColumn } from "../column/BrowsingColumn";
-import { columnMenuPlace, columnPadding, useColumn } from "../column/SideColumn";
 import { shownTone } from "../../lib/pageTone";
+import { besideStrip, bottomBarLayout, DUO_BAR, duoSqueeze } from "../../lib/bottomBarSpan";
+import { useScreenLayout } from "../../state/app/screenLayout";
 
 export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: BrowserTab }) {
   countRender("BrowsingScreen");
@@ -73,16 +72,20 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   const design = useDesign();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const safeSide = Math.max(insets.left, insets.right);
-  const column = useColumn();
-  const pageWidth = column ? columnContentWidth(column, width) : width;
+  const hinge = useScreenLayout((s) => s.hinge);
+  const barSide = design === "redesigned" ? chromeLayout.barSideInset : browseLayout.barSideInset - 4;
+  const barLayout = bottomBarLayout(width, insets, hinge, barSide);
+  const { span: barSpan, strip } = barLayout;
+  const controlsSpan = { left: barSpan.left - barSide, right: barSpan.right - barSide };
+  const duoStrip = design === "redesigned" ? strip : null;
+  const squeeze = duoStrip ? duoSqueeze(width, barLayout) : null;
   const menuOpen = useMenuOpen();
   const finding = useFindOpen();
   const readerId = useReaderTabId();
   const pressing = usePressOpen();
   const tone = usePageTone(tab.id);
   const order = useDeckOrder();
-  const barOrder = useMemo(() => (design === "redesigned" && !column ? order.filter((other) => other.isPrivate === tab.isPrivate) : order), [order, design, column, tab.isPrivate]);
+  const barOrder = useMemo(() => (design === "redesigned" ? order.filter((other) => other.isPrivate === tab.isPrivate) : order), [order, design, tab.isPrivate]);
   const frozen = useFrozenOrder();
   const searching = useSearchOpen();
   const [tabsMenu, setTabsMenu] = useState(false);
@@ -93,28 +96,30 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   const left = around.left ? (byId.get(around.left) ?? null) : null;
   const right = around.right ? (byId.get(around.right) ?? null) : null;
   const pager = useTabPager({
-    width: pageWidth,
+    width,
     selectedId: tab.id,
     left: left?.id ?? null,
     right: right?.id ?? null,
     onCommit: switchToNeighbour,
     onGrab: captureCurrentCover,
   });
-  useDemoMotion(pager, pageWidth);
+  useDemoMotion(pager, width);
   const failed = useNavigation(tab.id, (n) => n?.failure != null);
   const pageTone = failed ? null : shownTone(tone, tab.themeColorHex);
   const top = pageTone?.top ?? theme.surface;
   const bottom = pageTone?.bottom ?? theme.surface;
   const barDark = design === "redesigned" && !pageTone?.bottom ? theme.dark : isDarkColor(bottom);
   useSystemBars(isDarkColor(top), barDark);
-  const collapse = useBarCollapse(tab.id, tab.isPrivate, finding, design === "redesigned");
-  const staged = design === "redesigned" && !column && searchStageIsNative();
+  const collapse = useBarCollapse(tab.id, tab.isPrivate, finding, design === "redesigned", squeeze !== null);
+  const duoBar = useMemo(() => (duoStrip ? { stripLeft: duoStrip.centerX - DUO_BAR.button / 2 - controlsSpan.left, stripTop: duoStrip.plus, squeeze, progress: collapse.fold.progress, collapsed: collapse.collapsed } : null), [duoStrip?.centerX, duoStrip?.plus, controlsSpan.left, squeeze?.marginLeft, squeeze?.marginRight, collapse.fold.progress, collapse.collapsed]);
+  const folds = squeeze === null;
+  const staged = design === "redesigned" && searchStageIsNative();
   useEffect(() => (staged && !collapse.hidden ? reportBarPill() : undefined), [staged, collapse.hidden]);
   const underBar = usePageUnderBars();
-  const layout = column ? COLUMN_PAGE : underBar ? { pageBottom: 0, toneBottom: barHeight(insets.bottom, design) } : pageInsets(collapse.collapses, barHeight(insets.bottom, design), browseLayout.pageOverlap);
+  const layout = underBar ? { pageBottom: 0, toneBottom: barHeight(insets.bottom, design) } : pageInsets(collapse.collapses, barHeight(insets.bottom, design), browseLayout.pageOverlap);
   const fullscreen = usePages((s) => s.fullscreen[tab.id] ?? false);
   const coveredBottom = obscuredBottom({ follows: Platform.OS === "android", bar: barHeight(insets.bottom, design), pill: barCenterFromBottom(insets.bottom, design) - floatingBarLayout.control / 2 + hostPillLayout.height, collapsed: collapse.collapsed, cleared: fullscreen || finding || searching });
-  const obscured = column ? COLUMN_OBSCURED : underBar ? { top: insets.top, bottom: coveredBottom } : undefined;
+  const obscured = underBar ? { top: insets.top, bottom: coveredBottom } : undefined;
   const painted = useSharedValue(false);
   useEffect(() => {
     painted.value = true;
@@ -129,7 +134,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   };
   const incognito = useIncognito();
   const reduceMotion = useReduceMotion();
-  const pulls = design === "redesigned" && !column;
+  const pulls = design === "redesigned";
   const tracks = pulls && !reduceMotion;
   useEffect(() => {
     if (!pulls) return;
@@ -139,7 +144,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   const barCenter = barCenterFromBottom(insets.bottom, design);
   const barTop = barCenter + floatingBarLayout.control / 2;
   const barShift = usePullBarShift(barTop, barCenter - redesignedBarCenterFromBottom(insets.bottom, Platform.OS));
-  const swipesUp = !column && !searching && !collapse.hidden && !(pulls && collapse.collapsed);
+  const swipesUp = !searching && !collapse.hidden && !(pulls && collapse.collapsed);
   const openDeckFromBar = () => {
     if (!incognito) countUsage("deck_bar_swipes");
     if (pulls) labTrace("PAGELAB bar swipe recognised with no pull to track");
@@ -152,9 +157,9 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   const statusStyle = useAnimatedStyle(() => ({ backgroundColor: painted.value ? withTiming(top, { duration: tabsMotion.barTone }) : top }), [top]);
   const barStyle = useAnimatedStyle(() => ({ backgroundColor: painted.value ? withTiming(bottom, { duration: tabsMotion.barTone }) : bottom }), [bottom]);
   return (
-    <View style={[StyleSheet.absoluteFill, pulls ? null : { backgroundColor: column ? (theme.dark ? ink.black : ink.white) : theme.surface }]} onLayout={() => pageLaidOut(tab.id)}>
+    <View style={[StyleSheet.absoluteFill, pulls ? null : { backgroundColor: theme.surface }]} onLayout={() => pageLaidOut(tab.id)}>
       <Shade shaded={menuOpen || readerId === tab.id || pressing || tabsMenu}>
-        <PageStack column={column} pulledTab={pulls ? tab.id : null} barTop={barTop}>
+        <PageStack pulledTab={pulls ? tab.id : null} barTop={barTop}>
         <PagerBackdrop />
         <Animated.View style={[StyleSheet.absoluteFill, styles.outgoing, { backgroundColor: theme.surface }, pager.outgoing]}>
           {underBar ? null : <Animated.View testID="pageStatusStrip" style={[{ height: insets.top }, statusStyle]} />}
@@ -165,95 +170,78 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
           </View>
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: tabsInk.pagerBlack }, pager.dim]} pointerEvents="none" />
         </Animated.View>
-        {left ? <PagerNeighbour pager={pager} tab={left} side={-1} width={pageWidth} statusHeight={insets.top} hasLeft hasRight={right !== null} /> : null}
-        {right ? <PagerNeighbour pager={pager} tab={right} side={1} width={pageWidth} statusHeight={insets.top} hasLeft={left !== null} hasRight /> : null}
+        {left ? <PagerNeighbour pager={pager} tab={left} side={-1} width={width} statusHeight={insets.top} hasLeft hasRight={right !== null} /> : null}
+        {right ? <PagerNeighbour pager={pager} tab={right} side={1} width={width} statusHeight={insets.top} hasLeft={left !== null} hasRight /> : null}
         <View style={[styles.loading, { top: insets.top }]} pointerEvents="none">
           <PageLoadingLine tabId={tab.id} color={theme.accent} />
         </View>
         </PageStack>
-        {column ? (
-          <BrowsingColumn
-            column={column}
-            width={width}
-            tab={tab}
-            order={order}
-            roles={rolesFor(theme.dark)}
-            dark={theme.dark}
-            hidden={finding}
-            onTabs={showDeck}
-            onTabsMenu={openTabsMenu}
-            onStep={stepTab}
-            onAddress={editPageQuery}
-            onPlus={newTab}
-            onMore={openPageMenu}
-          />
-        ) : (
-          <GestureDetector gesture={barGesture}>
-            <Animated.View
-              testID="pageBar"
-              pointerEvents={collapse.hidden ? "none" : design === "redesigned" ? "box-none" : "auto"} collapsable={false}
-              importantForAccessibility={collapse.hidden ? "no-hide-descendants" : "auto"}
-              accessibilityElementsHidden={collapse.hidden}
-              style={[styles.bar, { height: barHeight(insets.bottom, design) }, underBar ? null : barStyle, collapse.style]}
-            >
-              {design === "redesigned" ? (
-                <Animated.View style={[styles.controls, { bottom: barCenterFromBottom(insets.bottom, design) - floatingBarLayout.control / 2, paddingHorizontal: safeSide }, pulls ? barShift : null]} pointerEvents="box-none">
+        <GestureDetector gesture={barGesture}>
+          <Animated.View
+            testID="pageBar"
+            pointerEvents={collapse.hidden ? "none" : design === "redesigned" ? "box-none" : "auto"} collapsable={false}
+            importantForAccessibility={collapse.hidden ? "no-hide-descendants" : "auto"}
+            accessibilityElementsHidden={collapse.hidden}
+            style={[styles.bar, { height: barHeight(insets.bottom, design) }, underBar ? null : barStyle, collapse.style]}
+          >
+            {design === "redesigned" ? (
+              <Animated.View style={[styles.controls, { bottom: barCenterFromBottom(insets.bottom, design) - floatingBarLayout.control / 2, ...controlsSpan }, pulls ? barShift : null]} pointerEvents="box-none">
+                <Animated.View
+                  testID="floatingBarFold"
+                  collapsable={false}
+                  renderToHardwareTextureAndroid={Platform.OS === "android"}
+                  style={folds ? collapse.fold.bar : null}
+                  pointerEvents={folds && collapse.collapsed ? "none" : "box-none"}
+                  importantForAccessibility={folds && collapse.collapsed ? "no-hide-descendants" : "auto"}
+                  accessibilityElementsHidden={folds && collapse.collapsed}
+                >
+                  <FloatingBar
+                    tab={tab}
+                    order={barOrder}
+                    roles={rolesFor(barDark)}
+                    dark={barDark}
+                    showsPlus={staged || !searching}
+                    anchors={!folds || !collapse.collapsed}
+                    duo={duoBar}
+                    onTabs={showDeck}
+                    onTabsMenu={openTabsMenu}
+                    onStep={stepTab}
+                    onAddress={editPageQuery}
+                    onPlus={newTab}
+                    onMore={openPageMenu}
+                  />
+                </Animated.View>
+                {folds && collapse.fold.pillMounted ? (
                   <Animated.View
-                    testID="floatingBarFold"
+                    testID="hostPillFold"
                     collapsable={false}
                     renderToHardwareTextureAndroid={Platform.OS === "android"}
-                    style={collapse.fold.bar}
-                    pointerEvents={collapse.collapsed ? "none" : "box-none"}
-                    importantForAccessibility={collapse.collapsed ? "no-hide-descendants" : "auto"}
-                    accessibilityElementsHidden={collapse.collapsed}
+                    style={[styles.pillPlace, collapse.fold.pill]}
+                    pointerEvents={collapse.collapsed ? "box-none" : "none"}
+                    importantForAccessibility={collapse.collapsed ? "auto" : "no-hide-descendants"}
+                    accessibilityElementsHidden={!collapse.collapsed}
                   >
-                    <FloatingBar
-                      tab={tab}
-                      order={barOrder}
-                      roles={rolesFor(barDark)}
-                      dark={barDark}
-                      showsPlus={staged || !searching}
-                      anchors={!collapse.collapsed}
-                      onTabs={showDeck}
-                      onTabsMenu={openTabsMenu}
-                      onStep={stepTab}
-                      onAddress={editPageQuery}
-                      onPlus={newTab}
-                      onMore={openPageMenu}
-                    />
+                    <HostPill tab={tab} dark={barDark} shown={collapse.collapsed} anchors={collapse.collapsed} contentStyle={collapse.fold.pillContent} onExpand={collapse.expand} />
                   </Animated.View>
-                  {collapse.fold.pillMounted ? (
-                    <Animated.View
-                      testID="hostPillFold"
-                      collapsable={false}
-                      renderToHardwareTextureAndroid={Platform.OS === "android"}
-                        style={[styles.pillPlace, collapse.fold.pill]}
-                      pointerEvents={collapse.collapsed ? "box-none" : "none"}
-                      importantForAccessibility={collapse.collapsed ? "auto" : "no-hide-descendants"}
-                      accessibilityElementsHidden={!collapse.collapsed}
-                    >
-                      <HostPill tab={tab} dark={barDark} shown={collapse.collapsed} anchors={collapse.collapsed} contentStyle={collapse.fold.pillContent} onExpand={collapse.expand} />
-                    </Animated.View>
-                  ) : null}
-                </Animated.View>
-              ) : (
-                <>
-                  <View style={[StyleSheet.absoluteFill, { backgroundColor: barDark ? tabsInk.barShadeOnDark : tabsInk.barShadeOnLight }]} />
-                  <View style={[styles.controls, { bottom: barCenterFromBottom(insets.bottom, design) - browseLayout.hitTarget / 2, paddingHorizontal: safeSide }]}>
-                    <BottomBar order={order} roles={rolesFor(barDark)} showsPlus={!searching} onTabs={showDeck} onTabsMenu={openTabsMenu} onStep={stepTab} onPlus={newTab} onMore={openPageMenu} />
-                  </View>
-                </>
-              )}
-            </Animated.View>
-          </GestureDetector>
-        )}
+                ) : null}
+              </Animated.View>
+            ) : (
+              <>
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: barDark ? tabsInk.barShadeOnDark : tabsInk.barShadeOnLight }]} />
+                <View style={[styles.controls, { bottom: barCenterFromBottom(insets.bottom, design) - browseLayout.hitTarget / 2, ...controlsSpan }]}>
+                  <BottomBar order={order} roles={rolesFor(barDark)} showsPlus={!searching} onTabs={showDeck} onTabsMenu={openTabsMenu} onStep={stepTab} onPlus={newTab} onMore={openPageMenu} />
+                </View>
+              </>
+            )}
+          </Animated.View>
+        </GestureDetector>
         {finding ? <FindBar tabId={tab.id} /> : null}
         {pulls ? <PullBlocker /> : null}
       </Shade>
       {tabsMenu ? (
         <Menu
           items={tabsMenuItems(barOrder)}
-          place={column ? { ...columnMenuPlace(column, width, SCREEN_COLUMN.top), width: Math.min(tabsLayout.menuWidth, pageWidth - space.l * 2) } : { bottom: barHeight(insets.bottom, design) + space.xs, left: space.l, width: Math.min(tabsLayout.menuWidth, width - space.l * 2) }}
+          place={duoStrip ? { bottom: barCenterFromBottom(insets.bottom, design) - DUO_BAR.button / 2, ...besideStrip(duoStrip, width, tabsLayout.menuWidth, space.l) } : { bottom: barHeight(insets.bottom, design) + space.xs, left: space.l, width: Math.min(tabsLayout.menuWidth, width - space.l * 2) }}
           frost={null}
           onDismiss={() => setTabsMenu(false)}
         />
@@ -267,21 +255,14 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
 });
 
 
-const COLUMN_PAGE = { pageBottom: 0, toneBottom: 0 };
-const COLUMN_OBSCURED = { top: 0, bottom: 0 };
-
-function PageStack({ column, pulledTab, barTop, children }: { column: ScreenColumn | null; pulledTab: string | null; barTop: number; children: ReactNode }) {
+function PageStack({ pulledTab, barTop, children }: { pulledTab: string | null; barTop: number; children: ReactNode }) {
   if (pulledTab) return <PagePull tabId={pulledTab} barTop={barTop}>{children}</PagePull>;
-  if (!column) return children;
-  return (
-    <View testID="columnPageStack" style={[styles.columnPage, columnPadding(column)]}>
-      {children}
-    </View>
-  );
+  return children;
 }
 
-function useBarCollapse(tabId: string, isPrivate: boolean, finding: boolean, folds: boolean) {
-  const collapses = usePreferences((p) => p.collapsesBottomBar);
+function useBarCollapse(tabId: string, isPrivate: boolean, finding: boolean, folds: boolean, squeezes: boolean) {
+  const chosen = usePreferences((p) => p.collapsesBottomBar);
+  const collapses = chosen || squeezes;
   const direction = useNavigation(tabId, (n) => n?.scrollDirection ?? "up");
   const page = useNavigation(tabId, (n) => n?.url ?? null);
   const reduceMotion = useReduceMotion();
@@ -297,9 +278,9 @@ function useBarCollapse(tabId: string, isPrivate: boolean, finding: boolean, fol
   const hidden = finding || (!folds && scrolledAway);
   const wasCollapsed = useRef(collapsed);
   useEffect(() => {
-    if (android && collapsed && !wasCollapsed.current && !isPrivate) countUsage("bottom_bar_collapses");
+    if ((android || squeezes) && collapsed && !wasCollapsed.current && !isPrivate) countUsage("bottom_bar_collapses");
     wasCollapsed.current = collapsed;
-  }, [collapsed, tabId, isPrivate]);
+  }, [collapsed, tabId, isPrivate, squeezes]);
   const fold = useBarFold(collapsed, reduceMotion);
   const hide = useSharedValue(0);
   useEffect(() => {
@@ -390,7 +371,6 @@ const styles = StyleSheet.create({
   outgoing: { overflow: "hidden" },
   page: { flex: 1 },
   loading: { position: "absolute", left: 0, right: 0 },
-  columnPage: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, overflow: "hidden" },
   bar: { position: "absolute", left: 0, right: 0, bottom: 0 },
   controls: { position: "absolute", left: 0, right: 0 },
   pillPlace: { position: "absolute", left: 0, right: 0, bottom: 0, height: hostPillLayout.height, alignItems: "center", justifyContent: "flex-end" },

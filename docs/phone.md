@@ -1097,7 +1097,7 @@ The owner's reference is Safari's swipe up on its bottom bar (#2607; the measure
   values (`growDeckPull`, response 0.18 s as before), the other cards tuck in behind it, the header's glyphs fade out, and
   the live page is mounted only once the card has landed (mounting it mid-growth stalled the growth for over 100 ms)
   and takes the card's place when it is laid out and its cover has painted. The bar then cross-fades back to the
-  page's in 150 ms. In Grid a tile still opens with the older cut. The separate opening card is now only used in the column layouts.
+  page's in 150 ms. In Grid a tile still opens with the older cut. The separate opening card is now only used in the classic design.
 - **Grid.** With Grid chosen the waiting deck holds the grid, centred on the page's tab, and the target is that tile.
 - **Reduce Motion.** Nothing tracks the finger, nothing moves and nothing waits (#2647). What the swipe and the tap
   do depends on what the page's card can show at once:
@@ -1150,8 +1150,8 @@ The owner's reference is Safari's swipe up on its bottom bar (#2607; the measure
 - **Back.** Android's Back does nothing while a pull is landing, waiting for the deck or handing over
   (`deckPullCommitted`), so it can't take the page back a step as it shrinks into its card; during the tracking and
   the return it behaves as on a page at rest.
-- **Landscape** takes the pull too, aimed at the landscape card. **Duo and iPad** keep the old tree and the old
-  entrance: `pulls` is false in the column layouts.
+- **Landscape** takes the pull too, aimed at the landscape card. The closed and open Duo take it as any iPhone does
+  (#2840); `wide` and `split` never show the deck.
 
 In a lab build every pull prints `PAGELAB perf deck pull <ms>` for the time under the finger, then
 `PAGELAB perf deck pull landing 900ms` (or `deck pull return`). A tap prints only the landing line. On iPhone `labLog`
@@ -1514,7 +1514,7 @@ Events (service `ardia-phone`, `$lib` `ardia-phone-telemetry`, tags `app: phone`
 | `perf_launch` | `launch_ms`, `js_ms` | each launch, once the module gives the process start (`ArdiaPhoneSystem.processStartedAt()`, epoch ms) |
 | `perf_backdrop` | `backdrop_ms` | each launch on iPhone, once the native launch backdrop has shown (`system.launchBackdropShownAt()`, epoch ms on the process start's clock) |
 | `perf_launch_tray` | `tray_ms` | each launch with Auto-Open Keyboard on, once the launch tray is up (process start on `ArdiaPhoneSystem.processStartedAt()`'s clock) |
-| `usage_counts` | `tabs_opened`, `searches`, `pins_to_mac`, `tabs_sent`, `page_processes_gone`, `links_given_up` (a link whose handling passed its 8 s deadline), `pages_reloaded_online` (a failed page reloaded when the phone came back online), `find_opened_system` and `find_opened_bar` (Find on Page opened in WebKit's own panel, or in the app's find bar), `spaces_swiped` (a swipe in Spaces or on the start page that changed the profile), `tray_hidden_rows_opened` (a tray row opened while it peeked or sat under the keyboard), `deck_pictures_late` (a deck opened from a page whose picture hadn't painted within 250 ms, so it shrank without waiting), `search_tabs_opened` (the deck's Search Tabs field focused, in the redesign), `spaces_picked` (a space picked from the deck's switcher menu, or by a VoiceOver adjustment of the start page's dots, that changed the profile, in the redesign), `tabs_moved_to_space` (a tab moved to another space with the deck card menu's Move to Space, in the redesign), `pages_printed` (a page printed from the page menu's Print, counted when the print sheet opened, in the redesign), `pages_translated` (a page sent to Google Translate from the page menu's Translate, never from an Incognito tab), `pinned_tabs_refound` (a pinned site's tile or row switched to the tab it had opened after that tab had left the pinned address, where it used to open a second copy), `site_permissions_revoked` (a site's camera, microphone or location access revoked from Site Settings, by swipe or by its dialog, on iPhone's Expo UI Settings), `tray_back_swiped` (a search tray closed with Android's predictive back swipe), `card_opens_waited` (a card opened from the deck whose growth landed before its page had laid out and its picture painted, so the page waited up to 250 ms to take over), `native_menus_opened` (a menu opened as the system's own: a deck card's long press, the deck's ···, the space switchers, the + menus, Reader's Text Appearance, the page menu's Send to Device, the tabs button's recent tabs, on iPhone), `drawn_menus_opened` (a menu or confirmation card the app draws itself opened: every menu and confirmation card on Android, and on iPhone the few that have no system counterpart, such as a page link's long press; neither menu count is taken on the deck's Incognito side, on an Incognito page or for an Incognito card), `library_opened` (History, Bookmarks or Downloads opened from the page menu), `deck_grid_shown` (Grid picked for the deck in Settings › Appearance › Tabs, on iPhone), `landscape_shown` (a launch in which the phone was turned to landscape at least once, counted once a launch), `duo_layout_shown` (a launch that used the column, wide or split layout at least once, counted once a launch, on iPhone), `list_sheets_late` (an Archive or History sheet whose rows were drawn more than 400 ms after it was asked for, on iPhone), `list_pages_added` (Archive or History adding its next 200 rows as you scroll, on iPhone), `search_reveals_late` (a search panel opened whose content had not laid out within 250 ms, so the stage revealed it on its deadline, on iPhone), `address_field_scrolled` (a long address in the search field scrolled sideways with a swipe, on iPhone), `deck_bar_swipes` (the deck opened by swiping up on the browsing bar, the second way in beside the tabs button), `tabs_swiped_closed` and `tabs_swiped_reopened` (a back swipe on a page with no history that closed its tab, and a forward swipe with no forward history that reopened the last closed tab), `page_menu_tapped_away` (the page menu closed by a tap on the page above it, on iPhone), `new_tab_search_opened` (search opened on a new tab in the iPhone's full-height search panel), `deck_incognito_switches` (a tap on the deck bar's Incognito switch that went from the normal tabs to the Incognito tabs, on iPhone), `deck_bar_swipes_returned` (a swipe up on the browsing bar let go before its commit point, so the page grew back), `deck_pulls_hitched` (a swipe up or a tabs tap during whose shrink into the deck two UI-thread frames were more than 50 ms apart), `browse_for_me_opened` (Browse for Me opened from the tray, voice search or a launch argument), `browse_answers_chatgpt`, `browse_answers_on_device`, `browse_answers_excerpts` and `browse_answers_failed` (a Browse for Me answer by who wrote it, or a page that found or read nothing), `browse_chatgpt_fallbacks` (a ChatGPT answer that failed, so Apple Intelligence, Gemini Nano or the excerpts wrote it instead), `page_summaries_pinched` and `page_summaries_from_menu` (a page summary opened by pinching in or from the page menu's Summarize Page), `page_summaries_chatgpt`, `page_summaries_on_device`, `page_summaries_excerpts` and `page_summaries_failed` (a page summary by who wrote it, or a page it couldn't read or summarize; ChatGPT on Android only), `page_summaries_chatgpt_fallbacks` (a ChatGPT summary that failed, so Gemini Nano wrote it instead, on Android), `paste_and_go_links`, `paste_and_go_texts` and `paste_and_go_unread` (a Paste and Go tap with a link, with text, or that read nothing because the paste prompt was refused or the clipboard emptied; never counted while browsing privately), `search_tile_taps`, `voice_tile_taps` and `incognito_tile_taps` (Ardia opened from its Quick Settings tiles, on Android, counted on the phone and sent with the next day's counts) | at most once a day, for the last UTC day the app was used before today, when anything was counted; private tabs are never counted |
+| `usage_counts` | `tabs_opened`, `searches`, `pins_to_mac`, `tabs_sent`, `page_processes_gone`, `links_given_up` (a link whose handling passed its 8 s deadline), `pages_reloaded_online` (a failed page reloaded when the phone came back online), `find_opened_system` and `find_opened_bar` (Find on Page opened in WebKit's own panel, or in the app's find bar), `spaces_swiped` (a swipe in Spaces or on the start page that changed the profile), `tray_hidden_rows_opened` (a tray row opened while it peeked or sat under the keyboard), `deck_pictures_late` (a deck opened from a page whose picture hadn't painted within 250 ms, so it shrank without waiting), `search_tabs_opened` (the deck's Search Tabs field focused, in the redesign), `spaces_picked` (a space picked from the deck's switcher menu, or by a VoiceOver adjustment of the start page's dots, that changed the profile, in the redesign), `tabs_moved_to_space` (a tab moved to another space with the deck card menu's Move to Space, in the redesign), `pages_printed` (a page printed from the page menu's Print, counted when the print sheet opened, in the redesign), `pages_translated` (a page sent to Google Translate from the page menu's Translate, never from an Incognito tab), `pinned_tabs_refound` (a pinned site's tile or row switched to the tab it had opened after that tab had left the pinned address, where it used to open a second copy), `site_permissions_revoked` (a site's camera, microphone or location access revoked from Site Settings, by swipe or by its dialog, on iPhone's Expo UI Settings), `tray_back_swiped` (a search tray closed with Android's predictive back swipe), `card_opens_waited` (a card opened from the deck whose growth landed before its page had laid out and its picture painted, so the page waited up to 250 ms to take over), `native_menus_opened` (a menu opened as the system's own: a deck card's long press, the deck's ···, the space switchers, the + menus, Reader's Text Appearance, the page menu's Send to Device, the tabs button's recent tabs, on iPhone), `drawn_menus_opened` (a menu or confirmation card the app draws itself opened: every menu and confirmation card on Android, and on iPhone the few that have no system counterpart, such as a page link's long press; neither menu count is taken on the deck's Incognito side, on an Incognito page or for an Incognito card), `library_opened` (History, Bookmarks or Downloads opened from the page menu), `deck_grid_shown` (Grid picked for the deck in Settings › Appearance › Tabs, on iPhone), `landscape_shown` (a launch in which the phone was turned to landscape at least once, counted once a launch), `duo_layout_shown` (a launch on a Duo in any pose, or that used the wide or split layout at least once, counted once a launch, on iPhone), `list_sheets_late` (an Archive or History sheet whose rows were drawn more than 400 ms after it was asked for, on iPhone), `list_pages_added` (Archive or History adding its next 200 rows as you scroll, on iPhone), `search_reveals_late` (a search panel opened whose content had not laid out within 250 ms, so the stage revealed it on its deadline, on iPhone), `address_field_scrolled` (a long address in the search field scrolled sideways with a swipe, on iPhone), `deck_bar_swipes` (the deck opened by swiping up on the browsing bar, the second way in beside the tabs button), `tabs_swiped_closed` and `tabs_swiped_reopened` (a back swipe on a page with no history that closed its tab, and a forward swipe with no forward history that reopened the last closed tab), `page_menu_tapped_away` (the page menu closed by a tap on the page above it, on iPhone), `new_tab_search_opened` (search opened on a new tab in the iPhone's full-height search panel), `deck_incognito_switches` (a tap on the deck bar's Incognito switch that went from the normal tabs to the Incognito tabs, on iPhone), `deck_bar_swipes_returned` (a swipe up on the browsing bar let go before its commit point, so the page grew back), `deck_pulls_hitched` (a swipe up or a tabs tap during whose shrink into the deck two UI-thread frames were more than 50 ms apart), `browse_for_me_opened` (Browse for Me opened from the tray, voice search or a launch argument), `browse_answers_chatgpt`, `browse_answers_on_device`, `browse_answers_excerpts` and `browse_answers_failed` (a Browse for Me answer by who wrote it, or a page that found or read nothing), `browse_chatgpt_fallbacks` (a ChatGPT answer that failed, so Apple Intelligence, Gemini Nano or the excerpts wrote it instead), `page_summaries_pinched` and `page_summaries_from_menu` (a page summary opened by pinching in or from the page menu's Summarize Page), `page_summaries_chatgpt`, `page_summaries_on_device`, `page_summaries_excerpts` and `page_summaries_failed` (a page summary by who wrote it, or a page it couldn't read or summarize; ChatGPT on Android only), `page_summaries_chatgpt_fallbacks` (a ChatGPT summary that failed, so Gemini Nano wrote it instead, on Android), `paste_and_go_links`, `paste_and_go_texts` and `paste_and_go_unread` (a Paste and Go tap with a link, with text, or that read nothing because the paste prompt was refused or the clipboard emptied; never counted while browsing privately), `search_tile_taps`, `voice_tile_taps` and `incognito_tile_taps` (Ardia opened from its Quick Settings tiles, on Android, counted on the phone and sent with the next day's counts) | at most once a day, for the last UTC day the app was used before today, when anything was counted; private tabs are never counted |
 
 On the dashboard they are kept out of every Mac section by source and lib (`PHONE_APP_SOURCE` in `apps/dashboard/src/server/sql.ts`).
 
@@ -1546,7 +1546,7 @@ Every count and timing the phone can send, for the owner to read as one set and 
 | `deck_bar_swipes` | the owner's tabs pass (the swipe up on the bar, beside the tabs button) | Whether people use the swipe as well as the button; zero across testers after a release means the swipe stopped opening the deck |
 | `deck_bar_swipes_returned` | the swipe that follows the finger (#2607; on Android too since the deck parity of 2026-11-19) | How often a swipe up is let go early. Read it against `deck_bar_swipes`: a share above about a third after a release means the commit point sits too far, or the swipe is caught by people who only meant to touch the bar |
 | `deck_pulls_hitched` | the swipe that follows the finger (#2607; on Android too since the deck parity of 2026-11-19) | Whether the shrink into the deck drops frames in the field. Read it against `deck_bar_swipes` plus `deck_bar_swipes_returned`: it should stay near zero, and a share that grows after a release means something on the pull's path again blocks the UI thread. It sees only UI-thread gaps over 50 ms, not frames the GPU drops |
-| `duo_layout_shown` | the Duo layouts on iPhone | Whether anyone runs Ardia on a Duo; zero after a release reaching Duo owners means the layout probe stopped reporting |
+| `duo_layout_shown` | a launch on a Duo in any pose (the probe reports a hinge), or in `wide` or `split` | Whether anyone runs Ardia on a Duo or a full-screen iPad; zero after a release reaching Duo owners means the layout probe stopped reporting. Since #2840 it counts the closed and open Duo too, which now take `phone` |
 | `landscape_shown` | landscape on both phones | How often people turn the phone; zero across testers after a release that rotates means the orientation lock came back |
 | `card_opens_waited` | the card open's hand-over | Whether the page mounted at the start of a card's growth is ready when the card lands; a share of card opens that grows after a release means the open is again held at full size before the page takes over |
 | `deck_pictures_late` | the deck-entrance hold, and the pull's handover (#2651) | Whether the leaving page's picture paints before the deck shrinks, or by the 1 s deadline of the wait that follows a pulled page landing in its card (1.25 s for one picture, and up to about 2.5 s with a replacement, before #2664); a share of deck opens that grows after a release means a card may again open on a blank or placeholder face |
@@ -1686,8 +1686,8 @@ which the bar's fold needs. No new telemetry: `deck_pulls_hitched` keeps watchin
     VoiceOver reads the switch's name, state and hint. One tap opens the Incognito deck and the plus opens private
     tabs there. A second tap restores the regular deck and its scroll position. Closing the last Incognito card
     leaves the Incognito deck open. The Archive capsule and Open Archive stay on the regular side. Android's
-    standard deck and the Duo column keep regular and private tabs together. Watch `deck_incognito_switches` for use.
-  - The bottom bars sit 24 points in from the screen's sides, up from 12 (build 13, the owner: more side spacing, like Safari's bottom bar but a bit less). Safari's bar on the iPhone 17 Pro Max simulator (iOS 27.0) sits 34 points in on both sides, its back circle and tabs circle 48 points and 8 points from the address capsule, read from the accessibility frames and checked on the pixels; 24 is between our 12 and Safari's 34. One token, `chromeLayout.barSideInset`, sets the browsing bar (`FloatingBar`), the deck's bottom bar (`DeckBottomBar`, and its plus menu's anchor) and the start page's bar (`StartPage`), so the three line up when one turns into another. Since the follow-up to build 13 (the owner: the Space picker and ··· should sit as far in as the bottom row) it also sets the deck's header (`DeckHeader`: the Space picker, the Incognito pill, the ··· and their menus' anchors) and the Archive capsule under it, so the deck's top and bottom rows share one edge; the Duo column keeps the header 12 in (`deckChromeLayout.headerSide`), beside its 12-point field, and the grid keeps its 16. The safe-area side inset still adds to it in landscape. Watch `deck_bar_swipes` and `deck_bar_swipes_returned`: a narrower bar shouldn't change how often a swipe up on it lands.
+    standard deck keeps regular and private tabs together. Watch `deck_incognito_switches` for use.
+  - The bottom bars sit 24 points in from the screen's sides, up from 12 (build 13, the owner: more side spacing, like Safari's bottom bar but a bit less). Safari's bar on the iPhone 17 Pro Max simulator (iOS 27.0) sits 34 points in on both sides, its back circle and tabs circle 48 points and 8 points from the address capsule, read from the accessibility frames and checked on the pixels; 24 is between our 12 and Safari's 34. One token, `chromeLayout.barSideInset`, sets the browsing bar (`FloatingBar`), the deck's bottom bar (`DeckBottomBar`, and its plus menu's anchor) and the start page's bar (`StartPage`), so the three line up when one turns into another. Since the follow-up to build 13 (the owner: the Space picker and ··· should sit as far in as the bottom row) it also sets the deck's header (`DeckHeader`: the Space picker, the Incognito pill, the ··· and their menus' anchors) and the Archive capsule under it, so the deck's top and bottom rows share one edge, and the grid keeps its 16. The safe-area side inset still adds to it in landscape. Watch `deck_bar_swipes` and `deck_bar_swipes_returned`: a narrower bar shouldn't change how often a swipe up on it lands.
   - Closing a card has no dust cloud. The card flies off the top on main's `flyAway` spring (response 0.32, no bounce), starting at the flick's speed, and the cards after it close the gap in the same frames: the order drops the card at once and a leaving record (`DeckLeave` in `lib/deckGeometry.ts`, timed by one UI-thread clock) draws it until it is off the screen. Closing the last tab lets the card leave before the start screen comes. With Reduce Motion the card fades where it is.
 
 - Find on Page on iPhone is WebKit's own find panel (`UIFindInteraction`), as main's SwiftUI app has, decided from the side-by-side screenshots in `/tmp/ardia-phone-shots/find-on-page/`. The app's own find bar stays for Android, and on iPhone behind the launch switch `-ArdiaAppFind YES` for comparison. `find_opened_system` and `find_opened_bar` count which one opens.
@@ -1819,8 +1819,8 @@ Owner: **screens** (JS), **iPhone** (native), **decision** (needs the owner).
 | Settings | Connect pages | match | The connect flow worked end to end on 2026-11-16 | |
 | Toasts | Copy Link | match | Neither app shows a toast half a second after Copy Link in the page menu; both keep the menu open. Other kinds not seen | |
 | Extensions, widgets, intents | | partly | The Expo project compiles main's own sources for these. Seen on our build 2026-11-17 (`unseen/widgets/`): the gallery offers main's four widgets (Search small and medium, Your Mac's Tabs medium and large, with the demo Mac's tabs in the previews); the large one on the home screen shows "Sync With Your Mac" without a synced snapshot (demo mode writes none) and a tap opens the app on the Spaces sheet with the Mac's tabs. Main's tap does the same (`unseen/widgets/ref-p4/`). The share sheet, seen 2026-11-17 on the iPhone 17 at e3be236e1 beside main's from Safari with no Mac connected: the same sheet in both, the page's title and host, Open in Ardia and the line about turning on Sync With Your Mac, its top edge on the same pixel row (`ports/30-ref-share-1.png`, `32-ours-share-b.png`). Not seen: the widgets in dark, and the share sheet's Send to Your Mac row with a Mac connected (the demo writes no snapshot; the row and the exporter are main's own sources) | iPhone |
-| Duo | Open and half-open layouts | not seen | Simlock leases the iPhone Duo folded only: `fold open` needs a simulator in the default set and Simlock's are in a scoped one (2026-11-17). Later the same day Simlock's Duo did not boot at all (two tries: a boot timeout, then a closed connection), and a Duo simulator made in the default set is not offered by the Device panel, so the layouts are still seen only under `-ArdiaDuoCanvas` on the iPhone 18 Pro (the row below) | |
-| iPhone in landscape, Duo layouts | | partly | Decided 2026-11-16. Built to the specification below. `phone` in landscape (db4823c0f and this change): every bar pads by `max(left, right)`, the deck takes main's landscape card, and the archive capsule now swaps the deck to main's archive geometry (407.6×188 at 852×393; 273.2 wide in portrait on a 402×874 iPhone), springing from the old card as main animates it. Seen on the iPhone 18 Pro simulator turned on its side: browsing, the deck with and without the capsule. `column`, `wide` and `split` are built (components/column, components/duo) and switch from the native probe (44797e4ed); under `-ArdiaDuoCanvas` on the iPhone 18 Pro each draws, but the 669×951 canvas overflows that screen, so their sizes still need the iPhone Duo simulator. `column` seen beside main on the iPhone Duo simulator closed (466×678, trailing 84): the deck's and browsing's columns land on main's, and the deck now clips its cards at the content edge as main's does. Simlock's Duo can't fold or turn (its scoped simulator set has no hinge), so `wide` and `split` are checked by tests only (duoLayout.test.ts, duoWide.render.test.tsx, main's numbers), not yet seen at their real size: this Mac's default-set Duo holds someone's install of main and is left as it is, until the owner names a Duo that may be folded. The command bar keeps its greatest height as main's does (main's rows take `rowsBudget`). Not matched yet: the status bar in `wide` follows the backdrop rather than the page's top tone | screens |
+| Duo | Closed and open take `phone`; only a half-open horizontal fold takes `split` | partly | Since #2840 (2026-11-20) the closed and open Duo show the page full screen, as any iPhone, seen on the Duo simulator. Their bottom bars follow Safari's on the closed Duo, with our page still full screen (the owner, 2026-11-20): closed, `+` and Tabs stacked in the strip with the address capsule along the bottom 24 to 370, never squeezing; open, three fixed slots in the strip (`+`, Tabs, and the `···` the 400-wide capsule grows out of, 527 to 927), the capsule squeezing into that `···` on scroll by default; the deck's Search Tabs is a circle in that slot that grows into the field, keyboard-wide while typing; on either Duo the search panel ends 8 short of the strip so it clears the clock. Checked in `bottomBarSpan.test.ts` and `landscape.render.test.tsx`, not yet seen on the simulator. `split` is not seen yet: Simlock leases the iPhone Duo folded only: `fold open` needs a simulator in the default set and Simlock's are in a scoped one (2026-11-17). Later the same day Simlock's Duo did not boot at all (two tries: a boot timeout, then a closed connection), and a Duo simulator made in the default set is not offered by the Device panel, so the layouts are still seen only under `-ArdiaDuoCanvas` on the iPhone 18 Pro (the row below) | |
+| iPhone in landscape, Duo layouts | | partly | Decided 2026-11-16. Built to the specification below. `phone` in landscape (db4823c0f and this change): every bar pads by `max(left, right)`, the deck takes main's landscape card, and the archive capsule now swaps the deck to main's archive geometry (407.6×188 at 852×393; 273.2 wide in portrait on a 402×874 iPhone), springing from the old card as main animates it. Seen on the iPhone 18 Pro simulator turned on its side: browsing, the deck with and without the capsule. `wide` (a full-screen iPad) and `split` (a half-open Duo) are built (components/duo) and switch from the native probe (44797e4ed); under `-ArdiaDuoCanvas` on the iPhone 18 Pro each draws, but the 669×951 canvas overflows that screen, so their sizes still need the iPhone Duo simulator. The closed and open Duo take `phone` since #2840 (the owner, 2026-11-20); the `column` layout that the closed Duo had is gone. Simlock's Duo can't fold or turn (its scoped simulator set has no hinge), so `wide` and `split` are checked by tests only (duoLayout.test.ts, duoWide.render.test.tsx, main's numbers), not yet seen at their real size: this Mac's default-set Duo holds someone's install of main and is left as it is, until the owner names a Duo that may be folded. The command bar keeps its greatest height as main's does (main's rows take `rowsBudget`). Not matched yet: the status bar in `wide` follows the backdrop rather than the page's top tone | screens |
 
 **Motions from main's pass (d199b885c)**:
 
@@ -1877,7 +1877,7 @@ so the app takes part in Split View and Slide Over (`TARGETED_DEVICE_FAMILY = "1
 extensions, no `UIRequiresFullScreen`). In Expo that is `UISupportedInterfaceOrientations` and
 `UISupportedInterfaceOrientations~ipad` in `apps/phone/ios/Ardia/Info.plist` (by hand: `app.json`'s `"default"` would
 add upside down on iPhone; `supportsTablet` there only records the choice). An iPad window at least 600 pt both ways
-gets the open Duo's `wide` layout; a narrower one (a Split View third, Slide Over) gets `phone`, from the same probe
+gets the `wide` layout; a narrower one (a Split View third, Slide Over) gets `phone`, from the same probe
 as the Duo, never the device model. A new device joining sync on an iPad is named "iPad" (`SyncMeta.deviceName`).
 From @mantrakp04's #2263 on the SwiftUI app. In a window (Windowed Apps, Split View, Slide Over) iPadOS draws its
 window controls over the window's top-left corner; `WindowControlsClearance` (SceneDelegate.swift) adds the extra the
@@ -1887,25 +1887,21 @@ its top stays there when its top clearance changes, so a window growing from `ph
 the toolbar (`PageView.applyObscuredInsets`). Android rotates too, as
 the Compose app does: see "Android's half" below.
 
-**Choosing a layout** (main's `ScreenLayout.resolve`). It reads the safe-area size, the safe-area insets, the
-vertical bar edge trait, the hinge and the fold rectangle; never size classes, orientation or the model. The
-keyboard never changes it. Checked in this order:
+**Choosing a layout** (`ScreenLayout.resolve`). It reads the safe-area size, the hinge and the fold rectangle;
+never size classes, orientation or the model. The keyboard never changes it. Checked in this order:
 1. Hinge partly open and a horizontal fold (a division at least half the screen wide, wider than tall): `split`,
    with `fold.top = rect.minY + safeTop` and `fold.bottom = rect.maxY + safeTop`.
-2. Safe-area size at least 600 by 600: `wide`.
-3. One side inset at least 60 (the vertical bar edge, or else one side at least 60, the other 0 and the top 0):
-   `column` on that edge, inset rounded up to a multiple of 12.
+2. Any other hinge (closed or fully open): `phone`.
+3. Safe-area size at least 600 by 600: `wide`.
 4. Otherwise `phone`.
 
-A closed Duo (466×678, 84 trailing) is `column`; an open Duo (669×951, or 951×669 on its side) is `wide`; half open
-is `split`. An ordinary iPhone in landscape has equal side insets and stays `phone`. Checked 2026-11-16 on an
-iPhone 17 Pro simulator, iOS 27.0: main rotated both ways keeps the phone layout (bottom row bar), and the probe
-reports 750×382 with 62 on each side and no vertical bar edge. Still open for iOS 27.1, where the trait exists: if it
-reports an edge on a plain iPhone in landscape, a Pro (62 side insets) would get `column` with 72, and a non-Pro (59)
-would stay `phone`. No simulator pool offers a 27.1 iPhone other than the Duo. On the Duo (27.1, simlock), closed: the probe
-reports `column`, trailing 84, with `verticalBarEdge` trailing, so the trait follows the real bar there; a closed Duo
-doesn't turn, and simlock's scoped simulator set can't fold, so the deciding reading (an open Duo on its side) still
-needs a Duo in the default set.
+The Duo, closed and open, takes `phone` since #2840: the owner's decision on 2026-11-20, after a tester said the
+old full-screen view was better. Before it, the closed Duo took a `column` layout (the page stopped at the 84-point
+sensor strip, with round buttons in the strip) and the open Duo took `wide` (the page in a card under a toolbar).
+The `column` layout is gone, and `-ArdiaDuoCanvas column` with it. The probe on the Duo simulator (iOS 27.1) knows the hinge
+from its first report: closed 382×644 with trailing 84, open 867×635 with trailing 84. Only a half-open Duo with a
+horizontal fold keeps `split`; half open with a vertical crease takes `phone`, as the simulator reports it. A
+full-screen iPad (no hinge) keeps `wide`. An ordinary iPhone in landscape stays `phone`.
 
 A layout change is not animated: views swap at once. Pages are not reloaded (the web views are re-parented), the
 open search tray stays, and app state (tabs, surface, grid, sheets) survives. Going between `phone` and `wide`
@@ -1920,11 +1916,36 @@ resets the browsing view's own state: the bar comes back expanded and the sideba
   Horizontal padding = `max(left, right)` + 24 (`chromeLayout.barSideInset`; 12 before build 13's feedback) on
   **both** sides, so the bar stays centred; no maximum width (852 wide with 59 insets gives a 574 address capsule). 21.5 above the bottom edge, ignoring the safe area. Collapsed
   pill unchanged (30 high, at most 240 wide).
+- On a Duo (the probe reports a hinge) the bottom bars follow Safari on the closed Duo (`bottomBarLayout`, the owner,
+  2026-11-20), except that our page stays full screen where Safari's stops at the strip. The strip's buttons are 48
+  glass circles centred `min(48, inset − 24)` from its edge, 7 apart; a strip on the leading side mirrors it all, and
+  menus open beside the strip buttons. A strip needs a side inset of at least 48, the circle's width: under that (a pose
+  reporting no side inset) there is nowhere to put a circle clear of the capsule, so the bar is the plain centred one
+  of any iPhone. The hinge picks the sizing: a closed hinge is always the closed bar, even turned on its side, and a
+  fully or partly open one at 600 wide or more is the open bar.
+  - **Closed** (under 600 wide): Tabs on the bar's centre line, `+` 55 above it. The bar row keeps only the address
+    capsule with its `···`, from 24 to 12 short of the strip (24 to 370 on 466). The start bar keeps Settings in that
+    span; the deck bar keeps the Incognito switch and Search Tabs there, its `+` in the strip on the bar's line. It
+    never squeezes: with Collapse Bottom Bar on it folds into the host pill as any iPhone does, strip buttons
+    included, and with it off it never collapses.
+  - **Open** (600 wide or more), from the owner's sketch: three fixed slots, `+` 110 and Tabs 55 above the bar's line
+    and the bottom slot on it; `+` and Tabs never move. Expanded, the 400-wide capsule grows out of the bottom slot,
+    its right end and its `···` on that slot (527 to 927 on 951). Scrolling down, whatever Collapse Bottom Bar says,
+    moves only its left edge into the slot (on `barCollapse`, the host pill's spring) while the host fades, leaving
+    the `···` circle; it opens the page menu (never expands the bar), shows the red open lock on an insecure page,
+    is read as "Page Menu, <site>" and anchors the search tray. Scrolling up grows it back. The deck puts its `+` in
+    the top slot, the Incognito switch in the middle one (where the page's Tabs button turns into the Incognito
+    glyph as the deck pulls in) and Search Tabs as a 48 magnifier circle in the bottom slot that grows left into the 400-wide field when tapped (on the same spring, focused, counted in `search_tabs_opened`), runs from 24 to the slot while the keyboard is up, and shrinks back once the search closes empty; the page's capsule hands over to it on the same slot as the deck pulls in; the start page puts `+` and Tabs in the
+    top two and Settings in the bottom slot. On either Duo the search panel keeps 8 from the safe edges, so it ends
+    short of the strip and its clock. Closing search on the open Duo lands the panel on the capsule in one move
+    (`landsDirectly`): the phone's drop, fold and then narrow read as a second slide there, the panel being twice
+    the capsule's width and off to its left. Each open Duo collapse counts in `bottom_bar_collapses`. The deck's header, cards, grid, archive capsule and the search tray keep
+  the side insets.
 - Pager: the full screen width.
 - Search tray: the panel is the safe width less 8 each side, so it clears the island; radius 32.75; 8 above the
   keyboard; height `min(274 + 47.5·(fieldScale − 1), safeH + safeBottom − keyboard − 16)`, the keyboard term
   usually winning in landscape.
-- Deck: side padding `max(left, right)` for the header (+24), the Archive capsule (+24), the bottom bar (+24) and the grid (+16). In the Duo column the header keeps +12, beside the column's 12-point field.
+- Deck: side padding `max(left, right)` for the header (+24), the Archive capsule (+24), the bottom bar (+24) and the grid (+16).
   Cards take the screen's aspect: `cardW = min(W·306/440, band/(H/W))`, with `bandTop = chromeBottom + 41`,
   `bandBottom = H − max(safeBottom, 20) − 43`, band at least 120; `focusLeading = W·66/440`,
   `spacing = min(cardW, W·218/440)`, `barCenterY = H − max(safeBottom, 20) − 11`. Check at 852×393, safe top 0,
@@ -1934,20 +1955,7 @@ resets the browsing view's own state: the bar comes back expanded and the sideba
   the page dots at 393 high; match it, and note it as main's.
 - Page menu, share sheet, Settings, Archive and the other sheets: the system's, no landscape rules.
 
-**`column`** (closed Duo, or any one-sided inset of 60 or more).
-- `contentWidth = W − inset`. The button column's centre is `min(48, inset − 24)` from the column edge, its top 166,
-  buttons 48, spacing 7.
-- Page: padded by the inset on the column edge; behind it the system background, not the look's surface; obscured
-  insets 0 top and bottom. The column holds Tabs, the site button (48 circle: favicon 18, the reader glasses, or a
-  warning triangle), the menu button and Plus. It never collapses; it fades with the bar's motion.
-- Deck: `contentWidth` wide with side padding 0, away from the column; the backdrop runs full width. The header
-  drops its `···`; the column holds grid, Search Tabs, `···` (48) and Plus. The Search Tabs field floats over the
-  cards, `contentWidth − 24` wide, centred in the content, at y 245, fading over 0.25 s.
-- Start page: the spaces are `contentWidth` wide, away from the column; the dots sit at the bar's centre line, not
-  60 above it; the bar becomes a column of Tabs, Plus, Settings.
-- Search, the page menu, Settings and onboarding keep the phone layout.
-
-**`wide`** (open Duo, 600 both ways). The deck is never shown; the start page keeps the phone arrangement.
+**`wide`** (a full-screen iPad, 600 both ways, no hinge). The deck is never shown; the start page keeps the phone arrangement.
 - Card: x = 11 + left, y = `max(33, safeTop + 4)`, width `W − 22 − left − right`, bottom margin
   `max(9, safeBottom − 20)`; radius 16 continuous; shadow black 0.12, radius 10, y 2. The page inside has no bar; its
   content inset and obscured top are 63 (toolbar 45 + 9 above and below), bottom 0.
@@ -1968,7 +1976,7 @@ resets the browsing view's own state: the bar comes back expanded and the sideba
 - Search is a command bar instead of the tray: top = card top + 127 − safe top, side padding 27 + 8, height at most
   `min(484, keyboardTop − top − 24)`; top-anchored, fading in from 0.96 scale; no resting drop.
 
-**`split`** (half open). Card x 11, width `W − 22` (side insets unused), y the card top, height
+**`split`** (a half-open Duo with a horizontal fold). Card x 11, width `W − 22` (side insets unused), y the card top, height
 `max(fold.top − y − 11, 120)`; toolbar without the address. Below the fold, the sidebar as a panel `W` by
 `H − fold.bottom`, bottom padding the safe bottom, no background (the backdrop shows), no tiles, header from 16, no
 sidebar button. Search uses the phone tray.
@@ -2022,15 +2030,14 @@ the Compose app has no orientation lock.
 | `apps/phone/android/app/src/main/AndroidManifest.xml` | Drop `screenOrientation="portrait"` from `MainActivity` | Android |
 | `FullscreenHost` (`packages/phone/android`) | Ask for no orientation once the lock is gone; never end fullscreen on rotation | Android |
 | `PageView` (`packages/phone/ios`) | Done: `obscuresSafeTop` takes the obscured top from the view's own safe top, re-applied on every safe-area change, as main's `applyInsets`; `topClearance` (63 in `wide`) sets the scroll view's top content and indicator insets and adds to the obscured top | iPhone |
-| Simulation | Done: `<ScreenLayoutProbe onLayoutChange>` (mounted full screen) reports `layout`, `column {edge, inset}` (rounded to 12), `fold {top, bottom}` (screen points, safe top added), `canvas`, `forced` and the raw space, once per settled change; resolve is main's, tested in `ScreenLayoutTests`. In test builds `-ArdiaDuoCanvas wide\|split\|column` (main's `open` and `half` too) forces a layout: wide and split on a 669×951 canvas with the fold at 465.5 to 485.5, column trailing at 84; reports log as `ARDIA_SCREEN` | iPhone |
+| Simulation | Done: `<ScreenLayoutProbe onLayoutChange>` (mounted full screen) reports `layout`, `fold {top, bottom}` (screen points, safe top added), `canvas`, `forced` and the raw space (the hinge included), once per settled change; tested in `ScreenLayoutTests`. In test builds `-ArdiaDuoCanvas wide\|split` (main's `open` and `half` too) forces a layout on a 669×951 canvas with the fold at 465.5 to 485.5; reports log as `ARDIA_SCREEN` | iPhone |
 | `App.tsx` | Resolve the layout from window size, insets and the probe; swap in the Duo view | screens |
-| `FloatingBar`, `BottomBar`, `barGeometry` | Pad by `max(left, right)`; the column arrangement | screens |
+| `FloatingBar`, `BottomBar`, `barGeometry` | Pad by `max(left, right)` | screens |
 | `PageSurface`, `TabPager` | Insets and pager width on rotation; the `wide` clearance | screens |
-| `TabDeck`, `DeckHeader`, `DeckBottomBar`, `deckGeometry` | `safeSide = max(left, right)` (it passes 0 now); the landscape card formula; the column variant | screens |
+| `TabDeck`, `DeckHeader`, `DeckBottomBar`, `deckGeometry` | `safeSide = max(left, right)` (it passes 0 now); the landscape card formula | screens |
 | `SearchTray` | Side safe area; the `wide` command bar | screens |
-| `StartPage`, `StartSpaces` | The column and dots variants | screens |
 | `Sheet`, `FullSheet` | Check width and height in landscape (main uses system sheets) | screens |
-| New | Duo toolbar, sidebar, card, column stack | screens |
+| New | Duo toolbar, sidebar, card | screens |
 
 ### Tester checklist for the next build
 
@@ -2193,7 +2200,7 @@ Not audited at all: Compose's `SyncSetupContent` internals inside onboarding.
 
 - A page that isn't secure shows a red open lock in the bar, not the words "Not Secure" (the owner's decision,
   16 Nov 2026: "we can show open lock with red i guess see the arc for that").
-  - **Where:** the redesigned bar's address capsule, the collapsed host pill, and the Duo column and toolbar. The lock
+  - **Where:** the redesigned bar's address capsule, the collapsed host pill, and the Duo toolbar. The lock
     takes the site icon's slot at the site icon's size, so the address starts at the same x on a secure and an
     insecure page, and the stage's face snapshot and the landed pill carry it.
   - **Glyph:** SF `lock.open.fill` on iPhone; on Android a drawn glyph in Material's `lock_open` shape (filled body
@@ -2213,7 +2220,8 @@ Not audited at all: Compose's `SyncSetupContent` internals inside onboarding.
   a grey strip the bar's height across the page (POCO F4, 2026-11-20). Remove animations snaps to the endpoint. The page's
   direction update no longer waits for a second effect to choose the toolbar state. Tapping the pill expands it;
   the next upward then downward scroll can collapse it again. The deck keeps its own motion settings.
-  Watch the consent-gated `usage_counts.bottom_bar_collapses` count, never recorded in Incognito. This measures
+  Watch the consent-gated `usage_counts.bottom_bar_collapses` count, never recorded in Incognito; on iPhone it
+  counts only the open Duo's squeeze. This measures
   collapse use, not frame smoothness. Smoothness and viewport resize counts still need real-device captures.
 
 - The page under the bar (the owner's decision, 2026-11-16).

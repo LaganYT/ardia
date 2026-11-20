@@ -202,6 +202,10 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
     double sequence;
     if (Finite(dict, @"generation", &generation) && Finite(dict, @"seq", &sequence))
       [ArdiaWebView noteFieldFocus:Text(dict, @"field", 16) sequence:sequence generation:generation query:Text(dict, @"query", 64) owner:tab];
+  } else if ([kind isEqualToString:@"fieldProviderHint"] && dict) {
+    NSString *state = Text(dict, @"state", 16);
+    if ([@[ @"shown", @"dismissed" ] containsObject:state ?: @""] && [self sameSiteFrame:main origin:sender] && FieldProviderFor(_profile))
+      [self emit:@"fieldProviderHint" payload:@{@"state" : state}];
   } else if ([kind isEqualToString:@"fieldProvider"] && dict) {
     double generation;
     NSString *field = Text(dict, @"field", 16);
@@ -212,6 +216,7 @@ NSMutableOrderedSet<NSString *> *ScriptFramesOf(ArdiaCoreTab *tab) {
       if ([reason isEqualToString:@"noProvider"] || [reason isEqualToString:@"stale"]) return;
       NSMutableDictionary *payload = [@{@"via" : @"badge", @"shown" : result[@"shown"] ?: @NO} mutableCopy];
       if (reason) payload[@"reason"] = reason;
+      if (result[@"panel"]) payload[@"panel"] = result[@"panel"];
       [weakSelf emit:@"fieldProviderOpened" payload:payload];
     };
     if (!_visible) {
@@ -352,6 +357,13 @@ static NSMutableSet<NSString *> *SameSiteFramesOf(ArdiaCoreTab *tab) {
   [self callFrame:@"" kind:@"fieldProvider" json:state];
   for (NSString *frameId in [ScriptFramesOf(_tab) copy])
     [self callFrame:frameId kind:@"fieldProvider" json:[sameSite containsObject:frameId] ? state : @"false"];
+}
+
+- (void)pushFieldProviderHint:(NSString *)json {
+  if (!_tab) return;
+  NSSet<NSString *> *sameSite = [SameSiteFramesOf(_tab) copy];
+  if (!sameSite.count) return [self callFrame:@"" kind:@"fieldProviderHint" json:json];
+  for (NSString *frameId in sameSite) [self callFrame:frameId kind:@"fieldProviderHint" json:json];
 }
 
 - (BOOL)sameSiteFrame:(BOOL)main origin:(NSString *)origin {

@@ -75,7 +75,7 @@ const LIGHT: typeof DARK = {
   quietFaintText: 0.2,
 };
 
-type SidebarTokens = typeof DARK;
+export type SidebarTokens = typeof DARK;
 
 const HIGH_CONTRAST_DARK: SidebarTokens = { ...DARK, groupTitle: "#FFFFFF", newTabLabel: "#FFFFFFD1", newTabIcon: "#FFFFFFB3", badge: "#FFFFFF" };
 const HIGH_CONTRAST_LIGHT: SidebarTokens = { ...LIGHT, groupTitle: "#000000", newTabLabel: "#000000D1", newTabIcon: "#000000B3", badge: "#000000" };

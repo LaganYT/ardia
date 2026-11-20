@@ -28,7 +28,7 @@ import { importFavicons, importTabs, linksOf, windowFor } from "./tabImport";
 export { importTabs };
 export { importArcSpace, importDiaSpace } from "./sidebarTree";
 
-export type { BrowserProfile, BrowserSource, DiaTabsResult, ImportedExtension, ImportKind, ImportResult, SpaceSuggestion, SpaceSummary } from "../../platform/importModule";
+export type { BrowserProfile, BrowserSource, DiaTabsResult, ImportedExtension, ImportedSearchEngine, ImportKind, ImportResult, SpaceSuggestion, SpaceSummary } from "../../platform/importModule";
 
 export type ImportCounts = { bookmarks: number; history: number; tabs: number; passwords: number; cookies: number; addresses: number; cards: number; rules: number; archived: number; settings: number };
 

@@ -1,4 +1,5 @@
-import { setFieldProviders, showSystemPanel, type FieldProviderOpened, type VerificationCodeFound } from "../../platform/passwordProviders";
+import { setFieldProviders, showSystemPanel, type FieldProviderHint, type FieldProviderOpened, type VerificationCodeFound } from "../../platform/passwordProviders";
+import { offerPanelHint, panelHintReported } from "./panelHints";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { warnFor } from "../telemetry/consoleConsent";
 import { consentToken, type ConsentToken } from "../telemetry/choice";
@@ -27,7 +28,7 @@ import { closeVerificationCodePrompts, offerVerificationCode } from "./verificat
 import { followMode, forgetPendingOfferToSave, passwordAutofill, pendingOfferToSave, writeOfferToSave } from "./offerToSave";
 
 export { forgetPendingOfferToSave, passwordAutofill };
-export { profilesSharingData, type ManagerPlugin, type PasswordManagerChoice, type VerificationCodeFound };
+export { profilesSharingData, type FieldProviderHint, type FieldProviderOpened, type ManagerPlugin, type PasswordManagerChoice, type VerificationCodeFound };
 
 
 const browser = () => useBrowser.getState();
@@ -292,9 +293,12 @@ function codeSetupOn(tabId: string): boolean {
 
 export const verificationCodeFound = (tabId: string, found: VerificationCodeFound) => offerVerificationCode(tabId, found, codeSetupOn, generation);
 
-export function fieldProviderOpened(event: FieldProviderOpened) {
+export function fieldProviderOpened(tabId: string, event: FieldProviderOpened) {
   if (event?.via === "badge" || event?.via === "menu") notePasswordPanel(event.via, event.shown === true, event.reason);
+  void offerPanelHint(tabId, event);
 }
+
+export const fieldProviderHint = (tabId: string, hint: FieldProviderHint) => panelHintReported(tabId, hint);
 
 const PANEL_MAY_BE_UP = new Set(["noPanel", "tabGone"]);
 

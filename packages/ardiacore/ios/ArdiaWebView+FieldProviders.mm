@@ -173,26 +173,47 @@ void HoldAutoFillHeuristics(NSView *page) {
   });
 }
 
-NSIndexSet *PanelWindowNumbers(bool *namesHidden) {
+NSDictionary<NSNumber *, NSValue *> *PanelWindowFrames(bool *namesHidden) {
   NSArray<NSDictionary *> *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID));
   const pid_t me = getpid();
-  NSMutableIndexSet *numbers = [NSMutableIndexSet indexSet];
+  NSMutableDictionary<NSNumber *, NSValue *> *frames = [NSMutableDictionary dictionary];
   for (NSDictionary *window in windows) {
     NSString *owner = window[(id)kCGWindowOwnerName];
     if ([window[(id)kCGWindowOwnerPID] intValue] != me && !owner.length && namesHidden) *namesHidden = true;
     if (![owner isEqualToString:kSystemPanelOwner]) continue;
-    NSDictionary *bounds = window[(id)kCGWindowBounds];
-    if ([bounds[@"Width"] doubleValue] >= 100 && [bounds[@"Height"] doubleValue] >= 100) [numbers addIndex:[window[(id)kCGWindowNumber] unsignedIntegerValue]];
+    CGRect bounds;
+    if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)window[(id)kCGWindowBounds], &bounds)) continue;
+    if (bounds.size.width >= 100 && bounds.size.height >= 100) frames[window[(id)kCGWindowNumber]] = [NSValue valueWithRect:NSRectFromCGRect(bounds)];
   }
+  return frames;
+}
+
+NSIndexSet *PanelWindowNumbers(bool *namesHidden) {
+  NSMutableIndexSet *numbers = [NSMutableIndexSet indexSet];
+  for (NSNumber *number in PanelWindowFrames(namesHidden)) [numbers addIndex:number.unsignedIntegerValue];
   return numbers;
 }
 
-SystemPanelSight SightOfSystemPanel(NSIndexSet *before) {
+SystemPanelSight SightOfSystemPanel(NSIndexSet *before, CGRect *frame) {
   bool namesHidden = false;
-  NSMutableIndexSet *fresh = [PanelWindowNumbers(&namesHidden) mutableCopy];
-  [fresh removeIndexes:before];
-  if (fresh.count) return SystemPanelSight::Seen;
+  NSDictionary<NSNumber *, NSValue *> *frames = PanelWindowFrames(&namesHidden);
+  for (NSNumber *number in frames) {
+    if ([before containsIndex:number.unsignedIntegerValue]) continue;
+    if (frame) *frame = NSRectToCGRect(frames[number].rectValue);
+    return SystemPanelSight::Seen;
+  }
   return namesHidden ? SystemPanelSight::Unknown : SystemPanelSight::Missing;
+}
+
+NSString *SideOfSystemPanel(NSView *page, CGRect panel) {
+  id responder = page.window.firstResponder;
+  if (![responder conformsToProtocol:@protocol(NSTextInputClient)] || CGRectIsEmpty(panel)) return nil;
+  id<NSTextInputClient> client = responder;
+  const NSRect caret = [client firstRectForCharacterRange:[client selectedRange] actualRange:nullptr];
+  NSScreen *primary = NSScreen.screens.firstObject;
+  if (!primary || (NSIsEmptyRect(caret) && NSEqualPoints(caret.origin, NSZeroPoint))) return nil;
+  const CGFloat caretMiddle = NSHeight(primary.frame) - NSMidY(caret);
+  return CGRectGetMidY(panel) >= caretMiddle ? @"below" : @"above";
 }
 
 NSString *LoggedFieldKind(NSString *field) {
@@ -200,18 +221,46 @@ NSString *LoggedFieldKind(NSString *field) {
   return [@[ @"username", @"password", @"code" ] containsObject:field] ? field : @"other";
 }
 
-void ReportSystemPanelSight(NSIndexSet *before, void (^done)(NSDictionary *result)) {
-  void (^answer)(SystemPanelSight) = ^(SystemPanelSight sight) {
-    os_log(OS_LOG_DEFAULT, "[ardiacore] system passwords panel %{public}s", sight == SystemPanelSight::Seen ? "seen" : sight == SystemPanelSight::Missing ? "missing" : "unchecked");
-    done(sight == SystemPanelSight::Missing ? @{@"shown" : @NO, @"reason" : @"noPanel"} : @{@"shown" : @YES});
+void ReportSystemPanelSight(NSIndexSet *before, NSView *page, void (^done)(NSDictionary *result)) {
+  __weak NSView *weakPage = page;
+  void (^answer)(SystemPanelSight, CGRect) = ^(SystemPanelSight sight, CGRect frame) {
+    NSString *side = sight == SystemPanelSight::Seen ? SideOfSystemPanel(weakPage, frame) : nil;
+    os_log(OS_LOG_DEFAULT, "[ardiacore] system passwords panel %{public}s%{public}s%{public}@",
+           sight == SystemPanelSight::Seen ? "seen" : sight == SystemPanelSight::Missing ? "missing" : "unchecked", side ? " panel=" : "", side ?: @"");
+    if (sight == SystemPanelSight::Missing) return done(@{@"shown" : @NO, @"reason" : @"noPanel"});
+    done(side ? @{@"shown" : @YES, @"panel" : side} : @{@"shown" : @YES});
   };
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kSystemPanelFirstCheck * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-    const SystemPanelSight first = SightOfSystemPanel(before);
-    if (first != SystemPanelSight::Missing) return answer(first);
+    CGRect frame = CGRectZero;
+    const SystemPanelSight first = SightOfSystemPanel(before, &frame);
+    if (first != SystemPanelSight::Missing) return answer(first, frame);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((kSystemPanelLastCheck - kSystemPanelFirstCheck) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-      answer(SightOfSystemPanel(before));
+      CGRect later = CGRectZero;
+      const SystemPanelSight last = SightOfSystemPanel(before, &later);
+      answer(last, later);
     });
   });
+}
+
+NSUInteger gPanelHintWatch = 0;
+const CFTimeInterval kPanelHintPoll = 0.25;
+const CFTimeInterval kPanelHintLongest = 120;
+
+void WatchSystemPanelUntilClosed(NSUInteger watch, CFTimeInterval started, void (^closed)(void)) {
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kPanelHintPoll * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    if (watch != gPanelHintWatch) return;
+    bool namesHidden = false;
+    const bool open = PanelWindowFrames(&namesHidden).count > 0 || namesHidden;
+    if (open && CACurrentMediaTime() - started < kPanelHintLongest) return WatchSystemPanelUntilClosed(watch, started, closed);
+    closed();
+  });
+}
+
+NSString *PanelHintJSON(NSString *label, NSString *side) {
+  static NSRegularExpression *pattern = [NSRegularExpression regularExpressionWithPattern:@"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$" options:0 error:nil];
+  if (![label isKindOfClass:NSString.class] || ![pattern firstMatchInString:label options:0 range:NSMakeRange(0, label.length)]) return nil;
+  if (![@[ @"above", @"below" ] containsObject:side ?: @""]) return nil;
+  return JSONText(@{@"label" : label, @"side" : side});
 }
 
 void OpenSystemPanel(NSView *page, void (^done)(NSDictionary *result)) {
@@ -247,7 +296,7 @@ void OpenSystemPanel(NSView *page, void (^done)(NSDictionary *result)) {
     SEL pass = NSSelectorFromString(kShowOrHideAutoFill);
     if ([controller respondsToSelector:pass]) ((void (*)(id, SEL))objc_msgSend)(controller, pass);
   }
-  ReportSystemPanelSight(before, done);
+  ReportSystemPanelSight(before, page, done);
 }
 
 }
@@ -480,11 +529,32 @@ void OpenSystemPanel(NSView *page, void (^done)(NSDictionary *result)) {
         if (![reason isEqualToString:@"noProvider"] && ![reason isEqualToString:@"stale"]) {
           NSMutableDictionary *payload = [@{@"via" : @"menu", @"shown" : result[@"shown"] ?: @NO} mutableCopy];
           if (reason) payload[@"reason"] = reason;
+          if (result[@"panel"]) payload[@"panel"] = result[@"panel"];
           [weakView emit:@"fieldProviderOpened" payload:payload];
         }
         completion(result);
       }];
   return YES;
+}
+
++ (BOOL)showFieldProviderHint:(NSString *)label side:(NSString *)side tab:(NSString *)tabId {
+  ArdiaCoreTab *tab = ardia_host::TabWithAppTabId(tabId);
+  ArdiaWebView *view = tab ? [ArdiaTabRegistry viewForTab:tab] : nil;
+  NSString *json = PanelHintJSON(label, side);
+  if (!view || !json) return NO;
+  [view pushFieldProviderHint:json];
+  __weak ArdiaWebView *weakView = view;
+  [ArdiaWebView whenSystemPanelCloses:^{ [weakView pushFieldProviderHint:@"false"]; }];
+  return YES;
+}
+
++ (nullable NSString *)fieldProviderHintJSON:(NSString *)label side:(NSString *)side {
+  return PanelHintJSON(label, side);
+}
+
++ (void)whenSystemPanelCloses:(void (^)(void))closed {
+  const NSUInteger watch = ++gPanelHintWatch;
+  WatchSystemPanelUntilClosed(watch, CACurrentMediaTime(), closed);
 }
 
 + (BOOL)setUpVerificationCode:(NSString *)token tab:(NSString *)tabId generation:(double)generation completion:(void (^)(NSDictionary *result))completion {

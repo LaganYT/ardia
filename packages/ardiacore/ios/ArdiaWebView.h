@@ -176,6 +176,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)showSystemPanelForTab:(NSString *)tabId
                    generation:(double)generation
                    completion:(void (^)(NSDictionary *result))completion NS_SWIFT_NAME(showSystemPanel(tab:generation:completion:));
++ (BOOL)showFieldProviderHint:(NSString *)label side:(NSString *)side tab:(NSString *)tabId NS_SWIFT_NAME(showFieldProviderHint(_:side:tab:));
++ (nullable NSString *)fieldProviderHintJSON:(NSString *)label side:(NSString *)side NS_SWIFT_NAME(fieldProviderHintJSON(_:side:));
++ (void)whenSystemPanelCloses:(void (^)(void))closed NS_SWIFT_NAME(whenSystemPanelCloses(_:));
 + (BOOL)setUpVerificationCode:(NSString *)token
                           tab:(NSString *)tabId
                    generation:(double)generation

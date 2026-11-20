@@ -1,3 +1,4 @@
+import { foreignWriteHooks } from "../browser/foreignWriteHooks";
 import {
   chooseExtensionFolder,
   configureExtension,
@@ -165,15 +166,15 @@ export function cancelInstall() {
   useExtensions.setState({ install: null });
 }
 
-export async function removeExtension(profile: string, ext: InstalledExtension, windowId?: string) {
-  const { confirmed } = await confirm({
+export async function removeExtension(profile: string, ext: InstalledExtension, windowId?: string, mayRemove: () => boolean = () => true, ask: typeof confirm = confirm) {
+  const { confirmed } = await ask({
     title: `Remove “${ext.name}”?`,
     message: ext.fromWebStore ? "Its data and settings will be removed too." : `The extension's folder stays on your ${PLATFORM_TERMS.computer}.`,
     confirmTitle: "Remove",
     destructive: true,
     windowId,
   });
-  if (!confirmed) return;
+  if (!confirmed || !mayRemove()) return;
   if (useExtensions.getState().popup?.extensionId === ext.id) closeExtensionPopup();
   closeSidePanelsOf(ext.id);
   await changeThenRefresh(profile, "remove", () => uninstallExtension(ext.id, profile));
@@ -184,10 +185,11 @@ export async function setEnabled(profile: string, id: string, enabled: boolean) 
   await changeThenRefresh(profile, enabled ? "turn on" : "turn off", () => setExtensionEnabled(id, profile, enabled));
 }
 
-export async function setPinned(profile: string, id: string, pinned: boolean) {
+export async function setPinned(profile: string, id: string, pinned: boolean): Promise<boolean> {
   patchExtension(profile, id, { pinned });
   const done = await changed(pinned ? "pin" : "unpin", () => configureExtension(id, profile, { pinned }));
   if (!done) await refreshExtensions(profile);
+  return done;
 }
 
 export const setToolbarDrag = (windowId: string, drag: ToolbarDrag | null) => useExtensions.setState({ toolbarDrag: drag && { ...drag, windowId } });
@@ -216,8 +218,8 @@ export async function configure(profile: string, id: string, options: Parameters
   await changeThenRefresh(profile, "configure", () => configureExtension(id, profile, options));
 }
 
-export async function reload(profile: string, id: string) {
-  await changeThenRefresh(profile, "reload", () => reloadExtension(id, profile));
+export async function reload(profile: string, id: string): Promise<boolean> {
+  return changeThenRefresh(profile, "reload", () => reloadExtension(id, profile));
 }
 
 async function changed(what: string, change: () => Promise<void>): Promise<boolean> {
@@ -231,9 +233,10 @@ async function changed(what: string, change: () => Promise<void>): Promise<boole
   }
 }
 
-async function changeThenRefresh(profile: string, what: string, change: () => Promise<void>) {
-  await changed(what, change);
+async function changeThenRefresh(profile: string, what: string, change: () => Promise<void>): Promise<boolean> {
+  const done = await changed(what, change);
   await refreshExtensions(profile);
+  return done;
 }
 
 function patchExtension(profile: string, id: string, patch: Partial<InstalledExtension>) {
@@ -323,7 +326,7 @@ export async function showExtensionMenu(windowId: string, ext: InstalledExtensio
   const profile = extensionProfile(useBrowser.getState(), windowId);
   const panel = useExtensions.getState().sidePanels[windowId];
   const choice = await showMenu(extensionMenuItems(ext, panel?.extensionId === ext.id && !panel.hidden));
-  if (choice === "options") openOptions(windowId, ext);
+  if (choice === "options") foreignWriteHooks.around(() => openOptions(windowId, ext));
   if (choice === "pin") void setPinned(profile, ext.id, !ext.pinned);
   if (choice === "enable") void setEnabled(profile, ext.id, !ext.enabled);
   if (choice === "remove") void removeExtension(profile, ext, windowId);

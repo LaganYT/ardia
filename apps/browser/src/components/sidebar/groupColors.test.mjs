@@ -23,13 +23,16 @@ test("a neutral group keeps Dia's look, its box only under the pointer, and None
   assert.deepEqual(groupSurface("none", TOKENS), { fill: "transparent", stroke: "transparent" });
 });
 
-test("a folder with no colour of its own is drawn in #443AFF, and a coloured one in its group's tint", () => {
+test("a folder with no colour of its own takes the profile's colour, and a coloured one its group's tint", () => {
+  const PROFILE = "#0A84FF";
   for (const color of [null, undefined, "none"]) {
-    assert.equal(folderPalette(color, false).stroke, "#443AFF", String(color));
-    assert.deepEqual(folderPalette(color, true), folderPalette(null, true), String(color));
+    assert.equal(folderPalette(color, false, PROFILE).stroke, PROFILE, String(color));
+    assert.deepEqual(folderPalette(color, true, PROFILE), folderPalette(null, true, PROFILE), String(color));
   }
+  assert.notDeepEqual(folderPalette(null, true, PROFILE), folderPalette(null, true, "#C07A98"));
   for (const color of TAB_GROUP_COLORS) {
-    assert.equal(folderPalette(color, false).stroke, GROUP_COLORS[color].hex, color);
-    assert.notDeepEqual(folderPalette(color, true), folderPalette(null, true), color);
+    assert.equal(folderPalette(color, false, PROFILE).stroke, GROUP_COLORS[color].hex, color);
+    assert.deepEqual(folderPalette(color, true, PROFILE), folderPalette(color, true, "#C07A98"), color);
+    assert.notDeepEqual(folderPalette(color, true, PROFILE), folderPalette(null, true, PROFILE), color);
   }
 });

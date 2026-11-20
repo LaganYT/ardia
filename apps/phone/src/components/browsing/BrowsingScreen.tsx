@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { countRender } from "../../state/app/interactionPerf";
 import { Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -107,7 +107,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   const bottom = pageTone?.bottom ?? theme.surface;
   const barDark = design === "redesigned" && !pageTone?.bottom ? theme.dark : isDarkColor(bottom);
   useSystemBars(isDarkColor(top), barDark);
-  const collapse = useBarCollapse(tab.id, finding, design === "redesigned");
+  const collapse = useBarCollapse(tab.id, tab.isPrivate, finding, design === "redesigned");
   const staged = design === "redesigned" && !column && searchStageIsNative();
   useEffect(() => (staged && !collapse.hidden ? reportBarPill() : undefined), [staged, collapse.hidden]);
   const underBar = usePageUnderBars();
@@ -159,7 +159,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
         <Animated.View style={[StyleSheet.absoluteFill, styles.outgoing, { backgroundColor: theme.surface }, pager.outgoing]}>
           {underBar ? null : <Animated.View testID="pageStatusStrip" style={[{ height: insets.top }, statusStyle]} />}
           <View testID="pageArea" style={[styles.page, { marginBottom: layout.pageBottom }]}>
-            <PageSurface key={tab.id} tab={tab} toneBottom={layout.toneBottom} obscured={obscured} pinsSafeArea={pulls ? true : undefined} />
+            <PageSurface key={tab.id} tab={tab} toneBottom={layout.toneBottom} obscured={obscured} bottomInsetTransitionMs={Platform.OS === "android" && collapse.collapses && design === "redesigned" && !fullscreen && !finding && !searching ? hostPillLayout.foldSettleMs : 0} pinsSafeArea={pulls ? true : undefined} />
             <PageCover key={`${tab.id}:cover`} tab={tab} />
             <PageFailureView key={`${tab.id}:failure`} tabId={tab.id} />
           </View>
@@ -201,6 +201,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
                   <Animated.View
                     testID="floatingBarFold"
                     collapsable={false}
+                    renderToHardwareTextureAndroid={Platform.OS === "android"}
                     style={collapse.fold.bar}
                     pointerEvents={collapse.collapsed ? "none" : "box-none"}
                     importantForAccessibility={collapse.collapsed ? "no-hide-descendants" : "auto"}
@@ -224,8 +225,9 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
                   {collapse.fold.pillMounted ? (
                     <Animated.View
                       testID="hostPillFold"
-                    collapsable={false}
-                      style={[styles.pillPlace, collapse.fold.pill]}
+                      collapsable={false}
+                      renderToHardwareTextureAndroid={Platform.OS === "android"}
+                        style={[styles.pillPlace, collapse.fold.pill]}
                       pointerEvents={collapse.collapsed ? "box-none" : "none"}
                       importantForAccessibility={collapse.collapsed ? "auto" : "no-hide-descendants"}
                       accessibilityElementsHidden={!collapse.collapsed}
@@ -278,19 +280,33 @@ function PageStack({ column, pulledTab, barTop, children }: { column: ScreenColu
   );
 }
 
-function useBarCollapse(tabId: string, finding: boolean, folds: boolean) {
+function useBarCollapse(tabId: string, isPrivate: boolean, finding: boolean, folds: boolean) {
   const collapses = usePreferences((p) => p.collapsesBottomBar);
   const direction = useNavigation(tabId, (n) => n?.scrollDirection ?? "up");
   const page = useNavigation(tabId, (n) => n?.url ?? null);
   const reduceMotion = useReduceMotion();
   const [state, setState] = useState(() => followScroll(BAR_SHOWN, tabId, page, direction, collapses));
-  useEffect(() => setState((now) => followScroll(now, tabId, page, direction, collapses)), [tabId, page, direction, collapses]);
-  const scrolledAway = state.hidden && state.tabId === tabId;
+  const android = Platform.OS === "android";
+  const followed = android ? followScroll(state, tabId, page, direction, collapses) : state;
+  if (followed !== state) setState(followed);
+  useEffect(() => {
+    if (!android) setState((now) => followScroll(now, tabId, page, direction, collapses));
+  }, [tabId, page, direction, collapses]);
+  const scrolledAway = followed.hidden && followed.tabId === tabId;
   const collapsed = folds && scrolledAway && !finding;
   const hidden = finding || (!folds && scrolledAway);
+  const wasCollapsed = useRef(collapsed);
+  useEffect(() => {
+    if (android && collapsed && !wasCollapsed.current && !isPrivate) countUsage("bottom_bar_collapses");
+    wasCollapsed.current = collapsed;
+  }, [collapsed, tabId, isPrivate]);
   const fold = useBarFold(collapsed, reduceMotion);
   const hide = useSharedValue(0);
   useEffect(() => {
+    if (android && reduceMotion) {
+      hide.value = hidden ? 1 : 0;
+      return;
+    }
     hide.value = reduceMotion ? withTiming(hidden ? 1 : 0, { duration: tabsMotion.barCollapseReduced }) : withSpring(hidden ? 1 : 0, tabsMotion.barCollapse);
   }, [hidden, reduceMotion]);
   const style = useAnimatedStyle(() => ({ opacity: 1 - hide.value, transform: [{ translateY: hide.value * browseLayout.barCollapseTravel }] }));

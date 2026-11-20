@@ -44,7 +44,7 @@ jest.mock("../components/tabs/DeckCard", () => {
 
 const onAndroid = Platform.OS === "android" ? test : test.skip;
 
-const LANDS_MS = 278;
+const LANDS_MS = 167;
 const EXPANDED_Z = 100_000;
 
 let counted: jest.SpyInstance;

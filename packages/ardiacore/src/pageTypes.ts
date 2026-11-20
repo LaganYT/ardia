@@ -247,6 +247,7 @@ export type WebViewProps = ViewProps & {
 
 export type WebViewHandle = {
   nativeTag(): number | null;
+  isAttached?(): boolean | Promise<boolean | undefined>;
   loadUrl(url: string, options?: { userInitiated?: boolean }): Promise<void>;
   goBack(): Promise<void>;
   goForward(): Promise<void>;

@@ -77,7 +77,7 @@ export function FloatingBar({ tab, order, roles, dark, showsPlus, anchors = true
         <FloatingTabsButton tab={tab} order={order} roles={roles} dark={dark} testID="floatingBarTabs" glass={back.sidesGlass} glyphs={back.leadingGlyphs} ghost={!handed} onTabs={onTabs} onTabsMenu={onTabsMenu} onStep={onStep} />
       </Animated.View>
       <Animated.View testID="floatingBarCentre" nativeID={ids?.anchor} collapsable={false} style={styles.addressSlot} pointerEvents={back.centreShown ? "box-none" : "none"} importantForAccessibility={back.centreShown ? "auto" : "no-hide-descendants"} accessibilityElementsHidden={!back.centreShown}>
-      <ChromeSurface testID="floatingBarAddress" shape="capsule" cornerRadius={capsule(size)} incognito={tab.isPrivate} dark={dark} barShadow shown={back.centreGlass.shown} shownMs={back.centreGlass.shownMs} style={styles.address}>
+      <ChromeSurface testID="floatingBarAddress" shape="capsule" cornerRadius={capsule(size)} incognito={tab.isPrivate} dark={dark} barShadow={chromeLayout.barCastsShadow} shown={back.centreGlass.shown} shownMs={back.centreGlass.shownMs} style={styles.address}>
         <Animated.View testID="floatingBarCentreGlyphs" nativeID={ids?.face} collapsable={false} style={[styles.addressRow, back.centreGlyphs]}>
         <PullGlyphs style={styles.addressRow}>
         <Pressable
@@ -140,7 +140,7 @@ export function FloatingTabsButton({ tab, order, roles, dark, testID, glass, gly
           onLongPress={onLongPress}
           style={styles.circleHit}
         >
-          <ChromeSurface testID={testID} shape="circle" cornerRadius={capsule(size)} incognito={tab.isPrivate} dark={dark} barShadow shown={glass?.shown} shownMs={glass?.shownMs} style={styles.circle}>
+          <ChromeSurface testID={testID} shape="circle" cornerRadius={capsule(size)} incognito={tab.isPrivate} dark={dark} barShadow={chromeLayout.barCastsShadow} shown={glass?.shown} shownMs={glass?.shownMs} style={styles.circle}>
             <PullGlyphs>
               <Animated.View testID={`${testID}Glyphs`} pointerEvents="none" style={glyphs}>
                 <TabStack tabs={order.slice(-2)} roles={roles} />
@@ -163,7 +163,7 @@ export function FloatingPlusButton({ tab, dark, testID, glass, glyphs, ghost = f
   const size = floatingBarLayout.control;
   return (
     <PressScale label="New Search" onPress={onPlus} onPressIn={haptics.barPress} style={styles.circleHit}>
-      <ChromeSurface testID={testID} shape="circle" cornerRadius={capsule(size)} incognito={tab.isPrivate} dark={dark} barShadow shown={glass?.shown} shownMs={glass?.shownMs} style={styles.circle}>
+      <ChromeSurface testID={testID} shape="circle" cornerRadius={capsule(size)} incognito={tab.isPrivate} dark={dark} barShadow={chromeLayout.barCastsShadow} shown={glass?.shown} shownMs={glass?.shownMs} style={styles.circle}>
         <PullGlyphs>
           <Animated.View testID={`${testID}Glyphs`} pointerEvents="none" style={glyphs}>
             <Symbol name="plus" size={floatingBarLayout.plusSymbol} color={ink.foreground} />

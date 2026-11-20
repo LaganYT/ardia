@@ -347,8 +347,11 @@ test("the bar is one bar throughout: its three glass shapes stay while the brows
 
 const onAndroid = Platform.OS === "android" ? test : test.skip;
 
+const PULL_SETTLE_STARTED_MS = 150;
+const PULL_SETTLE_CAP_MS = 1000;
+
 for (const lands of [true, false]) {
-  onAndroid(`an Android deck pull ${lands ? "lands" : "returns"} in 300 ms after release`, () => {
+  test(`a deck pull ${lands ? "lands" : "returns"} on the iPhone's springs after release on both phones`, () => {
     app();
     const id = currentTabs().selectedId!;
     const settled = jest.fn();
@@ -359,9 +362,9 @@ for (const lands of [true, false]) {
     caughtUp();
     act(() => pull.settleDeckPull(lands, -300, settled));
     frame();
-    act(() => void jest.advanceTimersByTime(DECK_PULL.androidSettleMs - 32));
+    act(() => void jest.advanceTimersByTime(PULL_SETTLE_STARTED_MS));
     expect(settled).not.toHaveBeenCalled();
-    act(() => void jest.advanceTimersByTime(64));
+    act(() => void jest.advanceTimersByTime(PULL_SETTLE_CAP_MS));
     expect(settled).toHaveBeenCalledWith(id, lands, expect.any(Number));
   });
 }

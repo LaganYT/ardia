@@ -1583,7 +1583,7 @@ iPhone follows the SwiftUI app on main since the merge of main (8203d0b3c, 2026-
 
 - On 2026-11-17 the owner rejected the redesigned Android build on the POCO F4: "hate it … the … dropdowns are weird everywhere" (#2496). The dropdowns were Android's own PopupMenu and AlertDialog behind `MenuTrigger` and `confirmInSheet`, which look nothing like the iPhone's menus.
 - On 2026-11-19 he decided Android takes the iPhone's design after all, with the menus drawn by the app instead of the system's. Android's native menus module is gone, so every menu, picker and confirmation on Android is the drawn menu (`components/ui/Menu.tsx`) or the drawn action sheet (`components/ui/ActionSheet.tsx`), made to look and move like the iPhone's UIKit menu and action sheet. Their numbers sit in `menuLook`, `menuInk`, `actionSheetLook` and `actionSheetInk` (`components/ui/tokens.ts`), `menuMotion` (`components/ui/motion.ts`) and `lib/menuPlace.ts`.
-- The measurements are the iPhone's on iOS 27 (`/tmp/ardia-menus/ios/SPEC.md`, 2026-11-19): a 250 pt panel with 30.5 pt corners, 42 pt rows, labels at 29 pt (43.7 with a checkmark column, 65 beside a leading icon), group dividers as 20.67 pt bands with a line inset 24 pt, a pill press highlight inset 10 pt, no lines between rows. A tap menu sits on its trigger's matching corner and covers it (opening upward with its bottom on the trigger's when there is no room below), grows out of that corner on a spring with about 2.5 % overshoot and shrinks back into it in 200 ms. A long-press menu dims the screen (black 20 % light, 48 % dark). A confirmation is iOS 27's centred card: title, message, one pill button and no Cancel row, shown at once and fading out in 270 ms with nothing dimmed. Deliberately different: a long-press menu opens at the finger (the owner's rule) where UIKit places it from the lifted view and lifts that view; and a tap outside a confirmation only cancels it, where iOS also lets the tap through to what is underneath. Back cancels it, and TalkBack reaches the outside area as Cancel.
+- The measurements are the iPhone's on iOS 27 (`/tmp/ardia-menus/ios/SPEC.md`, 2026-11-19): a 250 pt panel with 30.5 pt corners, 42 pt rows, labels at 29 pt (43.7 with a checkmark column, 65 beside a leading icon), group dividers as 20.67 pt bands with a line inset 24 pt, a pill press highlight inset 10 pt, no lines between rows. A tap menu sits on its trigger's matching corner and covers it (opening upward with its bottom on the trigger's when there is no room below), grows out of that corner on a 0.3 s spring and shrinks back into it in 200 ms. UIKit's spring overshoots about 2.5 %; since 2026-11-20 the drawn menu's spring is critically damped on both phones, because menus are used all day and the owner's motion rule allows no overshoot there. A long-press menu dims the screen (black 20 % light, 48 % dark). A confirmation is iOS 27's centred card: title, message, one pill button and no Cancel row, shown at once and fading out in 270 ms with nothing dimmed. Deliberately different: a long-press menu opens at the finger (the owner's rule) where UIKit places it from the lifted view and lifts that view; and a tap outside a confirmation only cancels it, where iOS also lets the tap through to what is underneath. Back cancels it, and TalkBack reaches the outside area as Cancel.
 - Android keeps its touch habits: a long press opens the menu at the finger with the screen dimmed behind it, a tap outside or Back closes it (Back on a submenu goes back to its menu), the menu never runs off the screen or under the system bars, TalkBack moves into the menu and back to its trigger on close, and the app behind it is hidden from TalkBack while it is open.
 - Material You for Android (#2537, draft #2557) is dropped. The redesign switch from #2477 is on main: `designFor("android")` answers redesigned, and the deck's grid is offered on both phones.
 - `drawn_menus_opened` counts each drawn menu and confirmation card opened, by platform, never while browsing privately.
@@ -1596,8 +1596,8 @@ iPhone follows the SwiftUI app on main since the merge of main (8203d0b3c, 2026-
 - Confirmations follow iPhone: where iPhone asks with SwiftUI's confirmation (Clear Browsing Data, Restore Default Filter Lists, Remove This List, Stop Syncing This Device) or UIKit's action sheet (Close All Tabs, Close Incognito Tabs, Delete All archived tabs), Android shows the drawn confirmation card; Translate with Google stays the drawn centred dialog with Cancel on both phones. A menu taller than the screen is cut to the safe area and scrolls, and it is measured while hidden, so it first shows where its rows fit and keeps to its side of the finger when a submenu's page is taller. A turn of the phone closes an open menu as UIKit's does (the keyboard does not). A chosen row runs at once, once, while the menu plays its close; TalkBack goes back to the control that opened the menu only when it closes without a choice. A page link's long press opens at the finger like every other long-press menu.
 - Later on 2026-11-19 the owner asked for Android's own character instead of iPhone's glass ("we don't really want it to look like Apple Glass … have a solid background"). Android keeps the drawn menus' structure (placement on the trigger or at the finger, Back, tap outside, TalkBack, submenus as pages) and draws them as Material 3; iPhone's drawn menus and action sheet are unchanged. The Android values sit beside iPhone's in `menuLook`, `menuInk` (picked by platform), `materialDialogLook`, `materialDialogInk` and `materialMenuMotion`:
   - a menu is a solid surface (#F3EDF0 light; dark #1E1B1D with a 0.5 dp white 12 % edge, since a shadow doesn't show on the dark deck) with 16 dp corners and level-2 elevation, no frost or dim; 48 dp rows with one-line 16 sp labels at 16 dp, or at 52 dp beside a 24 dp icon slot; icons show only when every row has one (the owner, 2026-11-19: a lone icon, as on a card's Send to MacBook Pro, misaligns the menu), and a submenu page keeps the slot for its Back chevron; icons in on-surface-variant, a full-width ripple, groups split by an 8 dp gap with no line (the owner, 2026-11-19: the horizontal rules between groups read as clutter; headings and the order of actions stay), the check at the trailing edge, and M3 error red (#BA1A1A, #FFB4AB) for destructive rows;
-  - it fades in and grows from 80 % over 250 ms (emphasized decelerate) from its trigger's corner, and fades out in 150 ms (emphasized accelerate) without shrinking;
-  - a confirmation is an M3 basic dialog: 24 dp from the screen edges up to 560 dp wide, 28 dp corners, 24 dp padding, a 24 sp title and 14 sp message, Cancel (on-surface-variant) and the action (Ardia's plum primary, or the error red when destructive) as right-aligned text buttons, over a 32 % black scrim; it fades and grows from 92 % in 250 ms and fades out in 150 ms. Cancel is neutral because the dark theme's primary and error are both pale pinks.
+  - it fades in and grows from 80 % over 250 ms (emphasized decelerate) from its trigger's corner, and fades out in 150 ms (emphasized accelerate) without shrinking. Replaced on 2026-11-20 by the iPhone's motion (below);
+  - a confirmation is an M3 basic dialog: 24 dp from the screen edges up to 560 dp wide, 28 dp corners, 24 dp padding, a 24 sp title and 14 sp message, Cancel (on-surface-variant) and the action (Ardia's plum primary, or the error red when destructive) as right-aligned text buttons, over a 32 % black scrim; it fades and grows from 92 % in 250 ms and fades out in 150 ms (replaced on 2026-11-20 by the iPhone's: shown at once, fading out in 270 ms). Cancel is neutral because the dark theme's primary and error are both pale pinks.
   - Android's dark mode uses one near-black, #1E1B1D, for the chrome (the bars, Search Tabs and the round buttons, `chromeInk.dark.surface`, #000000 before), the menus and the dialogs, so nothing reads as a blacker black than its neighbour (the owner, 2026-11-19). iPhone's chrome stays #000000 where it isn't native glass.
   - Material You colours (the wallpaper palette and a Dynamic Colors switch, #2692 and Sai Charan's #2693) are a separate PR; these neutral surfaces are the fallback they would tint.
 - The rest of iPhone's deck and page parity comes to Android in the same PR (the owner, 2026-11-19: everything left except Material You):
@@ -1605,6 +1605,42 @@ iPhone follows the SwiftUI app on main since the merge of main (8203d0b3c, 2026-
   - the Archive capsule comes back on every deck open until it is dismissed or an interval is picked, as on iPhone, where Compose marked it shown when it first offered it;
   - a swipe between tabs shows the space's own surface behind the pages (`PagerBackdrop`), where Android drew black. The dim over the leaving page stays black on both phones, and a history swipe inside a page already takes the profile's surface (`surfaceColor` on the page view);
   - a top pull on a page still refreshes it; nothing native changed.
+
+### Android moves like the iPhone (the owner, 2026-11-20)
+
+After the bottom bar's fold (4a844bcfb), the owner asked on the F4 for Android's animations to be the iPhone's
+everywhere. Every motion value that was picked by platform now takes the iPhone's on both phones, and
+`src/render/motionPerPlatform.render.test.tsx` pins them on both presets:
+
+- the deck (`tabsMotion`): a card grows on the 0.18 s spring (Compose's 0.3), a released card settles on 0.26 s
+  (0.3 at 0.9 damping), the deck scrolls to rest on 0.28 s (0.4), a gap closes on 0.22 s (0.4 at 0.8), the pager
+  settles on 0.26 s (0.38), and the deck opens on SwiftUI's 190 ms arrive curve for scale and position together
+  (Compose's 0.19 s and 0.3 s springs). Fades are 150 ms (200), a fly-away 160 ms (200), the bar's tone 200 ms (250),
+  surfaces 150 ms (200);
+- the search tray (`trayMotion`): it rises on SwiftUI's 360 ms rise curve (a 0.39 s spring), lands after 220 ms
+  without a keyboard report (450), settles on 0.26 s (0.34 at 0.86), is dismissed on 0.14 s (0.32), a row press is
+  0.16 s (0.2 at 0.7), the Incognito toggle 0.2 s (0.3 at 0.85), the dim 200 ms ease-out (300 ease-in-out) and the
+  results 100 ms (140);
+- the progress bar fills in 150 ms (200), fades in 200 ms (250), advances in 300 ms (450) and shows after 100 ms (150);
+  a loading page's placeholder waits 250 ms and fades in over 150 ms (300 and 220);
+- onboarding: a step slides 72 points on 300 ms of (0.05, 0.7, 0.1, 1) (60 dp on a 0.42 s spring at 0.9), the
+  welcome rises on 360 ms after 50 ms (a 0.7 s spring at 0.7 after 100 ms), and Reduce Motion fades in 150 ms (200);
+- drawn menus grow from their trigger's corner and shrink back into it as the iPhone's do (Material's 250 ms grow
+  from 80 % and 150 ms fade are gone), on a 0.3 s spring that is now critically damped on both phones; a
+  confirmation shows at once and fades out in 270 ms (Material's 250 ms grow from 92 % and 150 ms fade). The
+  Material look, colours and layout stay;
+- the swipe into the deck lands and returns on the iPhone's springs (a fixed 300 ms before);
+- the voice screen's waveform bars ease to each new height over 100 ms, as on iPhone (Android jumped);
+- natively (`PageGestures.kt`, `PageSettle`): a history swipe settles on a critically damped curve that lands in about
+  220 ms, as UIKit's 0.22 s spring does (an ease-in-out 220 ms timing before), and pull to refresh settles on a
+  critically damped 0.3 s spring (Compose's 0.3 s at 0.86, which overshot).
+
+Kept per platform on purpose: Remove animations snaps on Android (`reducedMotionMs`); Android opens a card in the
+column layout through the deck card in Reanimated (`cardOpen`), because iPhone's opening card is a Core Animation
+growth and the Android equivalent (`coveringCard`) is still behind the `ArdiaOpeningCard` lab flag, while both phones
+open through the pulled card in the redesign; and the host pill stays mounted with its glass shown at once on Android,
+which the bar's fold needs. No new telemetry: `deck_pulls_hitched` keeps watching the swipe into the deck, and
+`card_opens_waited` the card opens.
 
 ### Android motion and menu follow-up
 
@@ -1615,8 +1651,9 @@ iPhone follows the SwiftUI app on main since the merge of main (8203d0b3c, 2026-
   start a search. Incognito taps are excluded.
 - The deck's ··· menu has one row height throughout on Android, including when sync and recently closed tabs add
   actions. iPhone keeps its native menu sections.
-- After an Android swipe into the deck, the landing or return takes 300 ms on the UI thread. The live page still
-  follows the finger and remains visible until its card can take over.
+- After an Android swipe into the deck, the landing or return runs on the UI thread on the iPhone's springs (0.34 s to land,
+  0.28 s back, no bounce; a fixed 300 ms timing until 2026-11-20). The live page still follows the finger and remains
+  visible until its card can take over.
 - Android Settings uses the same General, Search, Tabs, Privacy, Experimental and About groups as iPhone.
   The page menu opens History, Bookmarks and Downloads in Android's Library sheet using the same entries
   and file actions as iPhone. Android still uses its default-browser role and summary provider choices.
@@ -2030,7 +2067,7 @@ simulator, the list under "The iPhone redesign".
 
 **3. Start page and the search tray**
 - [ ] With no tabs and sync on. Expect: the start page's leading button is Synced Tabs; the logo fades and grows from 0.92 and the bar fades as the tray comes and goes.
-- [ ] Open the tray. Expect: it comes up with the keyboard and sits on its top edge on every frame, with no gap or overlap (including over Android's navigation bar); with a hardware keyboard it lands after 450 ms; the dim fades in over 300 ms; with Reduce Motion it fades instead of moving. Close it: the keyboard goes and the tray follows it down.
+- [ ] Open the tray. Expect: it comes up with the keyboard and sits on its top edge on every frame, with no gap or overlap (including over Android's navigation bar); with a hardware keyboard it lands after 220 ms; the dim fades in over 200 ms; with Reduce Motion it fades instead of moving. Close it: the keyboard goes and the tray follows it down.
 - [ ] Drag the tray down from the field, the incognito caption or the empty area. Expect: the dim lightens; past 8 points the keyboard goes down while the tray holds still; a short slow drag springs back and the keyboard returns; a long drag or a flick closes it.
 - [ ] Touch a row, slide along the rows and lift. Expect: the touched row lights at once, each row ticks as you pass it, and the last one opens on release with a confirm tick; the arrow on a query row refines; a 400 ms hold opens the row's menu; past 1.5x text size the list scrolls instead.
 - [ ] Type "otter", then "!w otter", then "12*12". Expect: nine rows with an "otter" search kept second; "Search Wikipedia" for the bang; "= 144", which copies with a "Copied 144" toast on a tap and offers Copy on a long press. A Mac tab row shows a laptop and its host and opens as a synced tab.
@@ -2167,6 +2204,18 @@ Not audited at all: Compose's `SyncSetupContent` internals inside onboarding.
   - **Main** shows the words (`BarControls.swift`). Arc's own indicator hasn't been measured here; the capture from
     Arc Search on the F4 decides whether shape, size, colour or position change.
 
+- Collapse Bottom Bar on Android is enabled when no valid saved choice exists. Explicit on and off values,
+  including imported values, win. iPhone keeps its existing default and spring. Android keeps the 30 dp host pill
+  mounted but hidden from touch and accessibility while expanded. Collapse and expand run iPhone's fold on
+  iPhone's spring (0.26 s, no bounce): the bar shrinks to 62 % into the pill as the pill grows out of it, and the
+  pill's surface fades with it, since Android has no glass to fade. On Android the bar and the pill cast no shadow:
+  inside the folds' hardware layers a shadow was cut flat at the pill's edges, and without the layers the shadows laid
+  a grey strip the bar's height across the page (POCO F4, 2026-11-20). Remove animations snaps to the endpoint. The page's
+  direction update no longer waits for a second effect to choose the toolbar state. Tapping the pill expands it;
+  the next upward then downward scroll can collapse it again. The deck keeps its own motion settings.
+  Watch the consent-gated `usage_counts.bottom_bar_collapses` count, never recorded in Incognito. This measures
+  collapse use, not frame smoothness. Smoothness and viewport resize counts still need real-device captures.
+
 - The page under the bar (the owner's decision, 2026-11-16).
   - **iPhone:** the page runs full screen under the glass bar, and WebKit gets the covered edges as
     `obscuredContentInsets`, so fixed footers and the page's last lines stay above the bar.
@@ -2179,7 +2228,13 @@ Not audited at all: Compose's `SyncSetupContent` internals inside onboarding.
     `obscuredInsets` and `toneInsets` on both. It also passes `obscuredColors`, the colours its own bars use: the
     page's remembered tone, or the theme's surface before it has one.
   - **What Android's page view does with them** (`PageView`, `PageBands`):
-    - it lays the WebView out between the bands and paints the bands in those colours, in the same commit as the bars;
+    - it lays the WebView out between the bands and paints the bands in those colours;
+    - a collapse or expand changes only transforms and opacity while scrolling. A bottom-only viewport change
+      waits 300 ms for the toolbar's fold and 120 ms without WebView scroll movement, including a fling,
+      with no finger still on the page. Only the latest endpoint is applied, once. Fixed footers and the page's
+      end then fit above the settled bar or pill. Top insets, view size changes, Find, search, full-screen video
+      and turning collapse off apply their viewport clearance immediately. A pending change belongs to its
+      page and WebView, and is cancelled when either is replaced or detached;
     - it samples the tone at the WebView's own edge;
     - it composes deck snapshots with the bands, so a card is the page as shown.
   - **Revisit** if Android's WebView gains an equivalent of `obscuredContentInsets`, or a way to keep fixed and

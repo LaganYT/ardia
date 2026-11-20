@@ -395,7 +395,7 @@ const androidCardOpen = (): CardOpen => (isLabBuild && launchArguments().opening
 
 export const cardOpen: () => CardOpen = iPhoneOr(() => "openingCard", androidCardOpen);
 
-export const OPENING_CARD_RESPONSE = iPhoneOr(0.18, 0.3);
+export const OPENING_CARD_RESPONSE = 0.18;
 export const OPENING_CARD_MOTION: MotionCurve = { type: "spring", response: OPENING_CARD_RESPONSE, dampingFraction: 1 };
 
 type OpeningCardProps = { tab: BrowserTab; geometry: DeckGeometry; centerX: number; centerY: number; growsAtMount?: boolean; endsSquare?: boolean; onGrowing: () => void; onLanded?: () => void };

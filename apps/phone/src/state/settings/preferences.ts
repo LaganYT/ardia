@@ -91,8 +91,10 @@ const PARSERS: { [K in keyof Preferences]: (raw: string) => Preferences[K] | und
 
 export const acceptsPreference = (name: keyof Preferences, raw: string) => PARSERS[name](raw) !== undefined;
 
-export function parsePreferences(stored: Record<string, string>): Preferences {
-  const out = { ...DEFAULT_PREFERENCES } as Record<keyof Preferences, unknown>;
+export const defaultPreferences = (platform?: string): Preferences => ({ ...DEFAULT_PREFERENCES, collapsesBottomBar: platform === "android" });
+
+export function parsePreferences(stored: Record<string, string>, platform?: string): Preferences {
+  const out = { ...defaultPreferences(platform) } as Record<keyof Preferences, unknown>;
   for (const name of Object.keys(PREFERENCE_KEYS) as (keyof Preferences)[]) {
     const raw = stored[PREFERENCE_KEYS[name]];
     if (raw === undefined) continue;

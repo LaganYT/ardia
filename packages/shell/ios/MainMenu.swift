@@ -306,9 +306,12 @@ enum MainMenu {
       profilesItem,
       hidden(.openProfileMenu),
     ])
+    let helpMenu = top("Help", helpItems())
+    MenuCatalog.capture(
+      main, dynamic: [services, shareMenu, moveToProfile, moveToWindow, bookmarkToFolder, profiles, littleArdiaInProfile, history, extensions],
+      growing: [bookmarks, windowMenu])
     NSApp.windowsMenu = windowMenu
-
-    NSApp.helpMenu = top("Help", helpItems())
+    NSApp.helpMenu = helpMenu
 
     built = nil
     refresh()

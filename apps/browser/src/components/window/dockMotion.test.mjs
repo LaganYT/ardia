@@ -11,16 +11,12 @@ const stub = await import("../../test-native/index.ts");
 
 const S = () => useBrowser.getState();
 
-const DIA = [
-  [0.0337, 0.303], [0.0629, 0.616], [0.0837, 0.805], [0.1212, 0.968], [0.1379, 1.011], [0.1629, 1.011], [0.1837, 1.003],
-  [0.0263, 0.246], [0.0596, 0.524], [0.0805, 0.8], [0.1055, 0.951], [0.1305, 1.008], [0.1555, 1.011], [0.1805, 1.003],
-  [0.0324, 0.316], [0.0657, 0.586], [0.0949, 0.846], [0.1032, 0.973], [0.1365, 1.011], [0.1532, 1.011], [0.1782, 1.005],
-];
-
-test("the slide follows Dia's measured rise and never passes its final width (#1630: Dia's 1 % overshoot laid pages out 3 pt too wide and back)", () => {
-  const rms = Math.sqrt(DIA.reduce((sum, [t, x]) => sum + (dm.slideAt(t) - Math.min(1, x)) ** 2, 0) / DIA.length);
-  assert.ok(rms < 0.025, `rms ${rms.toFixed(3)} against Dia's trace with its overshoot taken out`);
-  assert.ok(dm.slideAt(0.1) > 0.9, "90 % of the travel in 100 ms, as Dia");
+test("the slide is an ease-in-out over 200 ms that never passes its final width (#1630: an overshoot laid pages out too wide and back)", () => {
+  assert.equal(dm.DOCK_SLIDE.duration, 200);
+  assert.deepEqual([...dm.DOCK_SLIDE_CURVE], [0.42, 0, 0.58, 1]);
+  assert.ok(Math.abs(dm.slideAt(0.1) - 0.5) < 0.001, `half the travel at half the time: ${dm.slideAt(0.1)}`);
+  assert.ok(dm.slideAt(0.02) < 0.05, "starts gently");
+  assert.ok(dm.slideAt(0.18) > 0.95, "lands gently");
   let last = 0;
   for (let ms = 0; ms <= 400; ms++) {
     const x = dm.slideAt(ms / 1000);

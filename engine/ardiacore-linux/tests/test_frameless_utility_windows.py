@@ -12,7 +12,7 @@ BROWSER_VIEW = 'chrome/browser/ui/views/frame/browser_view.cc'
 NATIVE_WIDGET = 'chrome/browser/ui/views/frame/browser_native_widget_aura_linux.cc'
 FRAME_LAYOUT = 'chrome/browser/ui/views/frame/browser_frame_view_layout_linux.cc'
 
-GLOBALS_157 = '''int (*g_ardia_linux_window_tab_count)(const BrowserWindowInterface*) = nullptr;
+GLOBALS_158 = '''int (*g_ardia_linux_window_tab_count)(const BrowserWindowInterface*) = nullptr;
 bool (*g_ardia_linux_shell_passes_point)(gfx::NativeView child,
                                          const gfx::Point& location) = nullptr;
 void (*g_ardia_linux_minimum_size)(const BrowserWindowInterface*,
@@ -22,7 +22,7 @@ namespace {
 
 bool ArdiaLinuxBackgroundInstance() {
 '''
-TITLE_157 = '''  return nullptr;
+TITLE_158 = '''  return nullptr;
 }
 
 bool BrowserView::ShouldShowWindowTitle() const {
@@ -35,17 +35,18 @@ bool BrowserView::ShouldShowWindowIcon() const {
   if (GetIsWebAppType() && !GetSupportsTabStrip()) {
     return true;
 '''
-INCLUDES_157 = '''#include "chrome/browser/ui/views/frame/browser_view.h"
+INCLUDES_158 = '''#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
 #include "chrome/common/pref_names.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/platform_window/platform_window.h"
 #include "ui/views/widget/widget.h"
 
 BrowserNativeWidgetAuraLinux::BrowserNativeWidgetAuraLinux(
     BrowserWidget* browser_widget,
     BrowserView* browser_view)
 '''
-CUSTOM_FRAME_157 = '''}
+CUSTOM_FRAME_158 = '''}
 
 bool BrowserNativeWidgetAuraLinux::UseCustomFrame() const {
   if (!browser_view()) {
@@ -59,7 +60,7 @@ bool BrowserNativeWidgetAuraLinux::UseCustomFrame() const {
            .supports_server_side_window_decorations) {
     return true;
 '''
-LAYOUT_INCLUDES_157 = '''#include "chrome/browser/ui/views/frame/browser_frame_view_layout_linux.h"
+LAYOUT_INCLUDES_158 = '''#include "chrome/browser/ui/views/frame/browser_frame_view_layout_linux.h"
 
 #include "base/i18n/rtl.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view_linux.h"
@@ -67,14 +68,14 @@ LAYOUT_INCLUDES_157 = '''#include "chrome/browser/ui/views/frame/browser_frame_v
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/window/frame_view_utils_linux.h"
 '''
-LAYOUT_CONSTRUCTORS_157 = '''
+LAYOUT_CONSTRUCTORS_158 = '''
 }  // namespace
 
 BrowserFrameViewLayoutLinux::BrowserFrameViewLayoutLinux() = default;
 BrowserFrameViewLayoutLinux::~BrowserFrameViewLayoutLinux() = default;
 
 '''
-LAYOUT_TOP_157 = '''}
+LAYOUT_TOP_158 = '''}
 
 int BrowserFrameViewLayoutLinux::NonClientExtraTopThickness() const {
   return delegate_->IsTabStripVisible() ? 0 : kExtraTopBorder;
@@ -94,7 +95,7 @@ class FramelessUtilityWindowTests(unittest.TestCase):
         self.assertGreater(at, names.index('chromium-linux-window-minimum-size.patch'))
         self.assertEqual(names.count(PATCH.name), 1)
 
-    def test_the_patch_applies_to_the_chromium_157_frame_files(self):
+    def test_the_patch_applies_to_the_chromium_158_frame_files(self):
         if shutil.which('git') is None:
             self.skipTest('git is unavailable')
         with tempfile.TemporaryDirectory(prefix='ardia-frameless-') as directory:
@@ -102,9 +103,9 @@ class FramelessUtilityWindowTests(unittest.TestCase):
             widget = Path(directory) / NATIVE_WIDGET
             layout = Path(directory) / FRAME_LAYOUT
             view.parent.mkdir(parents=True)
-            view.write_text('\n' * 431 + GLOBALS_157 + '\n' * 3580 + TITLE_157)
-            widget.write_text('\n' * 13 + INCLUDES_157 + '\n' * 57 + CUSTOM_FRAME_157)
-            layout.write_text('\n' * 4 + LAYOUT_INCLUDES_157 + '\n' * 11 + LAYOUT_CONSTRUCTORS_157 + '\n' * 43 + LAYOUT_TOP_157)
+            view.write_text('\n' * 431 + GLOBALS_158 + '\n' * 3580 + TITLE_158)
+            widget.write_text('\n' * 15 + INCLUDES_158 + '\n' * 99 + CUSTOM_FRAME_158)
+            layout.write_text('\n' * 4 + LAYOUT_INCLUDES_158 + '\n' * 11 + LAYOUT_CONSTRUCTORS_158 + '\n' * 43 + LAYOUT_TOP_158)
             result = subprocess.run(['git', 'apply', '--whitespace=nowarn', str(PATCH)], cwd=directory,
                                     capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)

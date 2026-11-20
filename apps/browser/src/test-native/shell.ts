@@ -30,7 +30,9 @@ type UserScriptsHost = {
 const testGlobals = globalThis as { acTestUserScripts?: UserScriptsHost };
 
 export const docs = new Map<string, string>();
+export const stagedDocs = new Map<string, string>();
 export const heldSaves = { on: false, queue: [] as (() => void)[] };
+export const refusedSaves = { on: false };
 export const refusedWrites = { on: false, returnsFalse: false, landingFails: false };
 export const bangListServer: { reply: ((etag: string | null) => Promise<BangListReply>) | null } = { reply: null };
 export const appInfo: Partial<SystemInfo> = { appVersion: "1.0" };
@@ -172,20 +174,30 @@ const dialogs: Modules["ArdiaDialogs"] = {
 };
 
 const documents: Modules["ArdiaDocuments"] = {
-  readDocument: (name) => docs.get(name) ?? null,
+  readDocument: (name) => stagedDocs.get(name) ?? docs.get(name) ?? null,
   writeDocument: (name, contents) => {
     if (refusedWrites.on) throw new Error("write refused");
     if (refusedWrites.returnsFalse) return false as unknown as void;
     docs.set(name, contents);
+    stagedDocs.delete(name);
   },
   saveDocument: (name, contents) =>
-    new Promise((resolve) => {
-      const land = () => (docs.set(name, contents), resolve());
+    new Promise((resolve, reject) => {
+      stagedDocs.set(name, contents);
+      if (refusedSaves.on) return reject(new Error("save refused"));
+      const land = () => {
+        try {
+          docs.set(name, contents);
+        } finally {
+          if (stagedDocs.get(name) === contents) stagedDocs.delete(name);
+        }
+        resolve();
+      };
       if (heldSaves.on) heldSaves.queue.push(land);
       else land();
     }),
   documentSaved: () => (refusedWrites.on || refusedWrites.landingFails ? Promise.reject(new Error("save refused")) : Promise.resolve()),
-  removeDocument: (name) => void docs.delete(name),
+  removeDocument: (name) => void (docs.delete(name), stagedDocs.delete(name)),
 };
 
 const app: Modules["ArdiaApp"] = {

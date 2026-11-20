@@ -9,8 +9,8 @@ import { useSelectedProfile, useSyncStatus, useSyncView } from "../../state/sync
 import { useCanReopen, useIncognito } from "../../state/tabs/hooks";
 import { prepareArchive } from "../../state/tabs/store";
 import { countUsage } from "../../state/telemetry/telemetry";
-import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, IncognitoSpecs, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
-import { MenuTrigger, spaceSystemImage } from "../ui/MenuTrigger";
+import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, IncognitoSpecs, menuLook, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
+import { MenuTrigger, nativeMenus, spaceSystemImage } from "../ui/MenuTrigger";
 import { SpaceTitle, spaceMenuSymbol } from "../search/StartSpaces";
 import { FadingGlyphs, GlassCircleButton, type ChromeFade } from "./ChromeButtons";
 
@@ -31,17 +31,18 @@ export const deckHeaderBottom = () => deckChromeLayout.headerCenter + deckChrome
 
 export const deckArchiveBottom = () => deckChromeLayout.archiveCenter + deckChromeLayout.archiveHeight / 2;
 
+const menuGroupsRuled = () => nativeMenus() || menuLook.dividerLine > 0;
+
+function joinMenuGroups(groups: readonly MenuItem[][], ruled: boolean = menuGroupsRuled()): MenuItem[] {
+  return groups.filter((group) => group.length > 0).flatMap((group, index): MenuItem[] => (index > 0 && ruled ? ["divider", ...group] : group));
+}
+
 export function deckMoreMenuItems({ syncEnabled, canReopen, hasTabs, onCloseAll }: { syncEnabled: boolean; canReopen: boolean; hasTabs: boolean; onCloseAll: () => void }): MenuItem[] {
-  return [
-    { label: "Archive", onPress: openArchive },
-    ...(syncEnabled ? [{ label: "Spaces From Your Mac", onPress: openSpaces }] : []),
-    "divider",
-    { label: "New Incognito Tab", onPress: newIncognitoTab },
-    ...(canReopen ? [{ label: "Reopen Closed Tab", onPress: reopenLastClosed }] : []),
-    ...(hasTabs ? [{ label: "Close All Tabs", destructive: true, onPress: onCloseAll }] : []),
-    "divider",
-    { label: "Settings", onPress: () => openSettings() },
-  ];
+  return joinMenuGroups([
+    [{ label: "Archive", onPress: openArchive }, ...(syncEnabled ? [{ label: "Spaces From Your Mac", onPress: openSpaces }] : [])],
+    [{ label: "New Incognito Tab", onPress: newIncognitoTab }, ...(canReopen ? [{ label: "Reopen Closed Tab", onPress: reopenLastClosed }] : []), ...(hasTabs ? [{ label: "Close All Tabs", destructive: true, onPress: onCloseAll }] : [])],
+    [{ label: "Settings", onPress: () => openSettings() }],
+  ]);
 }
 
 export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, showsMore = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {

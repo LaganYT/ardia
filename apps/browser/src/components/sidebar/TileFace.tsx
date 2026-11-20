@@ -272,8 +272,8 @@ export function FolderDropRing({ on }: { on: boolean }) {
         bottom: -RING_OUTSET,
         borderRadius: radius.pinned + RING_OUTSET,
         borderWidth: 2,
-        borderColor: sidebarTokens(theme).dropLine,
-        backgroundColor: sidebarTokens(theme).dragGhostFill,
+        borderColor: sidebarTokens(theme).dropMark,
+        backgroundColor: sidebarTokens(theme).folderDropFill,
         opacity: shown,
         transform: [{ scale: shown.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }],
       }}

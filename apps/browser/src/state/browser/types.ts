@@ -19,6 +19,7 @@ export type Profile = {
   pinnedCollapsed?: boolean;
   shareTopApps?: true;
   syncTabs?: true;
+  passwordManager?: string;
 };
 
 type WindowBase = {

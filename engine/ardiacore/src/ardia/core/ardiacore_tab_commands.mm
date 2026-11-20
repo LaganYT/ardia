@@ -165,9 +165,9 @@ std::optional<bool> RunPageCommand(content::WebContents* contents, int command) 
   std::optional<base::AutoReset<ardiacore::OpenOrigin>> pending;
   if (host) {
     pending.emplace(host->ScopedPendingOpen(
-        {WindowOpenDisposition::NEW_FOREGROUND_TAB, _contents->GetWeakPtr()}));
+        {WindowOpenDisposition::kNewForegroundTab, _contents->GetWeakPtr()}));
   }
-  popups->ShowBlockedPopup(id_number, WindowOpenDisposition::NEW_FOREGROUND_TAB);
+  popups->ShowBlockedPopup(id_number, WindowOpenDisposition::kNewForegroundTab);
 }
 
 - (BOOL)executeChromeCommand:(int)command {

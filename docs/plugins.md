@@ -76,7 +76,7 @@ removed, unless they're always on (below). The command-line plugin, `cli`, is th
 builds on; `programs.test.mjs` and `adoption.test.mjs` pin it.
 
 - `useOfficialPlugins(): OfficialPlugin[]`, a hook, and `officialPlugins(store, supported?, showComingSoon?)`, its pure
-  form. `OfficialPlugin` is `{ name, title, blurb, icon, state }`, `state` one of `"available"`, `"installed"`,
+  form. `OfficialPlugin` is `{ name, title, blurb, icon, version, switchable, state }` (`switchable`: built in but not always on, so it has an off switch), `state` one of `"available"`, `"installed"`,
   `"comingSoon"`, `"unsupported"`. The list is `OFFICIAL_CATALOGUE` (the plugins Ardia means to ship, `cli` today) plus
   any other built-in plugin whose manifest says `official`; title, blurb and icon come from the bundled manifest when
   there is one. Only a built-in plugin can claim `official`, so a plugin you install never shows here. Where plugins
@@ -104,7 +104,7 @@ state and the attempt in progress to what a row shows (`officialView.test.mjs`).
 
 - **Settings › Plugins › Official** (`components/settings/panes/OfficialPlugins.tsx`), above the other plugins, which no
   longer list an official one twice. Text is kept to a minimum: a heading, and per row the icon, the seam's title and
-  its blurb on one line. **Install…** opens the consent sheet in place and the row turns to installed with no reload;
+  its blurb on one line. **Install…** (**Turn On…** for a switchable plugin, matching its sheet) opens the consent sheet in place and the row turns to installed with no reload; a switchable plugin that's on reads "On" beside its title, with a switch that turns it off;
   installed reads "Installed · <version>" beside the title, with a first command in mono and **Copy** (where the
   command lives is on the plugin's own page, behind the chevron); a failure shows its reason with **Try Again**;
   coming soon is the title and "Coming soon"; unsupported shows nothing. The list below has one short line, and its
@@ -354,6 +354,90 @@ At most 32. A tool is an action the helper performs on request: `name` (like a c
 command (`ardia plugins call`), and other plugins' helpers (`tools.call`). Input and result are JSON, at most 1 MB.
 Needs a `process`.
 
+### passwordManager
+
+Makes the plugin a password manager each profile can pick. Mac only: Linux and Windows don't show the choice and never
+call the Mac verbs below (`PLATFORM_FEATURES.systemPasswordManagers`). One per manifest; any number of plugins may
+declare one, and each group of profiles that shares browser data picks at most one.
+
+```json
+"passwordManager": { "fill": "system", "fields": ["login", "oneTimeCode"], "verificationCodeSetup": "system", "passkeys": "system" }
+```
+
+- `fill` (required): `system` is macOS's own Passwords panel at the field, which types the chosen login into the page.
+  `tool` is reserved (below) and refused for now ("passwordManager.fill: tool isn't available yet; use system").
+- `fields` (required, 1 or 2): which fields get the key: `login` (username, email and current password) and
+  `oneTimeCode`.
+- `verificationCodeSetup` (`system`): when a page in a profile using this plugin shows an `otpauth://` link, or a QR code
+  on a Chromium page, Ardia offers "Set Up Verification Code in <app>?" and opens it with macOS's handler for `otpauth:`
+  (the Passwords app on a stock Mac). QR codes are found on Chromium pages only: WebKit has no `BarcodeDetector`, so a
+  WebKit page that shows its setup code only as a QR image gets no offer; its `otpauth://` links still do. The search
+  is bounded so it costs pages little: the first 8 `otpauth` links each time the page changes, and QR codes only on a
+  page with a text field (a setup page asks for a code to confirm it), at most 12 decodes per page until the provider
+  set changes. A setup step that shows its QR code before any text field gets no offer for it. The URL, which holds the code's secret, stays in native code: the page script, JS and the prompt see
+  an opaque token, single use, bound to the tab, frame, document, profile, provider generation and handler app.
+- `passkeys` (`system`): the plugin's Settings page shows whether Ardia may use the passkeys saved on this Mac, with
+  macOS's access request. It says plainly when the build lacks Apple's browser passkey entitlement (every build today).
+
+The plugin never sees a secret and never runs code in a page: the key, field detection and code detection are Ardia's
+own page script, switched on per profile from the manifest.
+
+**Choosing.** Settings › Profiles › Passwords › Password manager lists Ardia (Chrome's password manager, as before),
+each enabled password-manager plugin by its title, and None (when an extension handles logins). The choice is stored
+on the profile as `ardia`, `none` or `plugin:<name>`; profiles that share browser data share it; a private window
+follows its profile's choice. A stored `plugin:<name>` counts only while the plugin loaded under that name is on and
+its manifest is the approved one; otherwise the profile reads as Ardia, and the stored choice comes back with it.
+
+**Default.** A profile that never chose reads as Ardia, unless a built-in password-manager plugin is on, in which case
+it reads as that plugin. Turning on a built-in one also stores it on every profile that never chose (the consent sheet
+says how many, naming the plugin: "Moves 3 profiles that never picked a password manager to Apple Passwords"). An installed plugin moves nobody: each
+profile picks it. Turning a plugin on never changes a profile that chose.
+
+**Offer to save.** While a profile's manager is a plugin or None, Ardia's offer to save is off for it; it comes back
+when the profile returns to Ardia, unless you had turned it off yourself. `password-manager.json` in the data folder
+records which profiles Ardia turned off, so the give-back survives a relaunch. Both directions are crash-safe: turning
+off writes the record, then the pref; giving back clears the record, then turns the pref on, so a crash in between
+leaves offer to save off and never overrides your own Off. A record write that fails while Ardia is taking a profile back is owed: it rides along with the next record
+write that succeeds (so a relaunch keeps it) and is retried every 30 s, doubling to 5 minutes. If no write to
+`password-manager.json` ever succeeds, the debt is lost at quit and offer to save stays off for that profile until you
+turn it on yourself; each failure counts in `password_manager_record_failed`. A record from a newer Ardia (a higher
+`version`) is never overwritten: offer to save is left as it is for that run.
+
+**Withdrawn at once.** Ardia pushes the whole set of profiles with a key (`passwords.setFieldProviders {session, generation,
+profiles: [{profile, fields, codeSetup}]}`) at launch and whenever it changes. Turning the plugin off, removing it or
+changing its manifest pushes the set without its profiles before the plugin is reported off, so the key leaves every
+live page first. Each push has a new generation; native drops badge clicks, menu requests, code detections and token
+redemptions from an older one, and the verification code prompt closes on every push and on navigation.
+
+**Accepted residual risk (the page script).** In Chromium the page script runs in the page's own JavaScript world, so a
+page can see and fake what it reports. Native is the authority: it opens the panel only when the tab's window is key,
+the page's view is first responder and editing text, the top frame last reported focus on a login or code field (in
+itself or a same-origin frame it can read) after the latest focus change, and the 0.6 s throttle allows it. A page that
+opens the panel without a click gets what Edit › AutoFill gives it: macOS's panel, then Touch ID and a pick by you,
+filled into the page's own focused field. The menu route asks the top frame for a fresh focus report and opens only on
+its answer within 200 ms. Between the page sampling which field has focus and Ardia opening the panel, focus can still
+move inside the page; the panel then fills whatever field macOS sees as focused, as Edit › AutoFill does.
+
+**Edit › AutoFill › Passwords…** in a profile whose manager is a `fill: "system"` plugin opens the macOS panel at the
+focused field (`passwords.showSystemPanel {tab, generation}`, in Chromium and WebKit tabs; a request from an older generation is refused as `stale`); otherwise Chrome's dropdown as before.
+
+**An otpauth link you click** still goes through the external-app prompt every link to another app gets, which shows
+the address in Ardia's own interface. That's base behaviour, unchanged; no plugin, log or count sees the address.
+
+**`fill: "tool"` (reserved, #1168).** For managers with their own vault (1Password, Bitwarden, Proton Pass). Not a
+normal tool: a host-only request the CLI and other plugins can never call, versioned, bound to the exact origin and
+form it fills, cancellable, with a consent line naming that the origin is sent to the plugin. The host would type the
+answer into that one field. Not built.
+
+#### Host extension points for credential providers
+
+What a password-manager plugin relies on, all host code a plugin can't reach past: the per-profile choice
+(`state/site/passwordManagerChoice.ts`), the provider push and withdrawal (`state/site/passwordManager.ts`, the store's
+`beforePluginsCommit` seam in `state/plugins/store.ts`), the key and code detection in both engines' page scripts, the
+native verbs in `PasswordsModule.swift` (`passwords.setFieldProviders`, `showSystemPanel`, `systemPanelAvailable`,
+`otpauthHandler`, `setUpVerificationCode`) and the page events `fieldProviderOpened {via, shown}` and
+`verificationCodeFound {token, main}`. A plugin adds none of these; its manifest switches them on.
+
 ### permissions
 
 | Permission | What it allows |
@@ -365,7 +449,7 @@ Needs a `process`.
 | `control` | Install or Turn On turns on `cliControl`, the ardia command's control of Ardia; the sheet says "Lets any program you run drive your tabs and pages, with your logins" (for an always-on plugin, "… while it's installed. There's no off switch"). On macOS there's no switch afterwards: while an always-on plugin that asks for it is installed, each launch turns it back on, and the control pill's Stop holds only until the next launch. For an `autoInstall` built-in plugin, its first link turns it on once unless you'd turned it off. `config.json` can't set it. |
 
 Contributions grant their own reach and are shown too: running a program, adding a page, adding commands, changing
-named Ardia settings, offering tools.
+named Ardia settings, offering tools, becoming a password manager.
 
 ## Turning a plugin on
 
@@ -620,6 +704,7 @@ The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": t
 ## Code
 
 - `lib/pluginManifest.ts`: parsing, migration, checks and the schema; `lib/pluginManifest.test.mjs`.
+- `state/site/passwordManager*.ts`, `verificationCodes.ts`: the `passwordManager` contribution's host side.
 - `state/plugins/`: the registry (`store.ts`), saved state (`savedState.ts`), turning on and off (`lifecycle.ts`),
   settings defaults (`defaults.ts`), the helper channel (`channel.ts`, `channelMethods.ts`), tools (`tools.ts`),
   command bar entries (`commands.ts`), page tabs (`pages.ts`, `pageNames.ts`), consent copy (`consent.ts`), socket methods
@@ -641,5 +726,8 @@ it), so a count that finishes after sharing changed stays in the local copy:
 `program_adoptions` (an old `ardia` install's home taken over), `plugin_adoptions` (an always-on plugin installed on update because an old install was there); the daily settings snapshot's
 `plugins_installed`, `plugins_enabled` and, among those on, how many use each contribution:
 `plugins_with_settings`, `plugins_with_commands`, `plugins_with_page`, `plugins_with_process`, `plugins_with_programs`,
-`plugins_with_hooks`, `plugins_with_tools`. Dashboard: watch `plugin_process_crashes` against
+`plugins_with_hooks`, `plugins_with_tools`, `plugins_with_passwordManager`. Password managers: hourly
+`password_manager_panel_opens_<badge|menu>`, `password_manager_panel_refused_<badge|menu>`,
+`verification_code_setups_<offered|accepted|failed>`, `password_manager_chose_<ardia|none|plugin>`,
+`password_manager_record_failed`, and the daily `password_manager_profiles_<ardia|none|plugin>`. Dashboard: watch `plugin_process_crashes` against
 `plugin_process_starts`, and `program_link_failures` against `program_links`.

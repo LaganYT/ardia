@@ -1,6 +1,6 @@
 import { Easing } from "react-native";
 import { useTheme } from "../ui/theme";
-import { duration } from "../ui/motion";
+import { duration, spring } from "../ui/motion";
 import { font, ink, radius, shadow, sidebarFont, sidebarIconSize, sidebarPoints, space, withAlpha, type ShadowLevel } from "../ui/tokens";
 import type { GroupColor } from "../../state/browser/types";
 import { GROUP_COLORS } from "../../state/groups/tokens";
@@ -16,10 +16,9 @@ const DARK = {
   multiSelectedStroke: "rgba(255,255,255,0.14)",
   dragBorder: "rgba(255,255,255,0.33)",
   dragSilhouette: "#0F0F14",
-  dropLine: "rgba(255,255,255,0.93)",
-  dragGhostFill: "rgba(255,255,255,0.15)",
-  dragGhostTileLift: "rgba(255,255,255,0.29)",
-  dragGhostBorder: null as string | null,
+  dropMark: "rgba(255,255,255,0.93)",
+  edgeGlow: "rgba(255,255,255,0.105)",
+  folderDropFill: "rgba(255,255,255,0.08)",
   splitDropFill: "rgba(255,255,255,0.42)",
   badge: "rgba(255,255,255,0.9)",
   newTabLabel: "#FFFFFF8C",
@@ -51,10 +50,9 @@ const LIGHT: typeof DARK = {
   multiSelectedStroke: "rgba(0,0,0,0.08)",
   dragBorder: "rgba(0,0,0,0.28)",
   dragSilhouette: "#FFFFFF",
-  dropLine: "rgba(0,0,0,0.8)",
-  dragGhostFill: "rgba(255,255,255,0.5)",
-  dragGhostTileLift: "rgba(255,255,255,0.5)",
-  dragGhostBorder: "rgba(0,0,0,0.08)",
+  dropMark: "rgba(0,0,0,0.8)",
+  edgeGlow: "rgba(0,0,0,0.1)",
+  folderDropFill: "rgba(0,0,0,0.05)",
   splitDropFill: "rgba(0,0,0,0.08)",
   badge: "rgba(0,0,0,0.75)",
   newTabLabel: "#00000080",
@@ -92,7 +90,7 @@ export function useSidebarTokens(): SidebarTokens {
 
 
 export const SIDEBAR_SHADOW = {
-  dragGhost: { color: ink.black, opacity: { dark: 0.3, light: 0.14 }, radius: 16, offset: [0, 6] },
+  dragGhost: { color: ink.black, opacity: { dark: 0.45, light: 0.18 }, radius: 10, offset: [0, 4] },
   card: shadow.card,
   searchTabs: shadow.dialog,
   tabSwitcher: { ...shadow.dialog, opacity: { dark: 0.45, light: 0.45 }, radius: 32, offset: [0, 14] },
@@ -140,13 +138,23 @@ export const SIDEBAR_MOTION = { liveFold: duration.long, fold: duration.base, li
 
 export const SLEEPING_TITLE_OPACITY = 0.6;
 
-export const DROP_LINE = { stroke: 2, ring: 8, inset: 7, trailing: 2 } as const;
-
 export const SPLIT_DROP = { gap: 14 } as const;
+
+export const SPLIT_PREVIEW = { response: 0.1, damping: 1 } as const;
+
 
 export const GHOST_TILE_MORPH = { response: 0.1, damping: 1 } as const;
 
 export const GHOST_ROW_POINTER = 0.37;
+export const GHOST_OVER_PROFILES = 0.3;
+export const GHOST_OPACITY = 0.96;
+export const EDGE_GLOW = {
+  width: 36,
+  inMs: 180,
+  outMs: 150,
+  fill: [[0, 0], [0.2, 1], [0.8, 1], [1, 0]],
+  fade: [[0, 1], [0.15, 0.75], [0.35, 0.42], [0.6, 0.15], [1, 0]],
+} as const;
 
 export const TAB_ROW = {
   contentLeft: 9,

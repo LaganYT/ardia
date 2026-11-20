@@ -1,9 +1,9 @@
 import { displayHost, hostOf } from "@ardia/core";
 import { memo, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, View } from "react-native";
 import { faviconFailed, useAppearanceDark, useFavicon, useFaviconTheme } from "../../state/favicons/favicons";
 import { radius, Symbol, useTheme, weight } from "../ui";
-import { typeFace } from "../ui/tokens";
+import { CapCenteredLetter } from "../glyph/CapCenteredLetter";
 import { bundledSiteIcon } from "./siteIcons";
 
 export const Favicon = memo(function Favicon({
@@ -70,7 +70,9 @@ export const FaviconFallback = memo(function FaviconFallback({ url, size = 16, o
           justifyContent: "center",
         }}
       >
-        <Text style={{ ...typeFace(), fontSize: Math.round(tile * 0.64), lineHeight: tile, fontWeight: weight.semibold, color: theme.textSecondary }}>{initial}</Text>
+        <CapCenteredLetter box={tile} fontSize={Math.round(tile * 0.64)} fontWeight={weight.semibold} color={theme.textSecondary}>
+          {initial}
+        </CapCenteredLetter>
       </View>
     </View>
   );

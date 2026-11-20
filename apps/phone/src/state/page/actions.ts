@@ -5,7 +5,7 @@ import { pages, type PageEngineEvent, type PageRequestAnswer } from "../../platf
 
 export type { ReadableContent } from "../../platform/pages";
 import { copyText, openExternal, preferredLanguage, pressHaptic, shareLink, successHaptic } from "../../platform/system";
-import { cancelSearch, closeArchive, openTab, showDeck, takeSheetFromSettings, useBrowse } from "../browse/store";
+import { cancelSearch, closeArchive, deckPullCommitted, openTab, showDeck, takeSheetFromSettings, useBrowse } from "../browse/store";
 import { display } from "../search/omnibox";
 import { presentSearch, searchState } from "../search/store";
 import { setPreference } from "../settings/store";
@@ -23,11 +23,14 @@ import { pageUi, usePageUi, type Press } from "./store";
 import { closeVoiceSearch, useVoice } from "../voice/store";
 import { addOnlineAgainListener } from "../../platform/network";
 import { countUsage } from "../telemetry/telemetry";
+import { pageSummaryOpenedCount, pageSummarySettledCounts } from "../../lib/telemetrySchema";
+import { pageSummariesEnabled, pageSummariesRevision, refreshPageSummariesEnabled } from "../pageSummary/enabled";
 import { dismissArchiveCard } from "../browse/archiveCard";
 import { copy } from "../../lib/platformCopy";
 import { launchValues } from "../../platform/launch";
 import { COPIED_LINK } from "../browse/tabMenus";
 import { syncData } from "../sync/store";
+import { libraryBack } from "../library/store";
 import { showToast, TOAST_LONG_DURATION_MS } from "../toasts/store";
 import { syncOffered } from "../../platform/system";
 
@@ -92,6 +95,32 @@ export function printCurrentPage() {
     quietly(async () => {
       if ((await pages.print(tab.id)) && !tab.isPrivate) countUsage("pages_printed");
     });
+}
+
+export function canSummarizePages(): boolean {
+  try {
+    return pages.canSummarize();
+  } catch {
+    return false;
+  }
+}
+
+export function summarizeCurrentPage() {
+  const tab = selectedTab();
+  if (!tab || !pageSummariesEnabled()) return;
+  const navigation = usePages.getState().navigation[tab.id];
+  const url = navigation?.url ?? tab.url;
+  if (!isSyncableUrl(url) || navigation?.isLoading) return;
+  const revision = pageSummariesRevision();
+
+  afterMenuHidden = () => {
+    if (!pageSummariesEnabled() || pageSummariesRevision() !== revision) return;
+    const current = selectedTab();
+    const latest = usePages.getState().navigation[tab.id];
+    if (current?.id !== tab.id || useBrowse.getState().surface !== "browsing" || latest?.isLoading || (latest?.url ?? current.url) !== url) return;
+    quietly(() => pages.summarize(tab.id));
+  };
+  closePageMenu();
 }
 
 export function openInDefaultBrowser() {
@@ -388,6 +417,14 @@ function pageEvent(event: PageEngineEvent) {
     case "page.externalAppMissing":
       showToast(NO_APP_FOR_LINK, "warning");
       return;
+    case "page.summaryOpened": {
+      const field = event.isPrivate ? null : pageSummaryOpenedCount(event.trigger);
+      if (field) countUsage(field);
+      return;
+    }
+    case "page.summarySettled":
+      if (!event.isPrivate) for (const field of pageSummarySettledCounts(event.outcome, event.chatGPTFellBack)) countUsage(field);
+      return;
     default:
       return;
   }
@@ -399,6 +436,7 @@ export function startPageUi() {
   if (started) return;
   started = true;
   listenToPages(pageEvent);
+  void refreshPageSummariesEnabled();
   try {
     downloads.addListener(downloadEvent);
   } catch {
@@ -415,6 +453,7 @@ export function handleSystemBack(): boolean {
     return true;
   }
   if (popSettings()) return true;
+  if (libraryBack()) return true;
   const { surface, sheet } = useBrowse.getState();
   const id = selectedId();
   const ui = pageUi();
@@ -429,6 +468,7 @@ export function handleSystemBack(): boolean {
     return true;
   }
   if (surface === "deck") return dismissArchiveCard();
+  if (surface === "browsing" && deckPullCommitted()) return true;
   const layer = backLayer({
     isFullscreen: surface === "browsing" && pageIsFullscreen(id),
     hasRequest: surface === "browsing" && pageRequest(id) !== null,
@@ -485,6 +525,7 @@ function closePageLayers() {
     if (ui.findOpen) closeFind();
     usePageUi.setState({ menuOpen: false, readerTabId: null, press: null });
   }
+  if (canSummarizePages()) quietly(() => pages.dismissSummaries());
 }
 
 useBrowse.subscribe((browse, previous) => {

@@ -93,6 +93,53 @@ const laterEvent = <E extends EventName>(name: E, data: EventData<E>) => queueMi
 export const emitDownload = (download: EngineEvents["downloads.changed"]) => emitEvent("downloads.changed", download);
 export const emitPermission = (request: EngineEvents["permissions.requested"]) => emitEvent("permissions.requested", request);
 
+export const passwordProviders = {
+  calls: [] as unknown[][],
+  generation: 0,
+  profiles: [] as { profile: string; fields: string[]; codeSetup: boolean }[],
+  panel: { shown: true } as CallResult<"passwords.showSystemPanel">,
+  handlerApp: "Passwords" as string | null,
+  lastPanelGeneration: undefined as number | undefined,
+  opened: [] as { tab: string; token: string; generation?: number }[],
+  openResult: true,
+  hold: null as Promise<void> | null,
+  holdNext: null as Promise<void> | null,
+  notAppliedNext: 0,
+  bareReplyNext: 0,
+  sessions: [] as unknown[],
+  rejectNext: 0,
+  handlerGate: null as Promise<void> | null,
+};
+const providerFakes = {
+  setFieldProviders: async (args: { generation: number; session: string; profiles: { profile: string; fields: string[]; codeSetup: boolean }[] }) => {
+    const { generation, profiles } = args;
+    passwordProviders.calls.push(["setFieldProviders", generation, profiles.map((p) => p.profile)]);
+    passwordProviders.sessions.push(args.session);
+    if (passwordProviders.rejectNext > 0) {
+      passwordProviders.rejectNext -= 1;
+      throw new Error("native refused the provider set");
+    }
+    const once = passwordProviders.holdNext;
+    passwordProviders.holdNext = null;
+    await once;
+    await passwordProviders.hold;
+    if (passwordProviders.bareReplyNext > 0) {
+      passwordProviders.bareReplyNext -= 1;
+      return {} as { applied: boolean };
+    }
+    if (passwordProviders.notAppliedNext > 0) {
+      passwordProviders.notAppliedNext -= 1;
+      return { applied: false };
+    }
+    passwordProviders.generation = generation;
+    passwordProviders.profiles = profiles.map((p) => ({ ...p, fields: [...p.fields] }));
+    return { applied: true };
+  },
+  showSystemPanel: ({ tab, generation }: { tab: string; generation?: number }) => (passwordProviders.calls.push(["showSystemPanel", tab]), (passwordProviders.lastPanelGeneration = generation), { ...passwordProviders.panel }),
+  systemPanelAvailable: () => ({ chromium: true, webkit: true }),
+  otpauthHandler: async () => (passwordProviders.calls.push(["otpauthHandler"]), await passwordProviders.handlerGate, { app: passwordProviders.handlerApp }),
+  setUpVerificationCode: ({ tab, token, generation }: { tab: string; token: string; generation?: number }) => (passwordProviders.opened.push({ tab, token, generation }), { opened: passwordProviders.openResult }),
+};
 export const current = { device: null as string | null };
 
 type Login = { origin: string; url: string; username: string; password: string; created: number };
@@ -363,7 +410,7 @@ const fakeModules = {
     "tabs",
     {
       routeLinkTabs: () => linkRoute.next,
-      stripCommand: ({ id, command }) => (tabStripHost().command(command, id), null),
+      stripCommand: async ({ id, command }) => (await tabStripHost().command(command, id), null),
       strips: () => tabStripHost().snapshot(),
       lastTabPolicy: () => ({ closesWindow: true }),
     },
@@ -434,7 +481,12 @@ const fakeModules = {
       allowSaving: () => ({ ok: true }),
       export: () => ({ status: "cancelled" }),
       autofillEnabled: ({ profile }) => profileToggle(profile, "passwords"),
-      setAutofillEnabled: ({ profile, enabled }) => (setProfileToggle(profile, "passwords", enabled), null),
+      setAutofillEnabled: ({ profile, enabled }) => {
+        setProfileToggle(profile, "passwords", enabled);
+        passwordProviders.calls.push(["offerToSave", profile, enabled]);
+        return null;
+      },
+      ...providerFakes,
     },
     {
       save: async (_profile: string, origin: string, username: string, password: string) => {

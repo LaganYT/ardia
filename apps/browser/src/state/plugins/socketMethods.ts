@@ -4,7 +4,7 @@ import { failure } from "../automation/automationMethods";
 import type { Body } from "../automation/controlSocket";
 import { openSettings } from "../settings/settingsWindows";
 import { releaseOrphanedConsent } from "./consentSurface";
-import { ALREADY_ASKING, disablePlugin, removePlugin, requestPluginConsent } from "./lifecycle";
+import { ALREADY_ASKING, removePlugin, requestPluginConsent, turnOffPlugin } from "./lifecycle";
 import { activeManifest, currentPlugins, isAlwaysOn, isInstalled, needsReview, recordOf } from "./store";
 import { officialPlugins } from "./official";
 import { pluginRecordsSaved } from "./savedState";
@@ -54,8 +54,9 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
       if (!known && !leftOn) return failure("bad_request", `There's no plugin ${String(name)}.`);
       if (isAlwaysOn(currentPlugins().listings[name])) return isInstalled(currentPlugins(), name!) ? failure("refused", `${name} is built into Ardia: once installed it stays.`) : { result: { ok: true } };
       const consent = consentNow();
-      if (!disablePlugin(name, consent)) return failure("failed", "Couldn't save plugins.json.");
-      return pluginRecordsSaved(consent).then((saved) => (saved ? { result: { ok: true } } : failure("failed", "It's off for now, but plugins.json couldn't be saved, so it may be on again after Ardia restarts.")));
+      return turnOffPlugin(name!, consent).then((off) =>
+        !off ? failure("failed", "Couldn't save plugins.json.") : pluginRecordsSaved(consent).then((saved) => (saved ? { result: { ok: true } } : failure("failed", "It's off for now, but plugins.json couldn't be saved, so it may be on again after Ardia restarts."))),
+      );
     }
     case "plugins.remove":
       if (!known && !recorded) return failure("bad_request", `There's no plugin ${String(name)}.`);

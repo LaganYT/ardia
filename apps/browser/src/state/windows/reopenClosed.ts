@@ -66,7 +66,8 @@ function canRestoreTabInto(s: BrowserState, c: ClosedTab, windowId: string | und
 
 export function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null): BrowserState {
   const owner = entry.tab.profileId;
-  if (entry.pinnedTile && entry.tabId && !s.tabs[entry.tabId] && s.parkedPins[owner]?.tabs.some((p) => p.id === entry.tabId)) {
+  const key = entry.pinKey ?? entry.tabId;
+  if (entry.pinnedTile && key && entry.tabId && !s.tabs[entry.tabId] && s.parkedPins[owner]?.tabs.some((p) => p.id === key)) {
     const target = resolveWindowId(s, requested);
     let windowId = target && s.windows[target]!.kind !== "private" && s.windows[target]!.profileId === owner ? target : undefined;
     let next = s;
@@ -75,7 +76,8 @@ export function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string
       next = withWindow(next, emptyWindow(windowId, owner, "main", null));
     }
     next = adoptParkedPins(next, windowId, owner);
-    if (next.tabs[entry.tabId]) return restoreTab(next, entry, windowId);
+    const adopted = next.windows[windowId]!.tabIds.find((id) => next.tabs[id]?.profileId === owner && next.tabs[id]!.pin && pinKeyOf(next.tabs[id]!) === key);
+    if (adopted) return restoreTab(next, { ...entry, tabId: adopted, restoreFrom: entry.restoreFrom ?? entry.tabId, pinKey: undefined }, windowId);
   }
   const closedTabs = s.closedTabs.filter((c) => c.id !== entry.id);
   if (entry.small && !isIncognitoProfile(entry.tab.profileId)) {

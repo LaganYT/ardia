@@ -209,3 +209,26 @@ export type DockSelectionProps = ViewProps & {
 export const DockSelection = requireNativeViewManager<DockSelectionProps>("ArdiaDockSelection");
 
 export const PluginPageView = requireNativeViewManager<PluginPageProps>("ArdiaPlugins");
+
+export type FieldGlowLook = {
+  rgba: readonly number[];
+  glow: number[][];
+  tailFade: number[];
+  capFade: number[];
+  tail: number;
+  cap: number;
+  frontShare: number;
+  tailCeiling: number;
+  line: number;
+  floor: number;
+};
+export type FieldGlowProps = ViewProps & { glowId: string; radius: number; look: FieldGlowLook };
+export type FieldGlowNative = {
+  show(id: string, timings: number[]): void;
+  progress(id: string, progress: number, still: boolean): void;
+  finish(id: string, still: boolean): void;
+  reset(id: string): void;
+};
+
+let fieldGlowView: ReturnType<typeof requireNativeViewManager<FieldGlowProps>> | null = null;
+export const FieldGlowView = () => (fieldGlowView ??= requireNativeViewManager<FieldGlowProps>("ArdiaFieldGlow"));

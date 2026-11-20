@@ -32,10 +32,7 @@ export function launchedTree(pid, app, table = processTable()) {
   return [...(root ? [root] : []), ...descendants(pid, table)].filter((p) => insideApp(p.command, app));
 }
 
-export function orphansSince(app, launchedAt, table = processTable()) {
-  const since = Math.floor(launchedAt / 1000) * 1000;
-  return table.filter((p) => p.ppid === 1 && insideApp(p.command, app) && p.started >= since);
-}
+export const quitTargets = ({ tracked, confirmed }, app, table = processTable()) => (confirmed ? survivors(tracked, app, table) : []);
 
 export function survivors(tree, app, table = processTable()) {
   const alive = new Map(table.map((p) => [p.pid, p]));

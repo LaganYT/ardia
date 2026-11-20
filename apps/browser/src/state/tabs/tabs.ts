@@ -222,7 +222,7 @@ export function unloadPinnedTabs(s: BrowserState, requested: string[], keepTopAp
     const w = s.windows[t.windowId];
     const loaded = hasPage(t);
     if (loaded && t.url) {
-      closed.push({ ...closedTabEntry(s, t, { windowId: t.windowId, index: w?.tabIds.indexOf(id) ?? 0 }, now, null), pinnedTile: true });
+      closed.push({ ...closedTabEntry(s, t, { windowId: t.windowId, index: w?.tabIds.indexOf(id) ?? 0 }, now, null), pinnedTile: true, ...(t.pinKey ? { pinKey: t.pinKey } : {}) });
     }
     const back = backToPin(s, t);
     const pending = !back.url && pendingRestore(t) ? restoreId(pendingRestore(t)!) : undefined;

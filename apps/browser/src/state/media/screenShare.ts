@@ -1,5 +1,6 @@
 import { changeCaptureSource, requestScreenRecording, stopCapture, type DisplayMediaRequest } from "../../platform/media";
 import { noteScreenRecordingAsked, noteSharePicked } from "../telemetry/usage";
+import { consentToken, type ConsentToken } from "../telemetry/client";
 import { webviews } from "../../platform/webviews";
 import { useBrowser } from "../browser/store";
 import { engineProfile } from "../browser/model";
@@ -126,10 +127,10 @@ export function askForScreenRecording() {
 
 const sourceKind = (sourceId: string) => (sourceId.startsWith("screen:") ? "screen" : sourceId.startsWith("window:") ? "window" : "tab");
 
-export function answerDisplayMedia(tabId: string, sourceId: string | null, audio = false) {
+export function answerDisplayMedia(tabId: string, sourceId: string | null, audio = false, consent?: ConsentToken | null) {
   const request = useMedia.getState().displayRequests[tabId];
   if (!request) return;
-  if (sourceId) noteSharePicked(sourceKind(sourceId), request.controller === true);
+  if (sourceId) noteSharePicked(sourceKind(sourceId), request.controller === true, consent);
   void webviews.get(tabId)?.resolveDisplayMedia(request.id, sourceId, audio);
   useMedia.setState((m) => {
     const displayRequests = { ...m.displayRequests };
@@ -141,10 +142,11 @@ export function answerDisplayMedia(tabId: string, sourceId: string | null, audio
 export async function shareTab(tabId: string, sharedTabId: string, audio: boolean) {
   const request = useMedia.getState().displayRequests[tabId];
   if (!request) return;
+  const consent = consentToken();
   const source = await webviews.get(sharedTabId)?.mediaCaptureSourceId();
   if (useMedia.getState().displayRequests[tabId] !== request) return;
   if (source) noteTabShare(tabId, sharedTabId, request.origin);
-  answerDisplayMedia(tabId, source ?? null, audio);
+  answerDisplayMedia(tabId, source ?? null, audio, consent);
 }
 
 export function cancelDisplayMediaOnNavigation() {

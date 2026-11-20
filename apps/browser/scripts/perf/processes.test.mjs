@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { descendants, insideApp, launchedTree, orphansSince, parseTable, processTable, signalIfSame, stopTree, survivors } from "./processes.mjs";
+import { descendants, insideApp, launchedTree, parseTable, processTable, quitTargets, signalIfSame, stopTree, survivors } from "./processes.mjs";
 
 const APP = "/x/Bench.app";
 const T = 1_700_000_000_000;
@@ -45,10 +45,17 @@ test("survivors are tree members with the same start and command, so a reused pi
   assert.equal(signalIfSame(table[0], 0, later), false);
 });
 
-test("after a browser crash its reparented helpers are found as orphans started since its launch, never an older instance", () => {
-  const crashed = [{ ...table[1], ppid: 1 }, { ...table[2], ppid: 1 }, ...table.slice(3)];
-  assert.deepEqual(orphansSince(APP, T + 400, crashed).map((p) => p.pid), [11, 12]);
-  assert.deepEqual(orphansSince(APP, T + 1400, [{ ...table[5] }]), []);
+test("quit signals only the confirmed browser's recorded tree, never an untracked process of the same app copy", () => {
+  const tracked = launchedTree(10, APP, table);
+  const afterCrash = [
+    { ...table[1], ppid: 1 },
+    { pid: 12, ppid: 1, started: T + 5000, command: table[2].command },
+    { pid: 77, ppid: 1, started: T, command: `${APP}/Contents/Frameworks/Helper --type=renderer` },
+    ...table.slice(3),
+  ];
+  assert.deepEqual(quitTargets({ tracked, confirmed: true }, APP, afterCrash).map((p) => p.pid), [11]);
+  assert.deepEqual(quitTargets({ tracked, confirmed: false }, APP, afterCrash), []);
+  assert.deepEqual(quitTargets({ tracked: [], confirmed: true }, APP, afterCrash), []);
 });
 
 async function until(check, what, deadlineMs = 10_000) {
@@ -66,14 +73,17 @@ test("stopping a launched tree kills its helpers and spares a process whose argu
   mkdirSync(join(app, "Contents", "MacOS"), { recursive: true });
   symlinkSync(process.execPath, exe);
   const { NODE_OPTIONS, ...env } = process.env;
-  const helper = spawn(exe, ["-e", "setTimeout(() => {}, 30000)"], { stdio: "ignore", env });
-  const decoy = spawn("/bin/sh", ["-c", "sleep 30", exe], { stdio: "ignore" });
+  const idle = "setTimeout(() => {}, 30000)";
+  const helper = spawn(exe, ["-e", idle], { stdio: "ignore", env });
+  const decoy = spawn(process.execPath, ["-e", idle, exe], { stdio: "ignore", env });
   const helperGone = new Promise((ok) => helper.once("exit", (code, signal) => ok(signal)));
   try {
     const tree = await until(() => {
       const found = processTable().filter((p) => p.pid === helper.pid && p.command.startsWith(exe));
       return found.length ? found : null;
     }, "the helper's exec");
+    const decoyCommand = await until(() => processTable().find((p) => p.pid === decoy.pid && p.command.includes(exe))?.command, "the decoy's exec");
+    assert.equal(insideApp(decoyCommand, app), false);
     assert.deepEqual(await stopTree(tree, app, { graceMs: 200 }), [helper.pid]);
     assert.equal(await Promise.race([helperGone, new Promise((ok) => setTimeout(() => ok("still running"), 10_000))]), "SIGKILL");
     assert.equal(decoy.exitCode, null);

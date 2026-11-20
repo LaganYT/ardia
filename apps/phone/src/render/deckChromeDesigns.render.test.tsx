@@ -110,7 +110,7 @@ test("the redesign drops the old bar and chip for main's header and bottom bar",
   unmount(root);
 });
 
-test("the redesigned cards sit 24 points lower than the original's on iPhone, centred in the band between main's header and bar; on Android the bar sits where the browsing bar does, so the band's centre rises by half of that lift", () => {
+test("the redesigned cards sit 24 points lower than the original's on iPhone, centred in the band between main's header and bar; on Android the bar sits where the browsing bar does, 4 points above the gesture bar, so the band's centre rises by half of that lift", () => {
   const { width, height } = Dimensions.get("window");
   const original = deck("original");
   const before = cardCentres(original);
@@ -121,7 +121,7 @@ test("the redesigned cards sit 24 points lower than the original's on iPhone, ce
   const expected = deckGeometry(width, height, SAFE_TOP, SAFE_BOTTOM, 0, Platform.OS, "redesigned", 48).cardCenterY;
   for (const centre of after) expect(centre).toBeCloseTo(expected, 5);
   const barLift = redesignedBarCenterFromBottom(SAFE_BOTTOM, Platform.OS) - (Math.max(SAFE_BOTTOM, 20) + 11);
-  expect(barLift).toBe(Platform.OS === "android" ? 10.5 : 0);
+  expect(barLift).toBe(Platform.OS === "android" ? 17 : 0);
   for (const centre of before) expect(centre).toBeCloseTo(expected - 24 + barLift / 2, 5);
   unmount(root);
 });

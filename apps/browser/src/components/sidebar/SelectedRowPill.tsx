@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Animated, Pressable, StyleSheet, View, type ScrollView } from "react-native";
-import { watchWindowRecord } from "../../state/browser/keyedWatch";
-import { revealTab, rowsStamp, sameRows, selectedTabIn, selectedTabSnapshot, type PillTab, type RowsStamp } from "../../state/sidebar/reveal";
+import { revealTab, rowsStamp, sameRows, samePillTab, selectedTabIn, selectedTabSnapshot, selectedPlaceIn, movedInPlace, watchPillTab, watchSelectedPlace, type PillTab, type RowsStamp, type SelectedPlace } from "../../state/sidebar/reveal";
 import { notePageOverlay } from "../../state/telemetry/usage";
 import { capsule, Panel, radius, reduceMotion, Symbol, Text, tintedImage } from "../ui";
 import { useTheme } from "../ui/theme";
@@ -31,8 +30,7 @@ export type PillAway = { side: "above" | "below"; tab: PillTab } | null;
 type PillSink = (away: PillAway) => void;
 export type PillTracker = { judge: () => void; relocate: () => void; attach: (sink: PillSink) => () => void };
 
-const samePill = (a: PillAway, b: PillAway) =>
-  a === b || (!!a && !!b && a.side === b.side && a.tab.id === b.tab.id && a.tab.url === b.tab.url && a.tab.favicon === b.tab.favicon && a.tab.icon === b.tab.icon);
+const samePill = (a: PillAway, b: PillAway) => a === b || (!!a && !!b && a.side === b.side && samePillTab(a.tab, b.tab));
 
 export function useSelectedRowAway(
   windowId: string,
@@ -52,10 +50,15 @@ export function useSelectedRowAway(
     let selected: string | null | undefined;
     let quietUntil = 0;
     let quiet: ReturnType<typeof setTimeout> | undefined;
+    let selectedAt: SelectedPlace = { id: null, index: -1, group: null };
+    let unwatchTab: (() => void) | null = null;
     const show = (next: PillAway) => {
-      if (samePill(next, away)) return;
+      const same = samePill(next, away);
+      if (same && (!next || unwatchTab)) return;
       away = next;
-      sink?.(away);
+      unwatchTab?.();
+      unwatchTab = away ? watchPillTab(away.tab, judge) : null;
+      if (!same) sink?.(away);
     };
     const settleAfterSwitch = (tabId: string | null) => {
       if (selected !== undefined && tabId !== selected) {
@@ -68,6 +71,7 @@ export function useSelectedRowAway(
     const locate = () => {
       const mine = ++ticket;
       stamp = rowsStamp();
+      selectedAt = selectedPlaceIn(windowId);
       const page = live.current.geometry?.current;
       const tabId = selectedTabIn(windowId) ?? null;
       settleAfterSwitch(tabId);
@@ -101,7 +105,9 @@ export function useSelectedRowAway(
       },
       selectionMoved: () => {
         stamp = null;
-        if (!away || frame) return;
+        const was = selectedAt;
+        selectedAt = selectedPlaceIn(windowId);
+        if (frame || (!away && !movedInPlace(was, selectedAt))) return;
         frame = requestAnimationFrame(() => {
           frame = 0;
           judge();
@@ -118,13 +124,16 @@ export function useSelectedRowAway(
         cancelAnimationFrame(frame);
         frame = 0;
         clearTimeout(quiet);
+        ticket++;
+        unwatchTab?.();
+        unwatchTab = null;
       },
     };
   });
   useEffect(() => {
     if (!geometry) return;
     tracker.relocate();
-    const unwatch = watchWindowRecord(windowId, tracker.selectionMoved);
+    const unwatch = watchSelectedPlace(windowId, tracker.selectionMoved);
     return () => {
       unwatch();
       tracker.stop();
@@ -133,7 +142,7 @@ export function useSelectedRowAway(
   return tracker;
 }
 
-export function SelectedRowPill({ windowId, tracker, lift, bottomShift }: { windowId: string; tracker: PillTracker; lift: number; bottomShift?: Animated.AnimatedInterpolation<number> }) {
+export function SelectedRowPill({ windowId, tracker, lift, unedge, bottomShift }: { windowId: string; tracker: PillTracker; lift: number; unedge: Animated.AnimatedNode; bottomShift?: Animated.AnimatedInterpolation<number> }) {
   const [away, setAway] = useState<PillAway>(null);
   const [shown, setShown] = useState<PillAway>(null);
   const [leaving, setLeaving] = useState(false);
@@ -156,7 +165,7 @@ export function SelectedRowPill({ windowId, tracker, lift, bottomShift }: { wind
   const motion = useMemo(() => (leaving ? leaveStyle(progress, outward) : enterStyle(progress, outward)), [leaving, outward]);
   if (!shown) return null;
   return (
-    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { top: GLOW_ROOM - lift, zIndex: 2 }]}>
+    <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { top: GLOW_ROOM - lift, zIndex: 2, transform: [{ translateY: unedge }] }]}>
       <Animated.View
         pointerEvents="box-none"
         style={[PLACE, shown.side === "below" ? AT_BOTTOM : AT_TOP, shown.side === "below" && bottomShift ? { transform: [{ translateY: bottomShift }] } : null]}
@@ -165,7 +174,7 @@ export function SelectedRowPill({ windowId, tracker, lift, bottomShift }: { wind
           <PillFace windowId={windowId} side={shown.side} tab={shown.tab} />
         </Animated.View>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 

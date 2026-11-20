@@ -5,7 +5,7 @@ import { withLivePage } from "../../state/tabs/livePage";
 import { newTab } from "../../state/tabs/actions";
 import type { Tab } from "../../state/browser/types";
 import { useScopedTheme } from "../ui/theme";
-import { Button, curve, drawnSymbol, MouseArea, nativeLoop, reduceMotion, reduceMotionKnown, springs, type ButtonHit } from "../ui";
+import { Button, curve, drawnSymbol, MouseArea, nativeLoop, reduceMotion, reduceMotionKnown, type ButtonHit } from "../ui";
 
 export type NavPlace = { style?: ViewStyle; hit?: ButtonHit };
 import type { ClickModifiers } from "../../lib/keys";
@@ -185,7 +185,7 @@ export const HistoryButton = memo(function HistoryButton({
   historyHint: string | undefined;
 }) {
   const handoffMotion = useRef(new Animated.Value(0)).current;
-  const pressOffsetMotion = useRef(new Animated.Value(0)).current;
+  const [handingOff, setHandingOff] = useState(false);
   const icon = direction < 0 ? "chevron.left" : "chevron.right";
   const iconColor = disabled ? palette.iconDisabled : palette.icon;
   const handoff = useMemo(
@@ -202,34 +202,22 @@ export const HistoryButton = memo(function HistoryButton({
       if (!reduced) return;
       handoffMotion.stopAnimation();
       handoffMotion.setValue(0);
-      pressOffsetMotion.stopAnimation();
-      pressOffsetMotion.setValue(0);
+      setHandingOff(false);
     });
     return () => {
       subscription.remove();
       handoffMotion.stopAnimation();
-      pressOffsetMotion.stopAnimation();
     };
-  }, [handoffMotion, pressOffsetMotion]);
-  const animatePressOffset = (pressed: boolean) => {
-    pressOffsetMotion.stopAnimation();
-    if (reduceMotion() !== false) {
-      pressOffsetMotion.setValue(0);
-      return;
-    }
-    Animated.spring(pressOffsetMotion, {
-      toValue: pressed ? direction * HISTORY_BUTTON_MOTION.pressTravel : 0,
-      ...springs.snappy,
-      useNativeDriver: true,
-    }).start();
-  };
+  }, [handoffMotion]);
   const animateHandoff = () => {
     if (reduceMotion() !== false) return;
     handoffMotion.stopAnimation();
     handoffMotion.setValue(0);
+    setHandingOff(true);
     Animated.timing(handoffMotion, { toValue: HISTORY_BUTTON_MOTION.duration, duration: HISTORY_BUTTON_MOTION.duration, easing: curve.enter, useNativeDriver: true }).start(({ finished }) => {
       if (!finished) return;
       handoffMotion.setValue(0);
+      setHandingOff(false);
     });
   };
   const openMenu = useStableHandler(() => {
@@ -246,20 +234,21 @@ export const HistoryButton = memo(function HistoryButton({
     if (target?.url) openUrl(target.url, windowId, mode);
   });
   const onMiddleClick = useStableHandler((e: ClickModifiers) => !disabled && void onPress({ ...e, middle: true }));
-  const pressIn = useStableHandler(() => animatePressOffset(true));
-  const pressOut = useStableHandler(() => animatePressOffset(false));
   const face = useMemo(
-    () => (
-      <Animated.View style={[ICON_CENTER, { transform: [{ translateX: pressOffsetMotion }] }]}>
-        <Animated.View pointerEvents="none" style={[ICON_LAYER, { opacity: handoff.fadeOut, transform: [{ translateX: handoff.outX }] }]}>
-          {drawnSymbol({ name: icon, size: HISTORY_GLYPH.size, weight: HISTORY_GLYPH.weight, color: iconColor, style: SYMBOL_FRAME })}
-        </Animated.View>
-        <Animated.View pointerEvents="none" style={[ICON_LAYER, { opacity: handoff.fadeIn, transform: [{ translateX: handoff.inX }] }]}>
-          {drawnSymbol({ name: icon, size: HISTORY_GLYPH.size, weight: HISTORY_GLYPH.weight, color: iconColor, style: SYMBOL_FRAME })}
-        </Animated.View>
-      </Animated.View>
-    ),
-    [pressOffsetMotion, handoff, icon, iconColor],
+    () =>
+      handingOff ? (
+        <View style={ICON_CENTER}>
+          <Animated.View pointerEvents="none" style={[ICON_LAYER, { opacity: handoff.fadeOut, transform: [{ translateX: handoff.outX }] }]}>
+            {drawnSymbol({ name: icon, size: HISTORY_GLYPH.size, weight: HISTORY_GLYPH.weight, color: iconColor, style: SYMBOL_FRAME })}
+          </Animated.View>
+          <Animated.View pointerEvents="none" style={[ICON_LAYER, { opacity: handoff.fadeIn, transform: [{ translateX: handoff.inX }] }]}>
+            {drawnSymbol({ name: icon, size: HISTORY_GLYPH.size, weight: HISTORY_GLYPH.weight, color: iconColor, style: SYMBOL_FRAME })}
+          </Animated.View>
+        </View>
+      ) : (
+        drawnSymbol({ name: icon, size: HISTORY_GLYPH.size, weight: HISTORY_GLYPH.weight, color: iconColor, style: SYMBOL_FRAME })
+      ),
+    [handingOff, handoff, icon, iconColor],
   );
   return (
     <MouseArea style={place?.style} onMiddleClick={onMiddleClick}>
@@ -269,8 +258,6 @@ export const HistoryButton = memo(function HistoryButton({
         hit={place?.hit}
         disabled={disabled}
         onPress={onPress}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
         onLongPress={openMenu}
         onContextMenu={openMenu}
         tooltip={withShortcut(direction > 0 ? "Go Forward" : closesTab ? "Close Tab and Go Back" : "Go Back", historyHint)}

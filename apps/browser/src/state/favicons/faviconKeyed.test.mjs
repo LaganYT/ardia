@@ -87,3 +87,10 @@ test("a theme or appearance change reaches every Favicon that shows it", () => {
   b.unmount();
   c.unmount();
 });
+
+test("the favicon watches hear the store through one keyed dispatcher, never a plain subscribe per hook", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./faviconHooks.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /useFavicons\.subscribe\(/);
+  assert.match(source, /keyedWatch<Favicons>\(/);
+});

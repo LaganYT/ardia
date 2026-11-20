@@ -10,6 +10,7 @@ let package = Package(
     .library(name: "ArdiaReportCore", targets: ["ArdiaReportCore"]),
     .library(name: "ArdiaNotificationCore", targets: ["ArdiaNotificationCore"]),
     .library(name: "ArdiaPluginCore", targets: ["ArdiaPluginCore"]),
+    .library(name: "ArdiaFieldGlowCore", targets: ["ArdiaFieldGlowCore"]),
   ],
   targets: [
     .target(name: "ArdiaUpdaterCore", path: "ios/UpdaterCore"),
@@ -22,5 +23,7 @@ let package = Package(
     .testTarget(name: "ArdiaNotificationCoreTests", dependencies: ["ArdiaNotificationCore"], path: "notification-tests"),
     .target(name: "ArdiaPluginCore", path: "ios/PluginCore"),
     .testTarget(name: "ArdiaPluginCoreTests", dependencies: ["ArdiaPluginCore"], path: "plugin-tests"),
+    .target(name: "ArdiaFieldGlowCore", path: "ios/FieldGlowCore"),
+    .testTarget(name: "ArdiaFieldGlowCoreTests", dependencies: ["ArdiaFieldGlowCore"], path: "fieldglow-tests"),
   ]
 )

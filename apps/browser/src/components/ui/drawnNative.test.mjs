@@ -31,3 +31,18 @@ test("every sidebar row's label and every no-favicon globe draw the native view 
   assert.doesNotMatch(label, /<FadeLabel/);
   assert.match(favicon, /if \(!initial\) return drawnSymbol\(\{ name: "globe"/);
 });
+
+test("the sidebar divider's Clear arrow draws the native view inside a button that re-renders on every theme change", () => {
+  const divider = readFileSync(new URL("../sidebar/ClearDivider.tsx", import.meta.url), "utf8");
+  assert.match(divider, /icon=\{\(color\) => drawnSymbol\(\{ name: "arrow\.down", size: 9, weight: "semibold", color, style: CLEAR_ARROW \}\)\}/);
+  assert.doesNotMatch(divider, /<Symbol\b/);
+  const button = divider.slice(divider.indexOf("function DividerButton"));
+  assert.match(button, /const theme = useTheme\(\);/);
+});
+
+test("the new-tab row's plus draws the native view inside a row that re-renders on every theme change", () => {
+  const row = readFileSync(new URL("../sidebar/NewTabRow.tsx", import.meta.url), "utf8");
+  assert.match(row, /\{drawnSymbol\(\{ name: "plus", size: quiet \? sidebarPoints\(10\) : ROW_GLYPH\.plus, weight: "medium", color: quiet \? quietInk : tokens\.newTabIcon, style: \{ width: ROW_GLYPH\.box, height: ROW_GLYPH\.box \} \}\)\}/);
+  assert.doesNotMatch(row, /<Symbol\b/);
+  assert.match(row, /export const NewTabRow = memo\(function NewTabRow[^\n]*\n  const theme = useTheme\(\);/);
+});

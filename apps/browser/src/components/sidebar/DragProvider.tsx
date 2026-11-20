@@ -43,11 +43,11 @@ export function DragProvider({ children }: { children: (ghost: Ghost | null, con
   );
 }
 
-export function DragPage({ live, children }: { live: boolean; children: ReactNode }) {
+export function useDragPage(live: boolean) {
   const controller = useContext(DragContext);
   const items = useMemo(() => controller && new DragItems(controller, false), [controller]);
   useLayoutEffect(() => items?.setLive(live), [items, live]);
-  return <DragItemsContext.Provider value={items}>{children}</DragItemsContext.Provider>;
+  return (children: ReactNode) => <DragItemsContext.Provider value={items}>{children}</DragItemsContext.Provider>;
 }
 
 export function DragScope({ enabled, children }: { enabled: boolean; children: ReactNode }) {

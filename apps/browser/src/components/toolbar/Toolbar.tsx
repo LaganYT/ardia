@@ -11,7 +11,7 @@ import { toggleSidebar } from "../../state/windows/actions";
 import { openBarFromAddress } from "../../state/omnibox/barState";
 import { useIsBookmarked, useSettings, useTab, useTabLive, useTabsPlace, useTabsShown } from "../../state/browser/hooks";
 import type { Tab } from "../../state/browser/types";
-import { Button, ContextMenuArea, Divider, FadeLabel, ink, monoFace, sidebarFont, sidebarPoints, space, Symbol, Text, useHover, WindowDragRegion } from "../ui";
+import { Button, ContextMenuArea, Divider, FadeLabel, ink, monoFace, sidebarFont, sidebarPoints, drawnSymbol, space, Text, useHover, WindowDragRegion } from "../ui";
 import { type ToolbarGeometry } from "../window/geometry";
 import { usePage, usePages, type PageState } from "../../state/tabs/pageState";
 import { togglePopover } from "../../state/tabs/popoverDismiss";
@@ -30,10 +30,10 @@ import { showUrlBarMenu } from "../../state/omnibox/paste";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
 import { GlassFill, useGlass } from "../ui/Glass";
 import { TranslateButton } from "../site/TranslateControls";
-import { ReaderButton } from "../site/ReaderControls";
+import { ReaderButton, useReaderButtonShown } from "../site/ReaderControls";
 import { ZoomIndicator } from "../site/ZoomControls";
 import { NAV_HINTS, useShortcutHint, useShortcutHints, withShortcut } from "../../state/commands/commandShortcuts";
-import { buttonMotion, curve, usePressScaleMotion } from "../ui/motion";
+import { curve } from "../ui/motion";
 import { FieldLoadFill } from "./FieldLoadFill";
 import { fieldButtonsShown, sidebarFieldButtons } from "./fieldButtons";
 import { useFieldExtensionsHeld } from "../../state/extensions/store";
@@ -207,8 +207,6 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
   const { insecure, hovered, buttonsShown, popover, toggleSiteControls } = field;
   const openSplit = useStableHandler(() => openSplitPane(windowId, { anchorTabId: tab.id }));
   const glass = useGlass();
-  const lockPress = usePressScaleMotion(!!insecure, buttonMotion.iconPressScale);
-  const lockScaleStyle = lockPress.scale ? { transform: [{ scale: lockPress.scale }] } : undefined;
 
   return (
     <View {...field.hoverProps} style={[style, { flexDirection: "row", alignItems: "center", height: row.field, borderRadius: row.fieldRadius, backgroundColor: hovered && !glass ? palette.pill : undefined }]}>
@@ -217,32 +215,28 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
       ) : null}
       {loadFill && <FieldLoadFill tabId={tab.id} color={loadFillColor(palette, theme.accent)} height={row.field} radius={row.fieldRadius} />}
       {insecure && (
-        <Pressable onPress={toggleSiteControls} onPressIn={lockPress.onPressIn} onPressOut={lockPress.onPressOut} style={{ paddingLeft: LOCK.left }} tooltip="Connection is not secure">
-          <View style={{ width: LOCK.width, height: row.field, alignItems: "center", justifyContent: "center" }}>
-            <Animated.View pointerEvents="none" style={lockScaleStyle}>
-              <Symbol
-                name="lock.open.trianglebadge.exclamationmark.fill"
-                size={12}
-                color={insecure === "certificateError" ? theme.destructive : palette.secondary}
-                style={{ width: LOCK.width, height: 18 }}
-              />
-            </Animated.View>
-          </View>
+        <Pressable onPress={toggleSiteControls} style={{ paddingLeft: LOCK.left }} tooltip="Connection is not secure">
+          {drawnSymbol({
+            name: "lock.open.trianglebadge.exclamationmark.fill",
+            size: 12,
+            color: insecure === "certificateError" ? theme.destructive : palette.secondary,
+            style: { width: LOCK.width, height: row.field },
+          })}
         </Pressable>
       )}
       <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => void showUrlBarMenu(tab)}>
         <Pressable onPress={field.openPanel} style={{ flex: 1, height: row.field, justifyContent: "center", paddingLeft: insecure ? LOCK.gap : urlTextLeft(false) }}>
           {field.developerMode ? (
-            <Text numberOfLines={1} ellipsizeMode="middle" color={palette.text} style={monoFace()}>
+            <Text numberOfLines={1} ellipsizeMode="middle" color={palette.text} ardiaCentersCapitals style={monoFace()}>
               {withoutUserInfo(tab.url)}
             </Text>
           ) : (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text numberOfLines={1} ellipsizeMode="head" weight="medium" color={palette.text} style={HOST_FULL}>
+              <Text numberOfLines={1} ellipsizeMode="head" weight="medium" color={palette.text} ardiaCentersCapitals style={HOST_FULL}>
                 {field.host}
               </Text>
               {field.trail ? (
-                <Text numberOfLines={1} color={palette.secondary} style={SHRINK}>
+                <Text numberOfLines={1} color={palette.secondary} ardiaCentersCapitals style={SHRINK}>
                   {field.trail}
                 </Text>
               ) : null}
@@ -300,7 +294,7 @@ export const SidebarUrlField = memo(function SidebarUrlField({ tab, palette, win
       <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => void showUrlBarMenu(tab)}>
         <Pressable onPress={field.openPanel} style={{ flex: 1, height, justifyContent: "center", paddingLeft: shown.leading ? SIDEBAR_TEXT_GAP : SIDEBAR_TEXT_ALONE }}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text numberOfLines={1} ellipsizeMode="head" weight="medium" color={palette.text} style={SHRINK}>
+            <Text numberOfLines={1} ellipsizeMode="head" weight="medium" color={palette.text} ardiaCentersCapitals style={SHRINK}>
               {field.host}
             </Text>
             <FadeLabel text={field.trail} fontSize={sidebarFont.body.fontSize} color={palette.secondary} fadeWidth={14} style={{ flex: 1, height: sidebarPoints(18), marginLeft: -space.xxs }} />
@@ -360,11 +354,12 @@ function FieldButtons({
 }) {
   const popups = usePage(tab.id, (p) => p.popups.length);
   const capture = usePage(tab.id, (p) => p.mediaAccess);
+  const reader = useReaderButtonShown(tab.id, quiet);
   return (
     <View style={{ flexDirection: "row", alignItems: "center", paddingRight: space.xs }}>
       {children}
       {capture && <CaptureIndicator camera={capture.camera} microphone={capture.microphone} screen={capture.screen} onPress={toggleSiteControls} />}
-      <ReaderButton tabId={tab.id} palette={palette} onFocus={onFocus} quiet={quiet} />
+      {reader && <ReaderButton tabId={tab.id} palette={palette} onFocus={onFocus} quiet={quiet} />}
       <TranslateButton tabId={tab.id} palette={palette} onFocus={onFocus} quiet={quiet} />
       <ZoomIndicator tabId={tab.id} zoom={tab.zoom} palette={palette} onFocus={onFocus} quiet={quiet} />
       {popups > 0 && (

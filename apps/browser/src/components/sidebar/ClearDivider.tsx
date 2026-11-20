@@ -1,7 +1,7 @@
 import { memo, useState, type ReactNode } from "react";
 import { Animated, Pressable, View } from "react-native";
 import { useTheme } from "../ui/theme";
-import { ContextMenuArea, Divider, drawnSymbol, sidebarLineHeight, space, Symbol, Text, tintedImage, useHover } from "../ui";
+import { ContextMenuArea, Divider, drawnSymbol, sidebarLineHeight, space, Text, tintedImage, useHover } from "../ui";
 import { TAB_ROW } from "./tokens";
 import { HoverSlot } from "../ui/HoverSlot";
 import { closeAllTabs } from "../../state/sidebar/clearTabs";
@@ -70,7 +70,7 @@ export const ClearDivider = memo(function ClearDivider({ windowId, profileId, li
                     title="Clear"
                     label="Clear unpinned tabs"
                     onPress={() => closeAllTabs(windowId)}
-                    icon={(color) => <Symbol name="arrow.down" size={9} weight="semibold" color={color} style={{ width: 8, height: 11, marginRight: space.xs }} />}
+                    icon={(color) => drawnSymbol({ name: "arrow.down", size: 9, weight: "semibold", color, style: CLEAR_ARROW })}
                   />
                 ) : null}
               </>
@@ -131,3 +131,4 @@ function DividerButton({ title, label, onPress, icon }: { title: string; label: 
 }
 
 const CHEVRON = { width: 10, height: 10 } as const;
+const CLEAR_ARROW = { width: 8, height: 11, marginRight: space.xs } as const;

@@ -150,7 +150,7 @@ import { INJECTION_ENTITLEMENTS, prepareApp } from "../../../../scripts/lib/app-
 import { appEnv, launchVariables, mergeLaunchEnv } from "../../../../scripts/lib/instance.mjs";
 import { buildSeed } from "./seed.mjs";
 import { waitForUboEngine } from "./ubo-cache.mjs";
-import { launchedTree, listenerPid, orphansSince, processTable, signalIfSame, stopTree, survivors } from "./processes.mjs";
+import { launchedTree, listenerPid, quitTargets, signalIfSame, stopTree, survivors } from "./processes.mjs";
 import { componentsState, sidesProblems, templateProblems, templateSizes, waitForStartupComponents } from "./template-state.mjs";
 import { parseSettings, profileSeed } from "./profile-seed.mjs";
 import { writeSwitches } from "./js-bench.mjs";
@@ -446,7 +446,7 @@ class Instance {
     this.tracked = new Map();
   }
   track() {
-    if (!this.pid) return;
+    if (!this.pid || !this.confirmed) return;
     for (const p of launchedTree(this.pid, realpathSync(this.app))) this.tracked.set(p.pid, p);
   }
   async confirmOwnBrowser(timeoutMs = 30_000) {
@@ -550,18 +550,16 @@ class Instance {
     live.delete(this);
     if (!this.pid) return;
     const app = realpathSync(this.app);
-    if (!this.confirmed && listenerPid(this.port) !== this.pid) {
-      log(`not stopping pid ${this.pid}: it never proved to be this instance's browser (port ${this.port})`);
-      this.pid = null;
-    } else this.track();
+    if (!this.confirmed && listenerPid(this.port) === this.pid) this.confirmed = true;
+    if (!this.confirmed) log(`not stopping pid ${this.pid}: it never proved to be this instance's browser (port ${this.port})`);
+    this.track();
     const browser = this.tracked.get(this.pid);
     if (browser && survivors([browser], app).length) {
       acperf("quit", String(this.pid));
       for (let i = 0; i < 100 && survivors([browser], app).length; i++) await sleep(100);
       signalIfSame(browser, "SIGKILL");
     }
-    const orphans = orphansSince(app, this.t0, processTable()).filter((p) => !this.tracked.has(p.pid));
-    await stopTree([...this.tracked.values(), ...orphans], app);
+    await stopTree(quitTargets({ tracked: [...this.tracked.values()], confirmed: !!this.confirmed }, app), app);
   }
 }
 

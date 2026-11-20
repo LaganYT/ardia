@@ -41,3 +41,10 @@ test("the field's loading glow mounts once per field and runs a load without Rea
   assert.doesNotMatch(fill, /useLastingLoad|usePageProgress|setMounted/);
   for (const file of ["./Toolbar.tsx", "../littleArdia/SmallChrome.tsx"]) assert.doesNotMatch(readFileSync(new URL(file, import.meta.url), "utf8"), /<FieldLoadFill key=/);
 });
+
+test("without the native glow (an older build, Linux, Windows) the field keeps the JavaScript fill", async () => {
+  const { FieldLoadFill } = await import("./FieldLoadFill.tsx");
+  const { FieldGlowFill } = await import("./FieldGlowFill.tsx");
+  assert.notEqual(FieldLoadFill, FieldGlowFill);
+  assert.match(String(FieldLoadFill.type), /JsFieldLoadFill/);
+});

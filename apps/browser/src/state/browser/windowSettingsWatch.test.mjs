@@ -66,7 +66,11 @@ test("a tab switch wakes no settings or split subscriber, and a split or a pin w
 
 test("per-row hooks subscribe by key, not to the whole store", () => {
   const src = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
-  assert.match(src("../media/media.ts"), /export const usePinnedWithMediaControls = \(tabId: string \| undefined\) =>\n\s*useKeyed\(watchTabRecord,/);
+  const pinned = src("../media/media.ts");
+  const pinnedHook = pinned.slice(pinned.indexOf("export function usePinnedWithMediaControls"), pinned.indexOf("\n}", pinned.indexOf("export function usePinnedWithMediaControls")));
+  assert.match(pinnedHook, /useKeyed\(watchTabRecord, tabId,/);
+  assert.match(pinnedHook, /useKeyed\(watchSettings, tabId == null \? null : ALL,/);
+  assert.doesNotMatch(pinnedHook, /useBrowser\(/);
   assert.match(src("../windows/card.ts"), /export const useInSplit = \(tabId: string\) => useKeyed\(watchSplits,/);
   assert.match(src("../../components/sidebar/TabPressArea.tsx"), /const inSplit = useInSplit\(props\.tab\.id\);/);
   const layout = src("../windows/layout.ts");

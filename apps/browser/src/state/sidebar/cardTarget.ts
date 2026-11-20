@@ -1,5 +1,5 @@
 import { useBrowser } from "../browser/store";
-import { useMedia } from "../media/media";
+import { pinnedWithMediaControls, useMedia } from "../media/media";
 import type { Target } from "./sidebarUi";
 
 export function cardTargetFor<T extends Target>(target: T | null, cards: boolean, player: boolean): T | null {
@@ -16,6 +16,6 @@ export function cardTargetNow<T extends Target>(target: T | null): T | null {
   const s = useBrowser.getState();
   const cards = s.settings.showTabHoverMenu;
   const playerTab = !cards && target?.kind === "tab" ? target.id : undefined;
-  const player = !!playerTab && !!s.tabs[playerTab]?.pin && playerShowing(playerTab);
+  const player = !!playerTab && pinnedWithMediaControls(s, playerTab) && playerShowing(playerTab);
   return cardTargetFor(target, cards, player);
 }

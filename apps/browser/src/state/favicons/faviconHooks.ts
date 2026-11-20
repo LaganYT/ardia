@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { withoutFragment } from "../../lib/url";
-import { useKeyed } from "../browser/keyedWatch";
+import { keyedWatch, recordWatch, useKeyed } from "../browser/keyedWatch";
+import { changedIds } from "../browser/changes";
 import type { IconTheme } from "../../platform/favicons";
 import { askFaviconTheme, EMPTY_ICONS, lookupOrder, resolveFavicon, useFavicons, watchMissingFavicon, type ResolvedFavicon } from "./favicons";
 
@@ -10,56 +11,68 @@ type Favicons = { profiles: Record<string, Icons>; themes: Record<string, unknow
 
 const KEY_SEPARATOR = "\n";
 
-function faviconKeyWatches(empty: Icons) {
-  const pageWatchers = new Map<string, Set<Listener>>();
-  const uriWatchers = new Map<string, Set<Listener>>();
-  let hearing = false;
+function indexed(index: Map<string, Map<string, number>>, part: string, key: string, delta: number) {
+  let keys = index.get(part);
+  if (!keys) index.set(part, (keys = new Map()));
+  const count = (keys.get(key) ?? 0) + delta;
+  if (count > 0) keys.set(key, count);
+  else keys.delete(key);
+  if (!keys.size) index.delete(part);
+}
 
-  const hear = (f: Favicons, prev: Favicons) => {
-    const woken = new Set<Listener>();
-    if (f.themes !== prev.themes) for (const [uri, set] of uriWatchers) if (f.themes[uri] !== prev.themes[uri]) for (const listener of set) woken.add(listener);
-    if (f.profiles !== prev.profiles && pageWatchers.size) {
-      const changed: [Icons, Icons][] = [];
-      for (const id of new Set([...Object.keys(f.profiles), ...Object.keys(prev.profiles)])) {
-        const now = f.profiles[id] ?? empty;
-        const before = prev.profiles[id] ?? empty;
-        if (now !== before) changed.push([now, before]);
-      }
-      for (const [key, set] of pageWatchers) {
-        const at = key.indexOf(KEY_SEPARATOR);
-        const page = key.slice(0, at);
-        const src = key.slice(at + 1);
-        if (changed.some(([now, before]) => now.pages[page] !== before.pages[page] || now.appearances[page] !== before.appearances[page] || (!!src && now.srcs[src] !== before.srcs[src])))
-          for (const listener of set) woken.add(listener);
-      }
-    }
-    for (const listener of woken) listener();
+function faviconKeyWatches(empty: Icons) {
+  const byPage = new Map<string, Map<string, number>>();
+  const bySrc = new Map<string, Map<string, number>>();
+  const wakeAll = (index: Map<string, Map<string, number>>, part: string, wake: (key: string) => void) => {
+    const keys = index.get(part);
+    if (keys) for (const key of keys.keys()) wake(key);
   };
 
-  const watchKeysIn =
-    (watchers: Map<string, Set<Listener>>) =>
-    (key: string, listener: Listener): (() => void) => {
-      if (!hearing) {
-        hearing = true;
-        useFavicons.subscribe(hear);
+  const pages = keyedWatch<Favicons>(
+    () => useFavicons,
+    (f, prev, wake) => {
+      if (f.profiles === prev.profiles || !byPage.size) return;
+      for (const id of changedIds(f.profiles, prev.profiles)) {
+        const now = f.profiles[id] ?? empty;
+        const before = prev.profiles[id] ?? empty;
+        for (const page of changedIds(now.pages, before.pages)) wakeAll(byPage, page, wake);
+        for (const page of changedIds(now.appearances, before.appearances)) wakeAll(byPage, page, wake);
+        for (const src of changedIds(now.srcs, before.srcs)) wakeAll(bySrc, src, wake);
       }
-      let set = watchers.get(key);
-      if (!set) watchers.set(key, (set = new Set()));
-      set.add(listener);
-      return () => {
-        set.delete(listener);
-        if (!set.size && watchers.get(key) === set) watchers.delete(key);
-      };
+    },
+  );
+
+  const watchFaviconPage = (key: string, listener: Listener): (() => void) => {
+    const at = key.indexOf(KEY_SEPARATOR);
+    const page = key.slice(0, at);
+    const src = key.slice(at + 1);
+    indexed(byPage, page, key, 1);
+    if (src) indexed(bySrc, src, key, 1);
+    const off = pages(key, listener);
+    return () => {
+      off();
+      indexed(byPage, page, key, -1);
+      if (src) indexed(bySrc, src, key, -1);
     };
+  };
+
+  const watchFaviconUri = recordWatch<Favicons, Record<string, unknown>>(() => useFavicons, (f) => f.themes);
 
   return {
-    watchFaviconPage: watchKeysIn(pageWatchers),
-    watchFaviconUri: watchKeysIn(uriWatchers),
+    watchFaviconPage,
+    watchFaviconUri,
     pageKey: (url: string, src?: string | null) => (url ? `${withoutFragment(url)}${KEY_SEPARATOR}${src ?? ""}` : null),
   };
 }
 
 const { watchFaviconPage, watchFaviconUri, pageKey } = faviconKeyWatches(EMPTY_ICONS);
+
+export function watchFaviconOf(url: string, src: string | null, listener: Listener): () => void {
+  const key = pageKey(url, src);
+  return key ? watchFaviconPage(key, listener) : () => {};
+}
+
+export const watchFaviconTheme = (uri: string, listener: Listener): (() => void) => watchFaviconUri(uri, listener);
 
 export const useResolvedFaviconUri = (url: string, src?: string | null, profileId?: string): string | null =>
   useKeyed(watchFaviconPage, pageKey(url, src), () => resolveFavicon(url, src, profileId)?.uri ?? null);

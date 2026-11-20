@@ -1,70 +1,45 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
-import { watchLastingLoad } from "../../state/tabs/lastingLoad";
-import { pageProgressOf, watchPageProgress } from "../../state/tabs/pageProgress";
-import { notePageOverlay } from "../../state/telemetry/usage";
-import { GradientFill, reduceMotion, type GradientStop } from "../ui";
+import { fieldGlowAvailable } from "../../state/tabs/fieldGlow";
+import { GradientFill } from "../ui";
+import { driveFieldLoad, fieldLoadPlates, filledAt, frontOf, type Front, type LoadSink } from "./fieldLoadDrive";
+import { FieldGlowFill, type FieldLoadFillProps } from "./FieldGlowFill";
 import { FIELD_LOAD } from "./tokens";
 
-const { floor, motion } = FIELD_LOAD;
-
-const lined = (glow: readonly GradientStop[], height: number): GradientStop[] => {
-  const lineTop = 1 - FIELD_LOAD.line / height;
-  return [...glow.map(([at, alpha]) => [at * lineTop, alpha] as const), [lineTop, 1], [1, 1]];
-};
-const TAIL_GLOW: GradientStop[] = FIELD_LOAD.glow.map(([at, alpha]) => [at, Math.min(alpha, FIELD_LOAD.tailCeiling)]);
-const CAP_GLOW: GradientStop[] = FIELD_LOAD.glow.map(([at, alpha]) => [at, alpha - Math.min(alpha, FIELD_LOAD.tailCeiling)]);
-const fadingPast = (body: number, front: number, falloff: readonly number[]): GradientStop[] => [
-  [0, 1],
-  ...falloff.map((alpha, i) => [(body + (front * i) / (falloff.length - 1)) / (body + front), alpha] as const),
-];
+const { motion } = FIELD_LOAD;
 
 export type LoadValues = { filled: Animated.Value; opacity: Animated.Value; comet: Animated.Value };
-type Front = { width: number; tail: number };
 
-export function driveFieldLoad(tabId: string, values: LoadValues, front: () => Front): { refit: () => void; stop: () => void } {
-  const { filled, opacity, comet } = values;
-  let shown = false;
+export function animatedSink({ filled, opacity, comet }: LoadValues, front: () => Front): LoadSink {
   let leave: Animated.CompositeAnimation | null = null;
-  const refit = () => {
-    const { width, tail } = front();
-    if (!shown || !width) return;
-    const to = Math.max(floor, Math.min(pageProgressOf(tabId), 1 - tail / width));
-    if (reduceMotion()) filled.setValue(to);
-    else Animated.timing(filled, { toValue: to, ...motion.progress, useNativeDriver: true }).start();
-  };
-  const show = () => {
-    shown = true;
-    leave?.stop();
-    leave = null;
-    notePageOverlay("loadingField");
-    filled.setValue(0);
-    comet.setValue(0);
-    Animated.timing(opacity, { toValue: 1, ...motion.show, useNativeDriver: true }).start();
-    refit();
-  };
-  const finish = () => {
-    shown = false;
-    const still = reduceMotion();
-    if (still) {
-      filled.setValue(1);
-      comet.setValue(1);
-    }
-    const sweep = Animated.parallel([
-      Animated.timing(filled, { toValue: 1, ...motion.finish, useNativeDriver: true }),
-      Animated.timing(comet, { toValue: 1, ...motion.finish, useNativeDriver: true }),
-    ]);
-    leave = Animated.sequence([...(still ? [] : [sweep]), Animated.delay(motion.hold), Animated.timing(opacity, { toValue: 0, ...motion.hide, useNativeDriver: true })]);
-    leave.start();
-  };
   opacity.setValue(0);
-  const stopLoad = watchLastingLoad(tabId, (lasting) => (lasting ? show() : finish()));
-  const stopProgress = watchPageProgress(tabId, refit);
   return {
-    refit,
-    stop: () => {
-      stopLoad();
-      stopProgress();
+    show() {
+      leave?.stop();
+      leave = null;
+      filled.setValue(0);
+      comet.setValue(0);
+      Animated.timing(opacity, { toValue: 1, ...motion.show, useNativeDriver: true }).start();
+    },
+    progress(progress, still) {
+      if (!front().width) return;
+      const to = filledAt(progress, front());
+      if (still) filled.setValue(to);
+      else Animated.timing(filled, { toValue: to, ...motion.progress, useNativeDriver: true }).start();
+    },
+    finish(still) {
+      if (still) {
+        filled.setValue(1);
+        comet.setValue(1);
+      }
+      const sweep = Animated.parallel([
+        Animated.timing(filled, { toValue: 1, ...motion.finish, useNativeDriver: true }),
+        Animated.timing(comet, { toValue: 1, ...motion.finish, useNativeDriver: true }),
+      ]);
+      leave = Animated.sequence([...(still ? [] : [sweep]), Animated.delay(motion.hold), Animated.timing(opacity, { toValue: 0, ...motion.hide, useNativeDriver: true })]);
+      leave.start();
+    },
+    reset() {
       leave?.stop();
       opacity.stopAnimation();
       opacity.setValue(0);
@@ -72,44 +47,39 @@ export function driveFieldLoad(tabId: string, values: LoadValues, front: () => F
   };
 }
 
-export const FieldLoadFill = memo(function FieldLoadFill({ tabId, color, height, radius }: { tabId: string; color: string; height: number; radius: number }) {
+const JsFieldLoadFill = memo(function JsFieldLoadFill({ tabId, color, height, radius }: FieldLoadFillProps) {
   const [width, setWidth] = useState(0);
   const values = useRef<LoadValues>({ filled: new Animated.Value(0), opacity: new Animated.Value(0), comet: new Animated.Value(0) }).current;
-  const frontScale = Math.min(1, (width * FIELD_LOAD.frontShareOfField) / FIELD_LOAD.tail);
-  const tail = FIELD_LOAD.tail * frontScale;
-  const cap = FIELD_LOAD.cap * frontScale;
+  const { tail } = frontOf(width);
   const front = useRef<Front>({ width, tail });
   front.current = { width, tail };
   const drive = useRef<ReturnType<typeof driveFieldLoad> | null>(null);
 
   useEffect(() => {
-    drive.current = driveFieldLoad(tabId, values, () => front.current);
+    drive.current = driveFieldLoad(tabId, animatedSink(values, () => front.current));
     return () => drive.current?.stop();
   }, [tabId]);
   useEffect(() => drive.current?.refit(), [width, tail]);
 
   const layers = useMemo(() => {
     if (!width) return null;
-    const stops = lined(FIELD_LOAD.glow, height);
-    const capStops = lined(CAP_GLOW, height);
-    const tailFade = fadingPast(width, tail, FIELD_LOAD.tailFade);
-    const capFade = fadingPast(width, cap, FIELD_LOAD.capFade);
-    const cometFade: GradientStop[] = [[0, 0], ...capFade.slice(1)];
+    const plates = fieldLoadPlates(width, height);
     const { filled, opacity, comet } = values;
+    const plate = (extra: number) => ({ position: "absolute", left: 0, top: 0, bottom: 0, width: width + extra }) as const;
     return (
       <Animated.View
-        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: width + tail, opacity, transform: [{ translateX: filled.interpolate({ inputRange: [0, 1], outputRange: [-width, 0] }) }] }}
+        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: width + plates.tail.extra, opacity, transform: [{ translateX: filled.interpolate({ inputRange: [0, 1], outputRange: [-width, 0] }) }] }}
       >
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: comet.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }]}>
-          <GradientFill color={color} stops={TAIL_GLOW} fade={tailFade} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: width + tail }} />
-          <GradientFill color={color} stops={capStops} fade={capFade} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: width + cap }} />
+          <GradientFill color={color} stops={plates.tail.stops} fade={plates.tail.fade} style={plate(plates.tail.extra)} />
+          <GradientFill color={color} stops={plates.cap.stops} fade={plates.cap.fade} style={plate(plates.cap.extra)} />
         </Animated.View>
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: comet }]}>
-          <GradientFill color={color} stops={stops} fade={cometFade} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: width + cap }} />
+          <GradientFill color={color} stops={plates.comet.stops} fade={plates.comet.fade} style={plate(plates.comet.extra)} />
         </Animated.View>
       </Animated.View>
     );
-  }, [width, tail, cap, height, color]);
+  }, [width, height, color]);
 
   return (
     <View pointerEvents="none" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}>
@@ -117,3 +87,5 @@ export const FieldLoadFill = memo(function FieldLoadFill({ tabId, color, height,
     </View>
   );
 });
+
+export const FieldLoadFill = fieldGlowAvailable ? FieldGlowFill : JsFieldLoadFill;

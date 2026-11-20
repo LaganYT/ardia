@@ -37,12 +37,13 @@ export const BUTTON_NAVIGATION_INSET = 32;
 const BAR_HALF_HEIGHT = 22;
 const BAR_GAP = 6;
 
-export const FLOATING_BAR_PLACE = { control: 48, gap: 8, bottomGap: 21.5 } as const;
+export const FLOATING_BAR_PLACE = { control: 48, gap: 8, gestureGap: 4, bottomGap: 21.5 } as const;
 
 export function floatingBarCenter(navigationInset: number, os: string): number {
   const resting = FLOATING_BAR_PLACE.bottomGap + FLOATING_BAR_PLACE.control / 2;
-  if (os === "android" && navigationInset > BUTTON_NAVIGATION_INSET) return Math.max(resting, navigationInset + FLOATING_BAR_PLACE.gap + FLOATING_BAR_PLACE.control / 2);
-  return resting;
+  if (os !== "android" || navigationInset <= 0) return resting;
+  const gap = navigationInset > BUTTON_NAVIGATION_INSET ? FLOATING_BAR_PLACE.gap : FLOATING_BAR_PLACE.gestureGap;
+  return Math.max(resting, navigationInset + gap + FLOATING_BAR_PLACE.control / 2);
 }
 
 export function deckBarCenterFromBottom(navigationInset: number, os: string = "android"): number {

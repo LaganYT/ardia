@@ -300,6 +300,28 @@ export type WebViewHandle = {
   zap(action: ZapAction, level?: number): Promise<void>;
 };
 
+export type WebViewNativeHandle = Omit<
+  WebViewHandle,
+  | "nativeTag"
+  | "isAttached"
+  | "evaluate"
+  | "loadUrl"
+  | "resolvePasswordPrompt"
+  | "answerAutofillPrompt"
+  | "discard"
+  | "requestPictureInPicture"
+  | "takeControlPress"
+> & {
+  readonly nativeTag: number | null;
+  answerAutofillPrompt(id: number, answer: string): Promise<boolean>;
+  requestPictureInPicture(clickAt: number, control: number): Promise<boolean>;
+  takeControlPress(clickAt: number, control: number): Promise<boolean>;
+  evaluate(code: string): Promise<string | null>;
+  loadUrl(url: string, userInitiated?: boolean): Promise<void>;
+  resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;
+  discard(unload: boolean): Promise<DiscardOutcome>;
+};
+
 export type DiscardOutcome = "discarded" | "already" | "refused" | "unsupported";
 export type DiscardRefusal = number;
 export type DiscardReason = "external" | "urgent" | "proactive" | "suggested" | "frozen";

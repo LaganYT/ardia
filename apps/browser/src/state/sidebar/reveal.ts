@@ -4,6 +4,10 @@ import { revealTargets, type RevealTargets } from "./revealTargets";
 import { useLive } from "../live/store";
 import { knownFaviconTheme, resolveFavicon } from "../favicons/favicons";
 import { iconMarks } from "./rowState";
+import { watchTabState } from "../tabs/tabStateWatch";
+import { watchFaviconOf, watchFaviconTheme } from "../favicons/faviconHooks";
+import { fieldWatch, watchWindowRecord } from "../browser/keyedWatch";
+import { groupOf } from "../pins/tabGrouping";
 
 const asked = new Map<string, Set<(tabId: string) => void>>();
 
@@ -40,6 +44,44 @@ export function selectedTabSnapshot(windowId: string): PillTab | null {
   const faviconUri = resolveFavicon(tab.url, tab.favicon, tab.profileId)?.uri ?? null;
   const theme = faviconUri ? knownFaviconTheme(faviconUri) : null;
   return { id, url: tab.url, favicon: tab.favicon ?? null, icon: tab.customIcon ?? null, profileId: tab.profileId, faviconUri, template: theme?.kind === "template" && !!theme.stroke, marks: iconMarks(s, id) };
+}
+
+export const samePillTab = (a: PillTab, b: PillTab) =>
+  a.id === b.id &&
+  a.url === b.url &&
+  a.favicon === b.favicon &&
+  a.icon === b.icon &&
+  a.profileId === b.profileId &&
+  a.faviconUri === b.faviconUri &&
+  a.template === b.template &&
+  a.marks === b.marks;
+
+export function watchPillTab(tab: PillTab, changed: () => void): () => void {
+  const offs = [watchTabState(tab.id, changed), watchFaviconOf(tab.url, tab.favicon, changed)];
+  if (tab.faviconUri) offs.push(watchFaviconTheme(tab.faviconUri, changed));
+  return () => offs.forEach((off) => off());
+}
+
+export type SelectedPlace = { id: string | null; index: number; group: string | null };
+
+export function selectedPlaceIn(windowId: string): SelectedPlace {
+  const s = useBrowser.getState();
+  const id = activeTabId(s, windowId) ?? null;
+  return { id, index: id ? (s.windows[windowId]?.tabIds.indexOf(id) ?? -1) : -1, group: id ? (groupOf(s, id)?.id ?? null) : null };
+}
+
+export const movedInPlace = (was: SelectedPlace, now: SelectedPlace) =>
+  !!now.id && now.id === was.id && (now.index !== was.index || now.group !== was.group);
+
+const watchGroups = fieldWatch(() => useBrowser, (s) => s.groups);
+
+export function watchSelectedPlace(windowId: string, changed: () => void): () => void {
+  const offWindow = watchWindowRecord(windowId, changed);
+  const offGroups = watchGroups(windowId, changed);
+  return () => {
+    offWindow();
+    offGroups();
+  };
 }
 
 export type RowsStamp = readonly unknown[];

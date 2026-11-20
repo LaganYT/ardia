@@ -8,6 +8,12 @@ globalThis.fetch = async () => ({ status: 503 });
 const client = await import("./client.ts");
 const usage = await import("./usage.ts");
 const track = await import("./track.ts");
+const heard = (msAgo = 0) => {
+  const key = track.newOmniboxKey();
+  track.omniboxKeyHeard(key);
+  key.at -= msAgo;
+  return key;
+};
 const presses = await import("./tabPresses.ts");
 const { noteLinuxDownloadsPanelInsidePress } = await import("./downloadsPanelCounts.ts");
 after(() => client.setSharing(false, "settings"));
@@ -21,7 +27,7 @@ function beWhileOff() {
   noteLinuxDownloadsPanelInsidePress();
   usage.noteImportedPins({ rows: 3, splits: 1 });
   stub.editKeyAcks.pending = { accepted: 4 };
-  for (let i = 0; i < 20; i++) track.sampleOmniboxLatency(12);
+  for (let i = 0; i < 20; i++) track.sampleOmniboxLatency(heard(12));
   track.noteSearchSuggest("ok");
   presses.notePressStarted();
   presses.notePressEnded("click");

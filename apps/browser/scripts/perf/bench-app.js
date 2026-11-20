@@ -171,7 +171,7 @@ const scenarios = {
     return { steps, stats, settled };
   },
 
-  async openClose({ count = 20, origin } = {}) {
+  async openClose({ count = 20, origin, showTimeoutMs = 10000, closeTimeoutMs = 5000 } = {}) {
     const w = windowId();
     await quiet();
     const settled = await settleWindow();
@@ -185,7 +185,9 @@ const scenarios = {
       await sleep(150);
     }
     await quiet();
-    const lastShown = await until(() => tabShown(ids[ids.length - 1]), 10000);
+    if (!(await until(() => tabShown(ids[ids.length - 1]), showTimeoutMs))) {
+      throw new Error(`openClose: the last opened tab didn't show its title and favicon within ${showTimeoutMs} ms, so the open counts would miss that work`);
+    }
     const openStats = P.read();
     P.reset();
     const close = [];
@@ -194,8 +196,10 @@ const scenarios = {
       await sleep(150);
     }
     await sleep(500);
-    await until(() => !ids.some((id) => S().tabs[id]), 5000);
-    return { open, close, openStats, closeStats: P.read(), lastShown, settled };
+    if (!(await until(() => !ids.some((id) => S().tabs[id]), closeTimeoutMs))) {
+      throw new Error(`openClose: ${ids.filter((id) => S().tabs[id]).length} closed tabs were still open after ${closeTimeoutMs} ms, so the close counts would miss that work`);
+    }
+    return { open, close, openStats, closeStats: P.read(), settled };
   },
 
   async scroll({ distance = 2400, steps = 60 } = {}) {

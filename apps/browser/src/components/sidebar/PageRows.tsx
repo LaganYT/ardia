@@ -21,6 +21,7 @@ import { INCOGNITO_ICON } from "../ntp/IncognitoHeading";
 import { rowPitch, ROWS_PER_FRAME, type SidebarGeometry } from "./pageLayout";
 import { NewTabRow } from "./NewTabRow";
 import { CleanUpUpsell } from "./CleanUpUpsell";
+import { PluginSidebarViews } from "../plugins/PluginSidebarViews";
 import { sidebarTokens, TAB_ROW } from "./tokens";
 import { tailKey } from "./dragModel";
 import type { ListViewport } from "./listViewport";
@@ -135,6 +136,7 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
           <Tail section="list" />
           {!newTabButtonAtTop && inlineNewTab ? <NewTabRow windowId={windowId} shift={motion.tail} clip={motion.tailClip} /> : null}
         </View>
+        {!offScreen && !isIncognitoProfile(profileId) ? <PluginSidebarViews windowId={windowId} /> : null}
         {current ? <CleanUpUpsell windowId={windowId} shift={motion.tail} /> : null}
       </View>
     </ListMotionContext.Provider>

@@ -28,6 +28,7 @@ import { SIDEBAR_FIELD } from "../sidebar/geometry";
 import { FieldSiteButton, SidebarFieldFill } from "../sidebar/SidebarField";
 import { showUrlBarMenu } from "../../state/omnibox/paste";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
+import { PluginToolbarItems, usePluginToolbarWidth } from "../plugins/PluginToolbarItems";
 import { GlassFill, useGlass } from "../ui/Glass";
 import { TranslateButton } from "../site/TranslateControls";
 import { ReaderButton, useReaderButtonShown } from "../site/ReaderControls";
@@ -95,7 +96,9 @@ export const Toolbar = memo(function Toolbar({
   const history = useHistoryAvailability(tabId);
   const row = useToolbarRow();
   const extensionsWidth = useToolbarExtensionsWidth(windowId, Infinity);
-  useEffect(() => setToolbarExtensionsWidth(windowId, extensionsWidth), [windowId, extensionsWidth]);
+  const pluginsWidth = usePluginToolbarWidth(windowId);
+  const trailingWidth = extensionsWidth + pluginsWidth;
+  useEffect(() => setToolbarExtensionsWidth(windowId, trailingWidth), [windowId, trailingWidth]);
   const dim = useRef(new Animated.Value(focused ? 1 : 0.5)).current;
   const dimmedFor = useRef(focused);
   useEffect(() => {
@@ -117,10 +120,11 @@ export const Toolbar = memo(function Toolbar({
     return { top, sidebarButton: place(geometry.sidebarButton), back: nav(geometry.back), forward: nav(geometry.forward), reload: nav(geometry.reload) };
   }, [geometry, row]);
   const trailing = useMemo(
-    () => toolbarTrailing(row, { pinnedWidth: extensionsWidth, split: inSplit, cardRadius: geometry.cardRadius }),
-    [row, extensionsWidth, inSplit, geometry.cardRadius],
+    () => toolbarTrailing(row, { pinnedWidth: trailingWidth, split: inSplit, cardRadius: geometry.cardRadius }),
+    [row, trailingWidth, inSplit, geometry.cardRadius],
   );
   const right = trailing.fieldRight + geometry.trailing;
+  const extensionsRight = trailing.extensionsRight + geometry.trailing;
   const urlStyle = useMemo(() => ({ position: "absolute" as const, left: geometry.urlLeft, right, top: urlFieldOf(row).top }), [geometry.urlLeft, right, row]);
   if (!tab) return <View style={{ height: row.height }} />;
 
@@ -142,7 +146,8 @@ export const Toolbar = memo(function Toolbar({
         <HistoryButton place={at.back} tabId={tab.id} windowId={tab.windowId} direction={-1} disabled={!history.back} palette={palette} onFocus={focus} closesTab={history.backCloses} historyHint={hints.back} />
         <HistoryButton place={at.forward} tabId={tab.id} windowId={tab.windowId} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} historyHint={hints.forward} />
         <ReloadButton place={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} reloadHint={hints.reload} />
-        <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={row.center - row.extensionButton / 2} right={trailing.extensionsRight + geometry.trailing} />
+        <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={row.center - row.extensionButton / 2} right={extensionsRight} />
+        <PluginToolbarItems windowId={windowId} palette={palette} top={row.center - row.extensionButton / 2} right={extensionsRight + extensionsWidth} />
         <View nativeID={PAGE_IDENTITY_TAG} collapsable={false} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           {tab.url ? (
             <ToolbarUrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} loadFill={loadFill} onFocus={focus} style={urlStyle} splitHint={hints.openSplitPane} />

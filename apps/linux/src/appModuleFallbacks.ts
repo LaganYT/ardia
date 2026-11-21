@@ -60,7 +60,7 @@ const REPORT_FALLBACKS: Record<string, Fallback> = {
 
 const MODULE_FALLBACKS: Record<string, Record<string, Fallback>> = {
   ArdiaApp: APP_FALLBACKS,
-  ArdiaKeychain: { get: refuse("The keychain"), set: refuse("The keychain"), delete: refuse("The keychain") },
+  ArdiaKeychain: { get: refuse("The keychain"), read: refuse("The keychain"), set: refuse("The keychain"), delete: refuse("The keychain") },
   ArdiaTranslate: {
     userLanguages: () => [],
     languageName: (identifier) => identifier,
@@ -92,6 +92,10 @@ const MODULE_FALLBACKS: Record<string, Record<string, Fallback>> = {
     revealLog: now(undefined),
     revealFolder: now(undefined),
     devSnapshotPage: answer(false),
+    hostFetch: answer({ ok: false, reason: "plugins aren't available on Linux yet" }),
+    storageRead: answer({ status: "error", reason: "plugins aren't available on Linux yet" }),
+    storageWrite: answer({ ok: false, reason: "plugins aren't available on Linux yet" }),
+    readPluginFile: answer({ ok: false, reason: "plugins aren't available on Linux yet" }),
   },
   ArdiaAutomation: { start: answer({ state: "off", generation: 0, path: "", reason: "the control socket is unavailable on Linux" }), stop: answer(undefined) },
   ArdiaSystemSignals: {

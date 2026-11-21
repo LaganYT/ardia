@@ -349,8 +349,16 @@ const calendar: Modules["ArdiaCalendar"] = {
   events: () => Promise.resolve([]),
 };
 
+export const keychainReads = { values: new Map<string, string>(), errors: new Map<string, string>() };
+
 const keychain: Modules["ArdiaKeychain"] = {
   get: () => Promise.resolve(null),
+  read: (account) => {
+    const reason = keychainReads.errors.get(account);
+    if (reason !== undefined) return Promise.resolve({ status: "error", reason });
+    const value = keychainReads.values.get(account);
+    return Promise.resolve(value === undefined ? { status: "missing" } : { status: "ok", value });
+  },
   set: () => Promise.resolve(true),
   delete: () => Promise.resolve(true),
 };
@@ -476,7 +484,15 @@ const systemSignalsModule: Modules["ArdiaSystemSignals"] = {
 
 export const pluginHost = {
   folders: [] as { name: string; status: "ok" | "missing" | "link" | "notFile" | "tooBig" | "unreadable"; text?: string; folderId?: string; bundled?: boolean; replacesBundled?: boolean; ignoresUserFolder?: boolean }[],
-  starts: [] as { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean }[],
+  starts: [] as { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean; runtime?: "js" | "process"; entry?: string }[],
+  fetches: [] as { url: string; method: string; headers: Record<string, string>; body?: string; timeoutMs: number; allowedHosts: string[] }[],
+  fetchResult: null as null | { ok: true; status: number; statusText: string; url: string; headers: Record<string, string>; body: string } | { ok: false; reason: string },
+  storage: {} as Record<string, string>,
+  storageWrites: [] as { name: string; text: string }[],
+  storageResult: null as null | { ok: false; reason: string },
+  storageReadResult: null as null | { status: "error"; reason: string },
+  files: {} as Record<string, string>,
+  fileReads: [] as { name: string; folderId: string; approved: string; path: string }[],
   stops: [] as { name: string; run: number; graceMs: number }[],
   replies: [] as { name: string; run: number; line: string }[],
   events: [] as { name: string; run: number; line: string }[],
@@ -527,6 +543,26 @@ const plugins: Modules["ArdiaPlugins"] = {
   revealLog: () => {},
   revealFolder: () => {},
   devSnapshotPage: async () => false,
+  hostFetch: async (spec) => {
+    pluginHost.fetches.push({ ...spec, headers: { ...spec.headers }, allowedHosts: [...spec.allowedHosts] });
+    return pluginHost.fetchResult ?? { ok: true, status: 200, statusText: "OK", url: spec.url, headers: {}, body: "" };
+  },
+  storageRead: async (name) => {
+    if (pluginHost.storageReadResult) return pluginHost.storageReadResult;
+    const text = pluginHost.storage[name];
+    return text === undefined ? { status: "missing" } : { status: "ok", text };
+  },
+  storageWrite: async (name, text) => {
+    pluginHost.storageWrites.push({ name, text });
+    if (pluginHost.storageResult) return pluginHost.storageResult;
+    pluginHost.storage[name] = text;
+    return { ok: true };
+  },
+  readPluginFile: async (name, folderId, approved, path) => {
+    pluginHost.fileReads.push({ name, folderId, approved, path });
+    const text = pluginHost.files[`${name}/${path}`];
+    return text === undefined ? { ok: false, reason: "the file wasn't found" } : { ok: true, text };
+  },
   addListener: pluginEvents.addListener,
 };
 

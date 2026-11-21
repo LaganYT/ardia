@@ -71,6 +71,9 @@ jobs:
       - name: Vouch tests
         if: ${{ !cancelled() && matrix.part == 'rest' }}
         run: node --test .github/vouch/vouch.test.cjs
+      - name: Store simulator, the CI seed set
+        if: ${{ !cancelled() && matrix.part == 'rest' }}
+        run: pnpm --filter @ardia/browser sim
       - name: This share of the browser's tests
         if: matrix.part == 'browser'
         env:

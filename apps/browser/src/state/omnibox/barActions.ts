@@ -163,7 +163,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     });
   }
   out.push(...organizeActions(s, windowId));
-  if (eligibleKind(s, windowId)) out.push(...pluginBarActions(currentPlugins()));
+  if (eligibleKind(s, windowId)) out.push(...pluginBarActions(currentPlugins(), windowId));
   return out;
 }
 

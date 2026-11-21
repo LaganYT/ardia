@@ -10,6 +10,8 @@ import { EditBookmarkDialog } from "./components/bookmarks/EditBookmarkDialog";
 import { FolderMenus } from "./components/bookmarks/FolderMenus";
 import { ExtensionOverlays } from "./components/extensions/ExtensionOverlays";
 import { ExtensionSidePanel } from "./components/extensions/SidePanel";
+import { PluginSidePanel } from "./components/plugins/PluginSidePanel";
+import { PluginOverlays } from "./components/plugins/PluginOverlays";
 import { CrxDropArea } from "./components/extensions/CrxDropArea";
 import { DownloadMagnet, DownloadsPopover } from "./components/downloads/Downloads";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
@@ -75,6 +77,7 @@ function BrowserWindow() {
       <>
         <ContentCard />
         {!fullscreen && <ExtensionSidePanel />}
+        <PluginSidePanel hidden={fullscreen} />
         {!fullscreen && <BoostEditorDock />}
       </>
     ),
@@ -105,6 +108,7 @@ function BrowserWindow() {
           <FolderMenus />
           <DownloadsPopover />
           <ExtensionOverlays />
+          <PluginOverlays />
           <DownloadMagnet />
           <BookmarkDialog />
           <EditBookmarkDialog />

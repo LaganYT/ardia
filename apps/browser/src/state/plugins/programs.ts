@@ -34,7 +34,7 @@ export function userRefusedControl(): boolean {
 function grantControlOnce(name: string, consent: ConsentToken | null) {
   const s = currentPlugins();
   const record = recordOf(s, name);
-  if (!activeManifest(s, name)?.permissions.includes("control")) return;
+  if (!activeManifest(s, name)?.permissions.control) return;
   const { settings, settingsMeta } = useBrowser.getState();
   const userChose = settingsMeta.chosen.includes("cliControl") && !settingsMeta.inferred.includes("cliControl");
   if (record.controlGranted && (settings.cliControl || userChose)) return;
@@ -114,7 +114,7 @@ let controlKept = false;
 
 export const ADOPT_WITH_CONTROL_OFF = false;
 
-const asksControl = (name: string) => !!currentPlugins().listings[name]?.manifest?.permissions.includes("control");
+const asksControl = (name: string) => !!currentPlugins().listings[name]?.manifest?.permissions.control;
 
 function keepControlWhileInstalled() {
   const s = currentPlugins();

@@ -175,7 +175,7 @@ test("a path with a lone surrogate is a manifest problem, not a crash", () => {
 test("programs: a name like a plugin's and a file in the plugin's folder", () => {
   const ok = readManifest(JSON.stringify({ ...base(), programs: [{ name: "ardia", path: "bin/ardia" }] }));
   assert.deepEqual(ok.problems, []);
-  assert.deepEqual(ok.manifest.programs, [{ name: "ardia", path: "bin/ardia", afterUpdate: [] }]);
+  assert.deepEqual(ok.manifest.programs, [{ name: "ardia", path: "bin/ardia", afterUpdate: [], example: null, claim: false }]);
   assert.deepEqual(readManifest(JSON.stringify({ ...base(), programs: [{ name: "a", path: "a", afterUpdate: [["skills", "refresh"], ["x"]] }] })).manifest.programs[0].afterUpdate, [["skills", "refresh"], ["x"]]);
   for (const afterUpdate of [["x"], [[]], [Array(9).fill("x")], Array(5).fill(["x"]), [[""]]]) assert.ok(problems({ ...base(), programs: [{ name: "a", path: "a", afterUpdate }] }).some((p) => p.includes("programs[0].afterUpdate")), JSON.stringify(afterUpdate));
   assert.equal(readManifest(JSON.stringify({ ...base(), alwaysOn: true })).manifest.alwaysOn, true);
@@ -277,7 +277,7 @@ test("the built-in plugins' v1 manifests still read: cli's control and programs,
   const cli = readManifest(JSON.stringify({ manifest: 1, name: "cli", title: "Command Line", version: "0.3.0", alwaysOn: true, official: true, icon: "terminal.fill", permissions: ["control"], programs: [{ name: "ardia", path: "bin/ardia", afterUpdate: [["skills", "refresh"]] }] }));
   assert.deepEqual(cli.problems, []);
   assert.equal(cli.manifest.permissions.control, true);
-  assert.deepEqual(cli.manifest.programs, [{ name: "ardia", path: "bin/ardia", afterUpdate: [["skills", "refresh"]] }]);
+  assert.deepEqual(cli.manifest.programs, [{ name: "ardia", path: "bin/ardia", afterUpdate: [["skills", "refresh"]], example: null, claim: false }]);
   assert.equal(cli.manifest.icon, "terminal.fill");
   const pm = readManifest(PASSWORD_FIXTURE).manifest;
   assert.equal(pm.contributes.passwordManager, pm.passwordManager);
@@ -458,4 +458,37 @@ test("when clauses refuse hasSelection, which Ardia never fills, rather than tak
   assert.equal(read.ok, false);
   assert.match(read.problem, /names hasSelection, which isn't one of/);
   assert.equal(whenHolds("!hasSelection", { isActive: true }), false, "not even negated: the clause doesn't parse");
+});
+
+test("manifest 2 adds keywords, a telemetry disclosure, and a program's example and claim; manifest 1 can't use them", () => {
+  const v2 = {
+    manifest: 2,
+    name: "cli",
+    title: "Command Line",
+    keywords: ["terminal", "cli", "terminal"],
+    telemetry: { title: "The ardia command", items: ["Each command's name"] },
+    contributes: { programs: [{ name: "ardia", path: "bin/ardia", example: "ardia tabs", claim: true }] },
+  };
+  const read = readManifest(JSON.stringify(v2));
+  assert.deepEqual(read.problems, []);
+  assert.deepEqual(read.manifest.keywords, ["terminal", "cli"]);
+  assert.deepEqual(read.manifest.telemetry, { title: "The ardia command", items: ["Each command's name"] });
+  assert.deepEqual(read.manifest.programs[0], { name: "ardia", path: "bin/ardia", afterUpdate: [], example: "ardia tabs", claim: true });
+  assert.deepEqual(readManifest(JSON.stringify({ manifest: 2, name: "x" })).manifest.keywords, []);
+  assert.equal(readManifest(JSON.stringify({ manifest: 2, name: "x" })).manifest.telemetry, null);
+  const bad = (doc) => readManifest(JSON.stringify({ manifest: 2, name: "x", ...doc })).problems;
+  assert.ok(bad({ keywords: Array.from({ length: 13 }, (_, i) => `k${i}`) }).some((p) => p.includes("keywords must be a list of at most 12")));
+  assert.ok(bad({ keywords: ["x".repeat(41)] }).some((p) => p.includes("keywords[0]")));
+  assert.ok(bad({ telemetry: { title: "T", items: [] } }).some((p) => p.includes("telemetry.items")));
+  assert.ok(bad({ telemetry: { title: "T", items: ["a"], extra: 1 } }).some((p) => p.includes("telemetry.extra")));
+  assert.ok(bad({ contributes: { programs: [{ name: "a", path: "a", claim: "yes" }] } }).some((p) => p.includes("claim must be true or false")));
+  const v1 = (doc) => readManifest(JSON.stringify({ manifest: 1, name: "x", title: "X", ...doc })).problems;
+  assert.ok(v1({ keywords: ["a"] }).some((p) => p.includes("keywords needs manifest 2")));
+  assert.ok(v1({ telemetry: { title: "T", items: ["a"] } }).some((p) => p.includes("telemetry needs manifest 2")));
+  assert.ok(v1({ programs: [{ name: "a", path: "a", example: "a" }] }).some((p) => p.includes("programs[0].example needs manifest 2")));
+  assert.ok(v1({ programs: [{ name: "a", path: "a", claim: true }] }).some((p) => p.includes("programs[0].claim needs manifest 2")));
+  const schema = pluginSchema([], { untabbedEvents: [], approvedSettings: [] });
+  assert.ok(schema.then.properties.keywords && schema.then.properties.telemetry);
+  assert.ok(schema.then.properties.contributes.properties.programs.items.properties.claim);
+  assert.equal(schema.else.properties.programs.items.properties.claim, undefined, "manifest 1's schema keeps its old programs");
 });

@@ -30,23 +30,31 @@ enum HostPrelude {
   for (const level of ["log", "info", "warn", "error", "debug"]) consoleObject[level] = (...args) => native.log(level, args.map((a) => describe(a)).join(" "));
   define("console", consoleObject);
 
+  const TOO_MANY_TIMERS = "a plugin can have at most 10000 timers waiting";
   let nextTimer = 0;
   const timers = new Map();
   native.onTimer((id) => {
     const timer = timers.get(id);
     if (!timer) return;
-    if (timer.repeat) native.schedule(id, timer.ms); else timers.delete(id);
+    timers.delete(id);
+    if (timer.repeat) {
+      if (native.schedule(id, timer.ms) === false) reportError(new RangeError(TOO_MANY_TIMERS + ", so an interval stopped"));
+      else timers.set(id, timer);
+    }
     try { timer.fn.apply(undefined, timer.args); } catch (error) { reportError(error); }
   });
   const addTimer = (fn, ms, args, repeat) => {
     if (typeof fn !== "function") throw new TypeError("a timer needs a function");
     const delay = Math.max(repeat ? 1 : 0, Number(ms) || 0);
     const id = ++nextTimer;
+    if (native.schedule(id, delay) === false) throw new RangeError(TOO_MANY_TIMERS);
     timers.set(id, { fn, args, ms: delay, repeat });
-    native.schedule(id, delay);
     return id;
   };
-  const clearTimer = (id) => void timers.delete(Number(id));
+  const clearTimer = (id) => {
+    const key = Number(id);
+    if (timers.delete(key)) native.cancel(key);
+  };
   define("setTimeout", (fn, ms, ...args) => addTimer(fn, ms, args, false));
   define("setInterval", (fn, ms, ...args) => addTimer(fn, ms, args, true));
   define("clearTimeout", clearTimer);
@@ -363,7 +371,7 @@ enum HostPrelude {
       for (const fn of [this.onabort, ...listeners.map((l) => l.fn)]) { if (typeof fn === "function") { try { fn.call(this, event); } catch (error) { reportError(error); } } }
     }
     static abort(reason) { const s = new AbortSignal(); s[kAbort](reason); return s; }
-    static timeout(ms) { const s = new AbortSignal(); setTimeout(() => s[kAbort](new DOMException("The operation timed out", "TimeoutError")), ms); return s; }
+    static timeout(ms) { const s = new AbortSignal(); addTimer(() => s[kAbort](new DOMException("The operation timed out", "TimeoutError")), ms, [], false); return s; }
     static any(signals) { const s = new AbortSignal(); for (const one of signals) { if (one.aborted) { s[kAbort](one.reason); break; } one.addEventListener("abort", () => s[kAbort](one.reason), { once: true }); } return s; }
   }
   class AbortController {
@@ -396,7 +404,7 @@ enum HostPrelude {
     };
     const release = () => {
       if (!fetches.delete(id)) return;
-      clearTimeout(guard);
+      clearTimer(guard);
       inFlight--;
       pump();
     };
@@ -407,9 +415,13 @@ enum HostPrelude {
     };
     const launch = () => {
       if (settled) return;
+      try {
+        guard = addTimer(() => { release(); settle((_, no) => no(new TypeError("fetch got no answer from Ardia"))); }, timeoutMs + 5000, [], false);
+      } catch (error) {
+        return settle((_, no) => no(error));
+      }
       inFlight++;
       fetches.set(id, { requested: request.url, settle: (outcome) => { release(); settle(outcome); } });
-      guard = setTimeout(() => { release(); settle((_, no) => no(new TypeError("fetch got no answer from Ardia"))); }, timeoutMs + 5000);
       const params = { url: request.url, method: request.method, headers: Object.fromEntries(request.headers), timeoutMs };
       if (request.body !== null) params.body = request.body;
       const problem = native.send(JSON.stringify({ id, method: "net.fetch", params }));

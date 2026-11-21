@@ -1,6 +1,7 @@
 import { isFields } from "./decode";
 import type { PluginNode, QuickPickItem, QuickPickOptions, InputBoxOptions, ToolbarUpdate } from "./pluginProtocol";
 import { TONES } from "./pluginProtocol";
+import { pluginShortcutOf, pluginShortcutText } from "./pluginShortcuts";
 
 export const NODE_LIMITS = { depth: 24, nodes: 2000, textBytes: 256 * 1024, props: 32, propBytes: 16 * 1024, items: 500 } as const;
 
@@ -47,6 +48,11 @@ function nodeOf(raw: unknown, budget: Budget, depth: number): PluginNode | strin
   if (given.length > NODE_LIMITS.props) throw new Error(`has a node with more than ${NODE_LIMITS.props} props`);
   for (const [name, value] of given) {
     if (!PROP_NAME.test(name)) throw new Error(`has a prop named ${JSON.stringify(name.slice(0, 40))}`);
+    if (name === "shortcut") {
+      const shortcut = pluginShortcutOf(value);
+      if (shortcut) props.shortcut = pluginShortcutText(shortcut);
+      continue;
+    }
     const before = budget.bytes;
     props[name] = propValue(value, budget, 0);
     if (budget.bytes - before > NODE_LIMITS.propBytes) throw new Error(`has a prop over ${NODE_LIMITS.propBytes / 1024} KB`);

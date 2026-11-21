@@ -1,10 +1,11 @@
 import { build } from "esbuild";
 import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 const sdk = (path) => fileURLToPath(new URL(`../../../../packages/plugin-sdk/src/${path}`, import.meta.url));
-const outfile = here("dist/index.js");
+const outfile = process.argv[2] ? resolve(process.argv[2]) : here("dist/index.js");
 
 await build({
   entryPoints: [here("src/index.ts")],

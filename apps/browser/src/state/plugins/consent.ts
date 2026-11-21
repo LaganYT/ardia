@@ -5,8 +5,6 @@ import { contributionLines } from "./consentContributions";
 
 export type ConsentLine = { icon: string; text: string };
 
-export type ConsentContext = { bundled?: boolean; movesProfiles?: number };
-
 const FIELD_WORDS: Record<PasswordField, string> = { login: "login", oneTimeCode: "verification code" };
 
 function passwordManagerLines(m: PluginManifest, context: ConsentContext): ConsentLine[] {
@@ -48,7 +46,7 @@ function networkLines(m: PluginManifest): ConsentLine[] {
 function permissionLines(m: PluginManifest): ConsentLine[] {
   const p = m.permissions;
   const lines: ConsentLine[] = [];
-  if (p.control) lines.push({ icon: "hand.raised", text: m.alwaysOn ? "Lets any program you run drive your tabs and pages, with your logins, while it's installed. There's no off switch" : "Lets any program you run drive your tabs and pages, with your logins" });
+  if (p.control) lines.push({ icon: "hand.raised", text: m.alwaysOn ? "Lets any program you run drive your tabs and pages, with your logins, while control is on in Settings › Advanced. The plugin stays installed once you install it" : "Lets any program you run drive your tabs and pages, with your logins" });
   else if (m.alwaysOn) lines.push({ icon: "lock", text: "Once installed, there's no off switch" });
   lines.push(...networkLines(m));
   if (p.tabs) lines.push({ icon: "square.on.square", text: `${p.fullUrls ? "Sees the full address and title of your tabs" : "Sees the address (without what follows ? or #) and title of your tabs"}${p.tabs === "write" ? ", and can open, close and switch tabs" : ""}` });
@@ -61,8 +59,13 @@ function permissionLines(m: PluginManifest): ConsentLine[] {
   return lines;
 }
 
+export type ConsentContext = { controlOff?: boolean; bundled?: boolean; movesProfiles?: number };
+
+export const CONTROL_OFF_LINE = "Control is off, as you set it, and installing this leaves it off. To let programs drive Ardia, turn on “Let programs control Ardia” in Settings › Advanced";
+
 export function consentLines(m: PluginManifest, context: ConsentContext = {}): ConsentLine[] {
   const lines: ConsentLine[] = [...runtimeLines(m), ...permissionLines(m)];
+  if (m.permissions.control && context.controlOff) lines.push({ icon: "hand.raised.slash", text: CONTROL_OFF_LINE });
   const defaults = Object.keys(m.settings.defaults);
   if (defaults.length) lines.push({ icon: "slider.horizontal.3", text: `Changes these settings while it's on: ${defaults.join(", ")}` });
   if (m.settings.rows.length) lines.push({ icon: "list.bullet", text: `Adds ${m.settings.rows.length === 1 ? "a setting" : `${m.settings.rows.length} settings`} to its page here` });

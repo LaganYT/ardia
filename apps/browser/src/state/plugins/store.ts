@@ -15,7 +15,7 @@ export type PluginListing = {
 
 export type ProgramsState =
   | { state: "linking"; hash: string; request: number }
-  | { state: "linked"; hash: string; linked: string[]; refused: Record<string, string>; binDir: string }
+  | { state: "linked"; hash: string; linked: string[]; refused: Record<string, string>; binDir: string; adoption?: "retrying" | "busy" | "failed" }
   | { state: "failed"; hash: string; reason: string };
 
 export type ProcessState =

@@ -27,6 +27,7 @@ const NONE = {
   plugin_panel_opens: 0,
   plugin_toolbar_runs: 0,
   plugin_menu_runs: 0,
+  plugin_action_shortcuts: 0,
   plugin_omnibox_queries: 0,
   plugin_ui_prompts: 0,
   plugin_net_fetches: 0,

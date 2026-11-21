@@ -207,6 +207,8 @@ export type ReadyParams = {
 
 export const PLUGIN_PROTOCOL = 2;
 
+export type ProgramsStatus = { state: "none" | "linking" | "linked" | "failed"; linked: string[]; failed: { name: string; reason: string }[]; binDir: string | null };
+
 export const HOST_METHODS = {
   hello: "hello",
   ready: "ready",
@@ -237,6 +239,8 @@ export const HOST_METHODS = {
   pageOpen: "page.open",
   pagePost: "page.post",
   fetch: "net.fetch",
+  programsStatus: "programs.status",
+  programsRelink: "programs.relink",
   surfaceRender: "surface.render",
   surfaceClose: "surface.close",
 } as const;

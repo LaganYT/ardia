@@ -8,7 +8,11 @@ import { ensurePluginActivated, pluginReadyRun } from "./activation";
 export const MAX_CALLS_PER_PLUGIN = 16;
 export const MAX_TOOL_JSON = 1 << 20;
 
-export type ToolCaller = { kind: "command" } | { kind: "cli" } | { kind: "plugin"; plugin: string } | { kind: "host" };
+export type ToolCaller = { kind: "command" } | { kind: "socket" } | { kind: "plugin"; plugin: string } | { kind: "host" };
+
+export const SOCKET_CALLER_ON_WIRE = "cli";
+
+export const wireCaller = (caller: ToolCaller) => (caller.kind === "socket" ? { kind: SOCKET_CALLER_ON_WIRE } : caller);
 export type ToolOutcome = { ok: true; result: unknown } | { ok: false; code: "refused" | "failed" | "bad_request"; message: string };
 export type PluginCall =
   | { kind: "tool"; tool: string; input: unknown }
@@ -43,7 +47,8 @@ function finish(id: string, outcome: ToolOutcome) {
   return true;
 }
 
-function lineOf(id: string, call: PluginCall, caller: ToolCaller, deadline: number): string {
+function lineOf(id: string, call: PluginCall, given: ToolCaller, deadline: number): string {
+  const caller = wireCaller(given);
   if (call.kind === "tool") return JSON.stringify({ call: id, tool: call.tool, input: call.input === undefined ? {} : call.input, caller, deadline });
   if (call.kind === "command") return JSON.stringify({ call: id, kind: call.kind, name: call.command, context: call.context, caller, deadline });
   if (call.kind === "omnibox") return JSON.stringify({ call: id, kind: call.kind, name: call.provider, input: call.query, caller, deadline });

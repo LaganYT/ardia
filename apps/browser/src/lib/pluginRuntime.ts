@@ -1,8 +1,8 @@
-import { at, DEFAULT_MAIN_MB, DEFAULT_SIDECAR_MB, integer, isArgument, isPluginPath, LIMITS, matching, NAME, NAME_RULE, object, only, pluginFile, type Check } from "./pluginChecks";
+import { at, DEFAULT_MAIN_MB, DEFAULT_SIDECAR_MB, flag, integer, isArgument, isPluginPath, LIMITS, matching, NAME, NAME_RULE, object, only, pluginFile, text, type Check } from "./pluginChecks";
 
 export type ProcessSpec = { run: string[]; memoryMB: number };
 export type MainSpec = { entry: string; memoryMB: number };
-export type ProgramSpec = { name: string; path: string; afterUpdate: string[][] };
+export type ProgramSpec = { name: string; path: string; afterUpdate: string[][]; example: string | null; claim: boolean };
 
 export function sidecarOf(c: Check, path: string, value: unknown): ProcessSpec | null {
   if (value === undefined) return null;
@@ -35,11 +35,13 @@ export function mainOf(c: Check, entry: unknown, memory: unknown): MainSpec | nu
 export function program(c: Check, path: string, value: unknown): ProgramSpec | null {
   const doc = object(c, path, value);
   if (!doc) return null;
-  only(c, path, doc, ["name", "path", "afterUpdate"]);
+  only(c, path, doc, ["name", "path", "afterUpdate", "example", "claim"]);
   const name = matching(c, `${path}.name`, doc.name, NAME, NAME_RULE);
   const file = typeof doc.path === "string" && isPluginPath(doc.path) ? doc.path : (c.problems.push(`${path}.path must be a file in the plugin's folder, like bin/tool`), null);
   const [most, argv] = LIMITS.afterUpdate;
   const okAfter = (a: unknown) => Array.isArray(a) && a.length > 0 && a.length <= argv && a.every(isArgument);
   const after = doc.afterUpdate === undefined ? [] : Array.isArray(doc.afterUpdate) && doc.afterUpdate.length <= most && doc.afterUpdate.every(okAfter) ? (doc.afterUpdate as string[][]) : (c.problems.push(`${at(path, "afterUpdate")} must be a list of at most ${most} argument lists of 1 to ${argv}`), null);
-  return name && file && after ? { name, path: file, afterUpdate: after } : null;
+  const example = text(c, `${path}.example`, doc.example, LIMITS.example, false);
+  const claim = flag(c, `${path}.claim`, doc.claim);
+  return name && file && after ? { name, path: file, afterUpdate: after, example, claim } : null;
 }

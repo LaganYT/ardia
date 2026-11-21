@@ -90,6 +90,18 @@ export const passwordManagerSchema: JsonSchema = {
   description: "Makes the plugin a password manager each profile can pick in Settings › Profiles › Passwords",
 };
 
+export const programsSchemaV2: JsonSchema = {
+  ...programsSchema,
+  items: closed(
+    {
+      ...((programsSchema.items as JsonSchema).properties ?? {}),
+      example: { ...textOf(LIMITS.example), description: "A command to try, shown once the program is on PATH, like ardia tabs" },
+      claim: { const: true, description: "Built-in plugins only: reserves the name, so no other plugin can put a program with it on PATH" },
+    },
+    ["name", "path"],
+  ),
+};
+
 export const toolsSchema: JsonSchema = {
   type: "array",
   maxItems: LIMITS.tools,

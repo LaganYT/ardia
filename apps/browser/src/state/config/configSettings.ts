@@ -7,6 +7,7 @@ import { configShortcuts } from "./configShortcuts";
 import { parsePluginThemeKey } from "../plugins/themes";
 import { parseLaunchAction } from "../automation/launchActions";
 import { readProviderEntries } from "@ardia/core";
+import { LEGACY_SWITCHER_ICONS_KEY } from "../profiles/switcherMark";
 
 export const CONFIG_FILE = "config.json";
 
@@ -91,6 +92,7 @@ export function checkedSettings(label: string, given: Record<string, unknown>, s
       problems.push(`${label}: ${key} can't be set from a file`);
       continue;
     }
+    if (key === LEGACY_SWITCHER_ICONS_KEY) continue;
     if (!isConfigSettingKey(key)) {
       problems.push(`${label}: ${key} isn't a setting`);
       continue;

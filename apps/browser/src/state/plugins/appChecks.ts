@@ -19,7 +19,8 @@ export const UNTABBED_EVENTS: ReadonlySet<string> = new Set([
   "user.active",
 ]);
 
-export const RESERVED_PROGRAMS: Readonly<Record<string, string>> = { ardia: "cli" };
+export type ProgramClaims = { claims: Readonly<Record<string, string>>; failClosed: boolean };
+export const NO_CLAIMS: ProgramClaims = { claims: {}, failClosed: false };
 
 export const PLUGIN_RULES = { untabbedEvents: [...UNTABBED_EVENTS], approvedSettings: APPROVED_SETTINGS, decideEvents: [...DECIDE_EVENTS] };
 
@@ -29,7 +30,7 @@ export const manifestHash = (text: string, folderId = "") => hex(sha256(`${text}
 
 export const BUILT_IN = "bundled";
 
-export function appProblems(m: PluginManifest, settings: Settings, appVersion: string, folderId = ""): string[] {
+export function appProblems(m: PluginManifest, settings: Settings, appVersion: string, folderId = "", registry: ProgramClaims = NO_CLAIMS): string[] {
   const problems: string[] = [];
   const label = `plugin.json: ${m.declaredManifest < 2 ? "" : "contributes."}settings.defaults`;
   problems.push(...checkedSettings(label, m.settings.defaults, settings).problems);
@@ -41,11 +42,15 @@ export function appProblems(m: PluginManifest, settings: Settings, appVersion: s
     if (!decides && !(PLUGIN_EVENTS as readonly string[]).includes(name)) problems.push(`plugin.json: ${hookPath}[${i}]: ${name} isn't an event plugins can receive`);
     else if ((decides || !UNTABBED_EVENTS.has(name)) && !m.permissions.tabs) problems.push(`plugin.json: ${hookPath}[${i}]: ${name} needs the tabs permission`);
   });
-  m.programs.forEach((p, i) => {
-    const owner = RESERVED_PROGRAMS[p.name];
-    if (owner && (owner !== m.name || folderId !== BUILT_IN)) problems.push(`plugin.json: ${within}programs[${i}].name: ${p.name} belongs to Ardia's built-in ${owner} plugin`);
-  });
   const builtIn = folderId === BUILT_IN;
+  m.programs.forEach((p, i) => {
+    const at = `plugin.json: ${within}programs[${i}]`;
+    const owner = registry.claims[p.name];
+    if (p.claim && !builtIn) problems.push(`${at}.claim is only for plugins built into Ardia`);
+    else if (owner && registry.failClosed) problems.push(`${at}.name: ${p.name} is kept for Ardia's built-in plugins, and the list of which one owns it couldn't be read`);
+    else if (owner && (owner !== m.name || !builtIn)) problems.push(`${at}.name: ${p.name} belongs to Ardia's built-in ${owner} plugin`);
+    else if (p.claim && owner !== m.name) problems.push(`${at}.claim: ${p.name} isn't in the list of programs this Ardia reserves for its built-in plugins`);
+  });
   for (const key of ["alwaysOn", "official", "autoInstall"] as const) if (m[key] && !builtIn) problems.push(`plugin.json: ${key} is only for plugins built into Ardia`);
   if (m.autoInstall && !m.alwaysOn) problems.push("plugin.json: autoInstall needs alwaysOn");
   m.programs.forEach((p, i) => {
@@ -55,12 +60,12 @@ export function appProblems(m: PluginManifest, settings: Settings, appVersion: s
   return problems;
 }
 
-export function listingOf(name: string, text: string | null, readProblem: string | null, settings: Settings, appVersion: string, folderId = ""): PluginListing {
+export function listingOf(name: string, text: string | null, readProblem: string | null, settings: Settings, appVersion: string, folderId = "", registry: ProgramClaims = NO_CLAIMS): PluginListing {
   if (text === null) return { name, manifest: null, problems: [readProblem ?? "plugin.json couldn't be read"], hash: null, folderId };
   const hash = manifestHash(text, folderId);
   const read = readManifest(text);
   if (!read.manifest) return { name, manifest: null, problems: read.problems, hash, folderId };
-  const problems = appProblems(read.manifest, settings, appVersion, folderId);
+  const problems = appProblems(read.manifest, settings, appVersion, folderId, registry);
   if (read.manifest.name !== name) problems.push(`plugin.json: name is ${read.manifest.name}, but its folder is ${name}`);
   return problems.length ? { name, manifest: null, problems, hash, folderId } : { name, manifest: read.manifest, problems: [], hash, folderId };
 }

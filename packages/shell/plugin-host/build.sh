@@ -8,7 +8,7 @@ work="${DERIVED_FILE_DIR:-$here/build}/plugin-host"
 identity="${EXPANDED_CODE_SIGN_IDENTITY:--}"
 [ -z "$identity" ] && identity="-"
 min_os="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
-sources=("$here"/*.swift "$here/../ios/PluginCore/PluginURLParser.swift" "$here/../ios/PluginCore/PluginBase64.swift")
+sources=("$here"/*.swift "$here/../ios/PluginCore/PluginURLParser.swift" "$here/../ios/PluginCore/PluginBase64.swift" "$here/../ios/PluginCore/PluginTimerQueue.swift")
 binary="$work/$name"
 mkdir -p "$work" "$helpers"
 

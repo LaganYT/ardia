@@ -265,6 +265,24 @@ export function dropWindowPluginSurfaces(windowId: string) {
 }
 
 let watching = false;
+let stopWindowWatch: (() => void) | null = null;
+
+const holdsWindowSurfaces = (s: PluginSurfacesStore) =>
+  !!(s.quickPick || s.inputBox) || Object.keys(s.sidePanels).length > 0 || Object.keys(s.retainedSidePanels).length > 0 || Object.keys(s.popovers).length > 0 || Object.keys(s.commandViews).length > 0;
+
+function syncWindowWatch(s: PluginSurfacesStore) {
+  const wanted = holdsWindowSurfaces(s);
+  if (wanted && !stopWindowWatch) {
+    stopWindowWatch = useBrowser.subscribeTo(["windows"], (now, prev) => {
+      for (const windowId of Object.keys(prev.windows)) if (!Object.hasOwn(now.windows, windowId) || (eligibleKind(prev, windowId) && !eligibleKind(now, windowId))) dropWindowPluginSurfaces(windowId);
+    });
+  } else if (!wanted && stopWindowWatch) {
+    stopWindowWatch();
+    stopWindowWatch = null;
+  }
+}
+
+export const watchingSurfaceWindows = () => stopWindowWatch !== null;
 
 export function watchSurfaceRemounts() {
   if (watching) return;
@@ -272,7 +290,6 @@ export function watchSurfaceRemounts() {
   onPluginReady((plugin) => {
     for (const m of mountedSurfaces(plugin)) sendMount(m);
   });
-  useBrowser.subscribeTo(["windows"], (s, prev) => {
-    for (const windowId of Object.keys(prev.windows)) if (!Object.hasOwn(s.windows, windowId) || (eligibleKind(prev, windowId) && !eligibleKind(s, windowId))) dropWindowPluginSurfaces(windowId);
-  });
+  usePluginSurfaces.subscribe(syncWindowWatch);
+  syncWindowWatch(usePluginSurfaces.getState());
 }

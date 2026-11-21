@@ -1373,7 +1373,9 @@ does run in a test instance. A scratch folder with the marker must get both powe
   (add the label, then push or re-run the run). A pull request can read its base branch's caches and no other pull
   request's, which is why the Windows branch builds on every push: without that, each pull request into it would
   compile once for itself. A full run always compiles, saves that app for pull requests to reuse, and adds the tours, the
-  installers and the install check. Only a full run has the `Ardia-Setup-<cpu>` artifacts that
+  installers and the install check. The tours run beside the launch checks in their own jobs, `x64-tour` (the app
+  alone, then the pages and the typing with the engine; artifacts `tour` and `tour-engine`) and `x64-tour-first-run`
+  (artifact `tour-engine-first-run`), so a full run takes about as long as its slowest job instead of their sum. Only a full run has the `Ardia-Setup-<cpu>` artifacts that
   `scripts/windows/publish-alpha.sh` publishes.
 - With the browser window open, the x64 run also drives the app with real input and fails when the default layout
   marks no caption region; a drag by the gap beside the window buttons is not Windows' own move or does not move the

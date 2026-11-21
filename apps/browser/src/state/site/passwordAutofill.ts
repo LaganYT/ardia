@@ -8,6 +8,7 @@ import { engineProfile } from "../browser/model";
 import { consentToken, type ConsentToken } from "../telemetry/choice";
 import { warnFor } from "../telemetry/consoleConsent";
 import { noteOfferToSaveRestore, noteProfilesMovedBack } from "../telemetry/retiredPasswordManagerCounts";
+import { readPluginRecords } from "../plugins/savedState";
 
 export const passwordAutofill = resource("passwordAutofill", (profile: string) => getPasswordAutofill(profile).catch(() => true));
 
@@ -102,9 +103,9 @@ export function changeOfferToSave(profile: string, on: boolean, write: () => Pro
 
 const liveEngineProfiles = (s: Pick<BrowserState, "profiles">) => new Set(Object.keys(s.profiles).filter((id) => s.profiles[id]).map((id) => engineProfile(s, id)));
 
-function keepArdiaChoice(): number {
+function keepArdiaChoice(stampUnset: boolean): number {
   const profiles = useBrowser.getState().profiles as Record<string, ({ passwordManager?: unknown } & object) | undefined>;
-  const stale = Object.entries(profiles).filter(([, p]) => p && p.passwordManager !== ARDIA_PASSWORD_MANAGER);
+  const stale = Object.entries(profiles).filter(([, p]) => p && p.passwordManager !== ARDIA_PASSWORD_MANAGER && (stampUnset || p.passwordManager !== undefined));
   if (!stale.length) return 0;
   const moved = stale.filter(([, p]) => p!.passwordManager !== undefined).length;
   useBrowser.setState((s) => {
@@ -164,10 +165,14 @@ async function restoreHeldOff(consent: ConsentToken | null, tries: number, delay
 
 let started: Promise<void> | null = null;
 
+const RETIRED_MANAGER_PLUGIN = "apple-passwords";
+
+const rollbackCouldPickAPlugin = () => readPluginRecords()[RETIRED_MANAGER_PLUGIN]?.enabled === true;
+
 export function restoreRetiredPasswordManagers(): Promise<void> {
   if (started) return started;
   const consent = consentToken();
-  noteProfilesMovedBack(keepArdiaChoice(), consent);
+  noteProfilesMovedBack(keepArdiaChoice(readRecord().heldOff.length > 0 || rollbackCouldPickAPlugin()), consent);
   started = restoreHeldOff(consent, RESTORE_RETRY.tries, RESTORE_RETRY.firstMs);
   return started;
 }

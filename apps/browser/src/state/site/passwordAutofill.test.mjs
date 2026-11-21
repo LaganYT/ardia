@@ -42,6 +42,40 @@ test("every profile keeps an explicit ardia choice, and an offer to save Ardia t
   assert.deepEqual(takeRetiredPasswordManagerCounts(), { password_manager_offer_to_save_restored: 2 });
 });
 
+test("with no held-off record, a profile that never chose is left as it is: no store change and no write at launch", async () => {
+  S().hydrate({ profiles: { default: profile("default", undefined), work: profile("work", undefined) }, profileOrder: ["default", "work"] });
+  stub.docs.delete(RECORD);
+  const profilesBefore = S().profiles;
+  let changes = 0;
+  const stop = useBrowser.subscribe(() => changes++);
+  takeRetiredPasswordManagerCounts();
+  await launch();
+  stop();
+  assert.equal(S().profiles, profilesBefore, "the profiles are the same object, so nothing is saved");
+  assert.equal(changes, 0);
+  assert.equal(stub.docs.has(RECORD), false, "no record is written");
+  assert.deepEqual(takeRetiredPasswordManagerCounts(), {});
+  S().hydrate({ profiles: { default: profile("default", "plugin:apple-passwords"), work: profile("work", undefined) }, profileOrder: ["default", "work"] });
+  await launch();
+  assert.equal(S().profiles.default.passwordManager, "ardia", "an explicit retired choice still moves back");
+  assert.equal(S().profiles.work.passwordManager, undefined, "with nothing held off, an unset profile needs no stamp");
+  takeRetiredPasswordManagerCounts();
+});
+
+test("with Apple Passwords still on in plugins.json and nothing held off, an unset profile is saved as Ardia so a rollback to 0.2.47 can't pick the plugin", async () => {
+  S().hydrate({ profiles: { default: profile("default", undefined), work: profile("work", "ardia") }, profileOrder: ["default", "work"] });
+  stub.docs.delete(RECORD);
+  stub.docs.set("plugins.json", JSON.stringify({ plugins: { "apple-passwords": { enabled: true, approved: "d8476938b3d33c28cb5494dd4fe670accce05a3f61b1d458c737a8f43505824e", values: {}, applied: {} } }, version: 1 }));
+  try {
+    await launch();
+    assert.equal(S().profiles.default.passwordManager, "ardia");
+    assert.equal(stub.docs.has(RECORD), false, "no journal is made for it");
+  } finally {
+    stub.docs.delete("plugins.json");
+    takeRetiredPasswordManagerCounts();
+  }
+});
+
 test("a crash between the write and the record update sets it again next launch, and a value lost before it reached disk is set again", async () => {
   stub.docs.set(RECORD, record(["work"]));
   stub.profileToggles.user.set("work", { passwords: true });

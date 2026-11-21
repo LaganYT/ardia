@@ -1,6 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   Action,
   ActionPanel,
@@ -1534,6 +1538,18 @@ describe("v2-showcase fixture", () => {
     assert.equal(/^\s*\/\/ |\/\*/m.test(bundle), false);
     for (const method of ["tabs.readActivePage", "ui.showToast", "ui.showQuickPick", "toolbar.update", "panel.open"]) assert.ok(bundle.includes(`"${method}"`), method);
     assert.equal(bundle.includes('"tabs.close"'), false);
+  });
+
+  test("its committed bundle is what build.mjs makes from today's SDK", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "v2-showcase-"));
+    try {
+      const out = join(scratch, "index.js");
+      const built = spawnSync(process.execPath, [fileURLToPath(fixture("build.mjs")), out], { encoding: "utf8" });
+      assert.equal(built.status, 0, built.stderr);
+      assert.equal(readFileSync(fixture("dist/index.js"), "utf8"), readFileSync(out, "utf8"), "run node tests/fixtures/plugins/v2-showcase/build.mjs and commit dist/index.js");
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   });
 });
 

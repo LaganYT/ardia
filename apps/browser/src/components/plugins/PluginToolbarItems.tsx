@@ -1,8 +1,7 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Pressable, View } from "react-native";
 import type { Tone, ToolbarUpdate } from "../../lib/pluginProtocol";
 import { runPluginToolbarItem, type PluginToolbarEntry } from "../../state/plugins/actions";
-import { useWindowId } from "../../state/browser/hooks";
 import { usePluginPopover, usePluginToolbarItems, usePluginWindowEligible } from "../../state/plugins/hooks";
 import { Badge, Button, Dot, Text, useTheme, useToolbarRowContext, type ColorRole } from "../ui";
 import type { ToolbarPalette } from "../ui/toolbarColors";
@@ -13,12 +12,8 @@ const TONE_ROLE: Record<Tone, ColorRole | null> = { default: null, secondary: nu
 const labelOf = (state: ToolbarUpdate) => (typeof state.label === "string" && state.label ? state.label : null);
 const labelWidth = (label: string) => Math.min(TOOLBAR_ITEM.labelMax, Math.ceil(label.length * TOOLBAR_ITEM.labelChar) + TOOLBAR_ITEM.labelPad * 2);
 
-export function usePluginToolbarWidth(windowId?: string): number {
-  const currentWindowId = useWindowId();
-  const eligible = usePluginWindowEligible(windowId ?? currentWindowId);
-  const items = usePluginToolbarItems();
-  const button = useToolbarRowContext().extensionButton || TOOLBAR_ITEM.button;
-  if (!eligible || !items.length) return 0;
+function itemsWidth(items: readonly PluginToolbarEntry[], button: number): number {
+  if (!items.length) return 0;
   const total = items.reduce((sum, item) => {
     const label = labelOf(item.state);
     return sum + button + (label ? labelWidth(label) + TOOLBAR_ITEM.gap * 2 : 0) + TOOLBAR_ITEM.gap;
@@ -26,10 +21,14 @@ export function usePluginToolbarWidth(windowId?: string): number {
   return total - TOOLBAR_ITEM.gap + TOOLBAR_ITEM.edge;
 }
 
-export function PluginToolbarItems({ windowId, palette, top, right }: { windowId: string; palette: ToolbarPalette; top: number; right: number }) {
+export function PluginToolbarItems({ windowId, palette, top, right, onWidth }: { windowId: string; palette: ToolbarPalette; top: number; right: number; onWidth: (width: number) => void }) {
   const eligible = usePluginWindowEligible(windowId);
   const items = usePluginToolbarItems();
-  if (!eligible || !items.length) return null;
+  const button = useToolbarRowContext().extensionButton || TOOLBAR_ITEM.button;
+  const width = eligible ? itemsWidth(items, button) : 0;
+  useLayoutEffect(() => onWidth(width), [onWidth, width]);
+  useLayoutEffect(() => () => onWidth(0), [onWidth]);
+  if (!width) return null;
   return (
     <View style={{ position: "absolute", top, right, flexDirection: "row", alignItems: "center", gap: TOOLBAR_ITEM.gap }}>
       {items.map((item) => (

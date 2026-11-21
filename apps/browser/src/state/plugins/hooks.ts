@@ -6,6 +6,7 @@ import { pluginThemes } from "./themes";
 import { activeManifest, activeNames, currentPlugins, needsReview, recordOf, usePlugins, webViewsOnline, type PluginsStore } from "./store";
 import { pageContextOf, pageViewUrl, shownContext, usePluginPages } from "./pages";
 import { useBrowser } from "../browser/store";
+import { useKeyed, watchWindowRecord } from "../browser/keyedWatch";
 import { eligibleKind } from "../automation/automationWindows";
 import { valuesOf } from "./values";
 
@@ -53,7 +54,7 @@ export const usePluginToolbarState = (plugin: string, itemId: string) => usePlug
 export const usePluginSidePanel = (windowId: string) => usePluginSurfaces((s) => s.sidePanels[windowId] ?? null);
 const NO_SIDE_PANELS: SidePanel[] = [];
 export const usePluginRetainedSidePanels = (windowId: string) => usePluginSurfaces((s) => s.retainedSidePanels[windowId] ?? NO_SIDE_PANELS);
-export const usePluginWindowEligible = (windowId: string) => useBrowser((s) => eligibleKind(s, windowId) !== null);
+export const usePluginWindowEligible = (windowId: string) => useKeyed(watchWindowRecord, windowId, () => eligibleKind(useBrowser.getState(), windowId) !== null);
 export const usePluginPopover = (windowId: string) => usePluginSurfaces((s) => s.popovers[windowId] ?? null);
 export const usePluginCommandView = (windowId: string) => usePluginSurfaces((s) => s.commandViews[windowId] ?? null);
 export const usePluginQuickPick = () => usePluginSurfaces((s) => s.quickPick);

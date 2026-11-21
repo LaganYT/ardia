@@ -8,6 +8,9 @@ import type { MethodSpec, SocketCall } from "./socketCatalog";
 import { obj, oneOf, PROFILE, TAB, text } from "./socketSchema";
 import { expect, now, profileArg, tabOf } from "./socketTargets";
 import { OpError } from "./workspaceTargets";
+import { currentManagerPlugin } from "../site/passwordManager";
+import { noteSocketPasswordManagerRefused } from "../telemetry/cliCounts";
+import { consentToken } from "../telemetry/client";
 
 const ACTIONS = ["play", "pause", "toggle", "next", "previous", "seekBy", "seekTo", "stop"] as const;
 
@@ -59,7 +62,15 @@ function syncStatus() {
 
 const engineOf = (params: Record<string, unknown>) => engineProfile(now(), profileArg(params.profile));
 
+function ardiaKeepsPasswords(params: Record<string, unknown>) {
+  const plugin = currentManagerPlugin(profileArg(params.profile));
+  if (!plugin) return;
+  noteSocketPasswordManagerRefused(consentToken());
+  throw new OpError("password_manager_plugin", `This profile's passwords are kept by ${plugin.title}; Ardia's own password store isn't used.`);
+}
+
 function passwordsList(params: Record<string, unknown>) {
+  ardiaKeepsPasswords(params);
   return listPasswords(engineOf(params));
 }
 
@@ -70,6 +81,7 @@ async function autofillList(params: Record<string, unknown>) {
 }
 
 async function removePassword(params: Record<string, unknown>, call: SocketCall) {
+  ardiaKeepsPasswords(params);
   const engine = engineOf(params);
   const known = (await listPasswords(engine)).some((p) => p.origin === params.origin && p.username === params.username);
   if (!known) throw new OpError("no_window", "There's no saved login with that origin and username.");

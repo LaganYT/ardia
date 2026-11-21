@@ -1,8 +1,26 @@
 import { MENU_SLOTS, type PluginManifest } from "../../lib/pluginManifest";
+import type { PasswordField } from "../../lib/pluginPasswordManager";
 import { PLATFORM_TERMS } from "../../lib/platformTerms";
 import { contributionLines } from "./consentContributions";
 
 export type ConsentLine = { icon: string; text: string };
+
+const FIELD_WORDS: Record<PasswordField, string> = { login: "login", oneTimeCode: "verification code" };
+
+function passwordManagerLines(m: PluginManifest, context: ConsentContext): ConsentLine[] {
+  const pm = m.passwordManager;
+  if (!pm) return [];
+  const lines: ConsentLine[] = [
+    { icon: "key.fill", text: "Becomes a password manager you can pick for each profile. Profiles that use it stop offering to save passwords in Ardia" },
+  ];
+  const moves = context.bundled ? (context.movesProfiles ?? 0) : 0;
+  if (moves > 0) lines.push({ icon: "person.2", text: `Moves ${moves === 1 ? "1 profile" : `${moves} profiles`} that never picked a password manager to ${m.title}` });
+  const fields = pm.fields.map((f) => FIELD_WORDS[f]).join(" and ");
+  lines.push({ icon: "key", text: `Shows a key in ${fields} fields on every site. It opens macOS's Passwords panel there, which fills the field; the plugin never sees what's filled` });
+  if (pm.verificationCodeSetup) lines.push({ icon: "qrcode", text: "Offers to set up two-factor codes a page shows in the app macOS uses for them" });
+  if (pm.passkeys) lines.push({ icon: "person.badge.key", text: `Shows whether Ardia may use passkeys saved on this ${PLATFORM_TERMS.computer}, and can ask macOS for access` });
+  return lines;
+}
 
 function runtimeLines(m: PluginManifest): ConsentLine[] {
   const lines: ConsentLine[] = [];
@@ -41,7 +59,7 @@ function permissionLines(m: PluginManifest): ConsentLine[] {
   return lines;
 }
 
-export type ConsentContext = { controlOff?: boolean };
+export type ConsentContext = { controlOff?: boolean; bundled?: boolean; movesProfiles?: number };
 
 export const CONTROL_OFF_LINE = "Control is off, as you set it, and installing this leaves it off. To let programs drive Ardia, turn on “Let programs control Ardia” in Settings › Advanced";
 
@@ -56,5 +74,6 @@ export function consentLines(m: PluginManifest, context: ConsentContext = {}): C
   if (m.commands.length) lines.push({ icon: "command", text: `Adds to the command bar: ${m.commands.map((c) => c.title).join(", ")}` });
   if (m.tools.length) lines.push({ icon: "wrench.and.screwdriver", text: `Offers tools to the ardia command and other plugins: ${m.tools.map((t) => t.title).join(", ")}` });
   lines.push(...contributionLines(m, MENU_SLOTS));
+  lines.push(...passwordManagerLines(m, context));
   return lines;
 }

@@ -59,7 +59,7 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <PluginChromeContext.Provider value={small ? 0 : pluginChrome}>
+      <PluginChromeContext.Provider value={small ? pluginChrome & PLUGIN_CHROME.verificationCodes : pluginChrome}>
         <ThemeScope>{small ? <LittleArdiaWindow /> : <BrowserWindow />}</ThemeScope>
       </PluginChromeContext.Provider>
     </WindowContext.Provider>

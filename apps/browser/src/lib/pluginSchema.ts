@@ -5,7 +5,7 @@ import { SPLIT_SIDES } from "./pluginCommands";
 import { MENU_SLOTS, PANEL_MODES } from "./pluginContributions";
 import { TAB_ACCESS } from "./pluginPermissions";
 import { MAX_WHEN_LENGTH } from "./pluginWhen";
-import { builtInFlags, closed, retiredKey, commandBase, key, name, openCommandProperties, pluginPath, processSchema, programsSchemaV2, rowSchema, symbol, textOf, toolsSchema } from "./pluginSchemaParts";
+import { builtInFlags, closed, commandBase, key, name, openCommandProperties, passwordManagerSchema, pluginPath, processSchema, programsSchemaV2, rowSchema, symbol, textOf, toolsSchema } from "./pluginSchemaParts";
 import { legacyPluginBody } from "./pluginSchemaV1";
 import { MANIFEST_VERSION } from "./pluginManifest";
 
@@ -50,7 +50,7 @@ function contributes(hookNames: readonly string[]): JsonSchema {
     hooks: list(LIMITS.hooks, { enum: [...hookNames] }),
     settings: closed({ defaults: { type: "object", description: "Ardia settings, as in config.json" }, rows: list(LIMITS.rows, rowSchema(["toggle", "text", "number", "choice", "secret"])) }),
     programs: programsSchemaV2,
-    passwordManager: retiredKey,
+    passwordManager: passwordManagerSchema,
     menus: closed(Object.fromEntries(MENU_SLOTS.map((slot) => [slot, list(LIMITS.menuItems, menuItem)]))),
     toolbar: list(LIMITS.toolbar, closed({ id: key, title: textOf(LIMITS.title), icon: symbol, command: name, view: key, tooltip: textOf(LIMITS.tooltip) }, ["id", "title", "icon"])),
     sidebarViews: list(LIMITS.sidebarViews, closed({ id: key, title: textOf(LIMITS.pageTitle), icon: symbol }, ["id", "title"])),

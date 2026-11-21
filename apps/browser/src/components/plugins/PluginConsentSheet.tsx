@@ -8,6 +8,7 @@ import { Box, Button, DialogActions, DialogTitle, Sheet, Symbol, Text } from "..
 import { useTheme } from "../ui/theme";
 import { ink, radius } from "../ui/tokens";
 import { useControlTurnedOff } from "../../state/app/programControlSetting";
+import { useNeverChosenCount } from "../../state/site/passwordManager";
 
 type ConsentRequest = NonNullable<PluginsStore["consent"]>;
 
@@ -17,6 +18,7 @@ export function PluginConsentSheet({ request, onCancel, onConfirm, onClosed }: {
   const listing = usePluginListing(name);
   const m = listing?.manifest;
   const controlOff = useControlTurnedOff();
+  const movesProfiles = useNeverChosenCount();
   const install = isAlwaysOn(listing);
   const [selected, setSelected] = useState<ConsentButton | null>(null);
   const keyState = useRef(FRESH_CONSENT_KEYS);
@@ -57,7 +59,7 @@ export function PluginConsentSheet({ request, onCancel, onConfirm, onClosed }: {
             {changed ? (
               <Text tone="textSecondary">The plugin changed while this was open. Close this and try again.</Text>
             ) : (
-              consentLines(m, { controlOff }).map((line, index) => (
+              consentLines(m, { controlOff, bundled: !!listing?.bundled, movesProfiles }).map((line, index) => (
                 <Box key={`${index}:${line.text}`} row gap="m">
                   <Symbol name={line.icon} size={13} color={theme.icon} style={ICON} />
                   <Text style={LINE}>{line.text}</Text>

@@ -91,12 +91,8 @@ export function reconcilePlugins(consent: ConsentToken | null) {
 
 const toForget = new Set<string>();
 
-const RETIRED_OFFICIAL_PLUGINS = ["apple-passwords"];
-
 function forgetRemoved(consent: ConsentToken | null) {
   for (const name of toForget) if (updateRecord(name, () => null, consent)) toForget.delete(name);
-  const s = currentPlugins();
-  for (const name of RETIRED_OFFICIAL_PLUGINS) if (s.records[name] && !s.listings[name]) updateRecord(name, () => null, consent);
 }
 
 export const WITHDRAW_DEADLINE_MS = 1000;

@@ -3,8 +3,7 @@ import type { Migrations } from "./savedDocument";
 import { legacyPermissions } from "./pluginPermissions";
 import { PAGE_PANEL_ID } from "./pluginContributions";
 
-const MOVED_INTO_CONTRIBUTES = ["commands", "tools", "hooks", "settings", "programs"] as const;
-const RETIRED_KEYS = ["passwordManager"] as const;
+const MOVED_INTO_CONTRIBUTES = ["commands", "tools", "hooks", "settings", "programs", "passwordManager"] as const;
 
 function pageAsPanel(page: unknown): unknown {
   return isFields(page) ? { id: PAGE_PANEL_ID, mode: "tab", ...page } : page;
@@ -13,7 +12,6 @@ function pageAsPanel(page: unknown): unknown {
 export function contributesFromV1(doc: Fields): Fields {
   if (Object.hasOwn(doc, "contributes") || Object.hasOwn(doc, "sidecar") || Object.hasOwn(doc, "main")) return doc;
   const { permissions, process, page, ...rest } = doc;
-  for (const key of RETIRED_KEYS) delete rest[key];
   const contributes: Fields = {};
   for (const key of MOVED_INTO_CONTRIBUTES) {
     if (rest[key] === undefined) continue;

@@ -10,6 +10,7 @@ import { ANY_HOST } from "./pluginNetwork";
 import { permissionsOf, type PluginPermissions } from "./pluginPermissions";
 import { storedRows, type RowValue, type SettingsSpec } from "./pluginRows";
 import { mainOf, sidecarOf, type MainSpec, type ProcessSpec, type ProgramSpec } from "./pluginRuntime";
+import type { PasswordManagerSpec } from "./pluginPasswordManager";
 
 export { compareVersions } from "./versions";
 export { LIMITS, NAME_PATTERN, KEY_PATTERN, VERSION_PATTERN, SYMBOL_PATTERN, KEYWORD_PATTERN, isPluginPath, DEFAULT_MAIN_MB, DEFAULT_SIDECAR_MB } from "./pluginChecks";
@@ -51,6 +52,7 @@ export type PluginManifest = {
   tools: PluginContributions["tools"];
   hooks: string[];
   programs: ProgramSpec[];
+  passwordManager: PasswordManagerSpec | null;
   page: PageSpec | null;
   process: ProcessSpec | null;
 };
@@ -158,7 +160,7 @@ export function checkManifest(raw: Fields, declaredManifest = MANIFEST_VERSION):
     manifest: {
       manifest: MANIFEST_VERSION, declaredManifest, name, title, description, version, requires, icon, keywords, telemetry, permissions, main, sidecar, activationEvents, contributes,
       alwaysOn: !!alwaysOn, official: !!official, autoInstall: !!autoInstall,
-      settings: k.settings, commands: k.commands, tools: k.tools, hooks: k.hooks, programs: k.programs, page, process: sidecar,
+      settings: k.settings, commands: k.commands, tools: k.tools, hooks: k.hooks, programs: k.programs, passwordManager: k.passwordManager, page, process: sidecar,
     },
     problems: [],
   };
@@ -185,8 +187,8 @@ export function readManifest(text: string): ManifestRead {
   return { manifest, problems: problems.map((p) => `${MANIFEST_FILE}: ${legacy ? v1Problem(p) : p}`), newer: false };
 }
 
-export type Contribution = "settings" | "commands" | "page" | "process" | "programs" | "hooks" | "tools" | "main" | "menus" | "toolbar" | "sidebarViews" | "panels" | "omnibox" | "themes";
-export const CONTRIBUTIONS: readonly Contribution[] = ["settings", "commands", "page", "process", "programs", "hooks", "tools", "main", "menus", "toolbar", "sidebarViews", "panels", "omnibox", "themes"];
+export type Contribution = "settings" | "commands" | "page" | "process" | "programs" | "hooks" | "tools" | "passwordManager" | "main" | "menus" | "toolbar" | "sidebarViews" | "panels" | "omnibox" | "themes";
+export const CONTRIBUTIONS: readonly Contribution[] = ["settings", "commands", "page", "process", "programs", "hooks", "tools", "passwordManager", "main", "menus", "toolbar", "sidebarViews", "panels", "omnibox", "themes"];
 
 export function contributionsOf(m: PluginManifest): Contribution[] {
   const k = m.contributes;
@@ -198,6 +200,7 @@ export function contributionsOf(m: PluginManifest): Contribution[] {
     programs: k.programs.length > 0,
     hooks: k.hooks.length > 0,
     tools: k.tools.length > 0,
+    passwordManager: k.passwordManager !== null,
     main: m.main !== null,
     menus: MENU_SLOTS.some((slot) => k.menus[slot].length > 0),
     toolbar: k.toolbar.length > 0,

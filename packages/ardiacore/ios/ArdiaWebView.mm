@@ -103,6 +103,8 @@ void NoteEvent(int browserId, NSString *name, NSDictionary *payload) {
   NSMutableDictionary *brief = [NSMutableDictionary dictionary];
   for (NSString *key in payload) {
     id value = payload[key];
+    if ([value isKindOfClass:NSString.class] && [value rangeOfString:@"^otpauth(-migration)?:" options:NSRegularExpressionSearch | NSCaseInsensitiveSearch].location == 0)
+      value = [value substringToIndex:[value rangeOfString:@":"].location + 1];
     brief[key] = [value isKindOfClass:NSString.class] && [value length] > 200 ? [value substringToIndex:200] : value;
   }
   [list addObject:@{@"name" : name, @"payload" : brief, @"t" : @(round(CACurrentMediaTime() * 1000))}];

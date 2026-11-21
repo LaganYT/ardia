@@ -27,6 +27,8 @@ const windowHostHeader = read("../ios/ArdiaChromeWindowHost.h");
 const windowHost = read("../ios/ArdiaChromeWindowHost.mm");
 const swiftc = process.env.SWIFTC || "swiftc";
 const pageScriptSwift = read("../ios/WebKitPageScript.swift");
+const chromiumPageScript = read("../ios/page_script.js");
+const fieldProviderKit = chromiumPageScript.slice(chromiumPageScript.indexOf("  const fieldProviderKit = "), chromiumPageScript.indexOf("  const nativeMutationObserver = "));
 
 function pageWithVideos(videos) {
   const noop = () => {};
@@ -43,7 +45,7 @@ function pageWithVideos(videos) {
   const window = { document, addEventListener: noop, location: { protocol: "https:", origin: "https://example.test" }, navigator: {}, performance: { now: () => 0 }, setTimeout: noop, requestAnimationFrame: noop, EventTarget: class { addEventListener() {} } };
   window.window = window;
   window.top = window;
-  const source = pageScriptSwift.slice(pageScriptSwift.indexOf('#"""') + 4, pageScriptSwift.indexOf('"""#')).replace("\\#(WebKitMediaFaults.sitesJSON)", "[]");
+  const source = pageScriptSwift.slice(pageScriptSwift.indexOf('#"""') + 4, pageScriptSwift.indexOf('"""#')).replace("\\#(WebKitMediaFaults.sitesJSON)", "[]").replace("\\#(fieldProviderKit)", () => fieldProviderKit);
   runInNewContext(source, window);
   return window.__ardia;
 }

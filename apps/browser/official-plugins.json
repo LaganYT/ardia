@@ -45,6 +45,20 @@
         "ardia"
       ],
       "example": "ardia tabs"
+    },
+    {
+      "name": "apple-passwords",
+      "title": "Apple Passwords",
+      "blurb": "Fill logins and verification codes from the Passwords app on every site.",
+      "icon": "key.fill",
+      "version": "1.0.0",
+      "release": "https://github.com/ardia-browser/plugins/releases/download/apple-passwords-v1.0.0",
+      "artifacts": {
+        "macos-arm64": {
+          "file": "apple-passwords-plugin-1.0.0-macos-arm64.tar.gz",
+          "sha256": "9bca4437519ec6df5b590ebca1a6d4eef0a3e8f9aa08d0c8508051f96a45feee"
+        }
+      }
     }
   ],
   "comingSoon": [

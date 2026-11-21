@@ -34,7 +34,7 @@ import type { SettingsPane } from "./settingsWindows";
 import { FOLLOW_EVERY_MS, FOLLOW_FOR_MS, switchOutcome, updaterBusy } from "./updateStatus";
 import { noteUpdateChannelSwitch } from "../telemetry/usage";
 import { consentToken } from "../telemetry/client";
-import { changeOfferToSave, passwordAutofill } from "../site/passwordAutofill";
+import { forgetPendingOfferToSave, passwordAutofill } from "../site/passwordManager";
 import { notePreloadPagesTurned } from "../telemetry/preloadPagesCounts";
 import { trackAutofillToggleKept } from "../telemetry/track";
 import { askedValue, rememberAsked } from "./autofillAsked";
@@ -128,8 +128,8 @@ export async function setPreloadPagesFor(profile: string, on: boolean) {
 }
 
 export async function setPasswordAutofillFor(profile: string, on: boolean) {
-  const changed = await changeOfferToSave(profile, on, () => written(setPasswordAutofill(on, profile)));
-  if (!changed) return;
+  if (!(await forgetPendingOfferToSave(profile, consentToken())) && !on) return;
+  if (!(await written(setPasswordAutofill(on, profile)))) return;
   const now = await getPasswordAutofill(profile).catch(() => on);
   store(passwordAutofill, [profile], now);
   noteAsked(profile, "passwords", on, now);

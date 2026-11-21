@@ -133,6 +133,58 @@ NS_ASSUME_NONNULL_BEGIN
     NS_SWIFT_NAME(resolveDisplayMedia(_:sourceId:audio:));
 @end
 
+@interface ArdiaWebView (FieldProviders)
+@property(class, nonatomic, readonly) NSDictionary<NSString *, NSNumber *> *systemPanelAvailability;
+@property(class, nonatomic, readonly, nullable) NSString *otpauthHandlerName;
++ (BOOL)setFieldProviders:(NSArray<NSDictionary *> *)profiles
+               generation:(double)generation
+                  session:(NSString *)session NS_SWIFT_NAME(setFieldProviders(_:generation:session:));
++ (nullable NSDictionary *)fieldProviderForProfile:(NSString *)profile NS_SWIFT_NAME(fieldProvider(profile:));
++ (void)noteFieldFocus:(nullable NSString *)field
+              sequence:(double)sequence
+            generation:(double)generation
+                 query:(nullable NSString *)query
+                 owner:(id)owner NS_SWIFT_NAME(noteFieldFocus(_:sequence:generation:query:owner:));
++ (void)querySystemPanelIn:(NSView *)view
+                     owner:(id)owner
+                   profile:(NSString *)profile
+                generation:(double)generation
+                       ask:(void (^)(NSString *query))ask
+                completion:(void (^)(NSDictionary *result))completion
+    NS_SWIFT_NAME(querySystemPanel(in:owner:profile:generation:ask:completion:));
++ (void)resetFieldProviderPage:(id)owner NS_SWIFT_NAME(resetFieldProviderPage(_:));
++ (void)dropVerificationCodesOf:(id)owner frame:(nullable NSString *)frame NS_SWIFT_NAME(dropVerificationCodes(of:frame:));
++ (void)requestSystemPanelIn:(NSView *)page
+                       owner:(id)owner
+                     profile:(NSString *)profile
+                       field:(nullable NSString *)field
+                  generation:(double)generation
+                  completion:(void (^)(NSDictionary *result))completion
+    NS_SWIFT_NAME(requestSystemPanel(in:owner:profile:field:generation:completion:));
++ (nullable NSDictionary *)offerVerificationCode:(NSString *)url
+                                       owner:(id)owner
+                                       frame:(NSString *)frame
+                                     profile:(NSString *)profile
+                                  generation:(double)generation NS_SWIFT_NAME(offerVerificationCode(_:owner:frame:profile:generation:));
++ (void)redeemVerificationCode:(NSString *)token
+                         owner:(id)owner
+                       profile:(NSString *)profile
+                    generation:(double)generation
+                    frameAlive:(BOOL (^)(NSString *frame))frameAlive
+                    completion:(void (^)(NSDictionary *result))completion
+    NS_SWIFT_NAME(redeemVerificationCode(_:owner:profile:generation:frameAlive:completion:));
++ (BOOL)showSystemPanelForTab:(NSString *)tabId
+                   generation:(double)generation
+                   completion:(void (^)(NSDictionary *result))completion NS_SWIFT_NAME(showSystemPanel(tab:generation:completion:));
++ (BOOL)showFieldProviderHint:(NSString *)label side:(NSString *)side tab:(NSString *)tabId NS_SWIFT_NAME(showFieldProviderHint(_:side:tab:));
++ (nullable NSString *)fieldProviderHintJSON:(NSString *)label side:(NSString *)side NS_SWIFT_NAME(fieldProviderHintJSON(_:side:));
++ (void)whenSystemPanelCloses:(void (^)(void))closed NS_SWIFT_NAME(whenSystemPanelCloses(_:));
++ (BOOL)setUpVerificationCode:(NSString *)token
+                          tab:(NSString *)tabId
+                   generation:(double)generation
+                   completion:(void (^)(NSDictionary *result))completion NS_SWIFT_NAME(setUpVerificationCode(_:tab:generation:completion:));
+@end
+
 @interface ArdiaWebView (Peek)
 + (void)setPeekModifier:(NSString *)modifier;
 + (void)setSplitLinkModifier:(NSString *)modifier;

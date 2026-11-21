@@ -192,19 +192,34 @@ test("control is a permission of its own and needs nothing else", () => {
   assert.deepEqual(readManifest(JSON.stringify({ ...base(), permissions: [...base().permissions, "control"] })).problems, []);
 });
 
-const RETIRED_PASSWORD_MANAGER = { fill: "system", fields: ["login", "oneTimeCode"], verificationCodeSetup: "system", passkeys: "system" };
+const PASSWORD_FIXTURE = readFileSync(new URL("../../../../tests/fixtures/plugins/password-manager/plugin.json", import.meta.url), "utf8");
 
-test("a manifest that still names the retired passwordManager key loads, and the key is dropped", () => {
-  const v1 = readManifest(JSON.stringify({ manifest: 1, name: "apple-passwords", title: "Apple Passwords", version: "1.0.0", alwaysOn: true, official: true, passwordManager: RETIRED_PASSWORD_MANAGER }));
-  assert.deepEqual(v1.problems, []);
-  assert.equal(Object.hasOwn(v1.manifest, "passwordManager"), false);
-  assert.equal(Object.hasOwn(v1.manifest.contributes, "passwordManager"), false);
-  assert.deepEqual(contributionsOf(v1.manifest), []);
-  const v2 = readManifest(JSON.stringify({ manifest: 2, name: "pm", contributes: { passwordManager: RETIRED_PASSWORD_MANAGER } }));
-  assert.deepEqual(v2.problems, []);
-  assert.equal(Object.hasOwn(v2.manifest.contributes, "passwordManager"), false);
-  const schema = pluginSchema([], { untabbedEvents: [], approvedSettings: [] });
-  assert.ok(schema.then.properties.contributes.properties.passwordManager, "an old manifest still validates against the schema");
+test("a password manager declares how it fills, which fields get the key, and what else it offers", () => {
+  const { manifest, problems: found } = readManifest(PASSWORD_FIXTURE);
+  assert.deepEqual(found, []);
+  assert.deepEqual(manifest.passwordManager, { fill: "system", fields: ["login", "oneTimeCode"], verificationCodeSetup: "system", passkeys: "system" });
+  assert.deepEqual(contributionsOf(manifest), ["passwordManager"]);
+  const minimal = readManifest(JSON.stringify({ ...JSON.parse(PASSWORD_FIXTURE), passwordManager: { fill: "system", fields: ["oneTimeCode"] } }));
+  assert.deepEqual(minimal.manifest.passwordManager, { fill: "system", fields: ["oneTimeCode"], verificationCodeSetup: null, passkeys: null });
+  assert.equal(readManifest(FIXTURE).manifest.passwordManager, null);
+});
+
+test("fill: tool is reserved and refused by name, and every other shape is reported with its path", () => {
+  const doc = (passwordManager) => ({ ...JSON.parse(PASSWORD_FIXTURE), passwordManager });
+  assert.deepEqual(problems(doc({ fill: "tool", fields: ["login"] })), ["plugin.json: passwordManager.fill: tool isn't available yet; use system"]);
+  assert.deepEqual(problems(doc({ fill: "system", fields: ["login", "login"] })), ["plugin.json: passwordManager.fields has login twice"]);
+  assert.ok(problems(doc({ fill: "system", fields: [] }))[0].includes("passwordManager.fields must be a list of 1 to 2"));
+  assert.ok(problems(doc({ fill: "system", fields: ["login"], extra: 1 }))[0].includes("passwordManager.extra isn't a key"));
+  assert.ok(problems(doc([{ fill: "system", fields: ["login"] }]))[0].includes("passwordManager must be an object"));
+  assert.ok(problems(doc({ fill: "system", fields: ["login"], passkeys: "own" })).includes("plugin.json: passwordManager.passkeys must be system"));
+});
+
+test("the schema holds passwordManager to the same shape the app reads", () => {
+  const schema = pluginSchema([], { untabbedEvents: [], approvedSettings: [] }).then.properties.contributes.properties.passwordManager;
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.required, ["fill", "fields"]);
+  assert.deepEqual(schema.properties.fill.enum, ["system"]);
+  assert.deepEqual(schema.properties.fields.items.enum, ["login", "oneTimeCode"]);
 });
 
 const { parseWhen, evaluateWhen, whenHolds, globMatches } = await import("./pluginWhen.ts");
@@ -258,12 +273,14 @@ test("a v1 manifest migrates into v2's shape: process is the sidecar, page the d
   assert.deepEqual(manifest.activationEvents.slice(0, 1), ["onStartupFinished"]);
 });
 
-test("the built-in cli plugin's v1 manifest still reads its control and programs", () => {
+test("the built-in plugins' v1 manifests still read: cli's control and programs, apple-passwords' password manager", () => {
   const cli = readManifest(JSON.stringify({ manifest: 1, name: "cli", title: "Command Line", version: "0.3.0", alwaysOn: true, official: true, icon: "terminal.fill", permissions: ["control"], programs: [{ name: "ardia", path: "bin/ardia", afterUpdate: [["skills", "refresh"]] }] }));
   assert.deepEqual(cli.problems, []);
   assert.equal(cli.manifest.permissions.control, true);
   assert.deepEqual(cli.manifest.programs, [{ name: "ardia", path: "bin/ardia", afterUpdate: [["skills", "refresh"]], example: null, claim: false }]);
   assert.equal(cli.manifest.icon, "terminal.fill");
+  const pm = readManifest(PASSWORD_FIXTURE).manifest;
+  assert.equal(pm.contributes.passwordManager, pm.passwordManager);
   const network = readManifest(JSON.stringify({ ...base(), permissions: ["tabs", "network"] })).manifest;
   assert.equal(network.permissions.network, "*");
 });

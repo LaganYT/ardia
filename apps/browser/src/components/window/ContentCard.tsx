@@ -20,7 +20,7 @@ import { dockMoving, usePeekSpan, whenDockStill } from "../../state/windows/dock
 import { FrozenPage } from "./FrozenPage";
 import { setCardAnchor, setUrlAnchor, useAddressBarInSidebar, useCardCaptionRoom, useMinimalism, usePageFrameInset, useTabLayout, watchToolbarExtensionsWidth, onFullScreenLeft, onInterfaceScaleChange, windowRootShape } from "../../state/windows/layout";
 import { startSelectionTools } from "../../state/site/selection";
-import { restoreRetiredPasswordManagers } from "../../state/site/passwordAutofill";
+import { startPasswordManager } from "../../state/site/passwordManager";
 import { startMedia } from "../../state/media/pip";
 import { urlFieldRight } from "../toolbar/Toolbar";
 import { WindowToolbar } from "../toolbar/WindowToolbar";
@@ -68,7 +68,7 @@ export function ContentCard() {
   useEffect(startChromeTabs, []);
   useEffect(startMedia, []);
   useEffect(startSelectionTools, []);
-  useEffect(() => void restoreRetiredPasswordManagers(), []);
+  useEffect(startPasswordManager, []);
   useEffect(startPeeks, []);
   const peekId = usePeekOpenedFrom(activeId ?? "");
   const peekFullscreen = !!peekId && fullscreenTab === peekId;

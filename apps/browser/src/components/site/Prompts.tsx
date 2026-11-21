@@ -1,5 +1,6 @@
 import { setSiteSetting } from "../../state/site/siteSettings";
 import { answerAutofillPrompt, answerExternalApp, answerPasswordPrompt } from "../../state/site/prompts";
+import { acceptVerificationCode, declineVerificationCode, verificationCodeCopy } from "../../state/site/verificationCodes";
 import {
   type AutofillPromptAnswer,
   type PasswordPromptAnswer,
@@ -253,6 +254,30 @@ export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: nu
       </View>
     </Popover>
   );
+}
+
+export function VerificationCodePrompt({ tabId, right, top }: { tabId: string; right: number; top: number }) {
+  const offer = usePage(tabId, (p) => p.verificationCode);
+  const guard = usePromptInputGuard(offer?.token);
+  if (!offer) return null;
+  const { title, message } = verificationCodeCopy(offer.app, offer.host);
+  const close = guard(() => declineVerificationCode(tabId));
+  return (
+    <Popover key={offer.token} width={POPOVER_WIDTH.s} top={top} right={right} modal={false}>
+      <View>
+        <PromptBody icons={["key.fill"]} title={title} message={message}>
+          <Button variant="pill" title="Not Now" onPress={close} />
+          <Button variant="pill" title="Set Up" primary onPress={guard(() => acceptVerificationCode(tabId))} />
+        </PromptBody>
+        <PanelCloseButton onPress={close} />
+      </View>
+    </Popover>
+  );
+}
+
+export function VerificationCodeOffer(props: { tabId: string; right: number; top: number }) {
+  const offered = usePage(props.tabId, (p) => !!p.verificationCode);
+  return offered ? <VerificationCodePrompt {...props} /> : null;
 }
 
 export function ExternalAppPrompt({ tabId, left, top }: { tabId: string; left: number; top: number }) {

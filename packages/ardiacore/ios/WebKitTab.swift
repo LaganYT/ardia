@@ -138,6 +138,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     updateHidden()
     observe(view)
     WebKitHub.shared.permissions.reconcileCapture(view, profile: profile)
+    pushFieldProvider()
     updateSight()
   }
 
@@ -445,7 +446,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     case "scroll":
       guard main, let state = dict?["state"] as? String, ["down", "up", "top"].contains(state) else { return }
       emit("scroll", ["state": state])
-    default: break
+    default: fieldProviderMessage(kind, data: dict, frame: frame, frameInfo: frameInfo)
     }
   }
 
@@ -499,6 +500,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    fieldProviderCommitted()
     if !showingError { errorURL = nil }
     committedAt = Date().timeIntervalSince1970 * 1000
     committedStatus = respondedStatus
@@ -567,6 +569,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
     mediaFrames.removeAll()
     self.webView?.scriptFrames.removeAll()
+    if let view = self.webView { ArdiaWebView.resetFieldProviderPage(view) }
     resetNowPlaying()
     emit("crashed", ["status": 0, "reason": "crashed", "code": 0])
   }

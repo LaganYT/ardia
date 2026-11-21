@@ -286,16 +286,15 @@ document (`docs/conventions.md`):
 - **0 → 1.** A file with no `manifest` is version 0, the settings-only presets of github.com/ardia-browser/plugins
   (`name`, `title`, `description`, `requires`, `settings`, `reset`): its `settings` becomes `settings.defaults`, and
   `reset` (the old installer's) is dropped.
-- **1 → 2.** `commands`, `tools`, `hooks`, `settings` and `programs` move into `contributes`; the retired
-  `passwordManager` is dropped (in v2 a leftover `contributes.passwordManager` is ignored too, with no problem);
+- **1 → 2.** `commands`, `tools`, `hooks`, `settings`, `programs` and `passwordManager` move into `contributes`;
   `page` becomes the panel `{"id": "default", "mode": "tab", …}`; `process` becomes `sidecar`; and the permission
   list becomes the object (`"tabs"` → `"tabs": "read"`, `"network"` → `"network": "*"`, any other name → `true`).
   A manifest that already has `contributes`, `main` or `sidecar` is taken as v2 whatever its number says.
 - Problems in a migrated manifest are reported in its own words (`v1Problem`): a v1 plugin hears about `page` and
   `process`, not `contributes.panels[0]` and `sidecar`.
-- The approval is the hash of the file's text, so a migration never asks for a new approval. The bundled `cli` plugin
-  ships a v1 manifest today and loads through this path unchanged; `keywords`, `telemetry`, `programs[].example` and
-  `programs[].claim` need manifest 2.
+- The approval is the hash of the file's text, so a migration never asks for a new approval. The bundled `cli` and
+  `apple-passwords` plugins ship v1 manifests today and load through this path unchanged; `keywords`, `telemetry`,
+  `programs[].example` and `programs[].claim` need manifest 2.
 
 ### activationEvents
 
@@ -602,6 +601,96 @@ Code: `PluginCore/PluginPrograms.swift` (the store, links and leases; `plugin-te
 `PluginProgramLinks.swift` (places, PATH, the signed digests), `state/plugins/programs.ts`, `state/plugins/programRegistry.ts`.
 
 
+### passwordManager
+
+Makes the plugin a password manager each profile can pick. Mac only: Linux and Windows don't show the choice and never
+call the Mac verbs below (`PLATFORM_FEATURES.systemPasswordManagers`). One per manifest; any number of plugins may
+declare one, and each group of profiles that shares browser data picks at most one.
+
+```json
+"passwordManager": { "fill": "system", "fields": ["login", "oneTimeCode"], "verificationCodeSetup": "system", "passkeys": "system" }
+```
+
+- `fill` (required): `system` is macOS's own Passwords panel at the field, which types the chosen login into the page.
+  The panel lists every saved login, not the site's first: macOS takes a site to filter by only from apps holding Apple's
+  private `com.apple.textInput.autofillContext` entitlement (AutoFillCore checks it), and AppKit gives native
+  views no site of their own. So once the panel is on screen, Ardia shows a hint beside the key, on the side the panel
+  doesn't cover: "Type github in Passwords to find this site", with the page's registrable domain label. It closes with
+  the panel, when focus leaves the field or the page navigates, and a profile stops seeing it after closing it 3 times.
+  `tool` is reserved (below) and refused for now ("passwordManager.fill: tool isn't available yet; use system").
+- `fields` (required, 1 or 2): which fields get the key: `login` (username, email and current password) and
+  `oneTimeCode`.
+- `verificationCodeSetup` (`system`): when a page in a profile using this plugin shows an `otpauth://` link, or a QR code
+  on a Chromium page, Ardia offers "Set Up Verification Code in <app>?" and opens it with macOS's handler for `otpauth:`
+  (the Passwords app on a stock Mac). QR codes are found on Chromium pages only: WebKit has no `BarcodeDetector`, so a
+  WebKit page that shows its setup code only as a QR image gets no offer; its `otpauth://` links still do. The search
+  is bounded so it costs pages little: the first 8 `otpauth` links each time the page changes, and QR codes only on a
+  page with a text field (a setup page asks for a code to confirm it), at most 12 decodes per page until the provider
+  set changes. A setup step that shows its QR code before any text field gets no offer for it. The URL, which holds the code's secret, stays in native code: the page script, JS and the prompt see
+  an opaque token, single use, bound to the tab, frame, document, profile, provider generation and handler app.
+- `passkeys` (`system`): the plugin's Settings page shows whether Ardia may use the passkeys saved on this Mac, with
+  macOS's access request. It's the same row as Settings › Engines › Passkeys, and says plainly when the build lacks Apple's browser passkey entitlement (a local build; release builds carry it).
+
+The plugin never sees a secret and never runs code in a page: the key, field detection and code detection are Ardia's
+own page script, switched on per profile from the manifest.
+
+**Choosing.** Settings › Profiles › Passwords › Password manager lists Ardia (Chrome's password manager, as before),
+each enabled password-manager plugin by its title, and None (when an extension handles logins). The choice is stored
+on the profile as `ardia`, `none` or `plugin:<name>`; profiles that share browser data share it; a private window
+follows its profile's choice. A stored `plugin:<name>` counts only while the plugin loaded under that name is on and
+its manifest is the approved one; otherwise the profile reads as Ardia, and the stored choice comes back with it.
+
+**Default.** A profile that never chose reads as Ardia, unless a built-in password-manager plugin is on, in which case
+it reads as that plugin. Turning on a built-in one also stores it on every profile that never chose (the consent sheet
+says how many, naming the plugin: "Moves 3 profiles that never picked a password manager to Apple Passwords"). An installed plugin moves nobody: each
+profile picks it. Turning a plugin on never changes a profile that chose.
+
+**Offer to save.** While a profile's manager is a plugin or None, Ardia's offer to save is off for it; it comes back
+when the profile returns to Ardia, unless you had turned it off yourself. `password-manager.json` in the data folder
+records which profiles Ardia turned off, so the give-back survives a relaunch. Both directions are crash-safe: turning
+off writes the record, then the pref; giving back clears the record, then turns the pref on, so a crash in between
+leaves offer to save off and never overrides your own Off. A record write that fails while Ardia is taking a profile back is owed: it rides along with the next record
+write that succeeds (so a relaunch keeps it) and is retried every 30 s, doubling to 5 minutes. If no write to
+`password-manager.json` ever succeeds, the debt is lost at quit and offer to save stays off for that profile until you
+turn it on yourself; each failure counts in `password_manager_record_failed`. A record from a newer Ardia (a higher
+`version`) is never overwritten: offer to save is left as it is for that run.
+
+**Withdrawn at once.** Ardia pushes the whole set of profiles with a key (`passwords.setFieldProviders {session, generation,
+profiles: [{profile, fields, codeSetup}]}`) at launch and whenever it changes. Turning the plugin off, removing it or
+changing its manifest pushes the set without its profiles before the plugin is reported off, so the key leaves every
+live page first. Each push has a new generation; native drops badge clicks, menu requests, code detections and token
+redemptions from an older one, and the verification code prompt closes on every push and on navigation.
+
+**Accepted residual risk (the page script).** In Chromium the page script runs in the page's own JavaScript world, so a
+page can see and fake what it reports. Native is the authority: it opens the panel only when the tab's window is key,
+the page's view is first responder and editing text, the top frame last reported focus on a login or code field (in
+itself or a same-origin frame it can read) after the latest focus change, and the 0.6 s throttle allows it. A page that
+opens the panel without a click gets what Edit › AutoFill gives it: macOS's panel, then Touch ID and a pick by you,
+filled into the page's own focused field. The menu route asks the top frame for a fresh focus report and opens only on
+its answer within 200 ms. Between the page sampling which field has focus and Ardia opening the panel, focus can still
+move inside the page; the panel then fills whatever field macOS sees as focused, as Edit › AutoFill does.
+
+**Edit › AutoFill › Passwords…** in a profile whose manager is a `fill: "system"` plugin opens the macOS panel at the
+focused field (`passwords.showSystemPanel {tab, generation}`, in Chromium and WebKit tabs; a request from an older generation is refused as `stale`); otherwise Chrome's dropdown as before.
+
+**An otpauth link you click** still goes through the external-app prompt every link to another app gets, which shows
+the address in Ardia's own interface. That's base behaviour, unchanged; no plugin, log or count sees the address.
+
+**`fill: "tool"` (reserved, #1168).** For managers with their own vault (1Password, Bitwarden, Proton Pass). Not a
+normal tool: a host-only request the CLI and other plugins can never call, versioned, bound to the exact origin and
+form it fills, cancellable, with a consent line naming that the origin is sent to the plugin. The host would type the
+answer into that one field. Not built.
+
+#### Host extension points for credential providers
+
+What a password-manager plugin relies on, all host code a plugin can't reach past: the per-profile choice
+(`state/site/passwordManagerChoice.ts`), the provider push and withdrawal (`state/site/passwordManager.ts`, the store's
+`beforePluginsCommit` seam in `state/plugins/store.ts`), the key and code detection in both engines' page scripts, the
+native verbs in `PasswordsModule.swift` (`passwords.setFieldProviders`, `showSystemPanel`, `systemPanelAvailable`,
+`otpauthHandler`, `setUpVerificationCode`) and the page events `fieldProviderOpened {via, shown}` and
+`verificationCodeFound {token, main}`. A plugin adds none of these; its manifest switches them on.
+
+
 ### The channel
 
 Descriptor 3 is a Unix stream socket to Ardia speaking the control socket's protocol (`docs/automation.md` ›
@@ -785,6 +874,7 @@ The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": t
   `components/sidebar/AddressBar.tsx` (toolbar buttons), `components/sidebar/PageRows.tsx` (sidebar views),
   `state/sidebar/tabMenu.ts` (the tab menu), `state/config/configFiles.ts` (plugin themes),
   `state/automation/decideHooks.ts` (decide hooks after `hooks.json`).
+- `state/site/passwordManager*.ts`, `verificationCodes.ts`: the `passwordManager` contribution's host side.
 - `platform/plugins.ts` binds `ArdiaPlugins` (`packages/shell/ios/PluginsModule.swift`, `PluginProcess.swift`,
   `PluginHost.swift`, `PluginHostFetch.swift`, `PluginPageView.swift`, `PluginSchemeHandler.swift`, `PluginCore/`
   (`PluginSandbox`, `PluginFiles`, `PluginFetchPolicy`, `PluginStorage`, `PluginProcessTree`, `PluginRuns`,
@@ -815,7 +905,7 @@ in the local copy. Hourly `usage_counts`:
 
 The daily settings snapshot has `plugins_installed`, `plugins_enabled` and, among those on, how many use each part:
 `plugins_with_settings`, `plugins_with_commands`, `plugins_with_page`, `plugins_with_process`,
-`plugins_with_programs`, `plugins_with_hooks`, `plugins_with_tools`, and for v2
+`plugins_with_programs`, `plugins_with_hooks`, `plugins_with_tools`, `plugins_with_passwordManager`, and for v2
 `plugins_with_main`, `plugins_with_menus`, `plugins_with_toolbar`, `plugins_with_sidebarViews`,
 `plugins_with_panels`, `plugins_with_omnibox`, `plugins_with_themes`.
 

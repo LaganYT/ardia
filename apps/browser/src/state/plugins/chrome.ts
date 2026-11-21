@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 import { activeManifest, activeNames, usePlugins, type PluginsStore } from "./store";
 import { usePluginSurfaces, type PluginSurfacesStore } from "./surfaces";
 
-export const PLUGIN_CHROME = { toolbar: 1, sidebar: 2, panels: 4, overlays: 8 } as const;
+export const PLUGIN_CHROME = { toolbar: 1, sidebar: 2, panels: 4, overlays: 8, verificationCodes: 16 } as const;
 
 type Contributing = Pick<PluginsStore, "listings" | "records" | "order">;
 
@@ -17,6 +17,7 @@ export function contributedChrome(s: Contributing): number {
     if (contributes.toolbar.length) parts |= PLUGIN_CHROME.toolbar;
     if (contributes.sidebarViews.length) parts |= PLUGIN_CHROME.sidebar;
     if (contributes.panels.some((p) => p.mode === "sidecar")) parts |= PLUGIN_CHROME.panels;
+    if (contributes.passwordManager?.verificationCodeSetup) parts |= PLUGIN_CHROME.verificationCodes;
   }
   measured = { listings: s.listings, records: s.records, order: s.order };
   measuredParts = parts;

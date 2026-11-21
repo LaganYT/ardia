@@ -1,6 +1,7 @@
 import type { JsonSchema } from "./jsonSchema";
 import { DEFAULT_SIDECAR_MB, KEY_PATTERN, LIMITS, NAME_PATTERN, SYMBOL_PATTERN } from "./pluginChecks";
 import { SPLIT_SIDES } from "./pluginCommands";
+import { PASSWORD_FIELD_COUNT, PASSWORD_FIELDS, PASSWORD_FILLS } from "./pluginPasswordManager";
 
 const UNSAFE_CLASS = "\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069";
 export const textOf = (max: number, description?: string): JsonSchema => ({ type: "string", pattern: `^(?=[\\s\\S]*\\S)[^${UNSAFE_CLASS}]{1,${max}}$`, ...(description ? { description } : {}) });
@@ -76,6 +77,19 @@ export const programsSchema: JsonSchema = {
   ),
 };
 
+export const passwordManagerSchema: JsonSchema = {
+  ...closed(
+    {
+      fill: { enum: [...PASSWORD_FILLS], description: "system: macOS's Passwords panel fills the field. tool is reserved and refused for now" },
+      fields: { type: "array", minItems: PASSWORD_FIELD_COUNT[0], maxItems: PASSWORD_FIELD_COUNT[1], uniqueItems: true, items: { enum: [...PASSWORD_FIELDS] } },
+      verificationCodeSetup: { enum: ["system"], description: "Offer to set up two-factor codes a page shows in the app macOS uses for otpauth links" },
+      passkeys: { enum: ["system"], description: "Show the host's passkey status on the plugin's Settings page" },
+    },
+    ["fill", "fields"],
+  ),
+  description: "Makes the plugin a password manager each profile can pick in Settings › Profiles › Passwords",
+};
+
 export const programsSchemaV2: JsonSchema = {
   ...programsSchema,
   items: closed(
@@ -96,8 +110,6 @@ export const toolsSchema: JsonSchema = {
     ["name", "title"],
   ),
 };
-
-export const retiredKey: JsonSchema = { description: "Retired: Ardia ignores it" };
 
 export const builtInFlags: Record<string, JsonSchema> = {
   alwaysOn: { const: true, description: "Built-in plugins only: once installed, no switch turns it off" },

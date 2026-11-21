@@ -14,7 +14,7 @@ export type ProfilesSlice = {
   orphanedProfileData: string[];
 
   createProfile(options: { name: string; color?: ProfileColor; icon?: string | null; shareWith?: string | null; shareTopApps?: boolean }): string;
-  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "icon" | "switcherDot" | "pinnedCollapsed" | "shareTopApps" | "syncTabs">>): void;
+  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "icon" | "switcherDot" | "pinnedCollapsed" | "shareTopApps" | "syncTabs" | "passwordManager">>): void;
   setProfileLook(id: string, look: Partial<Pick<Profile, "color" | "theme">>): void;
   deleteProfile(id: string): void;
   reorderProfiles(ids: string[]): void;

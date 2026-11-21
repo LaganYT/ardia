@@ -1,7 +1,7 @@
 import type { JsonSchema } from "./jsonSchema";
 import { LIMITS, VERSION_PATTERN } from "./pluginChecks";
 import { PLUGIN_PERMISSIONS } from "./pluginPermissions";
-import { builtInFlags, closed, retiredKey, commandBase, name, openCommandProperties, pluginPath, processSchema, programsSchema, rowSchema, symbol, textOf, toolsSchema } from "./pluginSchemaParts";
+import { builtInFlags, closed, commandBase, name, openCommandProperties, passwordManagerSchema, pluginPath, processSchema, programsSchema, rowSchema, symbol, textOf, toolsSchema } from "./pluginSchemaParts";
 
 export function legacyPluginBody(eventNames: readonly string[]): JsonSchema {
   return closed(
@@ -22,7 +22,7 @@ export function legacyPluginBody(eventNames: readonly string[]): JsonSchema {
       page: closed({ title: textOf(LIMITS.pageTitle), icon: symbol, file: pluginPath() }, ["title", "file"]),
       process: processSchema,
       programs: programsSchema,
-      passwordManager: retiredKey,
+      passwordManager: passwordManagerSchema,
       ...builtInFlags,
       icon: symbol,
       hooks: { type: "array", maxItems: LIMITS.hooks, items: { enum: [...eventNames] } },

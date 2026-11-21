@@ -9,8 +9,9 @@ import { pageToProfile } from "../windows/profilePager";
 import { profileNames, requestCreateProfile } from "../profiles/createProfileRequest";
 import { storeAction, useBrowser } from "./store";
 import { rootOf } from "../groups/groups";
-import { closesWindow, engineProfile, isIncognitoProfile, plural, resolveWindowId } from "./model";
-import { leavesEmptyWindow } from "../omnibox/newTabBarPolicy";
+import { engineProfile, isIncognitoProfile, plural, resolveWindowId } from "./model";
+import { closesBesideKeptTopApps, lastTabOfWindow, leavesEmptyWindow } from "../omnibox/newTabBarPolicy";
+import { noteTopAppWindowClosedFromNewTab } from "../telemetry/tabSleepCounts";
 import { groupLabel } from "../pins/tabGrouping";
 import { sharingProfiles } from "../profiles/profiles";
 import { closeWindowAnimated } from "../windows/closeAnimated";
@@ -59,7 +60,7 @@ export async function closeTab(tabId: string, mayWrite?: () => boolean) {
   const tab = s.tabs[tabId];
   const w = tab && s.windows[tab.windowId];
   if (!tab || !w) return;
-  const last = closesWindow(s, tabId) && !leavesEmptyWindow(s, tabId);
+  const last = lastTabOfWindow(s, tabId) && !leavesEmptyWindow(s, tabId);
   if (last && managesWindowClose(w.id, "lastTab")) return;
   if (last && (asksBeforeClosingLastTab(w.id) || quitWarningMayAsk())) {
     const { decision, suppressWarning } = await decideLastTabClose(w.id);
@@ -69,8 +70,9 @@ export async function closeTab(tabId: string, mayWrite?: () => boolean) {
     applyHeldReports();
   }
   const now = store();
-  const closesItsWindow = now.tabs[tabId]?.windowId === w.id && !isPeekTab(now, tabId) && closesWindow(now, tabId) && !leavesEmptyWindow(now, tabId);
+  const closesItsWindow = now.tabs[tabId]?.windowId === w.id && !isPeekTab(now, tabId) && lastTabOfWindow(now, tabId) && !leavesEmptyWindow(now, tabId);
   if (last && closesItsWindow) {
+    if (closesBesideKeptTopApps(now, tabId)) noteTopAppWindowClosedFromNewTab(consent);
     noteTabClosedByUser(tabId);
     return closeWindowAnimated(w.id);
   }

@@ -110,7 +110,7 @@ test("the redesign drops the old bar and chip for main's header and bottom bar",
   unmount(root);
 });
 
-test("the redesigned cards sit 24 points lower than the original's on iPhone, centred in the band between main's header and bar; on Android the bar sits where the browsing bar does, so the band's centre rises by half of that lift", () => {
+test("the redesigned cards sit 24 points lower than the original's on iPhone, centred in the band between main's header and bar; on Android the bar sits where the browsing bar does, 4 points above the gesture bar, so the band's centre rises by half of that lift", () => {
   const { width, height } = Dimensions.get("window");
   const original = deck("original");
   const before = cardCentres(original);
@@ -121,7 +121,7 @@ test("the redesigned cards sit 24 points lower than the original's on iPhone, ce
   const expected = deckGeometry(width, height, SAFE_TOP, SAFE_BOTTOM, 0, Platform.OS, "redesigned", 48).cardCenterY;
   for (const centre of after) expect(centre).toBeCloseTo(expected, 5);
   const barLift = redesignedBarCenterFromBottom(SAFE_BOTTOM, Platform.OS) - (Math.max(SAFE_BOTTOM, 20) + 11);
-  expect(barLift).toBe(Platform.OS === "android" ? 10.5 : 0);
+  expect(barLift).toBe(Platform.OS === "android" ? 17 : 0);
   for (const centre of before) expect(centre).toBeCloseTo(expected - 24 + barLift / 2, 5);
   unmount(root);
 });
@@ -131,7 +131,7 @@ test("the header is centred 26 points under the safe top, 24 in from the sides l
   const header = style(root, "deckHeader");
   expect(header.top + header.height / 2).toBe(SAFE_TOP + 26);
   expect(header).toMatchObject({ paddingHorizontal: 24, gap: 8 });
-  expect(header.paddingHorizontal).toBe(style(root, "deckBottomBar").paddingHorizontal);
+  expect(style(root, "deckBottomBar")).toMatchObject({ paddingLeft: header.paddingHorizontal, paddingRight: header.paddingHorizontal });
   const more = root.root.findAll((node) => Array.isArray(node.props.items) && node.props.place && node.props.items.some((item: { label?: string }) => item?.label === "Settings"))[0]!;
   expect(more.props.place).toMatchObject({ right: 24 });
   expect(style(root, "deckHeaderMore")).toMatchObject({ width: 44, height: 44, borderRadius: 22 });
@@ -227,7 +227,7 @@ test("the bottom bar is the Incognito switch, the Search Tabs capsule and a 48-p
   const { height } = Dimensions.get("window");
   const root = deck();
   const bar = style(root, "deckBottomBar");
-  expect(bar).toMatchObject({ height: 48, gap: 8, paddingHorizontal: 24 });
+  expect(bar).toMatchObject({ height: 48, gap: 8, paddingLeft: 24, paddingRight: 24 });
   let place = host(root, "deckBottomBar")!.parent;
   while (place && StyleSheet.flatten(place.props.style)?.position !== "absolute") place = place.parent;
   const anchor = StyleSheet.flatten(place!.props.style);

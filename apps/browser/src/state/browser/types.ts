@@ -163,6 +163,7 @@ export type ClosedTab = {
   parents?: ClosedGroupInfo[];
   closedAt: number;
   pinnedTile?: boolean;
+  pinKey?: string;
   small?: boolean;
 };
 

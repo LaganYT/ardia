@@ -1,6 +1,6 @@
 import type { Adapter } from "../../platform/sync";
 import { consentToken, isSharing, stillValid, onConsentPeriodChange, type ConsentToken } from "./choice";
-import { countFor, fieldName } from "./countFor";
+import { consentOrNow, countFor, fieldName } from "./countFor";
 import { takePopupProtectedMediaCounts } from "./popupProtectedMedia";
 
 export type SyncWorkKind = "bookmark" | "history";
@@ -8,7 +8,7 @@ type Phase = "extract" | "apply";
 
 const phase = () => ({ runs: 0, msTotal: 0, msMax: 0 });
 const work = () => ({ extract: phase(), apply: phase(), recordsMax: 0 });
-const noSync = () => ({ bookmark: work(), history: work() });
+const noSync = () => ({ bookmark: work(), history: work(), historyTitlesKept: 0 });
 
 let syncPending = noSync();
 
@@ -33,6 +33,9 @@ function timed<T>(run: () => T, done: (result: Awaited<T>, ms: number) => void):
   return result;
 }
 
+export const noteSyncHistoryTitlesKept = (kept: number, consent: ConsentToken | null) =>
+  countFor(consent, () => void (isSharing() && (syncPending.historyTitlesKept += kept)));
+
 export function withSyncWorkCounts(kind: SyncWorkKind, adapter: Adapter): Adapter {
   return {
     ...adapter,
@@ -56,7 +59,7 @@ export function takeSyncWorkCounts(): Record<string, number> {
       [`sync_${kind}_records_max`]: recordsMax,
     };
   };
-  return { ...fields("bookmark"), ...fields("history") };
+  return { ...fields("bookmark"), ...fields("history"), sync_history_titles_kept: taken.historyTitlesKept };
 }
 
 const none = () => ({
@@ -80,7 +83,7 @@ onConsentPeriodChange(() => {
 });
 
 const count = (key: keyof ReturnType<typeof none>, consent?: ConsentToken | null) =>
-  countFor(consent, () => void (isSharing() && pending[key]++), { [fieldName(key)]: 1 });
+  countFor(consentOrNow(consent), () => void (isSharing() && pending[key]++));
 
 export const noteLiveSourceFetch = (shared: boolean) => count(shared ? "liveSourceFetchesShared" : "liveSourceFetches");
 export const noteLiveSave = (changed: boolean, kind: "write" | "intent" = "write") =>

@@ -80,6 +80,12 @@ export const tabRows = {
           description: "Hold one Top App over another to make a folder.",
           keywords: ["folder", "folders", "top apps", "pinned tiles", "favorites", "group", "tile folder", "stack"],
         },
+        tabReorderHaptics: {
+          title: "Haptic feedback when reordering tabs",
+          description: "The trackpad ticks as a dragged tab moves to a new place or over another window.",
+          keywords: ["haptic", "haptics", "trackpad", "force touch", "tick", "vibration", "feedback", "drag", "reorder", "move tabs"],
+          shown: () => PLATFORM_FEATURES.haptics,
+        },
         showTabHoverMenu: {
           title: "Show tab hover menu",
           description: "Rest on a tab to see its address and quick actions.",
@@ -157,6 +163,13 @@ export const tabRows = {
           description: `A link in Little Ardia that would open a new tab loads right there. ${keyText("⌘")}-click still opens it behind.`,
           keywords: ["target blank", "new tab", "links", "inside"],
           shown: () => PLATFORM_FEATURES.keepsNewTabLinksInLittleArdia,
+        },
+        littleArdiaShortcutFromAnyApp: {
+          title: "Shortcut opens Little Ardia from other apps",
+          explained: true,
+          description: "New Little Ardia Window's shortcut opens Little Ardia while another app is in front. Off, that app keeps the shortcut.",
+          shown: () => PLATFORM_FEATURES.littleArdiaShortcutFromAnyApp,
+          keywords: ["global shortcut", "global hotkey", "hotkey", "shortcut", "any app", "other apps", "system wide", "option command n", "new little ardia window"],
         },
         peekLinksToOtherSites: {
           title: "Links to other sites open in",

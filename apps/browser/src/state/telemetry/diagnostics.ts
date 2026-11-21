@@ -35,7 +35,7 @@ const startedAt = Date.now();
 export const sessionStart = () => appInfo().processStart ?? startedAt;
 let appMemoryMb: number | null = null;
 let pageProcessesGone = 0;
-let pageProcessEvents = 0;
+const pageProcessEvents = { shared: 0, local: 0 };
 let hoverLostEvents = 0;
 let windowUnpaintedEvents = 0;
 let samples: SavedContext[] = [];
@@ -165,7 +165,7 @@ onConsentPeriodChange(() => {
   hoverLostEvents = windowUnpaintedEvents = 0;
 });
 
-useBrowser.subscribe((s, prev) => {
+useBrowser.subscribeTo(["profiles"], (s, prev) => {
   if (s.profiles === prev.profiles || size(s.profiles) >= size(prev.profiles)) return;
   forgetContext();
   saveContext(null);
@@ -183,7 +183,7 @@ function recordForWebuiPage() {
 
 function watchWebuiPage() {
   shownPage = activeWebuiPage();
-  unwatchWebuiPage = useBrowser.subscribe((s, prev) => {
+  unwatchWebuiPage = useBrowser.subscribeTo(["tabs", "windows", "ui"], (s, prev) => {
     if (s.tabs === prev.tabs && s.windows === prev.windows && s.ui === prev.ui) return;
     const page = activeWebuiPage(s);
     if (page === shownPage) return;
@@ -264,9 +264,9 @@ export type PageTranslateContext = { translate: string; translate_stage: string 
 
 export function trackPageProcessGone(info: { reason: string; code: number }, visible: boolean, translate?: PageTranslateContext) {
   const consent = consentNow();
-  pageProcessesGone++;
-  if (pageProcessEvents >= MAX_PAGE_PROCESS_EVENTS) return;
-  pageProcessEvents++;
+  if (isSharing()) pageProcessesGone++;
+  const cap = isSharing() ? "shared" : "local";
+  if (pageProcessEvents[cap]++ >= MAX_PAGE_PROCESS_EVENTS) return;
   const reason = GONE_REASONS.has(info.reason) ? info.reason : "unknown";
   const props = {
     process: "renderer",

@@ -43,9 +43,11 @@ export type MenuState = {
   warnBeforeClosingWindow?: boolean;
   undoReopensClosedTab?: boolean;
   linksOpenInLittleArdia?: boolean;
+  littleArdiaShortcutFromAnyApp?: boolean;
   downloadsInProgress?: number;
   extensions?: { id: string; title: string; icon?: string | null; enabled: boolean }[];
   shortcuts?: Record<string, string[][]>;
+  mouseShortcuts?: Record<string, string[]>;
 };
 
 export type MenuBookmarkKey = "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks";
@@ -98,6 +100,7 @@ export type MenusNative = {
   menuShortcuts(): Promise<MenuShortcut[]>;
   recordShortcut(): Promise<{ key: string; modifiers: ShortcutModifier[] } | null>;
   cancelRecording(): Promise<void>;
+  mouseShortcutMonitor(): Promise<{ installed: boolean; installs: number }>;
 };
 
 let menusShown = 0;

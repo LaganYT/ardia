@@ -23,7 +23,7 @@ All of them are in `apps/browser/scripts/perf/`.
 | `bench-entry.js`, `bench-channel.js`, `bench-offline.js` | native | The JS entry of the bench bundle: the app's `index.js` plus the command channel (`ac.journeys()` is the field timing's own view). `bench-offline.js` answers every non-local `fetch` itself when the data folder holds a `bench-offline` file, so nothing is uploaded while sharing is on. |
 | `js-bench.mjs` | JS | React commits, renders, store updates and JS tasks per interaction, on a production bundle. |
 | `bench-app.js` | JS, render | The scenarios js-bench and render-bench run inside the app. **Not** part of native-bench. |
-| `seed.mjs` | JS, render | The big profile those runs start from: 200 tabs, 5000 history entries, 1000 bookmarks. |
+| `seed.mjs` | JS, render | The big profile those runs start from: 200 tabs, 5000 history entries, 1000 bookmarks. js-bench loads the two active tabs from `127.0.0.1` and the other tabs from `[::1]` (same port), so the active page's favicon can't reach the other rows through Chromium's same-host fallback partway through launch, and serves the active pages 400 ms late, so the address field's load fill (shown past 150 ms) is counted in every launch rather than in some. |
 | `render-bench.mjs` | render | Wasted renders per interaction, using React's profiling build (`js-bench.mjs bundle <dir> --profiling 1`). |
 | `census.mjs` | render | Per action of each journey (Cmd-T, keystroke, Cmd-L, tab switch, Enter, page load, hover): components rendered, wasted renders, hooks run, store subscriptions notified, selectors evaluated, native view updates, timers scheduled. Its results and fix list: [render-census.md](render-census.md). |
 | `micro-bench.mjs` | Node | Store-side work that grows with a profile (sidebar entries, group names, omnibox) in Node. No app needed. Its `counts` and `instr` cases feed the ratchet. |
@@ -155,7 +155,7 @@ node apps/browser/scripts/perf/ratchet.mjs baseline       # rebuild ratchet.json
 node apps/browser/scripts/perf/ratchet.mjs baseline --measure-only   # the runs only; then `init <the two reports> --adopt` merges them without raising a ceiling
 ```
 
-`run` takes about 85 s (6 s of it bundling the tree, 15 s the Node counts, the rest one launch and the nine scenarios of
+`run` takes about 85 s (6 s of it bundling the tree, 15 s the Node counts, the rest one launch and the ten scenarios of
 one hidden instance), and about 170 s when a count is over and the scenarios run a second time. It exits 1 and prints a
 table of the counts over their ceiling. A count over in the first run gets one more run, and only a count over in both fails: a real regression is in both, a pointer moving over the hidden window or the window
 deactivating mid-scenario is in one. A report of several runs is judged by its median run.
@@ -163,10 +163,13 @@ deactivating mid-scenario is in one. A report of several runs is judged by its m
 ### What is steady
 
 The scenarios run in a fixed order (`ratchet.mjs` header says why): `startup`, `launch` (all the launch's work, read
-once it has stopped), `idle`, `typing`, `switchTabs`, `scroll`, `hover`, `pageLoad`, `openClose`, with
+once it has stopped), `idle`, `typing`, `switchTabs`, `scroll`, `hover`, `pageLoad`, `openClose`, `nodeChurn`, with
 `--options '{"seconds":5}'`, followed by a second launch from a one-tab session (`js-bench.mjs --seed small`, counts
 prefixed `small.`). `launch.firstCommitMounts` (and `small.launch.firstCommitMounts`) is what the launch's first React
-commit mounted (`acPerf.firstCommitMounts`): the first frame waits for all of it. The census behind `ratchet.json` is 8 launches of 0.2.27's Release app with the tree's
+commit mounted (`acPerf.firstCommitMounts`): the first frame waits for all of it. `nodeChurn.nativeNodesLeft` is how many
+of React Native's native animated nodes outlive a churn (20 tabs visited, then 60 tabs opened and closed and 120
+switches): the probe counts `createAnimatedNode` against `dropAnimatedNode` (`acPerf.nativeNodes`), and anything above 0
+is a node left behind for every tab or switch, for the life of the app. The census behind `ratchet.json` is 8 launches of 0.2.27's Release app with the tree's
 bundle.
 
 Group totals per scenario over the 16 baseline runs (two batches of 8): a bare number repeated in every run is gated
@@ -234,7 +237,7 @@ again shows up here at once: `switchTabs.subNotified` grows by the row count per
   writes. They stay in the js-bench report.
 - A new component, task or timer that has no ceiling shows up in the group total's ceiling, not on its own: `check`
   lists the biggest counts without one.
-- The ceilings are for probe revision 2 and bench revision 3 (`perfProbe.ts` `PERF_PROBE_REVISION`, js-bench
+- The ceilings are for probe revision 2 and bench revision 4 (`perfProbe.ts` `PERF_PROBE_REVISION`, js-bench
   `BENCH_REVISION`). `check` warns when a report has another; rebuild with `baseline` after a change that redefines a
   counter.
 
@@ -338,6 +341,12 @@ legacy files gone, then copied per run), read big-seed launch numbers as "launch
 
 Launch rows count from just before `open -g -n`. Command rows count from `Date.now()` in the app's JS as the
 command starts.
+
+Every run starts from a copy of one template, made by a seeding launch that also waits until uBlock Origin has saved
+its compiled engine (the three `cache/selfie/static*` keys in its `chrome.storage.local`) and its storage has gone quiet
+(`ubo-cache.mjs`, 90 s deadline). Without that wait every run was uBO's first launch with a stale cache: about 7 s in,
+uBO wrote a 26 MB engine through the browser process, which peaked about 200 MB higher for under a second and, in a
+third to half of runs, kept 60 to 70 MB until quit, so the memory rows swung by that much from run to run.
 
 | Row | Measures |
 |---|---|

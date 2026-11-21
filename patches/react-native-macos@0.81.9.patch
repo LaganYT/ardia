@@ -21,6 +21,18 @@ index 72266bd2fa7e3a8a64dc6abc88b1a1a00cf0b614..e25055dfc5bbdc02028ee537fe7e9a8a
        ref={mergedRef}
        style={typeof style === 'function' ? style({pressed}) : style}
        collapsable={false}>
+diff --git a/Libraries/Components/TextInput/RCTTextInputViewConfig.js b/Libraries/Components/TextInput/RCTTextInputViewConfig.js
+index 253c2a49e4ed04ef7cce283ae905e218d438a007..90bdecb170c2aaf8848d1551727e1855097102f0 100644
+--- a/Libraries/Components/TextInput/RCTTextInputViewConfig.js
++++ b/Libraries/Components/TextInput/RCTTextInputViewConfig.js
+@@ -192,6 +192,7 @@ const RCTTextInputViewConfig: PartialViewConfigWithoutName = {
+     tooltip: true,
+     cursorColor: {process: require('../../StyleSheet/processColor').default},
+     // macOS]
++    ardiaCentersCapitals: true,
+     ...ConditionallyIgnoredEventHandlers({
+       onChange: true,
+       onSelectionChange: true,
 diff --git a/Libraries/Components/TextInput/TextInput.js b/Libraries/Components/TextInput/TextInput.js
 index 1ae22ed66776941c33b2c0a78038b2b997506aa7..632a0f284e88e2d3034f3eeb50cf2acf3be6652e 100644
 --- a/Libraries/Components/TextInput/TextInput.js
@@ -333,10 +345,10 @@ index bbee6d1e1865359b350da78b745c6c0061a2dc5d..c645bfead1814173bef35608504aa5ec
  
  function convertPointerEventToMouseEvent(input: PointerEvent): MouseEvent {
 diff --git a/Libraries/Text/Text/RCTTextView.h b/Libraries/Text/Text/RCTTextView.h
-index 3de368b73b6bbad86f1b27dd0ba56abb516f89e8..58ec2e0f64379d83989e5915b3ee44041be53f48 100644
+index 3de368b73b6bbad86f1b27dd0ba56abb516f89e8..84d3218318dc1771ca52ed445f9cd0f82e931b27 100644
 --- a/Libraries/Text/Text/RCTTextView.h
 +++ b/Libraries/Text/Text/RCTTextView.h
-@@ -12,6 +12,10 @@
+@@ -12,11 +12,18 @@
  
  NS_ASSUME_NONNULL_BEGIN
  
@@ -347,8 +359,16 @@ index 3de368b73b6bbad86f1b27dd0ba56abb516f89e8..58ec2e0f64379d83989e5915b3ee4404
  @interface RCTTextView : RCTUIView // [macOS]
  
  - (instancetype)initWithEventDispatcher:(id<RCTEventDispatcherProtocol>)eventDispatcher; // [macOS]
+ 
+ @property (nonatomic, assign) BOOL selectable;
++#if TARGET_OS_OSX
++@property (nonatomic, assign) BOOL ardiaCentersCapitals;
++#endif
+ 
+ - (void)setTextStorage:(NSTextStorage *)textStorage
+           contentFrame:(CGRect)contentFrame
 diff --git a/Libraries/Text/Text/RCTTextView.mm b/Libraries/Text/Text/RCTTextView.mm
-index abff88e692bd8ec88f4e5b292234b23133962d46..b279ebb05127338f69027c09e915acf865e7f705 100644
+index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf6d6cb257 100644
 --- a/Libraries/Text/Text/RCTTextView.mm
 +++ b/Libraries/Text/Text/RCTTextView.mm
 @@ -37,6 +37,108 @@ - (BOOL)canBecomeKeyView
@@ -490,15 +510,21 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..b279ebb05127338f69027c09e915acf8
    _textView.textStorage.attributedString = textStorage;
  #endif // macOS]
  
-@@ -205,6 +314,33 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
+@@ -205,6 +314,39 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
    [self setNeedsDisplay];
  }
  
 +#if TARGET_OS_OSX // [Ardia
 +- (CGRect)ardia_liftedContentFrame
 +{
-+  CGFloat lift = RCTTextOpticalLift(_opticalFont, ArdiaBackingDensity(self));
++  CGFloat lift = _ardiaCentersCapitals ? 0 : RCTTextOpticalLift(_opticalFont, ArdiaBackingDensity(self));
 +  return CGRectOffset(_contentFrame, 0, self.isFlipped ? -lift : lift);
++}
++
++- (void)setArdiaCentersCapitals:(BOOL)ardiaCentersCapitals
++{
++  _ardiaCentersCapitals = ardiaCentersCapitals;
++  [self ardia_applyOpticalLift];
 +}
 +
 +- (void)ardia_applyOpticalLift
@@ -524,7 +550,7 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..b279ebb05127338f69027c09e915acf8
  - (void)drawRect:(CGRect)rect
  {
    [super drawRect:rect];
-@@ -293,6 +429,11 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
+@@ -293,6 +435,11 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
    CGFloat fraction;
    NSLayoutManager *layoutManager = _textStorage.layoutManagers.firstObject;
    NSTextContainer *textContainer = layoutManager.textContainers.firstObject;
@@ -536,7 +562,7 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..b279ebb05127338f69027c09e915acf8
    NSUInteger characterIndex = [layoutManager characterIndexForPoint:point
                                                      inTextContainer:textContainer
                             fractionOfDistanceBetweenInsertionPoints:&fraction];
-@@ -310,6 +451,12 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
+@@ -310,6 +457,12 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
  - (void)didMoveToWindow
  {
    [super didMoveToWindow];
@@ -549,7 +575,7 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..b279ebb05127338f69027c09e915acf8
  
    if (!self.window) {
      self.layer.contents = nil;
-@@ -318,6 +465,9 @@ - (void)didMoveToWindow
+@@ -318,6 +471,9 @@ - (void)didMoveToWindow
        _highlightLayer = nil;
      }
    } else if (_textStorage) {
@@ -559,6 +585,20 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..b279ebb05127338f69027c09e915acf8
      [self setNeedsDisplay];
    }
  }
+diff --git a/Libraries/Text/Text/RCTTextViewManager.mm b/Libraries/Text/Text/RCTTextViewManager.mm
+index 769a3e556d96b2b9f6c2795303b675b749cdeb61..078288af5be55afc260a48d0860a902ed817a5b8 100644
+--- a/Libraries/Text/Text/RCTTextViewManager.mm
++++ b/Libraries/Text/Text/RCTTextViewManager.mm
+@@ -34,6 +34,9 @@ @implementation RCTTextViewManager {
+ RCT_EXPORT_SHADOW_PROPERTY(onTextLayout, RCTDirectEventBlock)
+ 
+ RCT_EXPORT_VIEW_PROPERTY(selectable, BOOL)
++#if TARGET_OS_OSX
++RCT_EXPORT_VIEW_PROPERTY(ardiaCentersCapitals, BOOL)
++#endif
+ 
+ - (void)setBridge:(RCTBridge *)bridge
+ {
 diff --git a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm b/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
 index 18bbe64f657a36596563b3eb6d135284e28c674a..a4046a33e13d35cac155e306f368e04ef8d1f51e 100644
 --- a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
@@ -843,7 +883,7 @@ index fac5699dedeaaa35bb22b8f8d5d96a3817ca92b1..692ea640ba83db5b0bfe3fc1a24fda68
        RCTBaseTextInputShadowView *shadowView =
            (RCTBaseTextInputShadowView *)[self.bridge.uiManager shadowViewForReactTag:viewTag];
 diff --git a/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputView.mm b/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputView.mm
-index 9973da7611fc92df7e66010350504bf077a9f2d9..628bc4c403f84a01abe1f687bf85002450f5a204 100644
+index 9973da7611fc92df7e66010350504bf077a9f2d9..66f7f05ae27762b12e41f92c02bd3997212ed092 100644
 --- a/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputView.mm
 +++ b/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputView.mm
 @@ -26,7 +26,9 @@ - (instancetype)initWithBridge:(RCTBridge *)bridge
@@ -879,11 +919,12 @@ index 9973da7611fc92df7e66010350504bf077a9f2d9..628bc4c403f84a01abe1f687bf850024
  - (void)setUseSecureTextField:(BOOL)useSecureTextField {
    if (_useSecureTextField != useSecureTextField) {
      _useSecureTextField = useSecureTextField;
-@@ -84,10 +97,10 @@ - (void)setUseSecureTextField:(BOOL)useSecureTextField {
+@@ -84,10 +97,11 @@ - (void)setUseSecureTextField:(BOOL)useSecureTextField {
      _backedTextInputView.selectionColor = previousTextField.selectionColor;
      _backedTextInputView.textAlignment = previousTextField.textAlignment;
      _backedTextInputView.textContainerInset = previousTextField.textContainerInset;
 -    _backedTextInputView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
++    _backedTextInputView.ardiaCentersCapitals = previousTextField.ardiaCentersCapitals;
      _backedTextInputView.textInputDelegate = self;
      _backedTextInputView.text = previousTextField.text;
      [self replaceSubview:previousTextField with:_backedTextInputView];
@@ -892,12 +933,13 @@ index 9973da7611fc92df7e66010350504bf077a9f2d9..628bc4c403f84a01abe1f687bf850024
  }
  
 diff --git a/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputViewManager.mm b/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputViewManager.mm
-index 386405335b411e70a82909033febc7dd5b4adabe..2b8d3d5576b83c20e6387c189943e1722cfad5ce 100644
+index 386405335b411e70a82909033febc7dd5b4adabe..ace454e53458fb82d2fd6b456c4e95623ee7311f 100644
 --- a/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputViewManager.mm
 +++ b/Libraries/Text/TextInput/Singleline/RCTSinglelineTextInputViewManager.mm
-@@ -30,4 +30,12 @@ - (RCTPlatformView *)view // [macOS]
+@@ -30,4 +30,13 @@ - (RCTPlatformView *)view // [macOS]
  
  RCT_REMAP_OSX_VIEW_PROPERTY(secureTextEntry, useSecureTextField, BOOL) // [macOS]
++RCT_REMAP_OSX_VIEW_PROPERTY(ardiaCentersCapitals, backedTextInputView.ardiaCentersCapitals, BOOL)
  
 +#if TARGET_OS_OSX // [Ardia: pastedTypes reached only multiline fields
 +RCT_CUSTOM_VIEW_PROPERTY(pastedTypes, NSArray<NSPasteboardType>*, RCTSinglelineTextInputView)
@@ -908,8 +950,22 @@ index 386405335b411e70a82909033febc7dd5b4adabe..2b8d3d5576b83c20e6387c189943e172
 +#endif // Ardia]
 +
  @end
+diff --git a/Libraries/Text/TextInput/Singleline/RCTUITextField.h b/Libraries/Text/TextInput/Singleline/RCTUITextField.h
+index 61242af88da2f235e5ae506e79dfb9898742eb51..259868183aa018ac6c0e7a83a9008ad63a2bb3dd 100644
+--- a/Libraries/Text/TextInput/Singleline/RCTUITextField.h
++++ b/Libraries/Text/TextInput/Singleline/RCTUITextField.h
+@@ -50,6 +50,9 @@ NS_ASSUME_NONNULL_BEGIN
+ @property (nonatomic, assign, readonly) CGPoint contentOffset;
+ @property (nonatomic, assign, readonly) UIEdgeInsets contentInset;
+ @property (nonatomic, assign) BOOL disableKeyboardShortcuts;
++#if TARGET_OS_OSX
++@property (nonatomic, assign) BOOL ardiaCentersCapitals;
++#endif
+ 
+ #if TARGET_OS_OSX // [macOS
+ @property (nonatomic, copy, nullable) NSString *text;
 diff --git a/Libraries/Text/TextInput/Singleline/RCTUITextField.mm b/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
-index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..a36d86861e3004008128b546ad35c8079e0a921f 100644
+index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..aee0e19607a58db55ddf0afc4f6d682b672eabcc 100644
 --- a/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
 +++ b/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
 @@ -10,6 +10,7 @@
@@ -1092,7 +1148,7 @@ index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..a36d86861e3004008128b546ad35c807
  #endif // macOS]
  
  #pragma mark - Accessibility
-@@ -304,8 +445,104 @@ - (RCTUIColor*)cursorColor
+@@ -304,8 +445,110 @@ - (RCTUIColor*)cursorColor
  - (void)setFont:(UIFont *)font
  {
    ((RCTUITextFieldCell*)self.cell).font = font;
@@ -1107,7 +1163,7 @@ index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..a36d86861e3004008128b546ad35c807
 +// keeps its full height.
 +- (NSRect)ardia_liftedFrame:(NSRect)frame
 +{
-+  CGFloat lift = RCTTextOpticalLift(self.font, ArdiaBackingDensity(self.superview ?: self));
++  CGFloat lift = _ardiaCentersCapitals ? 0 : RCTTextOpticalLift(self.font, ArdiaBackingDensity(self.superview ?: self));
 +  BOOL flipped = self.superview == nil || self.superview.isFlipped;
 +  return NSMakeRect(frame.origin.x, flipped ? frame.origin.y - lift : frame.origin.y, frame.size.width, frame.size.height + lift);
 +}
@@ -1129,6 +1185,12 @@ index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..a36d86861e3004008128b546ad35c807
 +  if (drift != 0) {
 +    [viewport setFrameOrigin:NSMakePoint(viewport.frame.origin.x, viewport.frame.origin.y + drift)];
 +  }
++}
++
++- (void)setArdiaCentersCapitals:(BOOL)ardiaCentersCapitals
++{
++  _ardiaCentersCapitals = ardiaCentersCapitals;
++  [self ardia_applyOpticalLift];
 +}
 +
 +- (void)ardia_applyOpticalLift
@@ -1197,7 +1259,7 @@ index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..a36d86861e3004008128b546ad35c807
  - (UIFont *)font
  {
    return ((RCTUITextFieldCell*)self.cell).font;
-@@ -330,7 +567,9 @@ - (void)setPlaceholder:(NSString *)placeholder
+@@ -330,7 +573,9 @@ - (void)setPlaceholder:(NSString *)placeholder
  #if !TARGET_OS_OSX // [macOS]
    [super setPlaceholder:placeholder];
  #else // [macOS
@@ -1207,7 +1269,7 @@ index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..a36d86861e3004008128b546ad35c807
  #endif // macOS]
    [self _updatePlaceholder];
  }
-@@ -385,6 +624,20 @@ - (void)_updatePlaceholder
+@@ -385,6 +630,20 @@ - (void)_updatePlaceholder
    _isUpdatingPlaceholderText = YES;
    self.placeholderAttributedString = [[NSAttributedString alloc] initWithString:self.placeholder ?: @""
  																	 attributes:[self _placeholderTextAttributes]];
@@ -1228,7 +1290,7 @@ index 137d0ee9f51616ea27c397a8bf595fe2c0ff5e91..a36d86861e3004008128b546ad35c807
    _isUpdatingPlaceholderText = NO;
  #endif // macOS]
  }
-@@ -710,6 +963,9 @@ - (void)keyUp:(NSEvent *)event {
+@@ -710,6 +969,9 @@ - (void)keyUp:(NSEvent *)event {
  - (void)setReadablePasteBoardTypes:(NSArray<NSPasteboardType> *)readablePasteboardTypes
  {
    _readablePasteboardTypes = readablePasteboardTypes;
@@ -1309,6 +1371,18 @@ index 6f332dc1701cada0aff0e9a2678fa7bdcea0ef85..462853ec8b76f004cd5b9e92291473bc
  @end
  
  #endif // TARGET_OS_OSX
+diff --git a/Libraries/Text/TextNativeComponent.js b/Libraries/Text/TextNativeComponent.js
+index 37027e5da92b30d4c8c8f72235890c4e6dfbf043..5b3fb284b52ee9e9150d53a4530eb40af2a5a9b6 100644
+--- a/Libraries/Text/TextNativeComponent.js
++++ b/Libraries/Text/TextNativeComponent.js
+@@ -48,6 +48,7 @@ const textViewConfig = {
+     android_hyphenationFrequency: true,
+     lineBreakStrategyIOS: true,
+     tooltip: true, // [macOS]
++    ardiaCentersCapitals: true,
+   },
+   directEventTypes: {
+     topTextLayout: {
 diff --git a/React/Base/RCTTouchHandler.m b/React/Base/RCTTouchHandler.m
 index b85ee3dd203f88bf2daaa47e912031ea200ff910..fdd49042170be0c7850fea3ea8550c32f52ee33b 100644
 --- a/React/Base/RCTTouchHandler.m

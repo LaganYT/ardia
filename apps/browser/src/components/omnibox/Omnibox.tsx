@@ -6,7 +6,7 @@ import { dictationAvailable, startDictation } from "../../state/omnibox/textInpu
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { findNodeHandle, type TextInput, type View } from "react-native";
 import { journeyBarCommitted, journeyBarFocused, journeyKeystroke, journeyNavigate, journeySuggestions } from "../../state/telemetry/journeys";
-import { sampleOmniboxLatency, trackSuggestionChosen } from "../../state/telemetry/track";
+import { newOmniboxKey, omniboxKeyHeard, sampleOmniboxLatency, trackSuggestionChosen } from "../../state/telemetry/track";
 import { useSettings, useTab, useWindow, useWindowId, useWindowProfileId } from "../../state/browser/hooks";
 import { removeHistory } from "../../state/history/actions";
 import { useWindowUiOf } from "../../state/windows/hooks";
@@ -232,13 +232,10 @@ export function Omnibox({
   }, [items]);
 
   const heardAt = useRef(0);
-  const keyAt = useRef(0);
+  const [key] = useState(newOmniboxKey);
   useLayoutEffect(() => {
     if (__DEV__) traceOmnibox({ bar: `${windowId}:${variant}`, typed, heard: heardAt.current, committed: Date.now() });
-    if (keyAt.current) {
-      sampleOmniboxLatency(Date.now() - keyAt.current);
-      keyAt.current = 0;
-    }
+    sampleOmniboxLatency(key);
   });
 
   const onChangeText = (next: string) => {
@@ -252,7 +249,7 @@ export function Omnibox({
     previewSelection.edited();
     bangEnter.cancel();
     focusEcho.current = false;
-    keyAt.current = Date.now();
+    omniboxKeyHeard(key);
     journeyKeystroke(tabId);
     if (hero) markNewTabBar("typed", tabId);
     const bySpace = scope ? null : keywordBySpace(previewing ? value : typed, next);

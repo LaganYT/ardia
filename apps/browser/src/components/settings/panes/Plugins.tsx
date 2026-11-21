@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import type { PluginManifest, RowSpec } from "../../../lib/pluginManifest";
+import type { PluginManifest, RowSpec, RowValue } from "../../../lib/pluginManifest";
 import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { PLATFORM_TERMS } from "../../../lib/platformTerms";
 import type { PluginListing, ProcessState, ProgramsState } from "../../../state/plugins/store";
@@ -12,7 +12,7 @@ import {
   pluginsFolderPath,
   relinkPrograms,
   canRelink,
-  removePlugin,
+  removePluginAfterConfirm,
   requestPluginConsent,
   restartPlugin,
   setPluginValue,
@@ -21,7 +21,6 @@ import {
 } from "../../../state/plugins/actions";
 import { usePluginActive, usePluginListing, usePluginNeedsReview, usePluginProcess, usePluginPrograms, usePluginRecord, usePluginValues } from "../../../state/plugins/hooks";
 import { goToSettingsPane, SETTINGS_WINDOW_ID, type SettingsPlace } from "../../../state/settings/settingsWindows";
-import { confirm } from "../../../state/app/system";
 import { Button, PopUp, Symbol, TextField, Toggle } from "../../ui";
 import { Group, Row, SectionHeader } from "../Form";
 import { useTheme } from "../../ui/theme";
@@ -132,9 +131,15 @@ function PluginRow({ name }: { name: string }) {
   );
 }
 
-function ValueRow({ name, row, value }: { name: string; row: RowSpec; value: string | boolean }) {
-  const [draft, setDraft] = useState(typeof value === "string" ? value : "");
-  useEffect(() => setDraft(typeof value === "string" ? value : ""), [value]);
+function draftOf(value: RowValue) {
+  return typeof value === "boolean" ? "" : String(value);
+}
+
+function ValueRow({ name, row, value }: { name: string; row: RowSpec; value: RowValue }) {
+  const [draft, setDraft] = useState(draftOf(value));
+  useEffect(() => setDraft(draftOf(value)), [value]);
+  if (row.type === "secret") return null;
+  const commit = () => setPluginValue(name, row.key, row.type === "number" ? Number(draft) : draft);
   if (row.type === "toggle") return <Row title={row.title} description={row.description}><Toggle value={value === true} accessibilityLabel={row.title} onChange={(on) => setPluginValue(name, row.key, on)} /></Row>;
   if (row.type === "choice")
     return (
@@ -144,16 +149,13 @@ function ValueRow({ name, row, value }: { name: string; row: RowSpec; value: str
     );
   return (
     <Row title={row.title} description={row.description}>
-      <TextField value={draft} width={200} onChangeText={setDraft} onSubmit={() => setPluginValue(name, row.key, draft)} onBlur={() => setPluginValue(name, row.key, draft)} />
+      <TextField value={draft} width={200} onChangeText={setDraft} onSubmit={commit} onBlur={commit} />
     </Row>
   );
 }
 
 async function confirmRemove(name: string, title: string) {
-  const ok = await confirm({ title: `Remove ${title}?`, message: `Its folder moves to the ${PLATFORM_TERMS.trash}, and its data and its panel's website data are deleted.`, confirmTitle: "Remove", destructive: true, windowId: SETTINGS_WINDOW_ID });
-  if (!ok) return;
-  const removed = await removePlugin(name);
-  if (removed.ok || removed.removed) goToSettingsPane("plugins");
+  if (await removePluginAfterConfirm(name, title, SETTINGS_WINDOW_ID)) goToSettingsPane("plugins");
 }
 
 function PluginPage({ name }: { name: string }) {
@@ -180,8 +182,8 @@ function PluginPage({ name }: { name: string }) {
             <Toggle value={active} disabled={!m} asksFirst={!active} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on)} />
           )}
         </Row>
-        {m?.process && active ? (
-          <Row title="Its program" description={m.process.run.join(" ")}>
+        {active && (m?.process || (m?.main && process)) ? (
+          <Row title={m?.process ? "Its program" : "Its code"} description={m?.process ? m.process.run.join(" ") : typeof m?.main === "string" ? m.main : m?.main?.entry}>
             <Button title="Show Log" onPress={() => showPluginLog(name)} />
             <Button title="Restart" onPress={() => restartPlugin(name)} />
           </Row>

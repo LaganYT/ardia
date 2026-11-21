@@ -1,7 +1,12 @@
+import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { activeManifest, currentPlugins, needsReview, recordOf, usePlugins, type PluginsStore } from "./store";
+import { surfaceKey, usePluginSurfaces, type PluginSurfacesStore, type SidePanel } from "./surfaces";
+import { pluginToolbarItems } from "./toolbar";
+import { pluginThemes } from "./themes";
+import { activeManifest, activeNames, currentPlugins, needsReview, recordOf, usePlugins, webViewsOnline, type PluginsStore } from "./store";
 import { pageContextOf, pageViewUrl, shownContext, usePluginPages } from "./pages";
 import { useBrowser } from "../browser/store";
+import { eligibleKind } from "../automation/automationWindows";
 import { valuesOf } from "./values";
 
 export const usePluginOrder = () => usePlugins((s) => s.order);
@@ -31,5 +36,29 @@ export const usePluginPageRun = (name: string) =>
     return state?.state === "running" ? state.run : 0;
   });
 export const usePluginApproval = (name: string) => usePlugins((s) => recordOf(s, name).approved ?? "");
-export const usePluginNetwork = (name: string) => usePlugins((s) => !!activeManifest(s, name)?.permissions.includes("network"));
+export const usePluginNetwork = (name: string) => usePlugins((s) => webViewsOnline(s, name));
 export const usePluginPageSpec = (name: string) => usePlugins((s) => s.listings[name]?.manifest?.page ?? null);
+export const usePluginManifest = (name: string) => usePlugins((s) => activeManifest(s, name));
+export const usePluginToolbarItems = () => {
+  const plugins = usePlugins(useShallow((s: PluginsStore) => ({ listings: s.listings, records: s.records, order: s.order })));
+  const surfaces = usePluginSurfaces(useShallow((s: PluginSurfacesStore) => ({ toolbarState: s.toolbarState })));
+  return useMemo(() => pluginToolbarItems(plugins, surfaces), [plugins, surfaces]);
+};
+export const usePluginSurfaceTree = (plugin: string, surfaceId: string) => usePluginSurfaces((s) => s.trees[surfaceKey(plugin, surfaceId)] ?? null);
+export const usePluginToolbarState = (plugin: string, itemId: string) => usePluginSurfaces((s) => s.toolbarState[surfaceKey(plugin, itemId)] ?? null);
+export const usePluginSidePanel = (windowId: string) => usePluginSurfaces((s) => s.sidePanels[windowId] ?? null);
+const NO_SIDE_PANELS: SidePanel[] = [];
+export const usePluginRetainedSidePanels = (windowId: string) => usePluginSurfaces((s) => s.retainedSidePanels[windowId] ?? NO_SIDE_PANELS);
+export const usePluginWindowEligible = (windowId: string) => useBrowser((s) => eligibleKind(s, windowId) !== null);
+export const usePluginPopover = (windowId: string) => usePluginSurfaces((s) => s.popovers[windowId] ?? null);
+export const usePluginCommandView = (windowId: string) => usePluginSurfaces((s) => s.commandViews[windowId] ?? null);
+export const usePluginQuickPick = () => usePluginSurfaces((s) => s.quickPick);
+export const usePluginInputBox = () => usePluginSurfaces((s) => s.inputBox);
+export const usePluginSidebarViews = () => {
+  const plugins = usePlugins(useShallow((s: PluginsStore) => ({ listings: s.listings, records: s.records, order: s.order })));
+  return useMemo(() => activeNames(plugins).flatMap((plugin) => activeManifest(plugins, plugin)!.contributes.sidebarViews.map((v) => ({ ...v, plugin }))), [plugins]);
+};
+export const usePluginThemes = () => {
+  const plugins = usePlugins(useShallow((s: PluginsStore) => ({ listings: s.listings, records: s.records, order: s.order })));
+  return useMemo(() => pluginThemes(plugins), [plugins]);
+};

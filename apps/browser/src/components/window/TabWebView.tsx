@@ -4,11 +4,11 @@ import type { PageEngine } from "../../state/engines/engines";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 import { focus, switchToTab } from "../../state/browser/actions";
-import { notePictureInPictureBackToTab, notePictureInPictureClickSkip, notePictureInPictureDragged, notePictureInPictureResized } from "../../state/telemetry/pictureInPictureCounts";
+import { notePictureInPictureBackToTab, notePictureInPictureClickSkip, notePictureInPictureDragged, notePictureInPictureHandleUnstash, notePictureInPictureResized } from "../../state/telemetry/pictureInPictureCounts";
 import { noteRendererResponsive, noteRendererUnresponsive } from "../../state/telemetry/freezes";
 import { noteFavicon } from "../../state/favicons/favicons";
 import { adoptIconPage, dropOutlivedFavicon, noteIconPage } from "../../state/favicons/iconPage";
-import { restoredThemeColor } from "../../state/windows/launchLook";
+import { endThemeHold, heldThemeColor } from "../../state/windows/launchLook";
 import { noteTabReady } from "../../state/app/cliControl";
 import { isQuitting } from "../../state/app/quit";
 import { useProfileTheme } from "./ThemeScope";
@@ -29,7 +29,7 @@ import type { Tab } from "../../state/browser/types";
 import { zoomChangedByUser } from "../../state/site/zoomBubble";
 import { markTabReady, patchPage, pageOf } from "../../state/tabs/pageState";
 import { popupBlocked, showAutofillPrompt, showExternalApp, showPasswordPrompt } from "../../state/site/prompts";
-import { fieldProviderOpened, verificationCodeFound, type VerificationCodeFound } from "../../state/site/passwordManager";
+import { fieldProviderHint, fieldProviderOpened, verificationCodeFound, type FieldProviderHint, type FieldProviderOpened, type VerificationCodeFound } from "../../state/site/passwordManager";
 import { hoverStatus, verificationCodeDocument, verificationCodeTabGone } from "../../state/site/verificationCodes";
 import { leftPage, pageAskedToClose, pageEnded } from "../../state/tabs/pageEvents";
 import { copyLinkToSelection, searchSelection, setPageSelection } from "../../state/site/selection";
@@ -118,6 +118,7 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
     return () => {
       if (handedToTab()) return forgetPeekHandover(tabId);
       noteGone(tabId);
+      endThemeHold(tabId);
       verificationCodeTabGone(tabId);
       noteFirstPagePending(tabId, false);
       forgetUnreadIfGone(tabId);
@@ -201,7 +202,7 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
           return;
         }
         noteFirstPagePending(tabId, firstPagePending({ url, committedInitial, isLoading }));
-        const shownTheme = restoredThemeColor(tabId, url, themeColor, isLoading);
+        const shownTheme = heldThemeColor(tabId, url, themeColor, isLoading);
         pending.current = null;
         const kept = pageOf(tabId).newTabShown;
         if (kept) {
@@ -252,6 +253,7 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
       onPictureInPictureDragged={notePictureInPictureDragged}
       onPictureInPictureResized={notePictureInPictureResized}
       onPictureInPictureSkip={notePictureInPictureClickSkip}
+      onPictureInPictureUnstashed={notePictureInPictureHandleUnstash}
       onMediaFault={noteWebKitMediaFault}
       onDisplayMediaRequest={(request) => requestDisplayMedia(tabId, request)}
       onOpenWindow={onOpenWindow}
@@ -306,7 +308,8 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
       onScroll={(state) => noteScroll(tabId, state)}
       onProtectedMedia={(request) => offerWebKit(tabId, request)}
       onAutoplayBlocked={(count) => noteSiteControls("autoplayPlaysBlocked", count)}
-      onFieldProviderOpened={fieldProviderOpened}
+      onFieldProviderOpened={(opened: FieldProviderOpened) => fieldProviderOpened(tabId, opened)}
+      onFieldProviderHint={(hint: FieldProviderHint) => fieldProviderHint(tabId, hint)}
       onVerificationCodeFound={(found: VerificationCodeFound) => verificationCodeFound(tabId, found)}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url, reason) => {

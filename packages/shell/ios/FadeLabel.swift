@@ -14,14 +14,7 @@ private final class LabelInk: CALayer {
 }
 
 final class FadeLabel: ExpoView {
-  private static let field: NSTextField = {
-    let field = NSTextField(labelWithString: "")
-    field.lineBreakMode = .byClipping
-    field.maximumNumberOfLines = 1
-    field.cell?.truncatesLastVisibleLine = false
-    field.isSelectable = false
-    return field
-  }()
+  private static let field = SingleLineInk.labelField()
   private static let weights: [String: NSFont.Weight] = [
     "ultraLight": .ultraLight, "thin": .thin, "light": .light, "regular": .regular, "medium": .medium,
     "semibold": .semibold, "bold": .bold, "heavy": .heavy, "black": .black,
@@ -140,7 +133,7 @@ final class FadeLabel: ExpoView {
     font = Self.resolvedFont(family: fontFamily, weight: weight, size: fontSize)
     let field = Self.field
     load(field)
-    fitting = field.frame(forAlignmentRect: NSRect(origin: .zero, size: field.intrinsicContentSize)).size
+    fitting = SingleLineInk.fitting(field)
     ink.setNeedsDisplay()
     relayout()
   }
@@ -181,7 +174,7 @@ final class FadeLabel: ExpoView {
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: true)
     effectiveAppearance.performAsCurrentDrawingAppearance {
-      field.cell?.draw(withFrame: NSRect(origin: .zero, size: size), in: field)
+      SingleLineInk.draw(field, size: size)
     }
     NSGraphicsContext.restoreGraphicsState()
   }

@@ -23,11 +23,28 @@ export type PluginProgramsResult =
   | { ok: true; linked: string[]; refused: Record<string, string>; binDir: string; adopted: boolean }
   | { ok: false; reason?: string; stale?: true };
 
-export type PluginStartSpec = { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean; launch: number };
+export type PluginStartSpec = {
+  name: string;
+  run: string[];
+  memoryMB: number;
+  network: boolean;
+  folderId: string;
+  approved: string;
+  page: boolean;
+  launch: number;
+  runtime?: "js" | "process";
+  entry?: string;
+};
 export type PluginStartResult = { ok: true; run: number; pid: number } | { ok: false; reason: string };
 export type PluginExit = { name: string; run: number; status: number | null; signal: number | null; overMemory: boolean };
 export type PluginLine = { name: string; run: number; launch: number; line: string };
 export type PluginRemoveResult = { ok: true } | { ok: false; reason: string };
+export type PluginFetchSpec = { url: string; method: string; headers: Record<string, string>; body?: string; timeoutMs: number; allowedHosts: string[] };
+export type PluginFetchResult =
+  | { ok: true; status: number; statusText: string; url: string; headers: Record<string, string>; body: string }
+  | { ok: false; reason: string };
+export type PluginFileReadResult = { ok: true; text: string } | { ok: false; reason: string };
+export type PluginStorageReadResult = { status: "ok"; text: string } | { status: "missing" } | { status: "error"; reason: string };
 
 export type PluginsNative = {
   folder(): string;
@@ -45,6 +62,10 @@ export type PluginsNative = {
   revealLog(name: string): void;
   revealFolder(): void;
   devSnapshotPage(name: string, path: string): Promise<boolean>;
+  hostFetch(spec: PluginFetchSpec): Promise<PluginFetchResult>;
+  storageRead(name: string): Promise<PluginStorageReadResult>;
+  storageWrite(name: string, text: string): Promise<{ ok: boolean; reason?: string }>;
+  readPluginFile(name: string, folderId: string, approved: string, path: string): Promise<PluginFileReadResult>;
   addListener(name: "onLine", listener: (e: PluginLine) => void): EventSubscription;
   addListener(name: "onExit", listener: (e: PluginExit) => void): EventSubscription;
 };
@@ -59,5 +80,9 @@ export type PluginPageProps = ViewProps & {
   approved: string;
   run: number;
   context: string;
+  themeCss?: string;
   onLoaded?: (e: PluginPageEvent<{ url: string; title: string }>) => void;
+  onTitleChange?: (e: PluginPageEvent<{ title: string }>) => void;
+  onNavigationChange?: (e: PluginPageEvent<{ url: string; title: string; canGoBack: boolean; canGoForward: boolean }>) => void;
+  onMessage?: (e: PluginPageEvent<{ body: string }>) => void;
 };

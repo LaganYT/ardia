@@ -157,6 +157,7 @@ function TabsAndTopAppsSection() {
         <SettingToggle anchor="tabs.closedTopAppTiles" />
         <SettingToggle anchor="tabs.balancedTopApps" />
         <SettingToggle anchor="tabs.topAppFolders" />
+        <SettingToggle anchor="tabs.tabReorderHaptics" />
         <SettingToggle anchor="tabs.showTabHoverMenu" />
         <SettingToggle anchor="tabs.showFullUrlInTabHoverMenu" />
         <SettingToggle anchor="tabs.autoPictureInPicture" />
@@ -230,6 +231,7 @@ function LinksSection() {
           }
         />
         <SettingToggle anchor="tabs.littleArdiaOpensNewTabLinks" />
+        <SettingToggle anchor="tabs.littleArdiaShortcutFromAnyApp" />
         <Row anchor="tabs.peekLinksToOtherSites">
           <PopUp value={peekOtherSites ? "peek" : "same"} options={OTHER_SITE_LINKS} onChange={(v) => updateSettings({ peekLinksToOtherSites: v === "peek" })} />
         </Row>

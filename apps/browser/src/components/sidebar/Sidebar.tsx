@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { ClipView, ContextMenuArea, space, WindowDragRegion } from "../ui";
-import { layout } from "../ui/theme";
+import { layout, useTheme } from "../ui/theme";
+import { useSidebarHighContrast } from "../../state/sidebar/textLook";
 import { TintInk } from "../ui/TintInk";
 import { useWindowId, useWindowProfileId } from "../../state/browser/hooks";
 import { useHasDownloads, useNoTiles } from "../../state/sidebar/hooks";
@@ -27,7 +28,7 @@ import { closeFolderPanel } from "../../state/sidebar/tileFolderUi";
 import { openSidebarMenu } from "../../state/sidebar/menus";
 import { GLOW_ROOM, rowPitch, type SidebarGeometry } from "./pageLayout";
 import { SidebarPage } from "./SidebarPage";
-import { SidebarTextScope } from "./SidebarTextScope";
+import { sidebarText } from "./SidebarTextScope";
 import { SidebarRowLookContext, useSidebarRowLookSource } from "./rowLook";
 import { useRevealTabs } from "./useRevealTabs";
 
@@ -35,6 +36,8 @@ const HEADER_RIGHT = space.m;
 
 export function Sidebar({ width }: { width: number }) {
   const windowId = useWindowId();
+  const theme = useTheme();
+  const strongText = useSidebarHighContrast();
   const current = useWindowProfileId();
   const { pages, paging } = usePagerPages(windowId);
   const [available, setAvailable] = useState(0);
@@ -164,14 +167,18 @@ export function Sidebar({ width }: { width: number }) {
               )
             ) : null}
             {ghost ? <EdgeGlow /> : null}
-            <SidebarTextScope>
+            {sidebarText(
+              theme,
+              strongText,
+              <>
               <FolderPanel windowId={windowId} />
               {ghost ? (
                 <ClipView pointerEvents="none" style={GHOST_CLIP}>
                   <DragGhost ghost={ghost} />
                 </ClipView>
               ) : null}
-            </SidebarTextScope>
+              </>,
+            )}
           </SidebarDropArea>
           </SidebarRowLookContext.Provider>
         );

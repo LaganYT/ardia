@@ -154,11 +154,13 @@ NS_ASSUME_NONNULL_BEGIN
     NS_SWIFT_NAME(querySystemPanel(in:owner:profile:generation:ask:completion:));
 + (void)resetFieldProviderPage:(id)owner NS_SWIFT_NAME(resetFieldProviderPage(_:));
 + (void)dropVerificationCodesOf:(id)owner frame:(nullable NSString *)frame NS_SWIFT_NAME(dropVerificationCodes(of:frame:));
-+ (NSDictionary *)requestSystemPanelIn:(NSView *)page
-                                owner:(id)owner
-                              profile:(NSString *)profile
-                                field:(nullable NSString *)field
-                           generation:(double)generation NS_SWIFT_NAME(requestSystemPanel(in:owner:profile:field:generation:));
++ (void)requestSystemPanelIn:(NSView *)page
+                       owner:(id)owner
+                     profile:(NSString *)profile
+                       field:(nullable NSString *)field
+                  generation:(double)generation
+                  completion:(void (^)(NSDictionary *result))completion
+    NS_SWIFT_NAME(requestSystemPanel(in:owner:profile:field:generation:completion:));
 + (nullable NSDictionary *)offerVerificationCode:(NSString *)url
                                        owner:(id)owner
                                        frame:(NSString *)frame
@@ -174,6 +176,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)showSystemPanelForTab:(NSString *)tabId
                    generation:(double)generation
                    completion:(void (^)(NSDictionary *result))completion NS_SWIFT_NAME(showSystemPanel(tab:generation:completion:));
++ (BOOL)showFieldProviderHint:(NSString *)label side:(NSString *)side tab:(NSString *)tabId NS_SWIFT_NAME(showFieldProviderHint(_:side:tab:));
++ (nullable NSString *)fieldProviderHintJSON:(NSString *)label side:(NSString *)side NS_SWIFT_NAME(fieldProviderHintJSON(_:side:));
++ (void)whenSystemPanelCloses:(void (^)(void))closed NS_SWIFT_NAME(whenSystemPanelCloses(_:));
 + (BOOL)setUpVerificationCode:(NSString *)token
                           tab:(NSString *)tabId
                    generation:(double)generation

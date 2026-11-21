@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { Box, Button, PluginPageView, Text } from "../ui";
 import { useTheme } from "../ui/theme";
 import { useTab } from "../../state/browser/hooks";
 import { usePluginActive, usePluginFolderId, usePluginNetwork, usePluginPageContext, usePluginApproval, usePluginPageRun, usePluginPageSpec, usePluginPageUrl, usePluginProcess } from "../../state/plugins/hooks";
 import { pluginPagePath } from "../../state/plugins/actions";
+import { wakeForFilePage } from "../../state/plugins/pages";
 import { openSettings } from "../../state/settings/settingsWindows";
 
 function Notice({ title, detail, name }: { title: string; detail: string; name: string }) {
@@ -30,6 +32,9 @@ export function PluginPage({ tabId, name }: { tabId: string; name: string }) {
   const folderId = usePluginFolderId(name);
   const run = usePluginPageRun(name);
   const approved = usePluginApproval(name);
+  useEffect(() => {
+    if (active && url) wakeForFilePage(name, path);
+  }, [active, url, name, path]);
   if (!spec || !active) return <Notice name={name} title={`${spec?.title ?? name} is off`} detail="Turn the plugin on in Settings › Plugins to use its page." />;
   if (!url) {
     const failed = process?.state === "crashed" || process?.state === "failed";

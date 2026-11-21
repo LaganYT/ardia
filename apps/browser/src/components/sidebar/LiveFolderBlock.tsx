@@ -14,18 +14,20 @@ import { layout, useTheme } from "../ui/theme";
 import { useLiveColors } from "../live/tokens";
 import { TabRow } from "./TabRow";
 import { Fold, useFold, type FoldEntry } from "./Fold";
-import { GROUP_BORDER, GROUP_INNER_RADIUS, GROUP_RADIUS, LIVE_FOLDER_PAD } from "./geometry";
+import { GROUP_BORDER, GROUP_INNER_RADIUS, GROUP_RADIUS, LIVE_FOLDER_BOX_PAD, LIVE_FOLDER_HEADER_MARGIN, LIVE_FOLDER_PAD } from "./geometry";
 import { useDragFolded, useDragItem } from "./DragProvider";
 import { dismissHover } from "../../state/sidebar/hover";
 import { useGroupHover } from "./hoverController";
 import { useHoverFade } from "./hoverMotion";
+import { Squish, useSquish } from "../ui/Squish";
 import { iconButton } from "../ui/tokens";
 import { openLiveFolderMenu } from "../../state/sidebar/liveMenus";
 import { registerRow } from "../../state/sidebar/sidebarUi";
-import { FolderOrIcon } from "./AnimatedFolder";
+import { LiveFolderIcon } from "./LiveFolderIcon";
 import { groupBoxAtRest, groupSurface, TAB_ROW, useSidebarTokens } from "./tokens";
 import { RefreshSpinner } from "./RefreshSpinner";
-import { SidebarRowLabel, SidebarRowSurface } from "./SidebarRow";
+import { SidebarRowSurface } from "./SidebarRow";
+import { FolderHeaderTitle } from "./FolderHeaderTitle";
 import { MoreRow, NoteRow, SectionTitle, StackRow } from "./LiveFolderRows";
 import { LiveItemRow } from "./LiveItemRow";
 import { CompletedFooter, useCompletedShown } from "./CompletedFooter";
@@ -34,7 +36,8 @@ import { entryKey } from "../../state/sidebar/entryKey";
 const PAD = LIVE_FOLDER_PAD;
 const EMPTY: LiveItem[] = [];
 const NONE: string[] = [];
-const BOX_ROOM = { paddingVertical: GROUP_BORDER, paddingHorizontal: PAD + GROUP_BORDER } as const;
+const HEADER_ROOM = { marginHorizontal: LIVE_FOLDER_HEADER_MARGIN } as const;
+const BOX_ROOM = { paddingVertical: GROUP_BORDER, paddingHorizontal: LIVE_FOLDER_BOX_PAD } as const;
 const REFRESH_SLOT = { minWidth: iconButton.s.box, alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "flex-end" } as const;
 const REFRESH_OVER = { position: "absolute", top: 0, bottom: 0, right: 0, flexDirection: "row", alignItems: "center" } as const;
 
@@ -81,7 +84,7 @@ export const LiveFolderBlock = memo(function LiveFolderBlock({ folderId, windowI
           pointerEvents="none"
           style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: GROUP_RADIUS, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, opacity: boxOpacity }}
         />
-        <View ref={headerRef} {...handle} style={{ marginHorizontal: -PAD }}>
+        <View ref={headerRef} {...handle} style={HEADER_ROOM}>
           <FolderHeader folderId={folderId} windowId={windowId} collapsed={collapsed} />
         </View>
         <Fold fold={fold} collapsed={collapsed} entries={entries} keep={keep} padBottom={PAD} />
@@ -132,6 +135,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
   const refreshShown = hovered && !updating;
   const refreshOpacity = useHoverFade(refreshShown);
   const [restOpacity] = useState(() => Animated.subtract(1, refreshOpacity));
+  const squish = useSquish("row");
   if (!folder) return null;
 
   return (
@@ -143,19 +147,18 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
         }}
       >
         <Pressable
+          onPressIn={squish.onPressIn}
+          onPressOut={squish.onPressOut}
           onPress={() => {
             dismissHover();
             updateFolder(folderId, { collapsed: !collapsed });
           }}
         >
           {() => (
-            <SidebarRowSurface
-              fill={ink.clear}
-              cornerRadius={GROUP_INNER_RADIUS}
-              padLeft={TAB_ROW.contentLeft + PAD}
-            >
-              <FolderOrIcon icon={folder.icon} open={!collapsed} color={folder.color} />
-              <SidebarRowLabel text={folder.name} weight="medium" color={tokens.groupTitle} />
+            <Squish scale={squish.scale}>
+            <SidebarRowSurface fill={ink.clear} cornerRadius={GROUP_INNER_RADIUS}>
+              <LiveFolderIcon folder={folder} open={!collapsed} />
+              <FolderHeaderTitle label={folder.name} color={tokens.groupTitle} />
               {status?.error ? (
                 <Pressable onPress={() => fixError(windowId, status.error)} tooltip={errorText(status.error.kind, status.error.source)} style={{ marginRight: space.xxs }}>
                   <Symbol name="exclamationmark.triangle.fill" size={10} color={colors.pending} style={{ width: 18, height: 18 }} />
@@ -177,6 +180,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
                 )}
               </View>
             </SidebarRowSurface>
+            </Squish>
           )}
         </Pressable>
       </ContextMenuArea>

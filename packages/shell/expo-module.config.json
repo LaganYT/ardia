@@ -20,6 +20,7 @@
       "MagnifyAreaModule",
       "PeekStageModule",
       "SurfaceModule",
+      "FieldGlowModule",
       "VisualEffectModule",
       "GlassEffectModule",
       "GlassGroupModule",

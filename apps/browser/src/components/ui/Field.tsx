@@ -81,6 +81,7 @@ export function SearchField({
         selectionColor={theme.selection}
         autoFocus={autoFocus}
         enableFocusRing={false}
+        ardiaCentersCapitals
         onBlur={onBlur}
         keyDownEvents={onArrow ? SEARCH_KEYS_WITH_ARROWS : onSubmit ? SEARCH_KEYS_WITH_ENTER : SEARCH_KEYS}
         onKeyDown={(e) => {
@@ -162,6 +163,7 @@ export function TextField({
           enableFocusRing={false}
           selectTextOnFocus={selectOnFocus}
           multiline={multiline}
+          ardiaCentersCapitals={!multiline}
           autoCorrect={mono ? false : undefined}
           spellCheck={mono ? false : undefined}
           onSubmitEditing={onSubmit}
@@ -216,7 +218,7 @@ export function PopUp<T extends string>({
         {({ pressed }) =>
           native ? (
             <View style={[PLAIN_POPUP, { backgroundColor: pressed ? theme.controlPressed : hovered ? theme.controlHover : undefined }]}>
-              <Text numberOfLines={1} style={{ ...typeScale.body, color: theme.textPrimary, flexShrink: 1 }}>
+              <Text numberOfLines={1} ardiaCentersCapitals style={{ ...typeScale.body, color: theme.textPrimary, flexShrink: 1 }}>
                 {current?.title ?? ""}
               </Text>
               <Symbol name={POP_UP_CHROME.indicator === "chevronDown" ? "chevron.down" : "chevron.up.chevron.down"} size={9} weight="semibold" color={theme.textSecondary} style={PLAIN_POPUP_GLYPH} />
@@ -240,7 +242,7 @@ export function PopUp<T extends string>({
               scaleStyle,
             ]}
           >
-            <Text numberOfLines={1} style={[POP_UP_TITLE, typeScale.body, { color: theme.textPrimary }]}>
+            <Text numberOfLines={1} ardiaCentersCapitals style={[POP_UP_TITLE, typeScale.body, { color: theme.textPrimary }]}>
               {current?.title ?? ""}
             </Text>
             {POP_UP_CHROME.indicator === "chevronDown" ? (

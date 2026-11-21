@@ -4,6 +4,7 @@ import { THEME_NAME } from "../../lib/themeFile";
 import { CONFIG_EXCLUDED_KEYS, isConfigSettingKey } from "../settings/configAllowlist";
 import { SETTING_SPECS, searchEngines, type SettingKey, type Settings } from "../settings/settings";
 import { configShortcuts } from "./configShortcuts";
+import { parsePluginThemeKey } from "../plugins/themes";
 import { parseLaunchAction } from "../automation/launchActions";
 import { readProviderEntries } from "@ardia/core";
 
@@ -46,8 +47,8 @@ export function describeSchema(schema: JsonSchema): string {
 
 function themeOf(doc: Record<string, unknown>, problems: string[]): string | null | undefined {
   if (!Object.hasOwn(doc, "theme") || doc.theme === null) return null;
-  if (typeof doc.theme === "string" && THEME_NAME.test(doc.theme)) return doc.theme;
-  problems.push(`${CONFIG_FILE}: theme must be a theme name (lowercase letters, digits, - and _) or null`);
+  if (typeof doc.theme === "string" && (THEME_NAME.test(doc.theme) || parsePluginThemeKey(doc.theme))) return doc.theme;
+  problems.push(`${CONFIG_FILE}: theme must be a theme name (lowercase letters, digits, - and _), plugin:<plugin>/<theme>, or null`);
   return undefined;
 }
 

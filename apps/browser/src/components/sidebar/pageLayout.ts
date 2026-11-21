@@ -31,6 +31,10 @@ export function pageLayout(i: PageLayoutInput): PageLayout {
   };
 }
 
+export function clearlyOverflows(rowCount: number, height: number): boolean {
+  return height > 0 && rowCount * rowPitch() > height * 2;
+}
+
 export function dockedAfter(docked: boolean, filler: number, hiddenGrowth = 0): boolean {
   if (hiddenGrowth && filler < 1) return docked;
   const slack = filler + hiddenGrowth;

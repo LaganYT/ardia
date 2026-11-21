@@ -129,11 +129,13 @@ test("Android's page bar fades over the growing or shrinking card while the deck
   assert.ok(least >= 0.25, `at worst ${least.toFixed(2)} of a bar shows`);
 });
 
-test("the redesigned bars keep iPhone's place over a home indicator, and on Android sit where the browsing bar does over a gesture bar or a 3-button bar", () => {
+test("the redesigned bars keep iPhone's place over a home indicator, and on Android sit above a gesture bar or a 3-button bar, where the browsing bar does", () => {
   assert.equal(redesignedBarCenterFromBottom(34, "ios"), 45);
   assert.equal(redesignedBarCenterFromBottom(48, "ios"), 59, "iPhone never lifts for a navigation bar");
-  assert.equal(redesignedBarCenterFromBottom(24, "android"), 45.5);
-  assert.equal(redesignedBarCenterFromBottom(16, "android"), 45.5, "a gesture handle never sits on the deck's bar");
+  assert.equal(redesignedBarCenterFromBottom(24, "android"), 52);
+  assert.equal(redesignedBarCenterFromBottom(16, "android"), 45.5);
+  for (const inset of [1, 16, 20, 24, 32]) assert.ok(redesignedBarCenterFromBottom(inset, "android") - 24 >= inset + 4, `a 48 point bar ends 4 points above a ${inset} point gesture bar, so its handle never sits on it`);
+  for (const inset of [33, 48, 63]) assert.ok(redesignedBarCenterFromBottom(inset, "android") - 24 >= inset + 8, `a 48 point bar ends 8 points above a ${inset} point 3-button bar`);
   assert.equal(redesignedBarCenterFromBottom(0, "android"), 45.5);
   assert.equal(redesignedBarCenterFromBottom(48, "android"), 80);
   for (const inset of [0, 16, 24, 32, 33, 48, 63]) assert.equal(redesignedBarCenterFromBottom(inset, "android"), floatingBarCenter(inset, "android"), `the deck's bar and the browsing bar share one place at a ${inset} inset`);

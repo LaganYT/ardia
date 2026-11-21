@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PluginManifest } from "../../lib/pluginManifest";
+import type { PluginManifest, RowValue } from "../../lib/pluginManifest";
 import type { ConsentToken } from "../telemetry/choice";
 
 export type PluginListing = {
@@ -28,7 +28,7 @@ export type ProcessState =
 export type PluginRecord = {
   enabled: boolean;
   approved: string | null;
-  values: Record<string, string | boolean>;
+  values: Record<string, RowValue>;
   applied: Record<string, { value: unknown; previous: unknown; order: number; over: string | null }>;
   controlGranted?: boolean;
   installed?: boolean;
@@ -76,6 +76,8 @@ export function activeManifest(s: Pick<PluginsStore, "listings" | "records">, na
   if (!listing?.manifest || !listing.hash || !record?.enabled || record.approved !== listing.hash) return null;
   return listing.manifest;
 }
+
+export const webViewsOnline = (s: Pick<PluginsStore, "listings" | "records">, name: string): boolean => activeManifest(s, name)?.permissions.network === "*";
 
 export const activeNames = (s: Pick<PluginsStore, "listings" | "records" | "order">) => s.order.filter((name) => activeManifest(s, name));
 

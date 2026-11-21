@@ -52,7 +52,7 @@ holds the rest.
 | Sidebar scroll | `node apps/browser/scripts/sidebar-scroll-test.mjs <Debug app>` | The pinned tiles hold still while the tabs scroll (Dia's dock), with the address field in the sidebar and without: a row dragged onto a tile after a scroll pins it there, selecting a tile while scrolled leaves the list put, and a dock too tall for the window scrolls with the tabs; after a change to another profile's page, a click on a tab in view leaves the list put |
 | Sidebar slides | `node apps/browser/scripts/sidebar-slide-test.mjs <Debug app> [--trials=3]` | Closing a tab leaves no blank space: the rows below slide up, every slide rests at 0, and the sidebar looks the same before and after every row renders again. Also when the list updates while the slides still run later than they should have finished (a close that kept the app busy), and when a row renders just as its slide ends; both left a row one place down with a blank space above it (#2186) |
 | Settings layout | `node apps/browser/scripts/settings-shift-test.mjs <Debug app> [--panes a,b] [--attach <data dir>] [--keep]` | Every Settings pane, the first right after the window opens: nothing moves, appears, disappears or changes between its first frame on screen and once it has settled; ⌘F, typing, Return and Escape in Settings search |
-| Peek | `node apps/browser/scripts/peek-edge-test.mjs <Debug app>` | The auto-hidden sidebar's peek: a pointer resting on the window's top or bottom edge beside it keeps it out, one well past the edge closes it, an edge crossing outside its column never opens it, pressing another space's dot keeps it out, and with the window against a screen edge another display shares, a slow crossing stops at the edge and peeks, a second push or 64 pt of pushing goes through, and a fast sweep crosses without stopping |
+| Peek | `node apps/browser/scripts/peek-edge-test.mjs <Debug app>` | The auto-hidden sidebar's peek: a pointer resting on the window's top or bottom edge beside it keeps it out, one well past the edge closes it, an edge crossing outside its column never opens it, pressing another space's dot keeps it out, and with the window against a screen edge another display shares, the pointer crosses without being held, an overshoot that comes straight back peeks, and crossing again closes the peek at once |
 | Import window | `node apps/browser/scripts/import-flow-test.mjs <Debug app> <scratch dir> [flow…] [--record <file>] [--compare <file>] [--keep]` | Every flow of the import window (Chrome with unlock, skip and back, Arc, Firefox, Dia, Safari direct, export and a bad file) against `packages/import/fixtures`, with a background-only stand-in for Dia, never a real profile |
 | Sync | `node packages/sync/scripts/e2e.mjs <Debug app>` | Two and three hidden instances through one folder (`docs/sync.md`) |
 | Import | `node packages/import/scripts/e2e.mjs <Debug app> <scratch dir>` | Cookies, addresses and cards from a fake Chrome home (`packages/import/README.md`) |
@@ -145,7 +145,16 @@ Launch with `scripts/agent/ac launch <app> --data <dir> [--instance K=V] [--test
   `[ardiacore] system passwords panel (background mode, not shown)` for the key and Edit › AutoFill › Passwords…; with
   this key it sends AppKit's `_handleInsertFromPasswordsCommand:` for real and logs the first responder, the target and
   whether AppKit took it (`log show --predicate 'eventMessage CONTAINS "system passwords panel"'`). Apple's panel
-  belongs to another process and can show on screen, so use it only with the screen locked or the owner's OK.
+  belongs to another process and can show on screen, so use it only with the screen locked or the owner's OK. After a
+  send it logs `held=1`: AppKit's own show-or-hide pass is held for 1.5 s, since its delayed dismiss used to cancel a
+  panel still opening. A pass skipped meanwhile runs once when the hold ends (`hold ended, replaying …`), and the hold
+  ends at once if the send is refused or focus leaves the page (`hold ended early`). It then compares the Passwords
+  panel windows on screen with those there before the send, at 0.6 s and again at 1.5 s, and logs `seen`, `missing`
+  (reported as `noPanel`, which opens nothing in Ardia) or `unchecked` (another app's window names were hidden). Every
+  refusal logs `refused reason=<reason> via=<badge|menu> field=<username|password|code|other>`.
+- **`systemPanelRace`**: right after sending the Passwords command, runs AppKit's
+  `_showOrHideAutoFillForCurrentTextInputContextIfAppropriate` at once, while Ardia is still active: the ordering that
+  lost the panel before the hold. Use it with a visible instance to check the panel still shows.
 - **`appDialog`**: `confirm` and `prompt` write their options (and `kind`) to `<data dir>/dialog.json` and answer from
   `dialog.json.pick` (deleted): `confirm` (with `,suppress` to tick the suppression box) or anything else to cancel; a
   prompt's answer is the text, empty to cancel. With no pick file they run as usual (background mode cancels).

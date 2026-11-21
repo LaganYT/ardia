@@ -1,4 +1,4 @@
-import { capture, consentNow, counted, isSharing, type ConsentToken } from "./client";
+import { capture, consentNow, consentToken, counted, isSharing, onConsentPeriodChange, stillValid, type ConsentToken } from "./client";
 import { appInfo } from "./transport";
 import { launchFirstWindow } from "./journeys";
 import type { PanelState } from "../browser/types";
@@ -51,8 +51,22 @@ const MAX_SAMPLES = 500;
 const latency: number[] = [];
 let keystrokes = 0;
 
-export function sampleOmniboxLatency(ms: number) {
-  if (++keystrokes % SAMPLE_EVERY) return;
+onConsentPeriodChange(() => (keystrokes = 0));
+
+export type OmniboxKey = { at: number; consent: ConsentToken | null };
+
+export const newOmniboxKey = (): OmniboxKey => ({ at: 0, consent: null });
+
+export function omniboxKeyHeard(key: OmniboxKey) {
+  key.at = Date.now();
+  key.consent = consentToken();
+}
+
+export function sampleOmniboxLatency(key: OmniboxKey) {
+  const { at, consent } = key;
+  key.at = 0;
+  if (!at || !stillValid(consent) || ++keystrokes % SAMPLE_EVERY) return;
+  const ms = Date.now() - at;
   if (ms >= 0 && ms < 10_000 && latency.length < MAX_SAMPLES) latency.push(ms);
 }
 

@@ -158,7 +158,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
 @Suite struct PhoneBrowsingSourceTests {
   @Test func aMissingDatabaseIsAnEmptyPhone() throws {
     let scratch = try Scratch()
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile))
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), engine: .system)
     try source.beginRead()
     #expect(try source.syncedTabs().isEmpty)
     #expect(try source.syncedVisits(since: .distantPast).isEmpty)
@@ -170,7 +170,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
     let scratch = try Scratch()
     let writer = try Writer(scratch.database, version: PhoneBrowsingSource.schemaVersion + 1)
     try writer.tab("https://a.example/", at: .now)
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile))
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), engine: .system)
     #expect(throws: PhoneBrowsingSource.ReadFailure.newerSchema(PhoneBrowsingSource.schemaVersion + 1)) { try source.beginRead() }
     #expect(throws: PhoneBrowsingSource.ReadFailure.newerSchema(PhoneBrowsingSource.schemaVersion + 1)) { try source.syncedTabs() }
   }
@@ -179,7 +179,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
     let scratch = try Scratch()
     let writer = try Writer(scratch.database)
     try writer.tab("https://one.example/", at: .now)
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile))
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), engine: .system)
     try source.beginRead()
     #expect(try source.syncedTabs().map(\.url) == ["https://one.example/"])
     try writer.tab("https://two.example/", at: .now.addingTimeInterval(1))
@@ -201,7 +201,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
       try? FileManager.default.removeItem(at: scratch.root.appending(path: "SQLite/\(name)"))
     }
     #expect(scratch.names("SQLite") == ["browser.db"])
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile))
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), engine: .system)
     try source.beginRead()
     #expect(try source.syncedTabs().map(\.url) == ["https://closed.example/"])
     source.endRead()
@@ -216,7 +216,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
     try writer.tab("https://archived.example/", at: .now, archived: true)
     try writer.tab("about:blank", at: .now)
     try writer.tab("file:///etc/hosts", at: .now)
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile))
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), engine: .system)
     let tabs = try source.syncedTabs()
     #expect(tabs.filter { $0.profileSyncId == "work" }.count == 30)
     #expect(tabs.first?.url == "https://p34.example/")
@@ -235,7 +235,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
     try writer.visit("https://ancient.example/", at: now.addingTimeInterval(-100 * 86_400))
     let inbox = PhoneInbox(file: scratch.inboxFile)
     #expect(inbox.remove(PhoneInbox.Removal(profileSyncId: "work", urls: ["https://gone.example/"])))
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: inbox, now: { now })
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: inbox, engine: .system, now: { now })
     try source.beginRead()
     let visits = try source.syncedVisits(since: now.addingTimeInterval(-60))
     #expect(visits.map(\.url) == ["https://a.example/", "https://a.example/"])
@@ -249,7 +249,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
   @Test func removalsAndReceivedTabsGoToTheInbox() throws {
     let scratch = try Scratch()
     let inbox = PhoneInbox(file: scratch.inboxFile)
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: inbox)
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: inbox, engine: .system)
     try source.removeVisits(urls: ["https://a.example/"], profileSyncId: nil)
     #expect(source.receive([received("send:a"), received("send:b", url: "javascript:alert(1)")]))
     let entries = inbox.entries()
@@ -261,7 +261,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
     let scratch = try Scratch()
     try FileManager.default.createDirectory(at: scratch.inboxFile.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data("not json".utf8).write(to: scratch.inboxFile)
-    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile))
+    let source = PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), engine: .system)
     #expect(throws: PhoneInbox.WriteFailed.self) { try source.removeVisits(urls: ["https://a.example/"], profileSyncId: nil) }
     try source.removeVisits(urls: ["https://a.example/"], profileSyncId: nil)
   }
@@ -279,7 +279,7 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
   func source(_ scratch: Scratch, _ gate: LegacyImportGate) throws -> PhoneBrowsingSource {
     let writer = try Writer(scratch.database)
     try writer.tab("https://a.example/", at: .now)
-    return PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), isReady: { !gate.holdsSync })
+    return PhoneBrowsingSource(database: scratch.database, inbox: PhoneInbox(file: scratch.inboxFile), engine: .system, isReady: { !gate.holdsSync })
   }
 
   @Test func withNoLegacyStoreSyncReadsAtOnce() throws {

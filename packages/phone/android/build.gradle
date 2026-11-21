@@ -193,6 +193,7 @@ dependencies {
   implementation "com.google.zxing:core:3.5.4"
   implementation project(":ardia-design")
   implementation(findProject(":expo-ui") ?: "expo.modules.ui:expo.modules.ui:+")
+  implementation(findProject(":expo-sqlite") ?: "host.exp.exponent:expo.modules.sqlite:+")
   implementation "androidx.compose.foundation:foundation-android:1.12.1"
   implementation "androidx.compose.ui:ui-android:1.12.1"
   implementation "androidx.compose.material3:material3:1.5.0-beta01"

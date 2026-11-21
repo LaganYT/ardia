@@ -111,6 +111,12 @@ minutes, and a flush after the app leaves the screen) runs it without React Nati
   the sync state (`noBackupFilesDir/PhoneSync`), written whole and renamed into place, until the app applies
   them to its store (`sync.inbox()`, `sync.inboxApplied(ids)`, the `sync.inbox` event). Visits waiting to be
   removed are left out of what sync reads, so they never go back to the Mac.
+- **One SQLite engine for `browser.db`.** expo-sqlite bundles its own SQLite (`exsqlite3_*`) and the app's JS keeps
+  `browser.db` open through it, so native code reads the file through that same engine: on iPhone
+  `SQLiteEngine.expoSQLite` (sync's `PhoneBrowsingSource`, Spotlight and Shortcuts' `TabRecords`), on Android
+  `ExpoSqliteBrowserRows` over `ExpoSqliteConnection`. A second engine in the process can't see the first one's file
+  locks: it resets the WAL index the first has mapped and the app dies with SIGBUS (the iPhone crash on reopening the
+  app, 0.2.47 and 1.0.1). `apps/phone/scripts/one-sqlite-engine.test.mjs` fails on any other use of the system SQLite.
 - **Lab.** The page lab's Sync button connects with a typed phrase and a picked folder and shows the status and
   the synced view's counts. Runtime checks runs semantic fixtures (closures in loops, microtask order around a
   host call, sort stability, Map and Set order, large integers, string comparison) in a second sync runtime and

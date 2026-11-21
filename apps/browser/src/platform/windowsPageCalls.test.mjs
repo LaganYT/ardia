@@ -109,6 +109,7 @@ test("a call Windows has no engine for yet answers what the Mac answers when it 
     resolveDisplayMedia: undefined,
     mediaCaptureSourceId: null,
     notificationAction: undefined,
+    siteData: null,
     zap: undefined,
   };
   assert.deepEqual(Object.keys(NOT_ON_WINDOWS_YET).sort(), Object.keys(expected).sort());

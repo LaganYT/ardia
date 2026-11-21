@@ -25,7 +25,7 @@ public final class PhoneBrowsingSource: LocalBrowsingSource {
   private var reading = false
   private var empty = false
 
-  public init(database: URL, inbox: PhoneInbox, engine: SQLiteEngine = .system, isReady: @escaping () -> Bool = { true }, now: @escaping () -> Date = Date.init) {
+  public init(database: URL, inbox: PhoneInbox, engine: SQLiteEngine, isReady: @escaping () -> Bool = { true }, now: @escaping () -> Date = Date.init) {
     self.database = database
     self.inbox = inbox
     self.engine = engine

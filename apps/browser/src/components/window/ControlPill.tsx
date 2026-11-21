@@ -1,25 +1,25 @@
 import { useEffect, useState } from "react";
 import { Animated, Image, StyleSheet, View, type ViewStyle } from "react-native";
-import { stopCliControl, useCliIndicator } from "../../state/app/cliControl";
+import { stopProgramControl, useControlIndicator } from "../../state/app/programControl";
 import { useSettings } from "../../state/browser/hooks";
-import { controlLine, controlLineText } from "../../state/app/cliCaller";
+import { controlLine, controlLineText } from "../../state/app/controlCaller";
 import { fileIcon } from "../../state/app/system";
 import { useTheme } from "../ui/theme";
 import { Button, Dot, space, Symbol, Text, usePresence } from "../ui";
 import { Hud } from "./Hud";
-import { CLI_PILL_MOTION } from "./tokens";
+import { CONTROL_PILL_MOTION } from "./tokens";
 
 const PILL_HEIGHT = 32;
 const PILL_BOTTOM = 12;
 
-export function CliControlPill({ style }: { style?: Animated.WithAnimatedValue<ViewStyle> }) {
+export function ControlPill({ style }: { style?: Animated.WithAnimatedValue<ViewStyle> }) {
   const theme = useTheme();
-  const shown = useCliIndicator((s) => s.shown);
-  const caller = useCliIndicator((s) => s.caller);
+  const shown = useControlIndicator((s) => s.shown);
+  const caller = useControlIndicator((s) => s.caller);
   const icon = useAppIcon(caller?.app ?? null);
   const line = controlLine(caller);
   const compact = useSettings((s) => s.compactCliPill);
-  const { shown: mounted, appear } = usePresence(shown || null, CLI_PILL_MOTION);
+  const { shown: mounted, appear } = usePresence(shown || null, CONTROL_PILL_MOTION);
   if (!mounted) return null;
   return (
     <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, style]}>
@@ -50,7 +50,7 @@ export function CliControlPill({ style }: { style?: Animated.WithAnimatedValue<V
                   {line.rest}
                 </Text>
               )}
-              <Button variant="pill" tone="chip" title="Stop" onPress={stopCliControl} />
+              <Button variant="pill" tone="chip" title="Stop" onPress={stopProgramControl} />
             </View>
           </Hud>
         </Animated.View>

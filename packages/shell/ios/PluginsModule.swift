@@ -35,6 +35,8 @@ public class PluginsModule: Module {
 
     AsyncFunction("legacyProgramsInstalled") { (promise: Promise) in PluginProgramLinks.legacyInstalled { promise.resolve($0) } }
 
+    AsyncFunction("programRegistry") { (promise: Promise) in PluginProgramLinks.registry { promise.resolve($0) } }
+
     AsyncFunction("sweepPrograms") { (active: [String], promise: Promise) in PluginProgramLinks.sweep(keeping: active) { promise.resolve(nil) } }
 
     AsyncFunction("unlinkPrograms") { (name: String, programs: [String], remove: Bool, promise: Promise) in

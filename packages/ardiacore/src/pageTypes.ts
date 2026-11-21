@@ -19,10 +19,6 @@ export type NavigationState = {
 };
 
 export type AppBadge = { origin: string; count: number | null; flag: boolean };
-export type FieldProviderPanelRefusal = "hidden" | "notFocused" | "unavailable" | "notKey" | "notEditing" | "throttled" | "refused" | "noPanel";
-export type FieldProviderOpened = { via: "badge" | "menu"; shown: boolean; reason?: FieldProviderPanelRefusal; panel?: "above" | "below" };
-export type FieldProviderHint = { state: "shown" | "dismissed" };
-export type VerificationCodeFound = { token: string; app: string; main: boolean };
 
 export type MediaState = { playing: boolean; muted: boolean };
 
@@ -245,9 +241,6 @@ export type WebViewProps = ViewProps & {
   onZapPicked?: (pick: ZapPick) => void;
   onTransferRefused?: (fromWindowId: string) => void;
   onAppBadge?: (badge: AppBadge) => void;
-  onFieldProviderOpened?: (opened: FieldProviderOpened) => void;
-  onFieldProviderHint?: (hint: FieldProviderHint) => void;
-  onVerificationCodeFound?: (found: VerificationCodeFound) => void;
 };
 
 export type WebViewHandle = {

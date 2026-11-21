@@ -5,7 +5,7 @@ import { SPLIT_SIDES } from "./pluginCommands";
 import { MENU_SLOTS, PANEL_MODES } from "./pluginContributions";
 import { TAB_ACCESS } from "./pluginPermissions";
 import { MAX_WHEN_LENGTH } from "./pluginWhen";
-import { builtInFlags, closed, commandBase, key, name, openCommandProperties, passwordManagerSchema, pluginPath, processSchema, programsSchema, rowSchema, symbol, textOf, toolsSchema } from "./pluginSchemaParts";
+import { builtInFlags, closed, retiredKey, commandBase, key, name, openCommandProperties, pluginPath, processSchema, programsSchemaV2, rowSchema, symbol, textOf, toolsSchema } from "./pluginSchemaParts";
 import { legacyPluginBody } from "./pluginSchemaV1";
 import { MANIFEST_VERSION } from "./pluginManifest";
 
@@ -49,8 +49,8 @@ function contributes(hookNames: readonly string[]): JsonSchema {
     tools: toolsSchema,
     hooks: list(LIMITS.hooks, { enum: [...hookNames] }),
     settings: closed({ defaults: { type: "object", description: "Ardia settings, as in config.json" }, rows: list(LIMITS.rows, rowSchema(["toggle", "text", "number", "choice", "secret"])) }),
-    programs: programsSchema,
-    passwordManager: passwordManagerSchema,
+    programs: programsSchemaV2,
+    passwordManager: retiredKey,
     menus: closed(Object.fromEntries(MENU_SLOTS.map((slot) => [slot, list(LIMITS.menuItems, menuItem)]))),
     toolbar: list(LIMITS.toolbar, closed({ id: key, title: textOf(LIMITS.title), icon: symbol, command: name, view: key, tooltip: textOf(LIMITS.tooltip) }, ["id", "title", "icon"])),
     sidebarViews: list(LIMITS.sidebarViews, closed({ id: key, title: textOf(LIMITS.pageTitle), icon: symbol }, ["id", "title"])),
@@ -74,6 +74,11 @@ function pluginBody(eventNames: readonly string[], decideEvents: readonly string
       version: { type: "string", pattern: VERSION_PATTERN },
       requires: { type: "string", pattern: VERSION_PATTERN, description: "The first Ardia version the plugin works with" },
       icon: symbol,
+      keywords: list(LIMITS.pluginKeywords, textOf(LIMITS.keyword), "Words that find the plugin in Settings"),
+      telemetry: closed(
+        { title: textOf(LIMITS.title), items: { type: "array", minItems: 1, maxItems: LIMITS.telemetryItems, items: textOf(LIMITS.telemetryItem) } },
+        ["title", "items"],
+      ),
       main: { ...pluginPath("The plugin's JavaScript, like dist/index.js; a plugin has main or sidecar, not both"), pattern: "^[^/\\\\][^\\\\]*\\.(m?js|cjs)$" },
       memoryMB: { type: "integer", minimum: LIMITS.memoryMB[0], maximum: LIMITS.memoryMB[1], default: DEFAULT_MAIN_MB, description: "main's memory limit" },
       sidecar: { ...processSchema, description: "A program Ardia runs beside the plugin; a plugin has main or sidecar, not both" },

@@ -1,6 +1,5 @@
-export type CliCaller = { name: string; app: string | null };
+export type ControlCaller = { name: string; app: string | null };
 
-export const CLI_CALLER_FALLBACK = "ardia";
 const MAX_NAME = 40;
 const MAX_APP_PATH = 1024;
 const INVISIBLE = /[\p{C}]/gu;
@@ -21,7 +20,7 @@ function cleanApp(raw: unknown): string | null {
   return parts.slice(0, -1).some((part) => part.endsWith(".app")) ? null : raw;
 }
 
-export function parseCliCaller(raw: unknown): CliCaller | null {
+export function parseControlCaller(raw: unknown): ControlCaller | null {
   if (!raw || typeof raw !== "object") return null;
   const fields = raw as { name?: unknown; app?: unknown };
   const name = cleanName(fields.name);
@@ -30,10 +29,9 @@ export function parseCliCaller(raw: unknown): CliCaller | null {
 
 export type ControlLine = { lead: string; name: string; rest: string };
 
-export function controlLine(caller: CliCaller | null): ControlLine {
-  const name = caller?.name ?? CLI_CALLER_FALLBACK;
-  if (name.toLowerCase() === CLI_CALLER_FALLBACK) return { lead: "The ", name: CLI_CALLER_FALLBACK, rest: " command is controlling Ardia" };
-  return { lead: "", name, rest: " is controlling Ardia" };
+export function controlLine(caller: ControlCaller | null): ControlLine {
+  if (!caller) return { lead: "A program", name: "", rest: " is controlling Ardia" };
+  return { lead: "", name: caller.name, rest: " is controlling Ardia" };
 }
 
 export const controlLineText = ({ lead, name, rest }: ControlLine) => `${lead}${name}${rest}`;

@@ -9,7 +9,7 @@ import { noteRendererResponsive, noteRendererUnresponsive } from "../../state/te
 import { noteFavicon } from "../../state/favicons/favicons";
 import { adoptIconPage, dropOutlivedFavicon, noteIconPage } from "../../state/favicons/iconPage";
 import { endThemeHold, heldThemeColor } from "../../state/windows/launchLook";
-import { noteTabReady } from "../../state/app/cliControl";
+import { noteTabReady } from "../../state/app/programControl";
 import { isQuitting } from "../../state/app/quit";
 import { useProfileTheme } from "./ThemeScope";
 import { opaqueCard } from "../ui/opaqueCard";
@@ -30,8 +30,7 @@ import { zoomChangedByUser } from "../../state/site/zoomBubble";
 import { markTabReady, patchPage, pageOf } from "../../state/tabs/pageState";
 import { deliverZapPicked } from "../../state/boostUi/zap";
 import { popupBlocked, showAutofillPrompt, showExternalApp, showPasswordPrompt } from "../../state/site/prompts";
-import { fieldProviderHint, fieldProviderOpened, verificationCodeFound, type FieldProviderHint, type FieldProviderOpened, type VerificationCodeFound } from "../../state/site/passwordManager";
-import { hoverStatus, verificationCodeDocument, verificationCodeTabGone } from "../../state/site/verificationCodes";
+import { hoverStatus } from "../../state/tabs/hoverStatus";
 import { leftPage, openBoostLink, pageAskedToClose, pageEnded } from "../../state/tabs/pageEvents";
 import { copyLinkToSelection, searchSelection, setPageSelection } from "../../state/site/selection";
 import { shareFromPage } from "../../state/site/share";
@@ -121,7 +120,6 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
       if (handedToTab()) return forgetPeekHandover(tabId);
       noteGone(tabId);
       endThemeHold(tabId);
-      verificationCodeTabGone(tabId);
       noteFirstPagePending(tabId, false);
       forgetUnreadIfGone(tabId);
     };
@@ -181,7 +179,6 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
       }}
       onNavigationChange={({ url: reported, title: reportedPageTitle, canGoBack, canGoForward, isLoading, themeColor, themeColorSource, initialDocumentAccessed, committedInitial, committedUrl, committedAt, httpStatus }) => {
         noteCommit(tabId, committedUrl, committedAt, httpStatus);
-        verificationCodeDocument(tabId, committedAt);
         if (reopening.current && reported && !isBlankAddress(reported)) {
           reopening.current = false;
           noteReopenedPage(canGoBack);
@@ -313,9 +310,6 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine }
       onScroll={(state) => noteScroll(tabId, state)}
       onProtectedMedia={(request) => offerWebKit(tabId, request)}
       onAutoplayBlocked={(count) => noteSiteControls("autoplayPlaysBlocked", count)}
-      onFieldProviderOpened={(opened: FieldProviderOpened) => fieldProviderOpened(tabId, opened)}
-      onFieldProviderHint={(hint: FieldProviderHint) => fieldProviderHint(tabId, hint)}
-      onVerificationCodeFound={(found: VerificationCodeFound) => verificationCodeFound(tabId, found)}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url, reason) => {
         releaseTranslation(tabId);

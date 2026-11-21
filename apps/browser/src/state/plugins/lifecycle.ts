@@ -6,7 +6,9 @@ import { useBrowser } from "../browser/store";
 import { notePlugin } from "../telemetry/pluginCounts";
 import { consentNow, consentToken, type ConsentToken } from "../telemetry/choice";
 import { warnFor } from "../telemetry/consoleConsent";
-import { listingOf } from "./appChecks";
+import { listingOf, NO_CLAIMS, type ProgramClaims } from "./appChecks";
+import { loadProgramClaims } from "./programRegistry";
+import { programControlOn, userTurnedControlOff } from "../app/programControlSetting";
 import { applySettingsPatch, planDisable, planEnable, spliceApplied } from "./defaults";
 import { pluginRecordsSaved, writePluginRecords } from "./savedState";
 import { settleInstall } from "./installWaiters";
@@ -31,13 +33,13 @@ const READ_PROBLEMS: Record<Exclude<PluginFolderEntry["status"], "ok">, string> 
   unreadable: "plugin.json couldn't be read",
 };
 
-export function listingsOf(entries: PluginFolderEntry[]): PluginListing[] {
+export function listingsOf(entries: PluginFolderEntry[], registry: ProgramClaims = NO_CLAIMS): PluginListing[] {
   const settings = useBrowser.getState().settings;
   const version = systemInfo().appVersion;
   return entries
     .slice(0, MAX_PLUGINS)
     .map((e) => ({
-      ...listingOf(e.name, e.status === "ok" ? (e.text ?? "") : null, e.status === "ok" ? null : READ_PROBLEMS[e.status], settings, version, e.folderId ?? ""),
+      ...listingOf(e.name, e.status === "ok" ? (e.text ?? "") : null, e.status === "ok" ? null : READ_PROBLEMS[e.status], settings, version, e.folderId ?? "", registry),
       ...(e.bundled ? { bundled: true } : {}),
       ...(e.replacesBundled ? { replacesBundled: true } : {}),
       ...(e.ignoresUserFolder ? { ignoresUserFolder: true } : {}),
@@ -134,7 +136,7 @@ export function rescanPlugins(consent: ConsentToken | null): Promise<void> {
         return null;
       });
       if (entries) {
-        const listings = listingsOf(entries);
+        const listings = listingsOf(entries, await loadProgramClaims());
         const withdrawing = withdrawBefore({ listings: listingsByName(listings), records: currentPlugins().records }, asked);
         if (withdrawing) await withdrawing;
         applyListings(listings, asked);
@@ -199,7 +201,7 @@ export function enablePlugin(name: string, hash: string): boolean {
   const builtIn = isAlwaysOn(listing) ? { installed: true, ...(before.controlGranted ? { controlGranted: true } : {}) } : {};
   if (!saveRecords({ ...records, [name]: { enabled: true, approved: hash, values, applied: plan.applied, ...builtIn } }, consent)) return false;
   const asksControl = manifest.permissions.control;
-  applySettingsPatch(kept || !asksControl || useBrowser.getState().settings.cliControl ? plan.patch : { ...plan.patch, cliControl: true });
+  applySettingsPatch(kept || !asksControl || programControlOn(useBrowser.getState()) || userTurnedControlOff() ? plan.patch : { ...plan.patch, cliControl: true });
   usePlugins.setState({ consent: null });
   notePlugin("plugin_enables", consent);
   reconcilePlugins(consent);

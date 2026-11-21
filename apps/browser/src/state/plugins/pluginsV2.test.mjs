@@ -1140,7 +1140,7 @@ test("a tool call never reaches a target stopped or restarted after it got ready
     await settledStops();
     await settle();
     takePluginCounts();
-    const calling = callTool("lazy", "echo", {}, { kind: "cli" });
+    const calling = callTool("lazy", "echo", {}, { kind: "socket" });
     await settle();
     const lazyRun = P().processes.lazy.run;
     send("lazy", "ready", {}, lazyRun);
@@ -1169,7 +1169,7 @@ test("a tool call to a lazy plugin keeps the consent it began with while the plu
       await settle();
       takePluginCounts();
       begin();
-      const calling = callTool("lazy", "echo", {}, { kind: "cli" });
+      const calling = callTool("lazy", "echo", {}, { kind: "socket" });
       await settle();
       const lazyRun = P().processes.lazy.run;
       assert.ok(lazyRun > 0, `${name}: lazy is starting for the call`);
@@ -1211,7 +1211,7 @@ test("only failed tool calls count as plugin_tool_failures; failed commands and 
   assert.equal(counts.plugin_tool_calls, 0);
   const lazyRun = await activated("lazy");
   takePluginCounts();
-  const calling = callTool("lazy", "echo", {}, { kind: "cli" });
+  const calling = callTool("lazy", "echo", {}, { kind: "socket" });
   await settle();
   const toolCall = echoLinesTo(lazyRun).map((e) => JSON.parse(e.line)).at(-1);
   await ask("lazy", "result", { call: toolCall.call, error: "nope" }, lazyRun);
@@ -1345,6 +1345,40 @@ test("a command's context shows tab and group titles only to a plugin with the t
   assert.deepEqual(shownCommandContext({ tabs: false }, context), { tabId: "t1", windowId: "w1", tabCount: 3 });
   assert.deepEqual(shownCommandContext({ tabs: "read" }, context), { url: "https://secret.example/doc", title: "Q3 layoffs draft", tabId: "t1", windowId: "w1", tabCount: 3 });
   assert.deepEqual(shownCommandContext({ tabs: false }, { groupId: "g1", title: "Hiring" }), { groupId: "g1" });
+});
+
+test("a control-socket caller is the socket inside Ardia and still \"cli\" on the wire, for protocol 2 as for protocol 1", async () => {
+  await enable(LAZY);
+  const lazyRun = await activated("lazy");
+  const calling = callTool("lazy", "echo", {}, { kind: "socket" });
+  await settle();
+  const toolCall = echoLinesTo(lazyRun).map((e) => JSON.parse(e.line)).at(-1);
+  assert.deepEqual(toolCall.caller, { kind: "cli" });
+  await ask("lazy", "result", { call: toolCall.call, result: { ok: 1 } }, lazyRun);
+  assert.deepEqual(await calling, { ok: true, result: { ok: 1 } });
+  lifecycle.disablePlugin("lazy", consentToken());
+  await settledStops();
+});
+
+test("programs.status and programs.relink answer a plugin about its own programs only", async () => {
+  const TOOLS = { manifest: 2, name: "tooly", title: "Tooly", main: "index.js", permissions: {}, contributes: { programs: [{ name: "tooly", path: "bin/tooly", example: "tooly go" }] } };
+  host.linkResult = { ok: true, linked: [], refused: { tooly: "/home/.local/bin/tooly is someone else's" }, binDir: "/home/.local/bin" };
+  await enable(TOOLS);
+  await settle();
+  const m = P().listings.tooly.manifest;
+  const caller = { name: "tooly", run: P().processes.tooly?.run ?? 1 };
+  assert.deepEqual(answerMethod(caller, m, "programs.status", {}).result, { state: "failed", linked: [], failed: [{ name: "tooly", reason: "/home/.local/bin/tooly is someone else's" }], binDir: "/home/.local/bin" });
+  host.linkResult = null;
+  assert.deepEqual(answerMethod(caller, m, "programs.relink", {}), { result: { ok: true } });
+  await settle();
+  assert.deepEqual(answerMethod(caller, m, "programs.status", {}).result, { state: "linked", linked: ["tooly"], failed: [], binDir: "/home/.local/bin" });
+  await enable(READER);
+  const reader = P().listings.reader.manifest;
+  assert.deepEqual(answerMethod({ name: "reader", run: 1 }, reader, "programs.status", {}).result, { state: "none", linked: [], failed: [], binDir: null });
+  assert.equal(answerMethod({ name: "reader", run: 1 }, reader, "programs.relink", {}).error.code, "refused");
+  lifecycle.disablePlugin("tooly", consentToken());
+  lifecycle.disablePlugin("reader", consentToken());
+  await settledStops();
 });
 
 test("an omnibox query cancelled while its lazy plugin starts never goes out, and one cancelled while waiting frees its slot", async () => {

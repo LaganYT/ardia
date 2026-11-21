@@ -1,7 +1,7 @@
 import { isFields, type Fields } from "./decode";
 import { upgraded } from "./savedDocument";
 import { RESERVED_PAGE_NAMES } from "./pluginNames";
-import { LIMITS, matching, NAME, NAME_RULE, only, text, VERSION, type Check, SYMBOL, SYMBOL_RULE } from "./pluginChecks";
+import { LIMITS, list, matching, NAME, NAME_RULE, object, only, text, VERSION, type Check, SYMBOL, SYMBOL_RULE } from "./pluginChecks";
 import { SPLIT_SIDES, type CommandSpec } from "./pluginCommands";
 import { contributesOf, MENU_SLOTS, pagePanelOf, type PluginContributions } from "./pluginContributions";
 import { activationEventsOf, derivedActivationEvents } from "./pluginActivation";
@@ -10,7 +10,6 @@ import { ANY_HOST } from "./pluginNetwork";
 import { permissionsOf, type PluginPermissions } from "./pluginPermissions";
 import { storedRows, type RowValue, type SettingsSpec } from "./pluginRows";
 import { mainOf, sidecarOf, type MainSpec, type ProcessSpec, type ProgramSpec } from "./pluginRuntime";
-import type { PasswordManagerSpec } from "./pluginPasswordManager";
 
 export { compareVersions } from "./versions";
 export { LIMITS, NAME_PATTERN, KEY_PATTERN, VERSION_PATTERN, SYMBOL_PATTERN, KEYWORD_PATTERN, isPluginPath, DEFAULT_MAIN_MB, DEFAULT_SIDECAR_MB } from "./pluginChecks";
@@ -26,6 +25,7 @@ export const MANIFEST_VERSION = 2;
 export const MANIFEST_FILE = "plugin.json";
 
 export type PageSpec = { title: string; icon: string; source: { file: string } };
+export type TelemetryDisclosure = { title: string; items: string[] };
 
 export type PluginManifest = {
   manifest: number;
@@ -36,6 +36,8 @@ export type PluginManifest = {
   version: string | null;
   requires: string | null;
   icon: string | null;
+  keywords: string[];
+  telemetry: TelemetryDisclosure | null;
   permissions: PluginPermissions;
   main: MainSpec | null;
   sidecar: ProcessSpec | null;
@@ -49,14 +51,14 @@ export type PluginManifest = {
   tools: PluginContributions["tools"];
   hooks: string[];
   programs: ProgramSpec[];
-  passwordManager: PasswordManagerSpec | null;
   page: PageSpec | null;
   process: ProcessSpec | null;
 };
 
 export type ManifestRead = { manifest: PluginManifest | null; problems: string[]; newer: boolean };
 
-const TOP_KEYS = ["$schema", "manifest", "name", "title", "description", "version", "requires", "icon", "main", "memoryMB", "sidecar", "activationEvents", "permissions", "contributes", "alwaysOn", "official", "autoInstall"];
+const TOP_KEYS = ["$schema", "manifest", "name", "title", "description", "version", "requires", "icon", "main", "memoryMB", "sidecar", "activationEvents", "permissions", "contributes", "alwaysOn", "official", "autoInstall", "keywords", "telemetry"];
+const V2_ONLY_KEYS = ["keywords", "telemetry"] as const;
 const K = "contributes";
 
 function commandProblems(c: Check, k: PluginContributions, permissions: PluginPermissions, hasPage: boolean, hasMain: boolean) {
@@ -92,6 +94,32 @@ function contributionProblems(c: Check, k: PluginContributions, permissions: Plu
   if (k.settings.rows.some((r) => r.type === "secret") && !permissions.secrets) c.problems.push(`${K}.settings.rows: a secret row needs the secrets permission`);
 }
 
+function keywordsOf(c: Check, value: unknown): string[] {
+  const given = list(c, "keywords", value, LIMITS.pluginKeywords).map((k, i) => text(c, `keywords[${i}]`, k, LIMITS.keyword));
+  return [...new Set(given.filter((k): k is string => k !== null))];
+}
+
+function telemetryOf(c: Check, value: unknown): TelemetryDisclosure | null {
+  if (value === undefined) return null;
+  const doc = object(c, "telemetry", value);
+  if (!doc) return null;
+  only(c, "telemetry", doc, ["title", "items"]);
+  const title = text(c, "telemetry.title", doc.title, LIMITS.title);
+  const raw = list(c, "telemetry.items", doc.items, LIMITS.telemetryItems);
+  if (!raw.length) c.problems.push(`telemetry.items must be a list of 1 to ${LIMITS.telemetryItems}`);
+  const items = raw.map((item, i) => text(c, `telemetry.items[${i}]`, item, LIMITS.telemetryItem));
+  return title && raw.length && items.every((i) => i !== null) ? { title, items: items as string[] } : null;
+}
+
+function v2OnlyProblems(c: Check, raw: Fields, programs: PluginContributions["programs"], declared: number) {
+  if (declared >= MANIFEST_VERSION) return;
+  for (const key of V2_ONLY_KEYS) if (raw[key] !== undefined) c.problems.push(`${key} needs manifest ${MANIFEST_VERSION}`);
+  programs.forEach((p, i) => {
+    if (p.example !== null) c.problems.push(`programs[${i}].example needs manifest ${MANIFEST_VERSION}`);
+    if (p.claim) c.problems.push(`programs[${i}].claim needs manifest ${MANIFEST_VERSION}`);
+  });
+}
+
 function pageOf(k: PluginContributions): PageSpec | null {
   const panel = pagePanelOf(k.panels);
   return panel?.file ? { title: panel.title, icon: panel.icon, source: { file: panel.file } } : null;
@@ -106,6 +134,8 @@ export function checkManifest(raw: Fields, declaredManifest = MANIFEST_VERSION):
   const version = matching(c, "version", raw.version, VERSION, "MAJOR.MINOR.PATCH", false);
   const requires = matching(c, "requires", raw.requires, VERSION, "an Ardia version, MAJOR.MINOR.PATCH", false);
   const icon = matching(c, "icon", raw.icon, SYMBOL, SYMBOL_RULE, false);
+  const keywords = keywordsOf(c, raw.keywords);
+  const telemetry = telemetryOf(c, raw.telemetry);
   const permissions = permissionsOf(c, raw.permissions);
   const main = mainOf(c, raw.main, raw.memoryMB);
   const sidecar = sidecarOf(c, "sidecar", raw.sidecar);
@@ -116,6 +146,7 @@ export function checkManifest(raw: Fields, declaredManifest = MANIFEST_VERSION):
   if (given && !runtime.main) c.problems.push("activationEvents only go with a main");
   const [alwaysOn, official, autoInstall] = (["alwaysOn", "official", "autoInstall"] as const).map((k) => (raw[k] === undefined ? false : raw[k] === true || (c.problems.push(`${k} must be true`), false)));
   const page = pageOf(contributes);
+  v2OnlyProblems(c, raw, contributes.programs, declaredManifest);
   commandProblems(c, contributes, permissions, page !== null, runtime.main);
   contributionProblems(c, contributes, permissions, runtime);
   if (contributes.panels.some((p) => p.file) && name && RESERVED_PAGE_NAMES.includes(name)) c.problems.push(`name: ${name} is one of Ardia's own pages (ardia://${name}), so a plugin with a page can't use it`);
@@ -125,9 +156,9 @@ export function checkManifest(raw: Fields, declaredManifest = MANIFEST_VERSION):
   const k = contributes;
   return {
     manifest: {
-      manifest: MANIFEST_VERSION, declaredManifest, name, title, description, version, requires, icon, permissions, main, sidecar, activationEvents, contributes,
+      manifest: MANIFEST_VERSION, declaredManifest, name, title, description, version, requires, icon, keywords, telemetry, permissions, main, sidecar, activationEvents, contributes,
       alwaysOn: !!alwaysOn, official: !!official, autoInstall: !!autoInstall,
-      settings: k.settings, commands: k.commands, tools: k.tools, hooks: k.hooks, programs: k.programs, passwordManager: k.passwordManager, page, process: sidecar,
+      settings: k.settings, commands: k.commands, tools: k.tools, hooks: k.hooks, programs: k.programs, page, process: sidecar,
     },
     problems: [],
   };
@@ -154,8 +185,8 @@ export function readManifest(text: string): ManifestRead {
   return { manifest, problems: problems.map((p) => `${MANIFEST_FILE}: ${legacy ? v1Problem(p) : p}`), newer: false };
 }
 
-export type Contribution = "settings" | "commands" | "page" | "process" | "programs" | "hooks" | "tools" | "passwordManager" | "main" | "menus" | "toolbar" | "sidebarViews" | "panels" | "omnibox" | "themes";
-export const CONTRIBUTIONS: readonly Contribution[] = ["settings", "commands", "page", "process", "programs", "hooks", "tools", "passwordManager", "main", "menus", "toolbar", "sidebarViews", "panels", "omnibox", "themes"];
+export type Contribution = "settings" | "commands" | "page" | "process" | "programs" | "hooks" | "tools" | "main" | "menus" | "toolbar" | "sidebarViews" | "panels" | "omnibox" | "themes";
+export const CONTRIBUTIONS: readonly Contribution[] = ["settings", "commands", "page", "process", "programs", "hooks", "tools", "main", "menus", "toolbar", "sidebarViews", "panels", "omnibox", "themes"];
 
 export function contributionsOf(m: PluginManifest): Contribution[] {
   const k = m.contributes;
@@ -167,7 +198,6 @@ export function contributionsOf(m: PluginManifest): Contribution[] {
     programs: k.programs.length > 0,
     hooks: k.hooks.length > 0,
     tools: k.tools.length > 0,
-    passwordManager: k.passwordManager !== null,
     main: m.main !== null,
     menus: MENU_SLOTS.some((slot) => k.menus[slot].length > 0),
     toolbar: k.toolbar.length > 0,

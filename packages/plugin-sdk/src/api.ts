@@ -8,6 +8,7 @@ import {
   type PanelResult,
   type PluginTabInfo,
   type PluginWindowInfo,
+  type ProgramsStatus,
   type QuickPickItem,
   type QuickPickOptions,
   type ToastOptions,
@@ -215,6 +216,10 @@ export function createArdia(rpc: Rpc, registry: Registry, state: ApiState) {
         rpc.request<{ tabId: string; windowId: string }>(M.pageOpen, options),
       post: (view: string, message: unknown) => rpc.request(M.pagePost, { view, message }).then(() => undefined),
       onMessage: (listener: PageMessageListener): Disposable => addTo(registry.pages, listener),
+    },
+    programs: {
+      status: () => rpc.request<ProgramsStatus>(M.programsStatus),
+      relink: () => rpc.request<{ ok: boolean }>(M.programsRelink),
     },
     net: {
       async fetch(input: string | FetchRequest, init: Omit<FetchRequest, "url"> = {}): Promise<PluginResponse> {

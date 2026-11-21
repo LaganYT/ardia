@@ -48,6 +48,8 @@ for folder in "$dist"/plugins/*/; do
   done
   /usr/libexec/PlistBuddy -c "Add :ArdiaBuiltInPlugins:$name string $("$root/scripts/release/plugin-digest.py" "$bundled/$name")" "$plist"
 done
+registry="$(python3 -I "$root/scripts/release/official-plugins.py" registry "$bundled")" || die "the bundled plugins' program registry couldn't be made"
+plutil -replace ArdiaProgramRegistry -json "$registry" "$plist" || die "couldn't write ArdiaProgramRegistry into Info.plist"
 
 echo "==> Licenses"
 licenses="$app/Contents/Resources/Licenses"

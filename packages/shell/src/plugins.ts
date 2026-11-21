@@ -17,10 +17,10 @@ export type PluginProgramsSpec = {
   approved: string;
   version: string | null;
   programs: { name: string; path: string; afterUpdate?: string[][] }[];
-  adopt: boolean;
 };
+export type PluginProgramRegistry = { claims: Record<string, string>; failClosed: boolean; legacyOwners: string[] };
 export type PluginProgramsResult =
-  | { ok: true; linked: string[]; refused: Record<string, string>; binDir: string; adopted: boolean }
+  | { ok: true; linked: string[]; refused: Record<string, string>; binDir: string; adopted: boolean; adoptBusy?: boolean }
   | { ok: false; reason?: string; stale?: true };
 
 export type PluginStartSpec = {
@@ -58,7 +58,8 @@ export type PluginsNative = {
   linkPrograms(spec: PluginProgramsSpec): Promise<PluginProgramsResult>;
   unlinkPrograms(name: string, programs: string[], remove: boolean): Promise<{ ok: boolean }>;
   sweepPrograms(active: string[]): Promise<void>;
-  legacyProgramsInstalled(): Promise<boolean>;
+  legacyProgramsInstalled(): Promise<string[]>;
+  programRegistry(): Promise<PluginProgramRegistry>;
   revealLog(name: string): void;
   revealFolder(): void;
   devSnapshotPage(name: string, path: string): Promise<boolean>;

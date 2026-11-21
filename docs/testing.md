@@ -141,20 +141,6 @@ Launch with `scripts/agent/ac launch <app> --data <dir> [--instance K=V] [--test
   in the dev harness has the current scale, `pixelRatio` and `hairline`. For a real 1× backing scale (pixel checks),
   add `--arg=-AppleMagnifiedMode --arg=YES` (low resolution mode, `devicePixelRatio` 1). Dev clicks and `windows.dev`
   points are root points.
-- **`applePasswordsPanel`** (password manager plugins, `docs/plugins.md` › passwordManager): background mode only logs
-  `[ardiacore] system passwords panel (background mode, not shown)` for the key and Edit › AutoFill › Passwords…; with
-  this key it sends AppKit's `_handleInsertFromPasswordsCommand:` for real and logs the first responder, the target and
-  whether AppKit took it (`log show --predicate 'eventMessage CONTAINS "system passwords panel"'`). Apple's panel
-  belongs to another process and can show on screen, so use it only with the screen locked or the owner's OK. After a
-  send it logs `held=1`: AppKit's own show-or-hide pass is held for 1.5 s, since its delayed dismiss used to cancel a
-  panel still opening. A pass skipped meanwhile runs once when the hold ends (`hold ended, replaying …`), and the hold
-  ends at once if the send is refused or focus leaves the page (`hold ended early`). It then compares the Passwords
-  panel windows on screen with those there before the send, at 0.6 s and again at 1.5 s, and logs `seen`, `missing`
-  (reported as `noPanel`, which opens nothing in Ardia) or `unchecked` (another app's window names were hidden). Every
-  refusal logs `refused reason=<reason> via=<badge|menu> field=<username|password|code|other>`.
-- **`systemPanelRace`**: right after sending the Passwords command, runs AppKit's
-  `_showOrHideAutoFillForCurrentTextInputContextIfAppropriate` at once, while Ardia is still active: the ordering that
-  lost the panel before the hold. Use it with a visible instance to check the panel still shows.
 - **`appDialog`**: `confirm` and `prompt` write their options (and `kind`) to `<data dir>/dialog.json` and answer from
   `dialog.json.pick` (deleted): `confirm` (with `,suppress` to tick the suppression box) or anything else to cancel; a
   prompt's answer is the text, empty to cancel. With no pick file they run as usual (background mode cancels).
@@ -180,8 +166,8 @@ Launch with `scripts/agent/ac launch <app> --data <dir> [--instance K=V] [--test
 - **`allowOcclusion`**: macOS posts no occlusion change for a window a band below normal, so minimizing and
   deminiaturizing post one for it (the page goes hidden as in a user's minimized window).
 - **The `ardia` command** (`cliHome`, `cliBinDir`, `cliUrl` (`file://` works), test `cliInstallScript`, test
-  `bundledPlugins`): on macOS a test instance links the built-in `cli` plugin only into `cliBinDir` and adopts an old
-  install only from `cliHome`, so it never touches the real home; give it the plugin folder with
+  `bundledPlugins`): on macOS a test instance links built-in plugins' programs only into `cliBinDir`, takes its program
+  registry from the bundled manifests' `claim`s, and adopts an old install only from `cliHome`, so it never touches the real home; give it the plugin folder with
   `ARDIA_TEST bundledPlugins=<dir>` (`scripts/release/official-plugins.py bundle <dir>` for the pinned ones, or
 `plugins/cli/build.sh <dir>` in ardia-browser/plugins for a local one), since a Debug build bundles none. On Linux a
   test instance installs or upgrades only with the first two set. Its

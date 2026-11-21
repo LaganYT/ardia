@@ -20,6 +20,7 @@ import { nativeEvents, unfaked } from "./events";
 import { reportModule } from "./report";
 import { telemetryLocalModule } from "./telemetryLocal";
 import { windowGeometries, windowGeometryFakes } from "./windowGeometry";
+import officialPin from "../../official-plugins.json";
 export { beginWindowControlTransition, finishStalledTransition, geometryWorld } from "./windowGeometry";
 
 type Modules = ShellNativeModules;
@@ -497,10 +498,11 @@ export const pluginHost = {
   replies: [] as { name: string; run: number; line: string }[],
   events: [] as { name: string; run: number; line: string }[],
   removed: [] as string[],
-  links: [] as { name: string; folderId: string; approved: string; version: string | null; programs: { name: string; path: string; afterUpdate?: string[][] }[]; adopt: boolean }[],
+  links: [] as { name: string; folderId: string; approved: string; version: string | null; programs: { name: string; path: string; afterUpdate?: string[][] }[] }[],
   unlinks: [] as { name: string; programs: string[]; remove: boolean }[],
   sweeps: [] as string[][],
-  legacyInstalled: false,
+  legacyInstalled: [] as string[],
+  registry: null as null | { claims: Record<string, string>; failClosed: boolean; legacyOwners: string[] },
   linkResult: null as null | { ok: false; reason?: string; stale?: true } | { ok: true; linked: string[]; refused: Record<string, string>; binDir: string; adopted: boolean },
   startResult: null as null | { ok: false; reason: string },
   removeGate: null as null | Promise<void>,
@@ -510,6 +512,22 @@ export const pluginHost = {
   listFails: false,
   nextRun: 0,
 };
+function derivedRegistry() {
+  const claims: Record<string, string> = {};
+  const declared: Record<string, string[]> = {};
+  for (const folder of pluginHost.folders) {
+    if (!folder.bundled || !folder.text) continue;
+    try {
+      const doc = JSON.parse(folder.text) as { programs?: unknown; contributes?: { programs?: unknown } };
+      const programs = (doc.contributes?.programs ?? doc.programs) as { name?: unknown; claim?: unknown }[] | undefined;
+      declared[folder.name] = (Array.isArray(programs) ? programs : []).flatMap((p) => (typeof p.name === "string" ? [p.name] : []));
+      for (const p of Array.isArray(programs) ? programs : []) if (p.claim === true && typeof p.name === "string") claims[p.name] ??= folder.name;
+    } catch {}
+  }
+  for (const plugin of (officialPin as { plugins: { name: string; reservedPrograms?: string[] }[] }).plugins)
+    for (const program of plugin.reservedPrograms ?? []) if (declared[plugin.name]?.includes(program)) claims[program] ??= plugin.name;
+  return { claims, failClosed: false, legacyOwners: [] };
+}
 const pluginEvents = nativeEvents();
 export const emitPluginLine = (line: { name: string; run: number; line: string }) => pluginEvents.emit("onLine", line);
 export const emitPluginExit = (exit: { name: string; run: number; status: number | null; signal: number | null; overMemory: boolean }) => pluginEvents.emit("onExit", exit);
@@ -539,7 +557,8 @@ const plugins: Modules["ArdiaPlugins"] = {
   },
   unlinkPrograms: async (name, programs, remove) => (pluginHost.unlinks.push({ name, programs: [...programs], remove }), { ok: true }),
   sweepPrograms: async (active) => void pluginHost.sweeps.push([...active]),
-  legacyProgramsInstalled: async () => pluginHost.legacyInstalled,
+  legacyProgramsInstalled: async () => [...pluginHost.legacyInstalled],
+  programRegistry: async () => pluginHost.registry ?? derivedRegistry(),
   revealLog: () => {},
   revealFolder: () => {},
   devSnapshotPage: async () => false,

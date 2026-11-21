@@ -11,9 +11,6 @@ import type {
   DiscardReason,
   DisplayMediaRequest,
   DownloadNavigation,
-  FieldProviderHint,
-  FieldProviderOpened,
-  FieldProviderPanelRefusal,
   FindResult,
   FocusRestoreOutcome,
   LoadError,
@@ -34,7 +31,6 @@ import type {
   ProtectedMediaRequest,
   ScrollState,
   SecurityInfo,
-  VerificationCodeFound,
   WebNotification,
   WebViewProps,
   ZapPick,
@@ -90,15 +86,11 @@ type NativeEvents = {
   onZapPicked: ZapPick;
   onTransferRefused: { from: string };
   onAppBadge: AppBadge;
-  onFieldProviderOpened: FieldProviderOpened;
-  onFieldProviderHint: { state?: string };
-  onVerificationCodeFound: VerificationCodeFound;
 };
 export type Handlers = keyof NativeEvents;
 export type PageEvent = { name: string; data: unknown };
 export type NativeProps = Omit<WebViewProps, Handlers> & { pageEvents: string[]; onPageEvent: (e: NativeSyntheticEvent<PageEvent>) => void };
 
-const FIELD_PROVIDER_REFUSALS: readonly FieldProviderPanelRefusal[] = ["hidden", "notFocused", "unavailable", "notKey", "notEditing", "throttled", "refused", "noPanel"];
 const FOCUS_RESTORE_OUTCOMES: readonly FocusRestoreOutcome[] = ["focused", "kept", "refused", "gaveUp"];
 
 const PAGE_EVENTS = {
@@ -150,9 +142,6 @@ const PAGE_EVENTS = {
   onZapPicked: "zapPicked",
   onTransferRefused: "transferRefused",
   onAppBadge: "appBadge",
-  onFieldProviderOpened: "fieldProviderOpened",
-  onFieldProviderHint: "fieldProviderHint",
-  onVerificationCodeFound: "verificationCodeFound",
 } as const satisfies Record<Handlers, string>;
 export type PageEventName = (typeof PAGE_EVENTS)[Handlers];
 export const pageEventOf = (handler: Handlers): PageEventName => PAGE_EVENTS[handler];
@@ -207,16 +196,6 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onZapPicked: (e) => [e],
   onTransferRefused: (e) => [e.from],
   onAppBadge: (e) => [e],
-  onFieldProviderOpened: (e) => [
-    {
-      via: e.via === "menu" ? "menu" : "badge",
-      shown: e.shown === true,
-      ...(e.shown !== true && FIELD_PROVIDER_REFUSALS.includes(e.reason as FieldProviderPanelRefusal) ? { reason: e.reason } : {}),
-      ...(e.shown === true && (e.panel === "above" || e.panel === "below") ? { panel: e.panel } : {}),
-    },
-  ],
-  onFieldProviderHint: (e) => [{ state: e.state === "dismissed" ? "dismissed" : "shown" } as FieldProviderHint],
-  onVerificationCodeFound: (e) => [{ token: String(e.token), app: String(e.app ?? ""), main: e.main === true }],
 };
 
 export const isPageEventProp = (key: string): key is Handlers => key in unwrap;

@@ -16,6 +16,7 @@ import { isPagePath, openPluginPage } from "./pages";
 import { valuesFor } from "./values";
 import { netFetch, readActivePage, secretsMethod, storageMethod } from "./channelData";
 import { UI_METHODS, uiMethod } from "./channelUi";
+import { programsStatus, relinkOwnPrograms } from "./programs";
 
 export const CHANNEL_PROTOCOL = 2;
 export const LEGACY_CHANNEL_PROTOCOL = 1;
@@ -115,6 +116,12 @@ export function answerMethod(c: ChannelCaller, m: PluginManifest, method: string
       return toolsCall(c.name, m, params);
     case "net.fetch":
       return netFetch(m, params);
+    case "programs.status":
+      return { result: programsStatus(c.name) };
+    case "programs.relink": {
+      const relinked = relinkOwnPrograms(c.name);
+      return relinked.ok ? { result: { ok: true } } : failure("refused", relinked.reason);
+    }
     case "result": {
       const problem = answerCall(c.name, c.run, params);
       return problem ? failure("bad_request", problem) : { result: { ok: true } };

@@ -29,8 +29,7 @@ import { useTheme } from "../../ui/theme";
 import { PaneSubPage } from "./PaneSubPage";
 import { releaseOrphanedConsent } from "../../../state/plugins/consentSurface";
 import { OfficialPluginsSection, usePluginsBelowOfficial } from "./OfficialPlugins";
-import { useNeverChosenCount } from "../../../state/site/passwordManager";
-import { PasswordManagerDetails } from "./PasswordManagerPlugin";
+import { useControlTurnedOff } from "../../../state/app/programControlSetting";
 
 export function PluginsPane({ detail }: SettingsPlace) {
   if (!PLATFORM_FEATURES.plugins) return <UnavailablePage />;
@@ -222,6 +221,7 @@ async function confirmRemove(name: string, title: string) {
 }
 
 function PluginPage({ name }: { name: string }) {
+  const controlOff = useControlTurnedOff();
   const theme = useTheme();
   const listing = usePluginListing(name);
   const active = usePluginActive(name);
@@ -229,7 +229,6 @@ function PluginPage({ name }: { name: string }) {
   const process = usePluginProcess(name);
   const programs = usePluginPrograms(name);
   const values = usePluginValues(name);
-  const movesProfiles = useNeverChosenCount();
   const m = listing?.manifest ?? null;
   if (!listing) return <PaneSubPage intro="This plugin isn't installed any more.">{null}</PaneSubPage>;
   return (
@@ -267,12 +266,11 @@ function PluginPage({ name }: { name: string }) {
           </Group>
         </>
       ) : null}
-      {m?.passwordManager && active ? <PasswordManagerDetails name={name} spec={m.passwordManager} /> : null}
       {m ? (
         <>
           <SectionHeader title="What it gets" />
           <Group>
-            {consentLines(m, { bundled: !!listing.bundled && !active, movesProfiles }).map((line) => (
+            {consentLines(m, { controlOff }).map((line) => (
               <Row key={line.text} title={line.text} icon={<Symbol name={line.icon} size={13} color={theme.icon} style={ICON} />} />
             ))}
           </Group>

@@ -25,7 +25,6 @@ test("a pane shows no site panel until one opens, and a closing panel stays unti
 test("each pane mounts its rare overlays only while they show, with no wrapper component per pane", () => {
   const overlays = readFileSync(new URL("./PageOverlays.tsx", import.meta.url), "utf8");
   for (const wrapper of ["<SiteControls ", "<ZoomPopover", "<HiddenElementsPopover"]) assert.ok(!overlays.includes(wrapper), `${wrapper} is a per-pane wrapper`);
-  assert.match(overlays, /\{verificationCode && <VerificationCodePrompt /, "the verification code prompt mounts only while a code is offered");
   const pane = readFileSync(new URL("./TabPane.tsx", import.meta.url), "utf8");
   assert.ok(!pane.includes("TabContentArea"), "the content area is marked by a prop, not a wrapper component per pane");
 });

@@ -944,6 +944,15 @@ describe("createHostRuntime", () => {
     assert.deepEqual(second, { command: "open", arg: "x" });
   });
 
+  test("ardia.programs asks the host about the plugin's own programs and relinks them", async () => {
+    const status = { state: "failed", linked: [], failed: [{ name: "tool", reason: "taken" }], binDir: "/home/.local/bin" };
+    const { host, runtime } = await started({}, { "programs.status": () => status, "programs.relink": () => ({ ok: true }) });
+    assert.deepEqual(await runtime.ardia.programs.status(), status);
+    assert.deepEqual(await runtime.ardia.programs.relink(), { ok: true });
+    assert.equal(host.calls("programs.status").length, 1);
+    assert.equal(host.calls("programs.relink").length, 1);
+  });
+
   test("storage.get reads the found envelope and keeps stored objects intact", async () => {
     const replies = { a: { found: true, value: { value: 1, other: 2 } }, b: { found: true, value: null }, c: { found: false } };
     const { runtime } = await started({}, { "storage.get": (p) => replies[p.key] });

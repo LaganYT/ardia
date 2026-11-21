@@ -11,7 +11,7 @@ globalThis.setTimeout = (callback, ms, ...args) => {
 globalThis.__DEV__ = false;
 registerHooks({
   resolve(specifier, context, next) {
-    if (!context.parentURL?.endsWith("/state/app/cliControl.ts") || specifier !== "../pages/urls") return next(specifier, context);
+    if (!context.parentURL?.endsWith("/state/app/programControl.ts") || specifier !== "../pages/urls") return next(specifier, context);
     const stub = "export const isInternalTab = (t) => /^ardia:\\/\\//i.test(t.page.nav?.url ?? t.url ?? '');";
     return { url: `data:text/javascript,${encodeURIComponent(stub)}`, shortCircuit: true };
   },
@@ -23,7 +23,7 @@ globalThis.acTestCliControl = (on) => {
   return new Promise((resolve) => replies.push(resolve));
 };
 const { useBrowser } = await import("../browser/store.ts");
-const cli = await import("./cliControl.ts");
+const cli = await import("./programControl.ts");
 const settle = () => new Promise((r) => setImmediate(r));
 const setOn = (on) => useBrowser.getState().updateSettings({ cliControl: on });
 const { emitEvent } = await import("../../test-native/index.ts");
@@ -31,7 +31,7 @@ const emit = (status) => emitEvent("engine.cliControl", status);
 const { markTabReady } = await import("../tabs/pageState.ts");
 const ready = (tabId) => (markTabReady(tabId), cli.noteTabReady(tabId));
 
-cli.startCliControl();
+cli.startProgramControl();
 await settle();
 replies.shift()({ state: "off", generation: 0 });
 await settle();
@@ -50,14 +50,14 @@ test("a failure from a superseded enable doesn't turn off a newer retry", async 
   await settle();
   assert.deepEqual(calls, [true, false, true]);
   assert.equal(useBrowser.getState().settings.cliControl, true);
-  assert.equal(cli.useCli.getState().server?.generation, 2);
+  assert.equal(cli.useControlServer.getState().server?.generation, 2);
 });
 
 test("a failure of the current start still turns the setting off and keeps the reason", async () => {
   emit({ state: "off", generation: 2, reason: "Couldn't write ArdiaControl.json: is a directory" });
   await settle();
   assert.equal(useBrowser.getState().settings.cliControl, false);
-  assert.match(cli.useCli.getState().server?.reason ?? "", /is a directory/);
+  assert.match(cli.useControlServer.getState().server?.reason ?? "", /is a directory/);
   assert.deepEqual(calls, [true, false, true, false]);
 });
 

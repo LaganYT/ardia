@@ -8,6 +8,7 @@ import {
   type PluginLine,
   type PluginProgramsResult,
   type PluginProgramsSpec,
+  type PluginProgramRegistry,
   type PluginRemoveResult,
   type PluginStartResult,
   type PluginStartSpec,
@@ -23,6 +24,7 @@ export type {
   PluginLine,
   PluginProgramsResult,
   PluginProgramsSpec,
+  PluginProgramRegistry,
   PluginRemoveResult,
   PluginStartResult,
   PluginStartSpec,
@@ -44,6 +46,7 @@ export const linkPluginPrograms = (spec: PluginProgramsSpec) => Plugins().linkPr
 export const unlinkPluginPrograms = (name: string, programs: string[], remove: boolean) => Plugins().unlinkPrograms(name, programs, remove);
 export const sweepPluginPrograms = (active: string[]) => Plugins().sweepPrograms(active);
 export const legacyProgramsInstalled = () => Plugins().legacyProgramsInstalled();
+export const programRegistry = () => Plugins().programRegistry();
 export const revealPluginLog = (name: string) => Plugins().revealLog(name);
 export const revealPluginsFolder = () => Plugins().revealFolder();
 export const devSnapshotPluginPage = (name: string, path: string) => Plugins().devSnapshotPage(name, path);

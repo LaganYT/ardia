@@ -41,14 +41,15 @@ const { PLATFORM_FEATURES } = await import("../../lib/platformFeatures.ts");
 PLATFORM_FEATURES.plugins = false;
 const { readDocument } = await import("../../platform/documents.ts");
 const { firstWindowCommitted } = await import("../../lib/afterFirstWindow.ts");
-const cli = await import("./cliControl.ts");
+const control = await import("./programControl.ts");
+const cli = await import("./linuxCommandInstall.ts");
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-cli.startCliControl();
+control.startProgramControl();
 firstWindowCommitted();
 await new Promise((resolve) => setTimeoutHoldingExit(resolve, 5));
 globalThis.setTimeout = setTimeoutHoldingExit;
-assert.equal(typeof upgradeTimer, "function", "startCliControl schedules the first install 8 s after the first window");
+assert.equal(typeof upgradeTimer, "function", "startProgramControl schedules the first install 8 s after the first window");
 
 const savedRecord = () => {
   const text = readDocument("ardia-cli.json");
@@ -61,14 +62,14 @@ test("8 s after launch on Windows no install is tried, so nothing rejects and no
   await settle();
   assert.deepEqual(unhandled, []);
   assert.equal(savedRecord().autoInstallTries, undefined);
-  assert.equal(cli.useCli.getState().installing, null);
+  assert.equal(cli.useCommandInstall.getState().installing, null);
 });
 
 test("Install in Settings says the ardia command isn't offered on Windows and doesn't stick on Installing", async () => {
-  const result = await cli.installCliInBackground("settings");
+  const result = await cli.installCommandInBackground("settings");
   assert.equal(result.ok, false);
   assert.match(result.error ?? "", /isn't offered on Windows/);
-  const state = cli.useCli.getState();
+  const state = cli.useCommandInstall.getState();
   assert.equal(state.installing, null);
   assert.match(state.error ?? "", /isn't offered on Windows/);
   assert.deepEqual(unhandled, []);

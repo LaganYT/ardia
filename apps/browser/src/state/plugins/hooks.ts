@@ -18,6 +18,10 @@ export const usePluginActive = (name: string) => usePlugins((s) => !!activeManif
 export const usePluginNeedsReview = (name: string) => usePlugins((s) => needsReview(s, name));
 export const usePluginProcess = (name: string) => usePlugins((s) => s.processes[name]);
 export const usePluginPrograms = (name: string) => usePlugins((s) => s.programs[name]);
+export function usePluginsWithPrograms(): { name: string; title: string }[] {
+  const key = usePlugins((s) => JSON.stringify(s.order.flatMap((name) => { const m = activeManifest(s, name); return m?.programs.length ? [{ name, title: m.title }] : []; })));
+  return useMemo(() => JSON.parse(key) as { name: string; title: string }[], [key]);
+}
 export const usePluginConsent = () => usePlugins((s) => s.consent);
 export const usePluginValues = (name: string) => usePlugins(useShallow((s: PluginsStore) => valuesOf(s, name)));
 export function usePluginPageContext(tabId: string, name: string): string {

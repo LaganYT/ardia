@@ -1,6 +1,6 @@
 import { Easing } from "react-native";
 import { curve, duration } from "../ui/motion";
-import { font, ink, monoFace, radius, shadow, type ShadowLevel } from "../ui/tokens";
+import { font, ink, monoFace, shadow, type ShadowLevel } from "../ui/tokens";
 
 const DARK = {
   statusFill: "rgba(40,38,39,0.96)",
@@ -96,7 +96,6 @@ export const ARC_PEEK_SPRING = { response: 0.18, damping: 0.8 } as const;
 export const ARC_PEEK_OUT_MS = 150;
 export const ARC_HIDE_MS = duration.fast;
 
-export const peekRadius = () => radius.panel;
 
 export const WINDOW_BUTTONS = {
   closeHover: "#C42B1C",

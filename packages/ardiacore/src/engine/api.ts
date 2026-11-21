@@ -18,8 +18,8 @@ import type { ChromeWindowState } from "../windows";
 import type { FieldProviderProfile, PasswordExportStatus, SavedPassword, SystemPanelResult, VerificationCodeSetupResult } from "../passwords";
 import type { ClearSiteDataResult, SiteSettings, SiteSettingType, SiteSettingValue } from "../siteSettings";
 import type { LinkRoute, TabStripCommand, TabStripTransaction, WindowRequest } from "../tabs";
-import type { PageCookie, PageEngine, PasskeyAccess } from "../webkit";
-import type { DisplayMediaSource } from "../pageTypes";
+import type { PageCookie, PageEngine, PasskeyAccess, StorageItems, WebKitCount } from "../webkit";
+import type { DisplayMediaSource, OpenWindowRequest, WebNotification } from "../pageTypes";
 
 type Profile = { profile: string };
 type Done = Record<string, never> | null;
@@ -90,6 +90,9 @@ export type EngineCalls = {
   "sites.reset": [Profile & { origin: string }, null];
   "sites.clearData": [Profile & { origin: string; engine: PageEngine }, ClearSiteDataResult];
   "sites.zoomLevels": [Profile, Record<string, number>];
+  "sites.readStorage": [Profile & { origin: string }, { items: StorageItems | null }];
+  "sites.writeStorage": [Profile & { origin: string; set: StorageItems; remove: string[] }, { written: number }];
+  "sites.registrableDomains": [Profile & { hosts: string[] }, { domains: string[] }];
   "sites.setZoom": [Profile & { host: string; zoom: number }, null];
   "sites.preloadPages": [Profile, boolean];
   "sites.setPreloadPages": [Profile & { on: boolean }, null];
@@ -211,12 +214,15 @@ export type EngineCalls = {
   "webKit.endPrivateSession": [{ session: string }, null];
   "webKit.cookieStoreKey": [Profile, string];
   "webKit.importCookies": [Profile & { storeKey: string; cookies: PageCookie[] }, number];
+  "webKit.setZoom": [Profile & { host: string; zoom: number }, null];
+  "webKit.setFraudWarnings": [{ enabled: boolean }, null];
   "webKit.devStoreExists": [Profile, boolean];
   "webKit.devTouchStore": [Profile, boolean];
   "webKit.devHoldStore": [Profile, null];
   "webKit.devParkedTransfers": [{}, string[]];
   "webKit.devContentBlocker": [{}, Record<string, unknown>];
   "webKit.passkeyAccess": [{}, PasskeyAccess];
+  "webKit.notificationAction": [{ id: string; action: "click" | "close" }, null];
   "webKit.requestPasskeyAccess": [{}, PasskeyAccess];
 };
 
@@ -233,6 +239,10 @@ export type EngineEvents = {
   "downloads.changed": Download;
   "permissions.requested": PermissionRequest;
   "permissions.dismissed": { id: string };
+  "webKit.counted": { name: WebKitCount; epoch?: string };
+  "webKit.notification": { profile: string; notification: WebNotification; epoch?: string };
+  "webKit.notificationClose": { id: string };
+  "webKit.openWindow": OpenWindowRequest & { profile: string };
   "contentBlocker.changed": ContentBlockerStats;
   "extensions.changed": ExtensionsChange;
   "extensions.tabs": TabsRequest;

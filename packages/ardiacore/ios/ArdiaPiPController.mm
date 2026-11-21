@@ -110,13 +110,6 @@ BOOL PreventsActivation(NSWindow *window) {
 
 NSInteger gActivations = 0;
 
-void ActivateApp(NSString *why) {
-  gActivations++;
-  if (ardia_host::Background()) return ardia_host::LogActivation([@"activate (skipped in a test instance): " stringByAppendingString:why]);
-  MarkBackToTabActivation();
-  [NSApp activate];
-}
-
 BOOL ThrowEnabled() {
   id value = [NSUserDefaults.standardUserDefaults objectForKey:kThrowDefault];
   return value ? [value boolValue] : YES;
@@ -292,8 +285,8 @@ NSString *CornerName(int corner) {
 - (void)backToTab {
   ArdiaWebView *view = self.view;
   if (!view) return;
-  ActivateApp(@"Back to Tab (menu)");
-  [view emit:@"activateRequest" payload:@{@"reason" : @"pictureInPicture"}];
+  const BOOL fromOtherApp = ActivateApp(@"Back to Tab (menu)");
+  [view emit:@"activateRequest" payload:@{@"reason" : @"pictureInPicture", @"fromOtherApp" : @(fromOtherApp)}];
   [view exitPictureInPicture];
 }
 

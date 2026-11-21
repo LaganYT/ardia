@@ -393,3 +393,28 @@ func received(_ key: String, url: String = "https://sent.example/", sentAt: Date
     #expect(gate.imported)
   }
 }
+
+@Suite struct SQLiteEngineTests {
+  @Test func readRowsReturnsEachColumnTypeAndBindsText() throws {
+    let scratch = try Scratch()
+    let writer = try Writer(scratch.database)
+    let at = Date(timeIntervalSince1970: 1_700_000_000)
+    try writer.tab("https://a.example/", at: at)
+    try writer.tab("https://b.example/", at: at, archived: true)
+    let rows = SQLiteEngine.system.readRows(
+      at: scratch.database.path(percentEncoded: false),
+      "SELECT url, lastActive, archivedAt, position FROM tabs WHERE url = ?",
+      ["https://a.example/"],
+      busyTimeoutMilliseconds: 1_000
+    )
+    #expect(rows == [[.text("https://a.example/"), .integer(1_700_000_000_000), .null, .real(1)]])
+    #expect(rows?.first?[1].number == 1_700_000_000_000)
+  }
+
+  @Test func readRowsIsNilWhenTheDatabaseOrQueryIsUnusable() throws {
+    let scratch = try Scratch()
+    #expect(SQLiteEngine.system.readRows(at: scratch.database.path(percentEncoded: false), "SELECT 1", [], busyTimeoutMilliseconds: 1_000) == nil)
+    _ = try Writer(scratch.database)
+    #expect(SQLiteEngine.system.readRows(at: scratch.database.path(percentEncoded: false), "SELECT nope FROM missing", [], busyTimeoutMilliseconds: 1_000) == nil)
+  }
+}

@@ -8,7 +8,7 @@ import { useSurface } from "../../state/browse/hooks";
 import { useDeckBarTop, useToast } from "../../state/toasts/hooks";
 import { TOAST_MOTION, toastDragDismisses, toastPlace } from "../../state/toasts/placement";
 import { dismissToast, holdToast, tapToast, type ToastIcon } from "../../state/toasts/store";
-import { capsule, font, space, Symbol, tabsMotion, toastLayout, toastMotion, useTheme, type SymbolName, useReduceMotion } from "../ui";
+import { font, space, Symbol, tabsMotion, toastLayout, toastMotion, useTheme, type SymbolName, useReduceMotion } from "../ui";
 
 const ICONS: Record<ToastIcon, SymbolName> = {
   checkmark: "checkmark",
@@ -92,7 +92,7 @@ function ToastView({ place }: { place: { top: number } | { bottom: number } }) {
             onPress={tapToast}
             style={[
               styles.toast,
-              { backgroundColor: theme.toastFill, borderColor: theme.panelBorder, shadowColor: theme.toastShadow, borderRadius: capsule(toastLayout.minHeight) },
+              { backgroundColor: theme.toastFill, borderColor: theme.panelBorder, shadowColor: theme.toastShadow, borderRadius: toastLayout.radius },
             ]}
           >
             <Symbol name={ICONS[toast.icon]} size={toastLayout.iconSize} color={theme.label} />
@@ -140,6 +140,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.l,
     paddingVertical: toastLayout.verticalPadding,
     borderWidth: StyleSheet.hairlineWidth,
+    borderCurve: "continuous",
     shadowOpacity: 1,
     shadowRadius: toastLayout.shadowRadius,
     shadowOffset: { width: 0, height: toastLayout.shadowY },

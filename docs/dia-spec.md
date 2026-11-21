@@ -98,12 +98,13 @@ Measured materials (our own non-activating panels over solid backdrops; sRGB; ac
   (`pageFrameZeroInFullScreen`, `pageFrameZeroWhenTabsHidden`): the first drops the effective inset to 0 in macOS full
   screen; the second only when full screen and Auto-Hide Tabs are both on (`pageFrameInsetOf`); borderless wins over both.
   Otherwise the slider still applies. The inset applies at the window's edges, below the top strip's
-  sides, in Little Ardia below its bar, and to the peek panel's top, bottom and side (its side is `min(5, frame)`);
+  sides, in Little Ardia below its bar, and to the floating sidebar (the peek), which sits `max(1, frame)` from the window's left, top and bottom, so it lines up with the card at every frame and keeps 1 pt off the edges at 0 (#3381);
   split panes and the extension side panel sit `max(frame, 2)` apart, so two panes still read as two edge to edge.
   Docked beside the sidebar the card starts at the sidebar's edge for any frame up to 9 (the sidebar's rows keep their
   9 pt), and `frame - 9` past it above that. The corner radius scales with the frame, `10 × min(1, frame / 9)` rounded
   to half points (0 edge to edge, where the window's own corner rounds the page), and the peek's is
-  `min(12, radius + frame - its side)`, so its corners still cover the card's. The traffic lights stay 21 pt below the
+  `radius + frame - its side`: the card's own radius at every frame from 1 pt, nested in the window's corner (15.3 pt
+  at 1 pt on a 16 pt window, 10 pt at 9, 7 pt at 12), so its corners cover the card's and never poke past the window's. The traffic lights stay 21 pt below the
   card's top (y = frame + 21; the compact toolbar lifts them as before). The sidebar's header and its first row rise by
   the same lift (`sidebarHeaderOf`, `firstRowTopOf` in `components/sidebar/geometry.ts`; issue #1364), so the first tab or
   Top Apps tile stays 24 pt below the lights; with the address bar in the sidebar the lights are fixed and so is the

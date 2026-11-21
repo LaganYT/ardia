@@ -330,6 +330,12 @@ test("Interface size turns up for every word people use for UI scaling", () => {
   for (const query of ["interface size", "ui size", "scaling", "fractional scaling", "1440p", "ui scale"]) assert.equal(first(query), "appearance.interfaceScale", query);
 });
 
+test("the profile switcher toggle turns up for the words of the old three-way row", () => {
+  for (const query of ["profile switcher", "profile dots", "profile icons", "dots", "space icons", "switcher in the sidebar shows"]) assert.ok(ids(query).includes("profiles.showProfileDots"), query);
+  for (const query of ["profile switcher", "profile dots"]) assert.equal(first(query), "profiles.showProfileDots", query);
+  assert.equal(findSetting("profiles.switcherShows"), undefined);
+});
+
 test("Minimalism mode turns up for every word people use for it", () => {
   for (const query of ["minimal", "minimalism", "clean", "zen", "distraction free", "no toolbar"]) assert.ok(ids(query).includes("appearance.minimalismMode"), query);
 });

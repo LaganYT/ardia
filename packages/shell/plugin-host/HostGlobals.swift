@@ -12,6 +12,9 @@ final class HostGlobals {
   private var lineHandler: JSValue?
   private var timerHandler: JSValue?
   private var earlyLines: [String] = []
+  private var timers = PluginTimerQueue()
+  private var timerSource: DispatchSourceTimer?
+  private var armedFor: UInt64?
 
   init(context: JSContext, queue: DispatchQueue) {
     self.context = context
@@ -34,6 +37,31 @@ final class HostGlobals {
     FileHandle.standardError.write(Data((text.hasSuffix("\n") ? text : text + "\n").utf8))
   }
 
+  private func armTimerSource() {
+    guard let due = timers.nextDue() else { return }
+    if armedFor == due { return }
+    let source: DispatchSourceTimer
+    if let existing = timerSource {
+      source = existing
+    } else {
+      source = DispatchSource.makeTimerSource(queue: queue)
+      source.setEventHandler { [weak self] in self?.fireDueTimers() }
+      timerSource = source
+      source.resume()
+    }
+    armedFor = due
+    source.schedule(deadline: DispatchTime(uptimeNanoseconds: due))
+  }
+
+  private func fireDueTimers() {
+    armedFor = nil
+    let now = DispatchTime.now().uptimeNanoseconds
+    while let id = timers.popDue(now: now) {
+      timerHandler?.call(withArguments: [id])
+    }
+    armTimerSource()
+  }
+
   func native() -> JSValue {
     let object = JSValue(newObjectIn: context)!
     let log: @convention(block) (String, String) -> Void = { level, text in
@@ -48,12 +76,16 @@ final class HostGlobals {
       for line in early { handler.call(withArguments: [line]) }
     }
     let onTimer: @convention(block) (JSValue) -> Void = { [weak self] handler in self?.timerHandler = handler }
-    let schedule: @convention(block) (Double, Double) -> Void = { [weak self] id, ms in
-      guard let self else { return }
+    let schedule: @convention(block) (Double, Double) -> Bool = { [weak self] id, ms in
+      guard let self else { return false }
       let delay = ms.isFinite ? min(Self.maxTimerMs, max(0, ms)) : 0
-      self.queue.asyncAfter(deadline: .now() + .milliseconds(Int(delay))) { [weak self] in
-        self?.timerHandler?.call(withArguments: [id])
-      }
+      let due = DispatchTime.now().uptimeNanoseconds + UInt64(delay) * 1_000_000
+      guard self.timers.schedule(id, due: due) else { return false }
+      self.armTimerSource()
+      return true
+    }
+    let cancel: @convention(block) (Double) -> Void = { [weak self] id in
+      self?.timers.cancel(id)
     }
     let send: @convention(block) (String) -> Any = { [weak self] line in
       guard let channel = self?.channel else { return "the channel to Ardia is closed" }
@@ -71,7 +103,7 @@ final class HostGlobals {
       PluginURLParser.parse(input, base: base.isString ? base.toString() : nil) ?? NSNull()
     }
     let functions: [String: Any] = [
-      "log": log, "onLine": onLine, "onTimer": onTimer, "schedule": schedule, "send": send, "btoa": btoa, "atob": atob, "randomUUID": randomUUID,
+      "log": log, "onLine": onLine, "onTimer": onTimer, "schedule": schedule, "cancel": cancel, "send": send, "btoa": btoa, "atob": atob, "randomUUID": randomUUID,
       "randomBytes": randomBytes, "parseURL": parseURL,
     ]
     for (name, function) in functions { object.setObject(function, forKeyedSubscript: name as NSString) }

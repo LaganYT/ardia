@@ -58,7 +58,8 @@ BOOL OnProtectedVideoSite(NSString *url) {
     @"audible.com", @"audible.co.uk", @"audible.ca", @"audible.com.au", @"audible.de", @"audible.fr", @"audible.it", @"audible.es",
     @"audible.co.jp", @"audible.in", @"audible.com.br",
     @"canalplus.com", @"mycanal.fr",
-    @"tv.youtube.com"
+    @"tv.youtube.com",
+    @"osnplus.com", @"anghami.com"
   ];
   NSURL *parsed = [NSURL URLWithString:url ?: @""];
   if (![parsed.scheme.lowercaseString isEqualToString:@"https"]) return NO;

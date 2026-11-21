@@ -71,6 +71,30 @@ forward.
   recreation or a JS reload is asked again: the first answer wins, and one granted in the meantime skips the dialog.
   An unanswered request is sent again when JS reopens a page it was already watching (07fca2a67).
 
+**Night Shade's timing on Android.** `night-shade.js` is added with `addDocumentStartJavaScript`, with the state for the
+page's host baked in: `WebViewPage` removes the old script and adds one carrying the host, the mode and the site's
+cached verdict (`light`: shade it, `dark`: it has its own dark look, or `unknown`) before each main-frame navigation
+(`prepareNavigation`, which `loadUrl`, reload, back and forward, restores, and renderer navigations and redirects
+through `shouldOverrideUrlLoading` all call), again in `onPageStarted`, when a site's verdict changes and when site
+settings change. The script trusts the baked state only when its host matches `location.hostname`; otherwise (a POST,
+a popup, a WebView without `DOCUMENT_START_SCRIPT`, which runs it at `onPageStarted`) it asks native over the
+`ardiaPage` listener at document start, which answers `"<mode> <verdict>"`. With the mode on (Always, or Automatic
+while the page sees a dark scheme) and the verdict `light`, the `#ardia-night-shade` style goes in as soon as `<html>`
+exists (a `MutationObserver` on the document), before any of the page's scripts and before the first paint. With no
+verdict, the page is measured when `<body>` exists (left alone while it has no background and stylesheets are still
+loading, as on iPhone) and again as each stylesheet loads, then at `DOMContentLoaded` and `load`. A cached verdict holds
+until `DOMContentLoaded`, then is measured again there and at `load`, so a redesigned site is corrected. When a
+measurement from `DOMContentLoaded` on differs from what the page was given, the script posts
+`nightShadeVerdict:light|dark` (accepted from the main frame only, keyed by its origin's host). `NightShadeVerdicts`
+keeps it: for regular tabs in the site preferences (`nightShade.verdicts`, at most 400 hosts, the least recently used
+dropped first, a use saved at most once a minute), for private tabs in memory until private browsing ends. Clear
+Browsing Data with History forgets the verdicts used in its range (`forgetNightShadeVerdicts`). The iPhone does the
+same in `WebEngine` and `NightShadeVerdicts.swift`; the measurement and the style are the same text on both
+(`PageScriptsTest`). Tests: `NightShadeVerdictsTest` (cap, order, private, clearing), `PageScriptsTest` (the baked
+script and the messages) and the device test `NightShadeStartTest` (an inline script at the top of `<body>` sees the
+style on a second load of a light site, typed, reloaded or followed from a script; a dark site is learned and left
+alone; a site that turned dark is corrected; Night Shade off shades nothing).
+
 `browser`'s `Omnibox.kt` (the ScriptEngine bridge) and `PageSurface.kt` (Compose) are left out of the module's build:
 the Expo app calls `@ardia/core` itself and hosts the page's view natively.
 
@@ -1666,6 +1690,7 @@ Every count and timing the phone can send, for the owner to read as one set and 
 | `material_you_turned_on`, `material_you_turned_off` | the Material You switch in Android Settings (the owner, 2026-11-20) | How many testers try Material You and how many go back. Read `off` against `on`: a share near one means it is tried and dropped. `app_launched.material_colors` says how many launches run with it on |
 | `card_close_tapped` | the × on a card in Android's Material deck | Whether people close tabs with the card's own button rather than a flick; zero across Android testers after a release means the × stopped closing cards, or its tap zone opens the card instead |
 | `material_back_swiped` | a predictive back swipe on Android's Material sheets, dialogs, menus and library | Whether people swipe back out of Material surfaces; zero across Android testers after a release means the swipe stopped reaching them, or Back goes to the wrong surface |
+| `night_shade_verdicts_reused`, `night_shade_verdicts_learned`, `night_shade_verdicts_corrected` | Night Shade's cached verdicts on Android (a tester's report: yahoo.com loaded white until half way) | Counted natively and drained with the pending counts, never for private tabs. `reused` is a page load, with Night Shade not off, whose site's verdict was already known, so the shade was decided before the first paint; `learned` is a site measured for the first time, whose first load can still shade late; `corrected` is a site whose verdict changed, so that load showed the old one until `DOMContentLoaded`. Read `reused` against `learned` for the hit rate, which should climb as testers revisit sites; a `corrected` share that grows means the measurement disagrees with itself between loads |
 
 ## What is left before the Expo app replaces both native apps
 

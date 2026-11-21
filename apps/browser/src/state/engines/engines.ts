@@ -96,6 +96,8 @@ export const PROTECTED_VIDEO_SITES: readonly string[] = [
   "canalplus.com",
   "mycanal.fr",
   "tv.youtube.com",
+  "osnplus.com",
+  "anghami.com",
 ];
 
 export function protectedVideoSite(url: string | undefined | null): boolean {

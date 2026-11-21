@@ -46,6 +46,17 @@ func drainMainQueue() async {
     #expect(page.opened == ["first", "second"])
   }
 
+  @Test func `a hidden tab holds a few dialogs and answers the rest at once, so a page can't pile them up`() {
+    let page = Page()
+    page.shown = false
+    for i in 0..<10 { page.ask("d\(i)") }
+    #expect(page.dialogs.waitingCount == WebKitPageDialogs.maxWaiting)
+    #expect(page.answers == (WebKitPageDialogs.maxWaiting..<10).map { "d\($0) cancelled" })
+    page.shown = true
+    page.dialogs.showNext()
+    #expect(page.opened == ["d0"])
+  }
+
   @Test func `a tab that isn't shown holds its dialog until it is`() {
     let page = Page()
     page.shown = false

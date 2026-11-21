@@ -119,6 +119,10 @@ extension WebKitTab {
   func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo,
                completionHandler: @escaping ([URL]?) -> Void) {
     guard visible, let window else { return completionHandler(nil) }
+    if LaunchConfig.shared.background {
+      NSLog("[webkit] file panel (background mode, not shown)")
+      return completionHandler(nil)
+    }
     let panel = NSOpenPanel()
     panel.allowsMultipleSelection = parameters.allowsMultipleSelection
     panel.canChooseDirectories = parameters.allowsDirectories

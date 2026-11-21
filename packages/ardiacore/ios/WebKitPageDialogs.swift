@@ -25,7 +25,10 @@ final class WebKitPageDialogs {
   var isShowing: Bool { shown != nil }
   var waitingCount: Int { waiting.count }
 
+  static let maxWaiting = 4
+
   func present(cancel: @escaping () -> Void, show: @escaping Show) {
+    guard waiting.count < Self.maxWaiting else { return cancel() }
     waiting.append(Waiting(show: show, cancel: cancel))
     showNext()
   }

@@ -22,10 +22,15 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   `role: "review"`, `mode: "async"`, and a new `clientRequestId` per round. Tell it to review only and edit
   nothing, and give it the full brief each round (it doesn't share your context). It reads more than it runs:
   reproduce each finding before fixing it.
-- **No git worktrees, ever.** Everyone works in this checkout.
-- **Commit straight to `main`.** Stage only your own hunks (`git add -p` or explicit paths), never
-  someone else's work in progress. Never stage with `git apply --unidiff-zero`: it drops hunks into the wrong
-  place (it once committed an `ACClient.mm` that didn't compile). Check `git diff --cached` reads as you meant.
+- **Worktrees are fine.** Use a git worktree or a scratch clone for isolated feature, PR and full-send work, so
+  you can switch branches, reset and stash without touching anyone else. `scripts/agent/guard-git` only blocks
+  `checkout`, `switch`, `restore`, `stash`, `reset --hard` and `clean` in the shared root checkout (the primary
+  checkout of the repo the guard itself lives in), where other sessions keep uncommitted work: there, undo your own hunks by editing and stage as below. `~/chromium-build` stays
+  one shared build tree for every worktree; build in it only under `scripts/agent/locked chromium`.
+- **Commit straight to `main`** from the shared checkout, or push a branch from your worktree. Stage only your
+  own hunks (`git add -p` or explicit paths), never someone else's work in progress. Never stage with
+  `git apply --unidiff-zero`: it drops hunks into the wrong place (it once committed an `ACClient.mm` that didn't
+  compile). Check `git diff --cached` reads as you meant.
   The index and the working tree are shared with every other session, so commit the index, never with paths:
   `git commit -m … -- <paths>` takes the whole working-tree file, other agents' hunks included. Check
   `git diff --cached --stat` lists only your files, then run a bare `git commit -m …`. For a file that also holds
@@ -52,6 +57,18 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   skipped run starts the build alone. Vouching lets that person send features, so start one outsider's build with
   `run-ci`. Agents manage the list and `run-ci` only when the owner asks. A new heavy PR workflow needs the `gate`
   job from `ios.yml` and an entry in `GATED_WORKFLOWS` in `.github/vouch/vouch.cjs`.
+- **Quiet outside PRs close.** `.github/workflows/stale.yml` (`.github/stale/stale.cjs`) runs daily: an outside PR
+  labelled `incomplete`, `needs-rebase` or `vouch:unvouched`, with no push, comment or review by a person for 7 days,
+  gets a two-line note and `stale`; 7 more quiet days close it. A push or comment clears `stale`, and the author's
+  comment reopens a PR it closed. Team and collaborator PRs, `vouch:trusted`, `ready`, `pinned` and `keep-open` are
+  never touched; add `keep-open` to hold one. A run acts on at most 40 PRs (`max_prs` on dispatch) and stops
+  cleanly at a rate limit; dispatch it with `dry_run` to see what it would do.
+- **Merging.** The owner's own PRs (`mantrakp04`) may merge on local verification without waiting for GitHub CI,
+  when the owner says so or in a full send; run CI's checks for what changed locally first, then watch the merged
+  run and fix forward if it fails. Every other PR waits for its CI to pass.
+- **Pick the free Mac.** Before CPU-heavy work (Xcode or Chromium builds, full test runs, video renders), check the
+  MacBook and the linked Mac mini for free CPU, RAM and disk and for the shorter queue of builds and runs, and use
+  that one. Stay on it until it's short of resources while the other has room or a shorter queue; then move.
 - **Progress reports.** Keep them short and plain: what shipped, what's left, what needs the owner.
 - **Clean up.** Quit your test instances, stop the servers and background jobs you started, and never
   kill processes you didn't start.
@@ -132,7 +149,7 @@ rules are for the owner's Mac.
   frame difference, and measure positions and timings from the pixels. A position or size in the owner's
   recording may be their saved preference rather than Dia's default.
 - **Bonzai handles maintenance.** Bonzai (hibonzai.com, the `bonzai` MCP server) watches production errors
-  (our ClickHouse), performance, dependency and security updates, and failing deploys for `mantrakp04/ardia`.
+  (our ClickHouse), performance, dependency and security updates, and failing deploys for `ardia-browser/ardia`.
   Leave those to it and focus on features: don't hunt telemetry for errors yourself. Call its `get_status`
   when the owner asks about errors or health, and take on what it lists under `for_you`. Report anything else
   you notice with its `report_problem` tool. Auto-fix is on, so Bonzai opens fix PRs by itself; YOLO stays
@@ -145,7 +162,7 @@ rules are for the owner's Mac.
   the PR's branch (no new branch), reproduce the failure on this Mac, build and exercise the fix in a hidden
   instance, fix what's wrong on top of Bonzai's commits, then babysit and merge. The full send is the owner's
   OK to merge that PR; `merge_fix` still needs its own OK. This file's rules beat the skill's where they
-  differ: no worktrees, hidden instances only, verify in proportion. A Bonzai PR with no linked issue gets
+  differ: hidden instances only, verify in proportion. A Bonzai PR with no linked issue gets
   one opened and linked first. The merged fix ships in the next nightly.
 - **Local crashes still get fixed without asking.** When `crash.log` shows up in the repo root or a crash report
   appears, find the cause and fix it. Check the binary UUID against the current build first (older builds are
@@ -203,8 +220,9 @@ rules are for the owner's Mac.
   - point the site at it (`.claude/skills/release/scripts/site-version.mjs <version>`);
   - deploy the site with `pnpm -C apps/site run deploy`.
 
-  The owner has authorized releases to go all the way through. After an update, the app opens the
-  release notes on ardia.dev.
+  Never cut or publish a nightly or stable release unless the owner explicitly asks for a release in that
+  request. Scheduled and background jobs open a PR with the `full-stop` skill and stop for the owner. Once asked,
+  a release goes all the way through the flow above. After an update, the app opens the release notes on ardia.dev.
 - **iPhone builds.** Upload to TestFlight only when the owner asks, at the version pinned in iOS Release. Let App Store
   Connect pick the build number. "Get a build on my phone" means installing a development-signed build on the owner's
   iPhone over USB or through Xcode's paired wireless connection. Use a local Xcode build or an iOS Release `device`

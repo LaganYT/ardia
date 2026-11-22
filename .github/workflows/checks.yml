@@ -12,6 +12,7 @@ on:
       - "engine/**"
       - ".claude/**"
       - ".github/vouch/**"
+      - ".github/stale/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -66,9 +67,9 @@ jobs:
       - name: Repository tests
         if: ${{ !cancelled() && matrix.part == 'rest' }}
         run: pnpm run test:root
-      - name: Vouch tests
+      - name: Vouch and stale tests
         if: ${{ !cancelled() && matrix.part == 'rest' }}
-        run: node --test .github/vouch/vouch.test.cjs
+        run: node --test .github/vouch/vouch.test.cjs .github/stale/stale.test.cjs
       - name: Store simulator, the CI seed set
         if: ${{ !cancelled() && matrix.part == 'rest' }}
         run: pnpm --filter @ardia/browser sim

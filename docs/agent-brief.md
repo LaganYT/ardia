@@ -1,8 +1,8 @@
 # Agent brief (read first)
 
-You are one of several engineers working **in parallel in the same working tree** on
-Ardia, a macOS browser that must reach **full feature and visual parity with Dia**
-(The Browser Company). The feature checklist is `docs/dia-feature-parity.md`; the
+You are one of several engineers working **in parallel on the same repository**, some in the shared root
+checkout and some in their own worktrees or clones, on Ardia, a macOS browser that must reach **full feature
+and visual parity with Dia** (The Browser Company). The feature checklist is `docs/dia-feature-parity.md`; the
 visual spec (colors, sizes, animations recovered from Dia's binary) is `docs/dia-spec.md`.
 The user is demanding: no sloppy work, every hover state/animation/detail matters.
 How the code is laid out and named (folders, import direction, tokens, state, the translation layer, environment
@@ -148,12 +148,14 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
 ## Rules
 - **Stay inside the files you own** (listed in your task). If you need a change elsewhere,
   make the smallest possible change, or describe it in your report instead. Other agents
-  are editing other files right now; never revert or reformat code you don't own. Never run
-  `git checkout -- <file>`, `git restore`, `git stash` or `git reset --hard` in this checkout: they wipe other
-  agents' uncommitted work in the same file. Undo your own hunks by editing.
-- **Commit your own work to `main`** (`git add -p` or explicit paths, only your hunks). Never commit another
-  agent's work in progress. The index and the working tree are shared, and `git commit -- <paths>` (`--only`) takes
-  the whole working-tree file, other agents' hunks included: check `git diff --cached --stat` lists only your
+  are editing other files right now; never revert or reformat code you don't own. In the shared root checkout,
+  never run `git checkout -- <file>`, `git restore`, `git stash`, `git reset --hard` or `git clean`: they wipe other
+  agents' uncommitted work in the same file. Undo your own hunks by editing. A git worktree or a scratch clone is
+  yours alone, so all of those are fine there (`scripts/agent/guard-git` lets them through); `~/chromium-build` is
+  still shared, under `scripts/agent/locked chromium`.
+- **Commit your own work to `main`** from the shared checkout, or push a branch from your worktree (`git add -p`
+  or explicit paths, only your hunks). Never commit another agent's work in progress. The index and the working
+  tree are shared, and `git commit -- <paths>` (`--only`) takes the whole working-tree file, other agents' hunks included: check `git diff --cached --stat` lists only your
   files, then commit the index with a bare `git commit -m …`. For a file that also holds someone else's uncommitted
   hunks, stage a blob (HEAD's copy plus your edits, `git hash-object -w`, `git update-index --cacheinfo
   100644,<blob>,<path>`) and check `git diff --cached`.

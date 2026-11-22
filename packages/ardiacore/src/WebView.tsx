@@ -5,7 +5,7 @@ import type { NativeSyntheticEvent } from "react-native";
 import { ArdiaError, ardiaError } from "@ardia/core";
 import { deliverPageEvent, isPageEventProp, pageEventOf, type NativeProps, type PageEvent } from "./pageEvents";
 import type { DiscardOutcome, DiscardRefusal, WebViewHandle, WebViewNativeHandle, WebViewProps } from "./pageTypes";
-import type { PageCookie } from "./webkit";
+import type { ChromiumSiteDataReply, PageCookie } from "./webkit";
 
 const NativeWebView = requireNativeViewManager<NativeProps>("ArdiaWebView");
 let NativeWebKitView: typeof NativeWebView | undefined;
@@ -71,6 +71,7 @@ export function webViewHandle(native: { readonly current: WebViewNativeHandle | 
     exitPictureInPicture: () => call(undefined, (n) => n.exitPictureInPicture()),
     getSecurityInfo: () => call(null, (n) => n.getSecurityInfo()),
     pageCookies: (urls) => call<PageCookie[]>([], (n) => n.pageCookies(urls)),
+    siteData: (request) => call<ChromiumSiteDataReply | null>(null, (n) => (typeof n.siteData === "function" ? n.siteData(request) : Promise.resolve(null))),
     openBlockedPopup: (id, always) => call(undefined, (n) => n.openBlockedPopup(id, always)),
     clearSiteData: () => call({ cookies: false, storage: false }, (n) => n.clearSiteData()),
     resolvePasswordPrompt: (answer, edits) =>
@@ -94,13 +95,13 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
 
   const latest = useRef(props);
   latest.current = props;
-  const onPageEvent = useRef((e: NativeSyntheticEvent<PageEvent>) => deliverPageEvent(latest.current, e.nativeEvent)).current;
+  const onPageEvent = useRef((e: NativeSyntheticEvent<PageEvent>) => !latest.current.retired && deliverPageEvent(latest.current, e.nativeEvent)).current;
   const nativeProps: Record<string, unknown> = { onPageEvent };
   const pageEvents: string[] = [];
   for (const [key, value] of Object.entries(props)) {
-    if (key === "engine") continue;
+    if (key === "engine" || key === "retired") continue;
     if (isPageEventProp(key)) {
-      if (typeof value === "function") pageEvents.push(pageEventOf(key));
+      if (typeof value === "function" && !props.retired) pageEvents.push(pageEventOf(key));
       continue;
     }
     nativeProps[key] = (key === "url" || key === "shownUrl") && typeof value === "string" ? toEngineUrl(value) : value;

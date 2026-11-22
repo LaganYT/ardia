@@ -17,10 +17,11 @@ import {
   noteElementPickerFromContextMenu,
   noteHiddenElementsRestored,
   noteHiddenElementWriteFailure,
+  notePickedSelectorEscaped,
 } from "../telemetry/hiddenElementCounts";
 import { consentToken } from "../telemetry/client";
 
-const HIDING_RULE = /^[a-z0-9.-]+##[^+^\s][^\n{}]*$/;
+const HIDING_RULE = /^[a-z0-9.-]+##(?![+^\s])(?!.*\/\*)[^\0-\x1f\x7f\x85\u2028\u2029{}]+$/;
 const MAX_FILTER = 1024;
 
 export type HiddenElement = { filter: string; host: string; selector: string; session: boolean };
@@ -41,6 +42,16 @@ export function hidingHost(url: string | null | undefined): string | null {
 export function hidingFilter(host: string, selector: string): string | null {
   const filter = `${host}##${selector.trim()}`;
   return filter.length <= MAX_FILTER && HIDING_RULE.test(filter) ? filter : null;
+}
+
+const PICKED_ATTRIBUTE = /\[(data-testid|data-test-id|data-test|data-qa|data-component|data-module)="([^"\\]*)"\]/g;
+const CSS_LINE_BREAK = /[\r\n\f]/;
+const ESCAPED_IN_ATTRIBUTE = /[\x01-\x1f\x7f\x85\u2028\u2029{}]|(?<=\/)\*/g;
+const cssEscape = (c: string) => `\\${c.charCodeAt(0).toString(16)} `;
+
+export function savablePickedSelector(selector: string): string | null {
+  if (CSS_LINE_BREAK.test(selector)) return null;
+  return selector.replace(PICKED_ATTRIBUTE, (_, name: string, value: string) => `[${name}="${value.replace(ESCAPED_IN_ATTRIBUTE, cssEscape)}"]`);
 }
 
 export function parseHidingFilter(filter: string, session = false): HiddenElement | null {
@@ -134,8 +145,21 @@ export async function startHidingElement(tabId: string, point: [number, number] 
   }
   const after = pageOf(tabId);
   const samePage = after?.host === page.host && after.profile === page.profile;
-  const filter = samePage && result?.selector ? hidingFilter(page.host, result.selector) : null;
-  if (!filter) return void noteElementPickerCancelled(consent);
+  const picked = samePage && typeof result?.selector === "string" ? result.selector : null;
+  const savable = picked ? savablePickedSelector(picked) : null;
+  const filter = savable ? hidingFilter(page.host, savable) : null;
+  if (!filter) {
+    if (picked) void web.evaluate(pickerCall("unhide", [picked]));
+    return void noteElementPickerCancelled(consent);
+  }
+  const selector = filter.slice(filter.indexOf("##") + 2);
+  if (selector !== picked) {
+    notePickedSelectorEscaped(consent);
+    void web
+      .evaluate(pickerCall("apply", [selector]))
+      .then(() => web.evaluate(pickerCall("unhide", [picked])))
+      .catch(() => {});
+  }
   noteElementHidden(page.inPrivateWindow, consent);
   if (page.inPrivateWindow) {
     useHiddenElements.setState((s) => {

@@ -1,19 +1,7 @@
 import {
-  allEngines,
-  controllingExtensionEngine,
-  appUrlRoute,
-  engineById,
-  extensionEngineId,
-  fixupUrl,
-  makeCustomEngine,
-  resolveInput,
-  validateEngine,
-  type CustomSearchEngine,
-  type EngineInput,
-  type ExtensionSearchEngine,
-  type SearchEngine,
-  isProviderEntryList,
-  type ProviderEntry,
+  allEngines, controllingExtensionEngine, customEnginesFrom, appUrlRoute, engineById, extensionEngineId, fixupUrl, makeCustomEngine, resolveInput,
+  validateEngine, validSearchTemplate, isProviderEntryList,
+  type CustomSearchEngine, type EngineInput, type ExtensionSearchEngine, type SearchEngine, type ProviderEntry,
 } from "@ardia/core";
 import type { StateCreator } from "zustand";
 import { fromLegacyUrl } from "../../lib/legacy";
@@ -31,6 +19,7 @@ import { PRESS_MOTIONS } from "../../lib/pressMotion";
 import { noteAutoHideTabsChosen } from "../telemetry/autoHideTabsChoices";
 import { READER_FONTS, READER_SIZE_NAMES } from "../reader/tokens";
 import { noteMinimalismToggled } from "../telemetry/minimalismCounts";
+import { keptSettingsPatch } from "./settingsPatch";
 
 export const DEFAULT_PROFILE_ID = "default";
 
@@ -55,11 +44,7 @@ const text = (d: string, synced = false): SettingSpec<string> => ({ default: d, 
 const width = (d: number): SettingSpec<number> => ({ default: d, valid: isWidth, synced: false, schema: WIDTH });
 const fraction = (d: number, synced = false): SettingSpec<number> => ({ default: d, valid: (v) => typeof v === "number" && v >= 0 && v <= 1, synced, schema: { type: "number", minimum: 0, maximum: 1 } });
 const oneOf = <const V extends readonly string[]>(values: V, d: V[number], synced = false): SettingSpec<V[number]> & { values: V } => ({
-  default: d,
-  values,
-  valid: (v) => values.includes(v as string),
-  synced,
-  schema: { type: "string", enum: values },
+  default: d, values, valid: (v) => values.includes(v as string), synced, schema: { type: "string", enum: values },
 });
 const shaped = <T,>(d: T, valid: (v: unknown) => boolean, schema: JsonSchema, synced = false): SettingSpec<T> => ({ default: d, valid, synced, schema });
 
@@ -82,7 +67,7 @@ export const SETTING_SPECS = {
   tabLayout: oneOf(["sidebar", "top"], "sidebar", SYNCED),
   sidebarSide: oneOf(["left", "right"], "left", SYNCED),
   autoHideTabs: flag(false, SYNCED),
-  hideToolbarWhileScrolling: flag(true, SYNCED),
+  hideToolbarWhileScrolling: flag(false, SYNCED),
   newTabPosition: oneOf(["top", "bottom", "nextToCurrent"], "bottom", SYNCED),
   newTabButtonPosition: oneOf(["top", "bottom"], "bottom", SYNCED),
   appLinksFirst: flag(false, SYNCED),
@@ -91,6 +76,7 @@ export const SETTING_SPECS = {
   warnBeforeClosingLastTab: flag(true, SYNCED),
   keepTopAppsRunning: flag(false, SYNCED),
   tabReorderHaptics: flag(true, SYNCED),
+  swipeBetweenTabs: flag(true, SYNCED),
   undoReopensClosedTab: flag(false, SYNCED),
   warnBeforeMovingTabsToProfile: flag(true, SYNCED),
   shareTabsAcrossWindows: flag(false),
@@ -134,6 +120,7 @@ export const SETTING_SPECS = {
   selectedTopApp: oneOf(["ring", "fill", "outline"], "ring", SYNCED),
   elementOutlines: flag(true, SYNCED),
   interfaceStyle: oneOf(["glass", "classic"], "glass", SYNCED),
+  windowButtons: oneOf(["native", "trafficLights", "hidden"], "native"),
   glassTintWithTheme: flag(false, SYNCED),
   glassTintAmount: fraction(0.8, SYNCED),
   fadeUnloadedTabs: flag(false, SYNCED),
@@ -178,9 +165,15 @@ export const SETTING_SPECS = {
   littleArdiaOpensNewTabLinks: flag(true, SYNCED),
   littleArdiaShortcutFromAnyApp: flag(false),
   littleArdiaSize: shaped<[number, number]>([900, 640], (v) => Array.isArray(v) && v.length === 2 && v.every(isWidth), { type: "array", prefixItems: [WIDTH, WIDTH], minItems: 2, maxItems: 2 }),
+  engineMode: oneOf(["automatic", "chromium", "webkit"], "automatic"),
   pageEngine: oneOf(["chromium", "webkit"], "chromium"),
   websiteEngines: shaped<Record<string, "chromium" | "webkit">>({}, (v) => isRecordOf(v, (e) => e === "chromium" || e === "webkit"), recordOf({ type: "string", enum: ["chromium", "webkit"] })),
   protectedVideoInWebKit: flag(true),
+  offerWebKitForProtectedVideo: flag(true),
+  engineSwitchKeepsPage: flag(true),
+  engineSwitchAsksAboutUnsavedWork: flag(true),
+  engineSwitchCarriesSiteData: flag(true),
+  webKitFraudWarnings: flag(false),
   launchActions: shaped<string[]>([], (v) => isStringList(v) && v.length <= 20, { type: "array", items: { type: "string" }, maxItems: 20 }),
   omniboxProviders: shaped<ProviderEntry[]>([], isProviderEntryList, PROVIDERS_SCHEMA),
   readerTextSize: oneOf(READER_SIZE_NAMES, "medium", SYNCED),
@@ -216,6 +209,7 @@ export function parseSettings(raw: unknown): Settings {
   const saved = isFields(raw) ? raw : {};
   const value = (key: SettingKey) => (SETTING_SPECS[key].valid(saved[key]) ? saved[key] : SETTING_SPECS[key].default);
   const settings = Object.fromEntries(SETTING_KEYS.map((key) => [key, value(key)])) as Settings;
+  settings.customSearchEngines = customEnginesFrom(settings.customSearchEngines);
   if (saved.hideBookmarksBarImport === true) settings.bookmarksImportDismissed = true;
   return { ...settings, ...withLinkKeysApart(settings, {}) };
 }
@@ -227,10 +221,7 @@ export function parseSettingsMeta(raw: unknown): SettingsMeta {
 
 export const validSettingValue = (key: SettingKey, value: unknown) => SETTING_SPECS[key].valid(value);
 
-const engineCache = new WeakMap<
-  CustomSearchEngine[],
-  { legacyUrl: string; extension: ExtensionSearchEngine[]; engines: SearchEngine[] }
->();
+const engineCache = new WeakMap<CustomSearchEngine[], { legacyUrl: string; extension: ExtensionSearchEngine[]; engines: SearchEngine[] }>();
 
 export function searchEngines(settings: Settings): SearchEngine[] {
   const custom = settings.customSearchEngines;
@@ -238,7 +229,7 @@ export function searchEngines(settings: Settings): SearchEngine[] {
   const cached = engineCache.get(custom);
   if (cached && cached.legacyUrl === settings.customSearchUrl && cached.extension === extension) return cached.engines;
   const engines = allEngines(custom, extension);
-  if (settings.customSearchUrl.includes("%s")) {
+  if (validSearchTemplate(settings.customSearchUrl)) {
     const at = engines.findIndex((e) => e.extension);
     engines.splice(at < 0 ? engines.length : at, 0, { id: "custom", name: "Custom", keyword: "custom", url: settings.customSearchUrl, custom: true });
   }
@@ -273,19 +264,18 @@ function validateCustomEngine(settings: Settings, input: EngineInput, ignoreId?:
   return validateEngine(input, searchEngines(settings), ignoreId);
 }
 
-function withPageFrameDependencies(settings: Settings, patch: Partial<Settings>): Partial<Settings> {
+function settledPatch(settings: Settings, raw: Partial<Settings>): Partial<Settings> {
+  const patch = keptSettingsPatch(raw, SETTING_SPECS);
   const next = { ...settings, ...patch };
-  if (next.pageFrameZeroInFullScreen && !next.pageFrameZeroWhenTabsHidden && !("pageFrameZeroWhenTabsHidden" in patch)) {
-    return { ...patch, pageFrameZeroWhenTabsHidden: true };
-  }
-  return patch;
+  const zeroWhenTabsHidden = next.pageFrameZeroInFullScreen && !next.pageFrameZeroWhenTabsHidden && !("pageFrameZeroWhenTabsHidden" in patch);
+  return zeroWhenTabsHidden ? { ...patch, pageFrameZeroWhenTabsHidden: true } : patch;
 }
 
 export function choose(s: Pick<BrowserState, "settings" | "settingsMeta">, patch: Partial<Settings>, { inferring = false } = {}): Pick<BrowserState, "settings" | "settingsMeta"> {
   const { chosen, inferred } = s.settingsMeta;
+  patch = settledPatch(s.settings, patch);
   if (patch.autoHideTabs !== undefined && patch.autoHideTabs !== s.settings.autoHideTabs) noteAutoHideTabsChosen();
   if (patch.minimalismMode !== undefined && patch.minimalismMode !== s.settings.minimalismMode) noteMinimalismToggled(patch.minimalismMode);
-  patch = withPageFrameDependencies(s.settings, patch);
   const next = { ...s.settings, ...patch };
   const added = Object.keys(patch).filter((k) => !chosen.includes(k));
   const left = inferring ? [...new Set([...inferred, ...Object.keys(patch)])] : inferred.filter((k) => !(k in patch));
@@ -360,9 +350,10 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
   settings: DEFAULT_SETTINGS,
   settingsMeta: NO_SETTINGS_META,
   updateSettings(patch, { fromSync = false, inferred = false } = {}) {
+    if ("customSearchEngines" in patch) patch = { ...patch, customSearchEngines: customEnginesFrom(patch.customSearchEngines) };
     set((s) => {
       const windows = windowsFollowingAutoHideTabs(s, patch);
-      if (fromSync) return { settings: { ...s.settings, ...withPageFrameDependencies(s.settings, patch) }, ...windows };
+      if (fromSync) return { settings: { ...s.settings, ...settledPatch(s.settings, patch) }, ...windows };
       return { ...choose(s, withLinkKeysApart(s.settings, patch), { inferring: inferred }), ...windows };
     });
   },

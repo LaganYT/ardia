@@ -1,4 +1,4 @@
-import type { FetchLike } from "@ardia/core";
+import { BUILT_IN_ENGINES, type ExtensionSearchEngine, type FetchLike } from "@ardia/core";
 import { fetchSearchSuggestions, stopSearchSuggestions } from "../../platform/search";
 import { noteSearchSuggest } from "../telemetry/track";
 import { consentNow } from "../telemetry/client";
@@ -12,8 +12,17 @@ export const remoteSuggestionsAllowed = (profileId: string) => !isIncognitoProfi
 
 export const suggestProfileKey = (profileId: string) => engineProfile(useBrowser.getState(), profileId);
 
+const endpointPrefix = (template: string | undefined) => {
+  const prefix = template?.includes("%s") ? template.slice(0, template.indexOf("%s")) : "";
+  return /^https?:\/\/[^/?#\s]+[/?]/i.test(prefix) ? [prefix] : [];
+};
+
+export const suggestUrlAllowed = (url: string, extension: readonly ExtensionSearchEngine[]) =>
+  [...BUILT_IN_ENGINES, ...extension].some((engine) => endpointPrefix(engine.suggestUrl).some((prefix) => url.startsWith(prefix)));
+
 export function browserSuggestFetch(profile: string): FetchLike {
   return async (url, { signal }) => {
+    if (!suggestUrlAllowed(url, useBrowser.getState().settings.extensionSearchEngines)) return { ok: false, text: async () => "" };
     const id = nextRequestId++;
     const consent = consentNow();
     const stop = () => void stopSearchSuggestions(profile, id).catch(() => {});

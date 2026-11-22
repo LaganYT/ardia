@@ -1,6 +1,7 @@
 #import "ArdiaWebViewInternal.h"
 #import "ArdiaRuntime.h"
 #import "ArdiaLaunchConfig.h"
+#import "ArdiaContentBlockerInternal.h"
 
 #include <fcntl.h>
 #include <sys/file.h>
@@ -213,6 +214,40 @@ void CaptureForChoice(ArdiaWebView *view, ArdiaCoreTab *tab, NSDictionary *menu,
                                                     }];
 }
 
+NSString *const kHideElementMenuTitle = @"Hide Element…";
+
+NSString *const kTakeHideElementFrameClick =
+    @"new Promise((resolve) => {"
+     "  const until = Date.now() + 3000;"
+     "  const look = () => {"
+     "    const ublock = chrome.extension.getBackgroundPage()?.µBlock;"
+     "    const click = ublock?.ardiaHideElementFrameClick;"
+     "    if (click && Date.now() - click.at < 5000) {"
+     "      ublock.ardiaHideElementFrameClick = null;"
+     "      return resolve({tabId: click.tabId, pageUrl: click.pageUrl});"
+     "    }"
+     "    if (Date.now() > until) return resolve(null);"
+     "    setTimeout(look, 25);"
+     "  };"
+     "  look();"
+     "}).then((v) => post('result', JSON.stringify({value: v})), (e) => post('result', JSON.stringify({error: String(e && e.message || e)})))";
+
+constexpr double kHideElementFrameClickSeconds = 6;
+
+void TakeHideElementFrameClick();
+
+void WatchHideElementMenuPicks() {
+  const SEL chromeMenuAction = NSSelectorFromString(@"itemSelected:");
+  [NSNotificationCenter.defaultCenter addObserverForName:NSMenuDidSendActionNotification
+                                                  object:nil
+                                                   queue:NSOperationQueue.mainQueue
+                                              usingBlock:^(NSNotification *note) {
+                                                NSMenuItem *item = Field<NSMenuItem>(note.userInfo, @"MenuItem");
+                                                if (item.action == chromeMenuAction && [item.title isEqualToString:kHideElementMenuTitle])
+                                                  TakeHideElementFrameClick();
+                                              }];
+}
+
 NSDictionary *FindMenuItem(NSArray *items, NSString *label) {
   for (NSUInteger i = 0; i < items.count; i++) {
     NSDictionary *item = items[i];
@@ -230,8 +265,22 @@ NSDictionary *FindMenuItem(NSArray *items, NSString *label) {
 
 @implementation ArdiaWebView (ContextMenu)
 
++ (void)load {
+  WatchHideElementMenuPicks();
+}
+
+- (BOOL)startPickerForFrameClickInTab:(int)tabId page:(NSString *)pageUrl {
+  if (!_tab || _tab.closed || _tab.tabId != tabId || ![_tab.url isEqualToString:pageUrl]) return NO;
+  [self emit:@"command" payload:@{@"command" : @"hideElement", @"text" : @"", @"point" : @[ @-1, @-1 ]}];
+  return YES;
+}
+
 + (void)setSearchEngineName:(NSString *)name {
   gSearchEngineName = name.length ? [name copy] : @"Google";
+}
+
++ (NSString *)searchEngineNameInUse {
+  return gSearchEngineName;
 }
 
 + (void)removeSharedImage:(NSURL *)file {
@@ -322,7 +371,54 @@ NSDictionary *FindMenuItem(NSArray *items, NSString *label) {
   NSArray<NSString *> *parts = [pick componentsSeparatedByString:@"\t"];
   NSDictionary *found = pick.length ? FindMenuItem(items, parts[0]) : nil;
   if (!found) return nil;
+  if ([parts[0] isEqualToString:kHideElementMenuTitle])
+    dispatch_async(dispatch_get_main_queue(), ^{
+      TakeHideElementFrameClick();
+    });
   return @{@"command" : found[@"command"], @"path" : found[@"path"], @"flags" : @(parts.count > 1 ? parts[1].intValue : 0)};
 }
 
 @end
+
+namespace {
+
+void StartPickerForFrameClick(NSDictionary *click) {
+  NSNumber *tabId = Field<NSNumber>(click, @"tabId");
+  NSString *pageUrl = Field<NSString>(click, @"pageUrl");
+  if (!tabId || !pageUrl.length) return;
+  for (ArdiaWebView *view in LiveViews().allObjects)
+    if ([view startPickerForFrameClickInTab:tabId.intValue page:pageUrl]) return;
+}
+
+void TakeHideElementFrameClick(NSString *profile) {
+  using namespace ardia_content_blocker;
+  ArdiaCoreProfile *p = ardia_host::LoadedProfile(profile);
+  NSString *key = [@"hide-element:" stringByAppendingString:profile];
+  if (!p || (Pages()[key] && !Pages()[key].dead)) return;
+  ArdiaContentBlockerPage *page = HiddenPage(key, profile, p, ExtensionId(), @"blank.html");
+  if (!page) return;
+  __block bool answered = false;
+  void (^finish)(NSDictionary *) = ^(NSDictionary *click) {
+    if (answered) return;
+    answered = true;
+    [page fail:@"done"];
+    if (Pages()[key] == page) [Pages() removeObjectForKey:key];
+    if (click) StartPickerForFrameClick(click);
+  };
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kHideElementFrameClickSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    finish(nil);
+  });
+  [page run:kTakeHideElementFrameClick
+      completion:^(id value, NSString *) {
+        NSDictionary *click = [value isKindOfClass:NSDictionary.class] ? value : nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+          finish(click);
+        });
+      }];
+}
+
+void TakeHideElementFrameClick() {
+  for (NSString *profile in [ardia_content_blocker::LoadedProfiles().array copy]) TakeHideElementFrameClick(profile);
+}
+
+}

@@ -14,6 +14,7 @@ import { useBrowse } from "../state/browse/store";
 import { currentTabs, useTabs } from "../state/tabs/store";
 import { renderSurface, someTabs, unmount, withTabs } from "../../test/render/harness";
 import type { BrowserTab } from "../state/tabs/tabModels";
+import { privateMark } from "../components/ui/IncognitoSpecs";
 
 const safeArea = require("react-native-safe-area-context") as { useSafeAreaInsets: () => { top: number; bottom: number; left: number; right: number } };
 
@@ -53,7 +54,7 @@ test.each(DESIGNS)("the %s design draws its own page bar and only that one", (de
   unmount(root);
 });
 
-test("the redesigned bar is three glass pieces, 48 points tall, 8 apart and 24 in from the sides, their bottom 21.5 points above the screen's edge on iPhone and 8 above Android's 3-button bar", () => {
+test("the redesigned bar is a glass pill address between two glass circles, 48 points tall, 8 apart and 24 in from the sides, their bottom 21.5 points above the screen's edge on iPhone and 8 above Android's 3-button bar", () => {
   const root = page("redesigned");
   const row = StyleSheet.flatten(host(root, "floatingBar")!.props.style);
   expect(row).toMatchObject({ gap: 8, paddingHorizontal: 24, height: 48 });
@@ -107,15 +108,20 @@ test("a page loaded over plain http shows a red open lock in place of its icon, 
 
 const pageViewModule = require("@ardia/phone-native/src/PageView") as typeof import("@ardia/phone-native/src/PageView");
 
-test("in the redesign the page runs full screen under the bar, told the top safe area and the bar's 75 points (more where Android lifts it over a 3-button bar) as obscured insets, and only the bar's pieces take touches", () => {
+test("in the redesign the page runs full screen under the bar, told the top safe area and, on iPhone, the bar's 75 points as obscured insets (none on Android, whose bar collapses by default), the status bar's strip is laid over the page in the page's top colour, a band in its bottom colour fades the page out under the bar, and only the bar's pieces take touches", () => {
   jest.spyOn(pageViewModule, "pageObscuresInsets").mockImplementation(() => true);
   const covered = Platform.OS === "android" ? 75 + 34 + 8 - 21.5 : 75;
   const root = page("redesigned");
   const view = root.root.findAll((node) => node.props.pageId !== undefined && node.props.obscuredInsets !== undefined)[0]!;
-  expect(view.props.obscuredInsets).toEqual({ top: 47, bottom: covered });
+  expect(view.props.obscuredInsets).toEqual({ top: 47, bottom: Platform.OS === "android" ? 0 : covered });
   expect(view.props.toneInsets).toEqual({ top: 0, bottom: covered });
   expect(StyleSheet.flatten(host(root, "pageArea")!.props.style).marginBottom).toBe(0);
-  expect(host(root, "pageStatusStrip")).toBeUndefined();
+  const strip = StyleSheet.flatten(host(root, "pageStatusStrip")!.props.style);
+  expect(strip).toMatchObject({ position: "absolute", top: 0, left: 0, right: 0, height: 47 });
+  expect(host(root, "pageStatusStrip")!.props.pointerEvents).toBe("none");
+  const base = host(root, "pageBarBase")!;
+  expect(base.props.pointerEvents).toBe("none");
+  expect(StyleSheet.flatten(base.props.style).experimental_backgroundImage).toMatch(/^linear-gradient\(to bottom, #[0-9A-Fa-f]{6}00 0%/);
   let bar = host(root, "floatingBar")!.parent;
   while (bar && bar.props.pointerEvents === undefined) bar = bar.parent;
   expect(bar!.props.pointerEvents).toBe("box-none");
@@ -136,37 +142,33 @@ test("the bands under the bars take the colours the bars use: the page's sampled
   unmount(toned);
 });
 
-test("on Android the page's obscured bottom is the bar's current height: the pill's when the bar collapses, and nothing under full-screen video, Find or the search tray; iPhone keeps SwiftUI's 75", () => {
+test("on Android the page runs under a bar that collapses, so nothing resizes it while scrolling, and stops above one that doesn't; iPhone keeps SwiftUI's 75", () => {
   jest.spyOn(pageViewModule, "pageObscuresInsets").mockImplementation(() => true);
-  const follows = Platform.OS === "android";
+  const android = Platform.OS === "android";
   const tab = currentTabs().open[0]!;
-  const bottom = (root: ReturnType<typeof renderSurface>) => root.root.findAll((node) => node.props.pageId !== undefined && node.props.obscuredInsets !== undefined)[0]!.props.obscuredInsets.bottom as number;
+  const pageView = (root: ReturnType<typeof renderSurface>) => root.root.findAll((node) => node.props.pageId !== undefined && node.props.obscuredInsets !== undefined)[0]!;
+  const bottom = (root: ReturnType<typeof renderSurface>) => pageView(root).props.obscuredInsets.bottom as number;
   const scrolled = (scrollDirection: "up" | "down") => act(() => storeNavigation(tab.id, { url: "https://site0.example/", title: "Site", isLive: true, isLoading: false, progress: 1, failure: null, canGoBack: false, canGoForward: false, scrollDirection } as unknown as PageState));
   setPreference("collapsesBottomBar", true);
   scrolled("up");
-  const lift = follows ? 34 + 8 - 21.5 : 0;
+  const lift = android ? 34 + 8 - 21.5 : 0;
   const root = page("redesigned", tab);
-  const transition = () => root.root.findAll((node) => node.props.pageId !== undefined && node.props.obscuredInsets !== undefined)[0]!.props.bottomInsetTransitionMs;
-  expect(transition()).toBe(follows ? 300 : 0);
-  expect(bottom(root)).toBe(75 + lift);
+  expect(pageView(root).props.bottomInsetTransitionMs).toBeUndefined();
+  expect(bottom(root)).toBe(android ? 0 : 75);
   scrolled("down");
-  expect(bottom(root)).toBe(follows ? 51.5 + lift : 75);
+  expect(bottom(root)).toBe(android ? 0 : 75);
   scrolled("up");
   act(() => storeFullscreen(tab.id, true));
-  expect(bottom(root)).toBe(follows ? 0 : 75);
-  expect(transition()).toBe(0);
+  expect(bottom(root)).toBe(android ? 0 : 75);
   act(() => storeFullscreen(tab.id, false));
   act(() => usePageUi.setState({ findOpen: true }));
-  expect(bottom(root)).toBe(follows ? 0 : 75);
-  expect(transition()).toBe(0);
+  expect(bottom(root)).toBe(android ? 0 : 75);
   act(() => usePageUi.setState({ findOpen: false }));
   act(() => useSearch.setState({ open: true }));
-  expect(bottom(root)).toBe(follows ? 0 : 75);
-  expect(transition()).toBe(0);
+  expect(bottom(root)).toBe(android ? 0 : 75);
   act(() => useSearch.setState({ open: false }));
-  expect(bottom(root)).toBe(75 + lift);
   act(() => setPreference("collapsesBottomBar", false));
-  expect(transition()).toBe(0);
+  expect(bottom(root)).toBe(75 + lift);
   unmount(root);
 });
 
@@ -189,7 +191,7 @@ test("the bar's glass and glyphs follow the page's sampled bottom colour, not th
   const symbols = light.root.findAll((node) => node.type === Symbol);
   expect(symbols.find((node) => node.props.name === "ellipsis")!.props.size).toBeCloseTo(23.3);
   expect(symbols.find((node) => node.props.name === "plus")!.props.size).toBeCloseTo(23.6);
-  expect(symbols.find((node) => node.props.name === "eyeglassesThin")!.props).toMatchObject({ size: 28, color: "rgba(0,0,0,0.5)" });
+  expect(symbols.find((node) => node.props.name === privateMark)!.props).toMatchObject({ size: 28, color: "rgba(0,0,0,0.5)" });
   unmount(light);
   act(() => storeTone(tab.id, { top: "#101418", bottom: "#101418" }));
   const dark = page("redesigned", tab);

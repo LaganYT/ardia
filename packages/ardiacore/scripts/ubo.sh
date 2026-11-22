@@ -6,7 +6,7 @@ vendor="$(cd "$(dirname "$0")/.." && pwd)/vendor"
 UBO_VERSION="1.76.4"
 UBO_SHA256="4b1b27ed82e734d508ae6d255933c334f62f256e8a8aece92724b826828e3d5f"
 UBO_KEY="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv1MPdIgJjIsN4Y0N/20GDNPfN4J//aknk5dsH8Y1LBxSnz3Jp/BT187Gub5cv6lee5CUVDmVBa3Yiqow8GMna5KwX+ZP+yc1pt/ewzyNxm2BzoQPgWz+1DgZaahz56/szi1EEtWVYxd3wNxFN4wPDqwV6aqlnV4R3RnxlF1ocw1kDgJ+8BxR1EY+MB+H8bymdef+xB3TNifBZIVmZt81cC3UMOG6KWRTU1wtIXsW+ZqSv5zaeFHLkjG4MPB7EfcMGrvO80ElJBZZLdrTmYOL4uUPsz2Wy6GiPWzpDmzzI9RfsZm11sLiJo63blcPF0Cz3sM0wQfxJPPcQuqkZDReswIDAQAB"
-UBO_PATCH="27"
+UBO_PATCH="29"
 ubo="$vendor/ubo"
 stamp="$UBO_VERSION-$UBO_PATCH"
 installed() { [ -f "$ubo/.version" ] && [ "$(cat "$ubo/.version")" = "$stamp" ]; }
@@ -71,11 +71,20 @@ patch("js/contextmenu.js",
       "const ARDIA_HIDE_ELEMENT_BIT     = 0b100000;\n")
 patch("js/contextmenu.js",
       "const onEntryClicked = function(details, tab) {\n",
+      "chrome.webNavigation.onBeforeNavigate.addListener(({ tabId, frameId }) => {\n"
+      "    if ( frameId === 0 && µb.ardiaHideElementFrameClick?.tabId === tabId ) {\n"
+      "        µb.ardiaHideElementFrameClick = null;\n"
+      "    }\n"
+      "});\n"
+      "\n"
       "const onEntryClicked = function(details, tab) {\n"
       "    if ( details.menuItemId === 'ardia-hideElement' ) {\n"
       "        if ( tab === undefined || /^https?:\\/\\//.test(tab.url) === false ) { return; }\n"
-      "        const ardiaEvent = details.frameId === 0 ? 'ardia-hide-element' : 'ardia-hide-element-in-frame';\n"
-      "        vAPI.tabs.executeScript(tab.id, { frameId: 0, code: \"document.dispatchEvent(new CustomEvent('\" + ardiaEvent + \"'))\" });\n"
+      "        if ( details.frameId !== 0 ) {\n"
+      "            µb.ardiaHideElementFrameClick = { tabId: tab.id, pageUrl: details.pageUrl || tab.url, at: Date.now() };\n"
+      "            return;\n"
+      "        }\n"
+      "        vAPI.tabs.executeScript(tab.id, { frameId: 0, code: \"document.dispatchEvent(new CustomEvent('ardia-hide-element'))\" });\n"
       "        return;\n"
       "    }\n")
 patch("js/contextmenu.js",
@@ -173,6 +182,181 @@ patch("js/storage.js",
       "                .map(lang => (/^[a-z]+/.exec(lang) || [])[0]).filter(Boolean));\n"
       "            if ( langs.size !== 0 ) {\n"
       "                re = new RegExp('\\\\b(?:' + Array.from(langs).join('|') + ')\\\\b');")
+patch("js/background.js", "        compiledMagic: 72,", "        compiledMagic: 173,")
+patch("js/background.js", "        selfieMagic: 72,", "        selfieMagic: 173,")
+for engine in ("Main", "ExtFilteringEngine", "NetFilteringEngine"):
+    for call in ("toCache", "fromCache"):
+        patch("js/storage.js", f"io.{call}('selfie/static{engine}'", f"io.{call}('selfie/staticArdia2{engine}'")
+patch("js/storage.js",
+      "            r = await Promise.all([\n"
+      "                loadMain(),\n",
+      "            if ( await loadMain() !== true ) { throw new Error('Filtering engine selfie main is not valid'); }\n"
+      "            r = await Promise.all([\n"
+      "                true,\n")
+hiding_cleanup = r'''
+const ardiaOldHidingRule = /^[a-z0-9.-]+##[^+^\s][^\n{}]*$/;
+const ardiaOldHidingRuleLength = 1024;
+const ardiaCosmeticRule = /^[^\s#]*#@?#[^+^\s]/;
+
+const ardiaSelectorParses = selector => {
+    try {
+        document.createDocumentFragment().querySelector(selector);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const ardiaSelectorOf = filter => filter.slice(filter.indexOf('##') + 2);
+
+const ardiaStorableHidingRule = filter =>
+    filter.length <= ardiaOldHidingRuleLength &&
+    ardiaOldHidingRule.test(filter) &&
+    ardiaSelectorParses(ardiaSelectorOf(filter));
+
+const ardiaSelectorLeftOpen = filter => ardiaSelectorParses(ardiaSelectorOf(filter) + '##');
+
+const ardiaPlainHidingRule = filter => ardiaStorableHidingRule(filter) && ardiaSelectorLeftOpen(filter) === false;
+
+const ardiaOpensAcrossBreak = filter => {
+    for ( let at = filter.indexOf('\r'); at !== -1; at = filter.indexOf('\r', at + 1) ) {
+        if ( ardiaSelectorLeftOpen(filter.slice(0, at)) ) { return true; }
+    }
+    return false;
+};
+
+µb.ardiaCleanHidingRules = function(text, { countNeighbours = false } = {}) {
+    const lines = text.split('\n');
+    const bodyOf = line => line.endsWith('\r') ? line.slice(0, -1) : line;
+    const eolOf = line => line.endsWith('\r') ? '\r' : '';
+    const inert = body => body.trim() === '' || body.trim().startsWith('!');
+    const keepsWorking = body => inert(body) || ardiaPlainHidingRule(body.trim());
+    let spans = 0;
+    let disabled = 0;
+    const disable = i => {
+        if ( keepsWorking(bodyOf(lines[i])) ) { return; }
+        lines[i] = '! ' + lines[i];
+        disabled += 1;
+    };
+    for ( let i = 0; i < lines.length; i++ ) {
+        const filter = bodyOf(lines[i]).trim();
+        if ( filter.includes('\r') ) {
+            if ( ardiaStorableHidingRule(filter) === false || ardiaOpensAcrossBreak(filter) === false ) { continue; }
+            const parts = filter.split('\r');
+            const eol = eolOf(lines[i]);
+            lines.splice(i, 1, ...parts.map(part => part + eol));
+            spans += 1;
+            for ( let j = i; j < i + parts.length; j++ ) { disable(j); }
+            i += parts.length - 1;
+            continue;
+        }
+        if ( ardiaStorableHidingRule(filter) === false || ardiaSelectorLeftOpen(filter) === false ) { continue; }
+        let joined = filter;
+        let end = i;
+        for ( let j = i + 1; j < lines.length; j++ ) {
+            const body = bodyOf(lines[j]);
+            if ( body.includes('\r') ) { break; }
+            joined += '\r' + body;
+            if ( joined.length > ardiaOldHidingRuleLength ) { break; }
+            if ( ardiaStorableHidingRule(joined) ) { end = j; }
+        }
+        spans += 1;
+        for ( let j = i; j <= end; j++ ) { disable(j); }
+        i = end;
+    }
+    let neighbours = 0;
+    if ( countNeighbours ) {
+        const plain = new Map();
+        const plainAt = i => {
+            if ( i < 0 || i >= lines.length ) { return false; }
+            if ( plain.has(i) === false ) { plain.set(i, ardiaPlainHidingRule(bodyOf(lines[i]).trim())); }
+            return plain.get(i);
+        };
+        for ( let i = 0; i < lines.length; i++ ) {
+            const body = bodyOf(lines[i]);
+            if ( inert(body) || ardiaCosmeticRule.test(body.trim()) ) { continue; }
+            if ( plainAt(i - 1) || plainAt(i + 1) ) { neighbours += 1; }
+        }
+    }
+    return { text: lines.join('\n'), spans, disabled, neighbours };
+};
+'''
+patch("js/storage.js",
+      "µb.saveUserFilters = function(content) {\n",
+      hiding_cleanup.lstrip("\n") +
+      "\n"
+      "let ardiaCleanupGate = Promise.resolve();\n"
+      "\n"
+      "const ardiaBackUpFilters = async text => {\n"
+      "    const key = 'ardiaSplitHidingRulesBackups';\n"
+      "    const bin = await vAPI.storage.get(key);\n"
+      "    const backups = Array.isArray(bin?.[key]) ? bin[key] : [];\n"
+      "    if ( backups.includes(text) ) { return true; }\n"
+      "    await vAPI.storage.set({ [key]: [...backups, text] });\n"
+      "    const stored = (await vAPI.storage.get(key))?.[key];\n"
+      "    return Array.isArray(stored) && stored.includes(text) && backups.every(previous => stored.includes(previous));\n"
+      "};\n"
+      "\n"
+      "const ardiaAddToCount = async (key, n) => {\n"
+      "    const bin = await vAPI.storage.get(key);\n"
+      "    const before = bin instanceof Object && Number.isInteger(bin[key]) ? bin[key] : 0;\n"
+      "    await vAPI.storage.set({ [key]: before + n });\n"
+      "};\n"
+      "\n"
+      "const ardiaCleanUserFilters = async function() {\n"
+      "    try {\n"
+      "        const details = await io.get(µb.userFiltersPath);\n"
+      "        if ( details instanceof Object === false || typeof details.content !== 'string' ) { return; }\n"
+      "        const { text, spans, disabled, neighbours } = µb.ardiaCleanHidingRules(details.content, { countNeighbours: true });\n"
+      "        const seen = await vAPI.storage.get('ardiaHidingRulesNextToScriptRules');\n"
+      "        if ( seen?.ardiaHidingRulesNextToScriptRules !== neighbours ) {\n"
+      "            await vAPI.storage.set({ ardiaHidingRulesNextToScriptRules: neighbours });\n"
+      "        }\n"
+      "        if ( text === details.content ) { return; }\n"
+      "        µb.selfieManager.destroy();\n"
+      "        µb.removeCompiledFilterList(µb.userFiltersPath);\n"
+      "        if ( await ardiaBackUpFilters(details.content) === false ) {\n"
+      "            ubolog('Saved Hide Element rules could not be backed up before cleanup');\n"
+      "            return;\n"
+      "        }\n"
+      "        await io.put(µb.userFiltersPath, text);\n"
+      "        const after = await io.get(µb.userFiltersPath);\n"
+      "        if ( after instanceof Object === false || after.content !== text ) {\n"
+      "            ubolog('Saved Hide Element rules that need cleanup are still stored');\n"
+      "            return;\n"
+      "        }\n"
+      "        await ardiaAddToCount('ardiaSplitHidingRulesRemoved', spans);\n"
+      "        await ardiaAddToCount('ardiaHidingRulesQuarantined', disabled);\n"
+      "        ubolog(`Commented out ${disabled} lines of ${spans} saved filters Hide Element could not have written`);\n"
+      "    } catch (reason) {\n"
+      "        ubolog(reason);\n"
+      "    }\n"
+      "};\n"
+      "\n"
+      "µb.ardiaRemoveSplitHidingRules = function() {\n"
+      "    ardiaCleanupGate = ardiaCleanupGate.then(ardiaCleanUserFilters);\n"
+      "    return ardiaCleanupGate;\n"
+      "};\n"
+      "\n"
+      "µb.saveUserFilters = async function(content) {\n"
+      "    await ardiaCleanupGate;\n")
+patch("js/storage.js",
+      "µb.loadUserFilters = function() {\n"
+      "    return io.get(this.userFiltersPath);\n",
+      "µb.loadUserFilters = async function() {\n"
+      "    await ardiaCleanupGate;\n"
+      "    return io.get(this.userFiltersPath);\n")
+patch("js/storage.js",
+      "µb.compileFilters = function(rawText, details = {}) {\n",
+      "µb.compileFilters = function(rawText, details = {}) {\n"
+      "    if ( details.assetKey === µb.userFiltersPath && typeof rawText === 'string' ) {\n"
+      "        rawText = µb.ardiaCleanHidingRules(rawText).text;\n"
+      "    }\n")
+patch("js/start.js",
+      "    // Prime the filtering engines before first use.\n",
+      "    await µb.ardiaRemoveSplitHidingRules();\n"
+      "\n"
+      "    // Prime the filtering engines before first use.\n")
 PY
   [ -d "$ubo/ext" ] && mv "$ubo/ext" "$ubo/ext.old"
   mv "$ubo/ext.new" "$ubo/ext"

@@ -49,12 +49,14 @@ export function setSettingsQuery(query: string) {
   useSettingsSearch.setState({ query, selected: 0, keyboardMove: 0, ...(query.trim() ? {} : { previewing: false }) });
 }
 
-export function dropSettingsSearch(consent: ConsentToken | null) {
-  if (useSettingsSearch.getState().query.trim()) noteSettingsSearch("dropped", consent);
+export function dropSettingsSearch(consent: ConsentToken | null, why: "dropped" | "closed" = "dropped") {
+  if (useSettingsSearch.getState().query.trim()) noteSettingsSearch(why, consent);
   useSettingsSearch.setState({ query: "", selected: 0, keyboardMove: 0, reveal: null, flash: null, previewSection: null, previewing: false });
 }
 
 onTargetedSettingsOpen(dropSettingsSearch);
+
+export const settingsSearchHost = () => () => dropSettingsSearch(consentToken(), "closed");
 
 export function noteSettingsSearchEmpty() {
   if (emptyNoted) return;
@@ -82,8 +84,12 @@ export const selectSettingsResult = (index: number) => useSettingsSearch.setStat
 
 export const clearSettingsReveal = () => useSettingsSearch.setState({ reveal: null });
 
-export function revealSetting({ id, pane, section }: Target, via: "keyboard" | "click", rank: number, unshown = false) {
+export function revealSetting(target: Target, via: "keyboard" | "click", rank: number, unshown = false) {
   noteSettingsSearchReveal(via, rank, unshown);
+  jumpToSetting(target);
+}
+
+export function jumpToSetting({ id, pane, section }: Target) {
   const key = settingsSectionKey(pane, section);
   useSettingsSearch.setState((s) => (s.revealedSections.includes(key) ? {} : { revealedSections: [...s.revealedSections, key] }));
   if (!useSettingsSearch.getState().previewing) goToSettingsPane(pane, settingsProfileFor(pane, useSettingsNav.getState()));

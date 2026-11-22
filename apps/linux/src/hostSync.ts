@@ -65,7 +65,7 @@ export function base32(bytes: Uint8Array): string {
   return out;
 }
 
-export function newSyncDeviceId(random: (bytes: Uint8Array) => Uint8Array = (bytes) => crypto.getRandomValues(bytes)): string {
+export function newSyncDeviceId(random: (bytes: Uint8Array<ArrayBuffer>) => Uint8Array = (bytes) => crypto.getRandomValues(bytes)): string {
   return base32(random(new Uint8Array(16)));
 }
 

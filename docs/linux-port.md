@@ -450,7 +450,7 @@ fake device, "Ardia Test Sink", and records routes without sending anything anyw
 Use a dedicated build root, apart from any Mac Chromium tree. `01-sync.sh` is for a fresh tree and refuses to run
 when an output directory exists; after that, builds are incremental.
 
-Provision Chromium's Linux build dependencies first, along with Node 24, pnpm 11, Python 3, Git, util-linux `flock`,
+Provision Chromium's Linux build dependencies first, along with Node 24, pnpm 12, Python 3, Git, util-linux `flock`,
 and ImageMagick or Pillow. Helium's Docker build environment is a useful reference.
 
 ```bash

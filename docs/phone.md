@@ -2675,8 +2675,8 @@ apps/phone/scripts/corex-test <commit> [--patch FILE] [--tests filters]   the Ko
   - **On the F4,** the corex APK installed over the Mac one as an update, kept the app's data and ran.
   - **Build times:** the first full build took about 11 min 20 s, an incremental one 107 s.
 - **Toolchain on corex.** JDK 17.0.21, NDK 27.1.12297006, build-tools 37.0.0 and android-37.0 are in the containers'
-  `~/Android/Sdk`. The Linux `hermesc` is pinned by hash in `packages/phone/android/build.gradle`. pnpm 11.1.3 comes
-  from `packageManager` (corex's own is 12).
+  `~/Android/Sdk`. The Linux `hermesc` is pinned by hash in `packages/phone/android/build.gradle`. pnpm 12.21.0 comes
+  from `packageManager`.
 
 ### Android release
 

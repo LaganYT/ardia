@@ -120,7 +120,7 @@ test("4 a search suggestion request made while sharing was off isn't counted whe
   let reply;
   globalThis.acTestSuggest = () => new Promise((resolve) => (reply = resolve));
   try {
-    const fetched = browserSuggestFetch("")("https://suggest.example/?q=a", { signal: new AbortController().signal });
+    const fetched = browserSuggestFetch("")("https://duckduckgo.com/ac/?q=a&type=list", { signal: new AbortController().signal });
     await turn();
     client.setSharing(true, "settings");
     reply({ status: 200, body: "[]" });

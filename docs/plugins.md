@@ -133,9 +133,15 @@ is the only source of which version may be fetched.
     read-only (folders 0555, files 0555 or 0444), and keeps the download beside it as `<sha256>.tar.gz` (0444). Program
     copies in `Programs/<name>/<version>/` are sealed the same way once they verify, except their top folder, where
     Ardia keeps its leases and after-update marks; removing either unseals it first.
-- **What makes a copy official.** A copy counts only while its download still has the pinned SHA-256 and the payload
-  digest of the copy (`PluginPrograms.payloadDigest`) equals the one computed by streaming that download's tar
-  (`OfficialArchive.payloadDigest`, `OfficialVerification`).
+- **What makes a copy official.** A copy counts only while its download still has a SHA-256 the signed app vouches
+  for, and the payload digest of the copy (`PluginPrograms.payloadDigest`) equals the one computed by streaming that
+  download's tar (`OfficialArchive.payloadDigest`, `OfficialVerification`).
+  - The SHA-256s the app vouches for are the current pin's and those of earlier pinned artifacts listed in
+    `apps/browser/official-plugins-history.json`, which `export-sign.sh` writes into Info.plist with the pin (each
+    plugin's `trusted.artifacts`, `OfficialTrust`). `OfficialPlugins/<name>/active` only selects among copies that pass,
+    and `plugins.json` plays no part in it: a copy no signed pin names is never official, whatever the record says.
+  - `official-plugins.py history-check` fails when a `v*` tag that pinned a plugin still in the pin has no history entry,
+    and the release-script tests run it, so a pin bump has to add the release it replaces.
   - Each lookup re-checks the stamps of the download and of every file in the copy, the digests are recomputed whenever
     one changed, and promotion always re-checks from scratch.
   - A replaced or damaged copy isn't listed as official, can't be promoted, and can't be linked. Linking stages the
@@ -170,7 +176,10 @@ is the only source of which version may be fetched.
 - **0.2.47 installs.** 0.2.47 bundled Command Line 0.4.0, approved as `sha256(manifest + "\0bundled")` and copied to
   `Programs/cli/<version>` with `ardia` linked to `Programs/cli/current/bin/ardia`.
   - Until a fetched copy is active, the scan lists that copy as the plugin (folder identity `bundled`, `legacy`), but
-    only while the record's old receipt approves it exactly. Its programs are kept linked in place
+    only while its payload digest is the one a release shipped (`trusted.bundledDigests`, one per release, since each
+    re-signed its bundled copy) and the record's old receipt approves it exactly. The history covers every release that
+    bundled Command Line: 0.2.47-nightly.7 (0.3.0), 0.2.47-nightly.8, 0.2.47-nightly.9 and 0.2.47 (0.4.0). A copy from
+    anywhere else stops counting as official: its `ardia` is taken off PATH and Install… is offered. Its programs are kept linked in place
     (`PluginPrograms.keepLegacy`), with nothing restaged or switched.
   - The launch sweep keeps every installed official plugin's link, listing or not (`programsKeptAtLaunch`).
   - The fetched replacement switches over silently when its `plugin.json` is the one already approved (it carries
@@ -633,8 +642,9 @@ Ardia never runs a plugin's program itself, with one exception for official plug
   read it.
 - **Not sandboxed.** A program isn't a helper: you, or a program you use, run it from a shell, as you, so neither the
   sandbox nor the plugin's other permissions apply to it, and the consent sheet says so ("Adds ardia to your PATH. It runs as you,
-  outside Ardia's sandbox", and "Adds ~/.local/bin to your PATH in your shell's login file"). It reaches Ardia the way any program does: the control socket
-  and the token server, while "Let the ardia command control Ardia" is on (`docs/automation.md`, `docs/cli.md`).
+  outside Ardia's sandbox", and "Adds ~/.local/bin to your PATH in your shell's login file"). It reaches Ardia the way any program does, while "Let the ardia command control Ardia" is on: the
+  control socket, which checks only that its peer runs as the same user, and the engine's token connection, whose token
+  sits in `ArdiaControl.json` for the user's processes to read (`docs/cli.md`, `docs/control-socket.md`).
 
 Code: `PluginCore/PluginPrograms.swift` (the store, links and leases; `plugin-tests/PluginProgramsTests.swift`),
 `PluginCore/PluginProgramRegistry.swift` (claims and legacy installs; `plugin-tests/PluginProgramRegistryTests.swift`),
@@ -770,6 +780,7 @@ Requests from the helper (`{"id", "method", "params"}`):
 | `windows` | `tabs` | as on the socket |
 | `run` `{"command", "arg"?, "window"?, "tab"?}` | `commands` | as on the socket |
 | `open` `{"urls", "activate"?}` | `commands` | opens 1 to 10 `http:` or `https:` URLs as background tabs in the last focused window (`activate` selects the first there without raising the window). Each URL, at most 2048 characters, is parsed whole as http or https with a host, before anything opens: the host as written must be ASCII (a Unicode name is refused; send it in punycode, `xn--`), with no user name or password and a port from 1 to 65535; an IPv6 host is put in its short form, and dotted IPv4 must have four parts. Raw spaces (percent-encode them), backslashes and control characters are refused before parsing. What opens is the normalised address: scheme and host lower-cased, the default port dropped, non-ASCII in the path, query and fragment percent-encoded as UTF-8, everything else as given. Anything else (`file:`, a path, `ardia:` or `chrome:` pages, `about:`, `javascript:`, `data:`, `ardia-plugin:`) is `bad_request`, and the message names the first bad entry, as in `urls[1] isn't a valid address`. It runs only while the run that asked is still the plugin's current run and still has `commands`; one queued behind other work when that stops opens nothing. Answers `{"ok": true, "tabs": [ids]}`: the tabs it made, nothing else |
+| `apply` `{"ops"}` | `workspace`, or `tabs: write` for `open`, `tab.close` and `tab.activate` | as on the socket, except that every URL in `open` and `group.create` is read by `open`'s rules above (http or https only). A batch with any other address is `refused` whole before anything in it runs, and the message names the address |
 | `page.post` `{"message", "view"?}` | a `page` | `{"ok": true}`, or `overloaded`: a message to the plugin's page views ([Pages and their helper](#pages-and-their-helper)); `refused` for a plugin with no page, however the method name is spelled in JSON |
 | `page.open` `{"path"?, "split"?, "side"?, "context"?}` | a `page`; `context` needs `tabs` | `{"tabId", "windowId"}`: opens the plugin's page at that path in the last focused window, as a tab or in Split View beside the current tab |
 | `tools.call` `{"plugin", "tool", "input"?}` | every permission the other plugin has | the tool's result, or its error; the plugin must be on and running. A plugin can't reach through another plugin's tools to what it wasn't granted itself |
@@ -964,6 +975,8 @@ in the local copy. Hourly `usage_counts`:
   `plugin_menu_runs`, `plugin_action_shortcuts` (an action run by its declared shortcut), `plugin_omnibox_queries`,
   `plugin_ui_prompts` (a quick pick, input box or confirm shown),
   `plugin_net_fetches`, `plugin_net_refusals` (a fetch outside `permissions.network` or to a private address),
+  `plugin_url_refusals_open`, `plugin_url_refusals_group_create` (an `apply` batch refused for an address outside the
+  plugin URL rules, such as one that isn't http or https or has a user name and password, by the operation that held it),
   `plugin_storage_writes`, `plugin_storage_cancels` (a storage request dropped because the plugin was being removed),
   `plugin_secret_writes`, `plugin_page_reads` (`activePage` reads), `plugin_decide_calls`,
   `plugin_decide_timeouts`.
@@ -987,5 +1000,6 @@ and each refusal's reason
 
 Dashboard: watch `plugin_process_crashes` against `plugin_process_starts`, `plugin_activation_failures` against
 `plugin_activations`, `plugin_decide_timeouts` against `plugin_decide_calls` (a plugin slowing navigation),
-`plugin_net_refusals` against `plugin_net_fetches`, `program_link_failures` against `program_links`, and `program_after_update_quit_kills` against
+`plugin_net_refusals` against `plugin_net_fetches`, `plugin_url_refusals_open` and `plugin_url_refusals_group_create`
+(a plugin trying addresses it may not open), `program_link_failures` against `program_links`, and `program_after_update_quit_kills` against
 `program_after_update_quit_exits` (afterUpdate commands that ignore TERM at quit).

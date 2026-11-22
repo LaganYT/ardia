@@ -41,6 +41,7 @@ class PageView(context: Context, appContext: AppContext) : ExpoView(context, app
     private val host = FrameLayout(context)
     private var scope: CoroutineScope? = null
     private var sampled: PageTone? = null
+    private var sampledDocument = -1L
     private var sentTone: PageTone? = null
     private var toneSampledSinceBind = false
     private var failedId: String? = null
@@ -452,7 +453,10 @@ class PageView(context: Context, appContext: AppContext) : ExpoView(context, app
             val (top, bottom) = PageBands.toneOffsets((toneInsets.first * density).roundToInt() to (toneInsets.second * density).roundToInt(), bands())
             val taken = page.sampleTone(top, bottom)
             toneSampledSinceBind = true
-            if (taken != null) sampled = taken
+            if (taken != null) {
+                sampled = taken.over(sampled.takeIf { sampledDocument == document.generation })
+                sampledDocument = document.generation
+            }
             sendTone(page.state.value)
         }
     }

@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import { SHELL_PREFIX, closeAllApps, killAllAppsNow, launchArdia, launchArguments, launchEnvironment } from "../../apps/linux/scripts/acceptance/lib/ardia.mjs";
 import { connectCdp, evaluate } from "../../apps/linux/scripts/acceptance/lib/cdp.mjs";
 import { errorText, js, nonce, until, withDeadline } from "../../apps/linux/scripts/acceptance/lib/util.mjs";
+import { selfieKeys } from "./ubo-seed.mjs";
 
 export const USAGE = `Usage: node scripts/linux/smoke.mjs --package <Ardia-*linux-x64*.tar.xz|.deb|.AppImage> --results <dir> [--timeout-ms N] [--keep] [--allow-old-engine]
 
@@ -79,7 +80,7 @@ export const BLOCKER_FILES = ["manifest.json", "js/vapi.js", "js/vapi-common.js"
 export const UBO_TUNING = { selfieDelayInSeconds: 3, autoUpdateDelayAfterLaunch: 600 };
 export const UBO_SEED = "ardia-seed/storage.json";
 
-export function uboSeedProblems(seedText, start) {
+export function uboSeedProblems(seedText, start, storageSource) {
   const problems = [];
   if (!start.includes("await ardiaSeedFromPackage();")) problems.push("js/start.js doesn't load the seed");
   let storage = null;
@@ -89,7 +90,11 @@ export function uboSeedProblems(seedText, start) {
   if (!storage || typeof storage !== "object") return [...problems, `no readable ${UBO_SEED}`];
   if (typeof storage.version !== "string" || !storage.version) problems.push("the seed has no version");
   if (!Array.isArray(storage.selectedFilterLists)) problems.push("the seed has no list selection");
-  for (const key of ["cache/selfie/staticMain", "cache/selfie/staticNetFilteringEngine"]) if (typeof storage[key] !== "string" || !storage[key]) problems.push(`the seed has no ${key}`);
+  try {
+    for (const key of selfieKeys(storageSource)) if (typeof storage[key] !== "string" || !storage[key]) problems.push(`the seed has no ${key}`);
+  } catch (error) {
+    problems.push(errorText(error));
+  }
   return problems;
 }
 
@@ -710,7 +715,11 @@ class Smoke {
     if (typeof manifest.key !== "string" || manifest.manifest_version !== 2) throw new Error("the packaged manifest is not the keyed MV2 uBlock Origin build");
     const tuning = uboTuningProblems(await readFile(join(blocker, "js", "background.js"), "utf8").catch(() => ""));
     if (tuning.length) throw new Error(`the packaged uBlock Origin is not tuned for launch: ${tuning.join("; ")}`);
-    const seeding = uboSeedProblems(await readFile(join(blocker, UBO_SEED), "utf8").catch(() => null), await readFile(join(blocker, "js", "start.js"), "utf8").catch(() => ""));
+    const seeding = uboSeedProblems(
+      await readFile(join(blocker, UBO_SEED), "utf8").catch(() => null),
+      await readFile(join(blocker, "js", "start.js"), "utf8").catch(() => ""),
+      await readFile(join(blocker, "js", "storage.js"), "utf8").catch(() => ""),
+    );
     if (seeding.length) throw new Error(`the packaged uBlock Origin is not seeded: ${seeding.join("; ")}`);
     let last;
     const state = await until(async () => {

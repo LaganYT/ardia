@@ -29,6 +29,8 @@ export const NOT_ON_WINDOWS_YET = {
   mediaCaptureSourceId: answeredWithoutWindows("mediaCaptureSourceId", null),
   notificationAction: answeredWithoutWindows("notificationAction", undefined),
   siteData: answeredWithoutWindows("siteData", null),
+  armElementPick: answeredWithoutWindows("armElementPick", null),
+  takeElementPick: answeredWithoutWindows("takeElementPick", false),
   zap: answeredWithoutWindows("zap", undefined),
 } satisfies Partial<EnginePageView>;
 

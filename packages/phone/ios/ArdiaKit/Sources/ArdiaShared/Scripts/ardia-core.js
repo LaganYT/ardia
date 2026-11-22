@@ -30,7 +30,7 @@ __define("packages/core/src/mobile.ts", function (exports, __require) {
 const { BANG_LIST, BANG_LIST_UNICODE } = __require("packages/core/src/bangList.ts");
 const { bangDocument, bangTable, findBang, joinBangTables, readBangDocument, slimBangs } = __require("packages/core/src/bangs.ts");
 const { cleanUrl } = __require("packages/core/src/cleanUrl.ts");
-const { allEngines, engineById, parseSuggestions, suggestRequestUrl } = __require("packages/core/src/engines.ts");
+const { allEngines, engineById, parseSuggestions, suggestRequestUrl, validSearchTemplate } = __require("packages/core/src/engines.ts");
 const { breadcrumb, fixupUrl, searchUrlFor, urlForDisplay } = __require("packages/core/src/omnibox.ts");
 const { findScope } = __require("packages/core/src/siteSearch.ts");
 const { buildSuggestions, prepareSuggestions } = __require("packages/core/src/suggest.ts");
@@ -94,7 +94,7 @@ function mobileSetSources(next                  )          {
 
 function mobileSetSearch(search              )                                                               {
   const list = allEngines(search.customEngines ?? []);
-  if (search.customUrl?.includes("%s")) list.push({ id: "custom", name: "Custom", keyword: "custom", url: search.customUrl, custom: true });
+  if (validSearchTemplate(search.customUrl)) list.push({ id: "custom", name: "Custom", keyword: "custom", url: search.customUrl, custom: true });
   engines = list;
   engine = engineById(engines, search.engineId ?? undefined);
   return { id: engine.id, name: engine.name, url: engine.url, suggests: Boolean(engine.suggestUrl) };
@@ -1045,6 +1045,9 @@ function markdownLink(title        , url        )         {
 });
 __define("packages/core/src/engines.ts", function (exports, __require) {
   __export(exports, "BUILT_IN_ENGINES", () => BUILT_IN_ENGINES);
+  __export(exports, "validSearchTemplate", () => validSearchTemplate);
+  __export(exports, "customEngineFrom", () => customEngineFrom);
+  __export(exports, "customEnginesFrom", () => customEnginesFrom);
   __export(exports, "allEngines", () => allEngines);
   __export(exports, "extensionEngineId", () => extensionEngineId);
   __export(exports, "controllingExtensionEngine", () => controllingExtensionEngine);
@@ -1145,8 +1148,20 @@ const BUILT_IN_ENGINES                          = [
   },
 ];
 
+const validSearchTemplate = (url         )                => typeof url === "string" && /^https?:\/\/[^/?#\s]+/i.test(url) && url.includes("%s");
+
+function customEngineFrom(raw         )                            {
+  if (!raw || typeof raw !== "object") return null;
+  const { id, name, keyword, url } = raw                           ;
+  if (typeof id !== "string" || typeof name !== "string" || typeof keyword !== "string" || !validSearchTemplate(url)) return null;
+  return { id, name, keyword, url };
+}
+
+const customEnginesFrom = (raw         )                       =>
+  Array.isArray(raw) ? raw.flatMap((e) => customEngineFrom(e) ?? []) : [];
+
 function allEngines(custom                                = [], extension                                   = [])                 {
-  const engines                 = [...BUILT_IN_ENGINES, ...custom.map((e) => ({ ...e, custom: true }))];
+  const engines                 = [...BUILT_IN_ENGINES, ...customEnginesFrom(custom).map((e) => ({ ...e, custom: true }))];
   const seen = new Set        ();
   for (const e of extension) {
     if (seen.has(e.extensionId)) continue;
@@ -1176,7 +1191,7 @@ function engineById(engines                         , id                    )   
 const searchUrl = (engine                           , query        ) => searchUrlFor(engine.url, query);
 
 const suggestRequestUrl = (engine              , query        ) =>
-  engine.suggestUrl && query.trim() ? searchUrlFor(engine.suggestUrl, query) : null;
+  engine.suggestUrl && !engine.custom && query.trim() ? searchUrlFor(engine.suggestUrl, query) : null;
 
 const engineHost = (engine                           ) => hostOf(engine.url.replace(/%s/g, "q"));
 

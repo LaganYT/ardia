@@ -364,11 +364,12 @@ internal class WebViewPage(
             }
         }
         lastCaptureRoute = topCapture.route
-        val topColor = ToneSampler.dominant(PageCapture.pixels(topCapture.bitmap))
-        val bottomColor = ToneSampler.dominant(PageCapture.pixels(bottomCapture.bitmap))
+        val topPixels = PageCapture.pixels(topCapture.bitmap)
+        val bottomPixels = PageCapture.pixels(bottomCapture.bitmap)
         topCapture.bitmap.recycle()
         bottomCapture.bitmap.recycle()
-        if (topColor == null && bottomColor == null) null else PageTone(topColor, bottomColor)
+        val tone = PageTone(ToneSampler.dominant(topPixels), ToneSampler.dominant(bottomPixels), ToneSampler.shade(topPixels), ToneSampler.shade(bottomPixels))
+        if (tone == PageTone()) null else tone
     }
 
     private suspend fun sampleBand(web: WebView, region: Rect, preferred: CaptureRoute): Capture? {

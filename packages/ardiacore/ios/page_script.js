@@ -1903,20 +1903,6 @@
 
   if (!isTop) return receive;
 
-  let contextMenuAt = null;
-  addEventListener(
-    "contextmenu",
-    (e) => {
-      if (e.isTrusted) contextMenuAt = { x: e.clientX, y: e.clientY, at: performance.now() };
-    },
-    { capture: true, passive: true },
-  );
-  document.addEventListener("ardia-hide-element", () => {
-    const asked = contextMenuAt;
-    contextMenuAt = null;
-    if (asked && performance.now() - asked.at < 60000) send("hideElement", { x: asked.x, y: asked.y });
-  });
-
   const parse = (css) => {
     if (!css) return null;
     if (/^rgba?\(/.test(css)) {

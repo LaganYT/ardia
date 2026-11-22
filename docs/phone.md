@@ -755,6 +755,11 @@ off in the lab`.
 sync20b; `--no-r8` builds the unshrunk control.
 The keep rules are in `apps/phone/android/app/proguard-rules.pro`. R8's reports (`mapping.txt`, `usage.txt`,
 `seeds.txt`, `configuration.txt`) land in `<name>-r8/` beside the APK in `/tmp/ardia-phone`.
+ML Kit finds its parts through Firebase's `ComponentRegistrar` classes, made by reflection from their no-argument
+constructor. R8 dropped `CommonComponentRegistrar`'s, so every release APK through 1.0.3-nightly.1 logged
+`NoSuchMethodException: CommonComponentRegistrar.<init>` at launch and Gemini Nano never started, even on phones
+Google lists. The rules keep every registrar's constructor and all of `com.google.mlkit` and
+`com.google.android.gms.internal.mlkit_*`.
 `apps/phone/test/r8/check-names.py <r8 apk> <unshrunk apk>` checks that what Android and the JavaScript reach by
 name survived. R8 renames the libraries' classes, so a crash's stack trace names classes like `a.b.c`: run
 `~/Library/Android/sdk/cmdline-tools/latest/bin/retrace <name>-r8/mapping.txt <trace.txt>` (or paste the trace into
@@ -2422,30 +2427,33 @@ Not audited at all: Compose's `SyncSetupContent` internals inside onboarding.
   counts only the open Duo's squeeze. This measures
   collapse use, not frame smoothness. Smoothness and viewport resize counts still need real-device captures.
 
-- The page under the bar (the owner's decision, 2026-11-16).
+- The page under the bar (the owner's decision, 2026-11-16, revised 2026-11-22).
   - **iPhone:** the page runs full screen under the glass bar, and WebKit gets the covered edges as
     `obscuredContentInsets`, so fixed footers and the page's last lines stay above the bar.
-  - **Android:** the page stops at the top band and at the bar, and the bands it doesn't cover are filled with the
-    page's own top and bottom tones, the colour iPhone shows under its glass. Android's WebView has no
-    obscured-insets equivalent. Only pages that opt in with `viewport-fit=cover` on WebView 140 and later get the
-    insets, as `env(safe-area-inset-*)`. A full-screen page would hide most sites' fixed footers and the last lines of
-    every page under the bar, and a browser mustn't.
+  - **Android, with Collapse Bottom Bar on (the default):** the page runs full screen under the bar and the host
+    pill, as on iPhone, and the bar's base fades over it as it does there. The page is never resized while
+    scrolling, so no flat band shows behind the pill. Android's WebView has no obscured-insets equivalent (only
+    `viewport-fit=cover` pages on WebView 140 and later get `env(safe-area-inset-*)`), so a fixed footer sits
+    under the bar until a scroll down folds it to the pill, and the page's last lines sit under the pill's base.
+    The owner chose that over the band on 2026-11-22.
+  - **Android, with Collapse Bottom Bar off:** the bar never moves, so the page stops at its top and the band
+    under it takes the page's bottom tone; otherwise the page's end could never scroll clear of it.
   - **One shape in JavaScript:** `pageObscuresInsets()` is true on both, and the bar code passes the same
-    `obscuredInsets` and `toneInsets` on both. It also passes `obscuredColors`, the colours its own bars use: the
-    page's remembered tone, or the theme's surface before it has one.
+    `obscuredInsets` and `toneInsets` on both (`obscuredBottom` in `lib/barCollapse.ts`). It also passes
+    `obscuredColors`, the colours its own bars use: the page's remembered tone, or the theme's surface before it
+    has one.
   - **What Android's page view does with them** (`PageView`, `PageBands`):
     - it lays the WebView out between the bands and paints the bands in those colours;
-    - a collapse or expand changes only transforms and opacity while scrolling. A bottom-only viewport change
-      waits 300 ms for the toolbar's fold and 120 ms without WebView scroll movement, including a fling,
-      with no finger still on the page. Only the latest endpoint is applied, once. Fixed footers and the page's
-      end then fit above the settled bar or pill. Top insets, view size changes, Find, search, full-screen video
-      and turning collapse off apply their viewport clearance immediately. A pending change belongs to its
-      page and WebView, and is cancelled when either is replaced or detached;
     - it samples the tone at the WebView's own edge;
     - it composes deck snapshots with the bands, so a card is the page as shown.
-  - **Revisit** if Android's WebView gains an equivalent of `obscuredContentInsets`, or a way to keep fixed and
-    bottom-anchored content clear of an overlay for every page. Then run the page under the bar as iPhone does and
-    drop the bands.
+  - **The tone under the bars on Android** (2026-11-22): each sampled edge also keeps its strip's commonest colour,
+    even when text or images keep any one colour from a third of it (`ToneSampler.shade`). The theme colour, the
+    page's background colour and earlier samples are used only when they are on the same side of dark as that
+    shade, so a site that declares a light `theme-color` but draws dark (Wikipedia at night) gets dark bars and a dark
+    fade. An edge the latest sample can't tell keeps the last one sampled on the same document. iPhone still puts the
+    theme colour first at the top.
+  - **Revisit** if Android's WebView gains an equivalent of `obscuredContentInsets`: then hand it the bar's height
+    as iPhone does, so fixed footers and the page's end clear the bar too.
 - Long press on links and images in a page: iPhone shows WebKit's system menu with Open in New Tab, Open in Background, Copy Link, Share… and Download Linked File, as the SwiftUI app does; Android shows the app's drawn menu from `page.longPress` (c317c5b8f).
 - Voice screen status-bar icons: always light; Compose takes them from the light-mode tint although the screen is always dark (3a9ca2f10, `lib/statusInk.ts`).
 - A link's `download="name"`: iPhone saves under WebKit's `suggestedFilename` as given (`DownloadManager.destination`), which WebKit fills from the response's Content-Disposition or the link's `download` attribute; Android names a download from its URL (`DownloadRules.linkName`, `URLUtil.guessFileName`) and, for a link with no type or disposition, from the response, as Download Linked File does, and reads no `download` attribute. A known gap, not to be added on Android without a decision (`SystemDownloadsTest`).

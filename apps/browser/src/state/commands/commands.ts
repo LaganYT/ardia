@@ -225,8 +225,8 @@ export function runCommand({ command, arg, windowId: given }: CommandEvent, { st
       return page ? void jumpToSelection(page.id) : undefined;
     case "useSelectionForFind":
       if (!page || !web) return;
-      return void web.evaluate<string>("post('result', JSON.stringify(String(getSelection() || '').trim().slice(0, 500)))").then((query) => {
-        if (query) openFind(page.id, { query });
+      return void web.evaluate<unknown>("post('result', JSON.stringify(String(getSelection() || '').trim().slice(0, 500)))").then((query) => {
+        if (typeof query === "string" && query) openFind(page.id, { query: query.slice(0, 500) });
       });
     case "findNext":
     case "findPrevious":

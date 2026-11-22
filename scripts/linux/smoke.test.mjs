@@ -101,11 +101,14 @@ test("the packaged uBlock Origin saves its engine soon after a launch and waits 
 
 test("the packaged uBlock Origin carries a seed that its start sequence loads", () => {
   const start = "µb.isReadyPromise = (async function start() {\n    try {\n        await ardiaSeedFromPackage();\n";
-  const seed = JSON.stringify({ storage: { version: "1.76.0b25", selectedFilterLists: ["user-filters", "easylist"], "cache/selfie/staticMain": "a", "cache/selfie/staticNetFilteringEngine": "b" } });
-  assert.deepEqual(uboSeedProblems(seed, start), []);
-  assert.deepEqual(uboSeedProblems(null, start), ["no readable ardia-seed/storage.json"]);
-  assert.deepEqual(uboSeedProblems(seed, "µb.isReadyPromise = (async function start() {"), ["js/start.js doesn't load the seed"]);
-  assert.deepEqual(uboSeedProblems(JSON.stringify({ storage: { version: "1.76.0b25", selectedFilterLists: [] } }), start), ["the seed has no cache/selfie/staticMain", "the seed has no cache/selfie/staticNetFilteringEngine"]);
+  const keys = ["Main", "NetFilteringEngine", "ExtFilteringEngine"].map((component) => `cache/selfie/staticArdia2${component}`);
+  const storageSource = keys.map((key) => `io.toCache('${key.slice("cache/".length)}', {});`).join("\n");
+  const base = { version: "1.76.4.29", selectedFilterLists: ["user-filters", "easylist"] };
+  const seed = JSON.stringify({ storage: { ...base, ...Object.fromEntries(keys.map((key) => [key, "saved"])) } });
+  assert.deepEqual(uboSeedProblems(seed, start, storageSource), []);
+  assert.deepEqual(uboSeedProblems(null, start, storageSource), ["no readable ardia-seed/storage.json"]);
+  assert.deepEqual(uboSeedProblems(seed, "µb.isReadyPromise = (async function start() {", storageSource), ["js/start.js doesn't load the seed"]);
+  assert.deepEqual(uboSeedProblems(JSON.stringify({ storage: base }), start, storageSource), keys.map((key) => `the seed has no ${key}`));
 });
 
 test("the gate takes a tarball, a .deb or an AppImage and refuses anything else", () => {

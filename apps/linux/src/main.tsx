@@ -16,7 +16,6 @@ import { peekShown } from "../../browser/src/state/windows/dockMotion";
 import { onPageCovered } from "./shims/web/HostWebView";
 import { toolbarMoving } from "./AutoHideToolbarRegion";
 import { copyLinkToSelection, jumpToSelection, replaceInField, usePageSelection } from "../../browser/src/state/site/selection";
-import { startUnsafeHidingRuleSweep } from "../../browser/src/state/site/hiddenElements";
 import { webviews } from "../../browser/src/platform/webviews";
 import { startMemoryTrim } from "../../browser/src/state/tabs/memoryTrim";
 import { startProfileUnloading } from "../../browser/src/state/profiles/profileUnloading";
@@ -126,7 +125,6 @@ async function start() {
   watchWindowDecorations(ardiaHost, windowId);
   const capabilities = linuxCapabilities(ardiaHost);
   if (capabilities.cliControl) startProgramControl();
-  if (capabilities.hiddenElements && !utility) startUnsafeHidingRuleSweep();
   await startLinuxShortcuts(ardiaHost);
   if (utility) {
     const persistence = startHostPersistence(ardiaHost, useBrowser, stored ?? {}, createUtilitySessionSnapshot(useBrowser.getState(), saved ?? {}));

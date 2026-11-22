@@ -137,7 +137,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
   useEffect(() => (staged && !collapse.hidden ? reportBarPill() : undefined), [staged, collapse.hidden]);
   const layout = underBar ? { pageBottom: 0, toneBottom: design === "material" ? 0 : barSlotHeight } : pageInsets(collapse.collapses, barSlotHeight, browseLayout.pageOverlap);
   const fullscreen = usePages((s) => s.fullscreen[tab.id] ?? false);
-  const coveredBottom = design === "material" ? materialCoveredBottom(collapse.collapses, barSlotHeight, fullscreen || finding || searching) : obscuredBottom({ follows: Platform.OS === "android", bar: barSlotHeight, pill: barCenterFromBottom(insets.bottom, design) - floatingBarLayout.control / 2 + hostPillLayout.height, collapsed: collapse.collapsed, cleared: fullscreen || finding || searching });
+  const coveredBottom = obscuredBottom({ insetsScroll: Platform.OS === "ios", bar: barSlotHeight, collapses: collapse.collapses, cleared: fullscreen || finding || searching });
   const obscured = underBar ? { top: insets.top, bottom: coveredBottom } : undefined;
   const materialSummaryBottom = fullscreen || searching ? insets.bottom : collapse.collapsed ? insets.bottom + materialBottomBar.inset + materialBarPill.height : barSlotHeight;
   const summaryBottomInset = design === "material" ? materialSummaryBottom : undefined;
@@ -202,7 +202,7 @@ export const BrowsingScreen = memo(function BrowsingScreen({ tab }: { tab: Brows
         <Animated.View style={[StyleSheet.absoluteFill, styles.outgoing, { backgroundColor: theme.surface }, pager.outgoing]}>
           {underBar ? null : <Animated.View testID="pageStatusStrip" style={[{ height: insets.top }, statusStyle]} />}
           <View testID="pageArea" style={[styles.page, { marginBottom: layout.pageBottom }]}>
-            <PageSurface key={tab.id} tab={tab} toneBottom={layout.toneBottom} obscured={obscured} bottomInsetTransitionMs={Platform.OS === "android" && collapse.collapses && design === "redesigned" && !fullscreen && !finding && !searching ? hostPillLayout.foldSettleMs : 0} summaryBottomInset={summaryBottomInset} pinsSafeArea={pulls ? true : undefined} />
+            <PageSurface key={tab.id} tab={tab} toneBottom={layout.toneBottom} obscured={obscured} summaryBottomInset={summaryBottomInset} pinsSafeArea={pulls ? true : undefined} />
             <PageCover key={`${tab.id}:cover`} tab={tab} />
             <PageFailureView key={`${tab.id}:failure`} tabId={tab.id} />
           </View>
@@ -321,8 +321,6 @@ function PageStack({ pulledTab, barTop, children }: { pulledTab: string | null; 
   if (pulledTab) return <PagePull tabId={pulledTab} barTop={barTop}>{children}</PagePull>;
   return children;
 }
-
-const materialCoveredBottom = (folds: boolean, bar: number, cleared: boolean) => (folds || cleared ? 0 : bar);
 
 function useBarCollapse(tabId: string, isPrivate: boolean, finding: boolean, design: Design, height: number, squeezes: boolean) {
   const folds = design === "redesigned" || design === "material";

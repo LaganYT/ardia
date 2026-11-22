@@ -85,23 +85,17 @@ test("what this version sends for custom engines is the shape older versions acc
   assert.ok(sent.every((e) => ["id", "name", "keyword", "url"].every((k) => typeof e[k] === "string")));
 });
 
-test("the suggestion transport refuses any endpoint that isn't a built-in or installed extension engine's", async () => {
-  const { browserSuggestFetch, suggestUrlAllowed } = await import("../omnibox/suggestTransport.ts");
-  const extension = [{ profile: "", extensionId: "e", extensionName: "E", name: "E", keyword: "e", url: "https://ext.example/s?q=%s", suggestUrl: "https://ext.example/suggest?q=%s", isDefault: false }];
-  assert.equal(suggestUrlAllowed("https://duckduckgo.com/ac/?q=typed&type=list", []), true);
-  assert.equal(suggestUrlAllowed("https://ext.example/suggest?q=typed", extension), true);
-  assert.equal(suggestUrlAllowed("https://ext.example/suggest?q=typed", []), false);
-  assert.equal(suggestUrlAllowed("http://127.0.0.1:9/collect?q=typed", extension), false);
-  assert.equal(suggestUrlAllowed("https://www.google.com.example/complete/search?q=typed", []), false);
-  const hostless = [{ ...extension[0], suggestUrl: "https://%s.example/" }];
-  assert.equal(suggestUrlAllowed("https://typed.example/", hostless), false);
+test("the suggestion transport refuses a custom engine's endpoint and keeps built-in ones", async () => {
+  const { browserSuggestFetch } = await import("../omnibox/suggestTransport.ts");
+  const ddg = BUILT_IN_ENGINES.find((e) => e.id === "duckduckgo");
+  const custom = allEngines([received]).find((e) => e.custom);
   let asked = 0;
   globalThis.acTestSuggest = async () => (asked++, { status: 200, body: "[]" });
   try {
-    const refused = await browserSuggestFetch("")("http://127.0.0.1:9/collect?q=typed", { signal: new AbortController().signal });
+    const refused = await browserSuggestFetch("")("http://127.0.0.1:9/collect?q=typed", { signal: new AbortController().signal, engine: { ...custom, suggestUrl: received.suggestUrl } });
     assert.equal(refused.ok, false);
     assert.equal(asked, 0);
-    await browserSuggestFetch("")("https://duckduckgo.com/ac/?q=typed&type=list", { signal: new AbortController().signal });
+    await browserSuggestFetch("")("https://duckduckgo.com/ac/?q=typed&type=list", { signal: new AbortController().signal, engine: ddg });
     assert.equal(asked, 1);
   } finally {
     globalThis.acTestSuggest = undefined;

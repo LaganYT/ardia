@@ -37,7 +37,7 @@ import { SiteExtensions } from "./SiteExtensions";
 import { SiteBoosts } from "./SiteBoosts";
 import { canBoostTab, newBoostForTab } from "../../state/boostUi/actions";
 import { TranslateRows } from "./TranslateControls";
-import { ReaderRow } from "./ReaderControls";
+import { ReaderLookRow, ReaderRow } from "./ReaderControls";
 import { ZoomStepper } from "./ZoomControls";
 import { blockerLabel, choiceTitle, featuredPermissions, permissionValue, readSiteSettings, setSitePermission, sitePermissionsFor, type SitePermission } from "../../state/site/siteControls";
 import { isWebPageUrl } from "../../lib/url";
@@ -297,6 +297,7 @@ export function SiteControlsPanel({
               <>
                 <MenuSeparator />
                 <ReaderRow tabId={tabId} onClose={close} />
+                <ReaderLookRow tabId={tabId} />
                 <TranslateRows tabId={tabId} onClose={close} />
                 {otherPermissions.map((p) => (
                   <MenuRow

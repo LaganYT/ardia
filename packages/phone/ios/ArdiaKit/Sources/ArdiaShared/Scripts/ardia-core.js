@@ -3431,7 +3431,7 @@ __define("packages/core/src/suggestFetcher.ts", function (exports, __require) {
 const { parseRemoteSuggestions, suggestReplyJson, suggestRequestUrl } = __require("packages/core/src/engines.ts");
 
                                                               
-                                                                                               
+                                                                                                                      
 
                               
                                                                                                                      
@@ -3483,7 +3483,7 @@ function createSuggestFetcher({
         timer = undefined;
         const controller = new AbortController();
         inFlight = controller;
-        fetch(url, { signal: controller.signal })
+        fetch(url, { signal: controller.signal, engine })
           .then(async (res) => {
             if (!res.ok) return none;
             try {

@@ -58,8 +58,8 @@ export const SETTING_SPECS = {
   customSearchEngines: shaped<CustomSearchEngine[]>([], (v) => Array.isArray(v) && v.every((e) => hasStrings(e, ["id", "name", "keyword", "url"])), engineRecords(["id", "name", "keyword", "url"]), SYNCED),
   extensionSearchEngines: shaped<ExtensionSearchEngine[]>(
     [],
-    (v) => Array.isArray(v) && v.every((e) => hasStrings(e, ["profile", "extensionId", "name", "keyword", "url"])),
-    engineRecords(["profile", "extensionId", "name", "keyword", "url"]),
+    (v) => Array.isArray(v) && v.every((e) => hasStrings(e, ["profile", "extensionId", "extensionName", "name", "keyword", "url"]) && (e.suggestUrl === undefined || isString(e.suggestUrl)) && typeof e.isDefault === "boolean"),
+    { type: "array", items: { type: "object", properties: { ...Object.fromEntries(["profile", "extensionId", "extensionName", "name", "keyword", "url", "suggestUrl"].map((k) => [k, { type: "string" }])), isDefault: { type: "boolean" } }, required: ["profile", "extensionId", "extensionName", "name", "keyword", "url", "isDefault"] } },
   ),
   searchSuggestions: flag(true, SYNCED),
   commandBarHistory: flag(true, SYNCED),

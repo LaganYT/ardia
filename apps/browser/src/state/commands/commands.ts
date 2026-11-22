@@ -156,7 +156,7 @@ export function runCommand({ command, arg, windowId: given }: CommandEvent, { st
   const page = tab?.url ? tab : undefined;
   const web = tabId ? webviews.get(tabId) : undefined;
   const ui = s.windowUi[windowId];
-  if (runBoostCommand(command, windowId, tabId) || (page && (runHidingCommand(command, page.id) || runReaderCommand(command, page.id, mayWrite)))) return;
+  if (runBoostCommand(command, windowId, tabId) || (page && (runHidingCommand(command, page.id) || runReaderCommand(command, page.id)))) return;
   if (!targeted && runSidebarCommand(command, arg, windowId)) return;
 
   switch (command) {

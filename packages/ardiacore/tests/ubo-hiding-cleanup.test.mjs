@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import vm from "node:vm";
 
 const script = readFileSync(new URL("../scripts/ubo.sh", import.meta.url), "utf8");
 const cleanup = /^hiding_cleanup = r'''\n([\s\S]*?)^'''$/m.exec(script)?.[1];
@@ -65,49 +66,77 @@ const MARKER = "*##+js(set-constant, ardiaFixtureMarker, 1)";
 
 const FIXTURES = [
   {
-    name: "a: a comment-wrapped rule as 0.2.47 stored it, carriage returns inside",
+    name: "a: a comment-wrapped rule as 0.2.47 stored it is commented out part by part, in place",
     text: `||ads.example^\nnews.test##.promo\n127.0.0.1##x/*\r${MARKER}\r*/`,
-    want: `||ads.example^\nnews.test##.promo\n! 127.0.0.1##x/*\n! ${MARKER}\n! */`,
+    want: `||ads.example^\nnews.test##.promo\n! 127.0.0.1##x/*\r! ${MARKER}\r! */`,
     spans: 1,
     disabled: 3,
   },
   {
     name: "a: an unclosed comment as 0.2.47 stored it",
     text: `news.test##.promo\n127.0.0.1##x/*\r${MARKER}`,
-    want: `news.test##.promo\n! 127.0.0.1##x/*\n! ${MARKER}`,
+    want: `news.test##.promo\n! 127.0.0.1##x/*\r! ${MARKER}`,
     spans: 1,
     disabled: 2,
   },
   {
     name: "a: a forgiving :is() as 0.2.47 stored it",
     text: `127.0.0.1##x:is(\r${MARKER}\r)\nnews.test##.promo`,
-    want: `! 127.0.0.1##x:is(\n! ${MARKER}\n! )\nnews.test##.promo`,
+    want: `! 127.0.0.1##x:is(\r! ${MARKER}\r! )\nnews.test##.promo`,
     spans: 1,
     disabled: 3,
   },
   {
     name: "a: a continued attribute string as 0.2.47 stored it",
     text: `127.0.0.1##[a="\\\r${MARKER}\\\r"]\nnews.test##.promo`,
-    want: `! 127.0.0.1##[a="\\\n! ${MARKER}\\\n! "]\nnews.test##.promo`,
+    want: `! 127.0.0.1##[a="\\\r! ${MARKER}\\\r! "]\nnews.test##.promo`,
     spans: 1,
     disabled: 3,
   },
   {
     name: "a: in a file with CRLF line ends",
     text: `news.test##.promo\r\n127.0.0.1##x/*\r${MARKER}\r*/\r\nlater.test##.banner\r\n`,
-    want: `news.test##.promo\r\n! 127.0.0.1##x/*\r\n! ${MARKER}\r\n! */\r\nlater.test##.banner\r\n`,
+    want: `news.test##.promo\r\n! 127.0.0.1##x/*\r! ${MARKER}\r! */\r\nlater.test##.banner\r\n`,
     spans: 1,
     disabled: 3,
   },
   {
     name: "a: a plain hide inside the record keeps working",
     text: `127.0.0.1##x/*\rnews.test##.promo\r${MARKER}`,
-    want: `! 127.0.0.1##x/*\nnews.test##.promo\n! ${MARKER}`,
+    want: `! 127.0.0.1##x/*\rnews.test##.promo\r! ${MARKER}`,
     spans: 1,
     disabled: 2,
   },
   {
-    name: "b: the comment-wrapped rule after My filters was saved again with line feeds",
+    name: "a: a scriptlet planted after a plain hide behind a carriage return is commented out where it stands",
+    text: `news.test##.promo\nexample.test##.banner\r${MARKER}\nlater.test##.banner`,
+    want: `news.test##.promo\nexample.test##.banner\r! ${MARKER}\nlater.test##.banner`,
+    spans: 1,
+    disabled: 1,
+  },
+  {
+    name: "a: the same in a file with CRLF line ends",
+    text: `example.test##.banner\r${MARKER}\r\nlater.test##.banner\r\n`,
+    want: `example.test##.banner\r! ${MARKER}\r\nlater.test##.banner\r\n`,
+    spans: 1,
+    disabled: 1,
+  },
+  {
+    name: "a: an HTML filter or a rewriting network option behind a carriage return is commented out too",
+    text: "example.test##.banner\rexample.test##^script:has-text(x)\r||ads.example^$redirect=noop.js\r||ads.example^$third-party",
+    want: "example.test##.banner\r! example.test##^script:has-text(x)\r! ||ads.example^$redirect=noop.js\r||ads.example^$third-party",
+    spans: 1,
+    disabled: 2,
+  },
+  {
+    name: "a: a directive inside a carriage-return record stays where uBlock Origin reads it",
+    text: `example.test##.banner\r!#if false\r${MARKER}\nkept1.example\n!#endif\nkept2.example`,
+    want: `example.test##.banner\r!#if false\r! ${MARKER}\nkept1.example\n!#endif\nkept2.example`,
+    spans: 1,
+    disabled: 1,
+  },
+  {
+    name: "b: the comment-wrapped rule saved again with line feeds: the rule, the scriptlet and the closer are commented out",
     text: `news.test##.promo\n127.0.0.1##x/*\n${MARKER}\n*/\nlater.test##.banner`,
     want: `news.test##.promo\n! 127.0.0.1##x/*\n! ${MARKER}\n! */\nlater.test##.banner`,
     spans: 1,
@@ -121,11 +150,11 @@ const FIXTURES = [
     disabled: 3,
   },
   {
-    name: "b: a comment closed and opened again",
+    name: "b: a comment closed and opened again: blocking-pattern fragments stay",
     text: `127.0.0.1##x/*\n*/\n.y/*\n${MARKER}\n*/\nlater.test##.banner`,
-    want: `! 127.0.0.1##x/*\n! */\n! .y/*\n! ${MARKER}\n! */\nlater.test##.banner`,
+    want: `! 127.0.0.1##x/*\n! */\n.y/*\n! ${MARKER}\n! */\nlater.test##.banner`,
     spans: 1,
-    disabled: 5,
+    disabled: 4,
   },
   {
     name: "b: the forgiving :is() saved again with line feeds",
@@ -142,24 +171,44 @@ const FIXTURES = [
     disabled: 3,
   },
   {
-    name: "b: an unclosed comment saved again: lines it may have swallowed are commented out, plain hides and notes stay",
-    text: `127.0.0.1##x/*\n${MARKER}\nlater.test##.banner\n||ads.example^\n! a note`,
-    want: `! 127.0.0.1##x/*\n! ${MARKER}\nlater.test##.banner\n! ||ads.example^\n! a note`,
+    name: "b: a closed span keeps the blocking rules and conditional sections inside it working",
+    text: `127.0.0.1##x/*\n${MARKER}\n!#if env_chromium\n||cond.example^\n!#endif\n*/\n||after.example^`,
+    want: `! 127.0.0.1##x/*\n! ${MARKER}\n!#if env_chromium\n||cond.example^\n!#endif\n! */\n||after.example^`,
     spans: 1,
     disabled: 3,
   },
   {
-    name: "b: an unclosed comment only reaches 1,024 characters, the longest rule 0.2.47 saved",
-    text: `127.0.0.1##x/*\n${MARKER}\nlater.test##.${"a".repeat(1000)}\nexample.test##+js(set-constant, userFlag, 1)`,
-    want: `! 127.0.0.1##x/*\n! ${MARKER}\nlater.test##.${"a".repeat(1000)}\nexample.test##+js(set-constant, userFlag, 1)`,
+    name: "b: a scriptlet continued on an indented line is commented out as one filter",
+    text: `127.0.0.1##x/*\n*##+js(set-constant, ardiaFixtureMarker, \\\n    1)\n*/\n||after.example^`,
+    want: `! 127.0.0.1##x/*\n! *##+js(set-constant, ardiaFixtureMarker, \\\n    1)\n! */\n||after.example^`,
     spans: 1,
-    disabled: 2,
-    neighbours: 1,
+    disabled: 3,
   },
   {
-    name: "b: a hand-written rule ending in an open comment disables the lines after it but deletes nothing",
+    name: "b: a span left open has no end to prove, so only its own line is commented out",
+    text: `127.0.0.1##x/*\n${MARKER}\nlater.test##.banner\n||ads.example^\n! a note`,
+    want: `! 127.0.0.1##x/*\n${MARKER}\nlater.test##.banner\n||ads.example^\n! a note`,
+    spans: 1,
+    disabled: 1,
+  },
+  {
+    name: "b: a continued filter after an open span keeps working",
+    text: `127.0.0.1##x/*\n${MARKER}\nexample.test##.cont \\\n    .tinued`,
+    want: `! 127.0.0.1##x/*\n${MARKER}\nexample.test##.cont \\\n    .tinued`,
+    spans: 1,
+    disabled: 1,
+  },
+  {
+    name: "b: a hand-written rule ending in an open comment leaves the rules after it alone",
     text: "example.test##.banner/*\n||ads.example^\nexample.test##+js(noeval)",
-    want: "! example.test##.banner/*\n! ||ads.example^\n! example.test##+js(noeval)",
+    want: "! example.test##.banner/*\n||ads.example^\nexample.test##+js(noeval)",
+    spans: 1,
+    disabled: 1,
+  },
+  {
+    name: "b: with a closer after it, only the scriptlet and the closer go with it, and blocking rules stay",
+    text: "example.test##.banner/*\n||ads.example^\nexample.test##+js(noeval)\n*/",
+    want: "! example.test##.banner/*\n||ads.example^\n! example.test##+js(noeval)\n! */",
     spans: 1,
     disabled: 3,
   },
@@ -187,30 +236,9 @@ const FIXTURES = [
   {
     name: "d: a scriptlet after a hide in a carriage-return list looks the same as a planted one, so it is commented out, not deleted",
     text: "example.test##.banner\rdiv\rexample.test##+js(set-constant, userFlag, 1)",
-    want: "example.test##.banner\ndiv\n! example.test##+js(set-constant, userFlag, 1)",
+    want: "example.test##.banner\rdiv\r! example.test##+js(set-constant, userFlag, 1)",
     spans: 1,
     disabled: 1,
-  },
-  {
-    name: "a: a scriptlet planted after a plain hide behind a carriage return is commented out on its own line",
-    text: `news.test##.promo\nexample.test##.banner\r${MARKER}\nlater.test##.banner`,
-    want: `news.test##.promo\nexample.test##.banner\n! ${MARKER}\nlater.test##.banner`,
-    spans: 1,
-    disabled: 1,
-  },
-  {
-    name: "a: the same in a file with CRLF line ends",
-    text: `example.test##.banner\r${MARKER}\r\nlater.test##.banner\r\n`,
-    want: `example.test##.banner\r\n! ${MARKER}\r\nlater.test##.banner\r\n`,
-    spans: 1,
-    disabled: 1,
-  },
-  {
-    name: "a: an HTML filter or a rewriting network option behind a carriage return is commented out too",
-    text: "example.test##.banner\rexample.test##^script:has-text(x)\r||ads.example^$redirect=noop.js\r||ads.example^$third-party",
-    want: "example.test##.banner\n! example.test##^script:has-text(x)\n! ||ads.example^$redirect=noop.js\n||ads.example^$third-party",
-    spans: 1,
-    disabled: 2,
   },
   {
     name: "d: a carriage-return list of blocking rules and hides after a hide stays byte for byte",
@@ -257,4 +285,64 @@ test("the cleanup runs before the engines load, holds back My filters reads and 
   assert.match(script, /compiledMagic: 173,/);
   assert.match(script, /selfieMagic: 173,/);
   assert.match(script, /selfie\/staticArdia2/);
+});
+
+function startupFlow() {
+  const from = script.indexOf('"let ardiaCleanupGate = Promise.resolve();\\n"');
+  const to = script.indexOf('"µb.saveUserFilters = async function(content) {\\n"');
+  assert.ok(from > 0 && to > from, "ubo.sh has the startup cleanup flow");
+  return script
+    .slice(from, to)
+    .split("\n")
+    .map((line) => /^\s*"(.*)"\s*$/.exec(line)?.[1])
+    .filter((literal) => literal !== undefined)
+    .map((literal) => JSON.parse(`"${literal}"`))
+    .join("");
+}
+
+function runStartup({ content = null, backupDelayMs = 0 }) {
+  const writes = [];
+  const storage = {};
+  const context = {
+    console,
+    Promise,
+    setTimeout: (fn, ms) => setTimeout(fn, ms / 1000),
+    ubolog: () => {},
+    recordWrite: (text) => void writes.push(text),
+    vAPI: {
+      storage: {
+        get: async (key) => ({ [key]: storage[key] }),
+        set: async (bin) => {
+          await new Promise((r) => setTimeout(r, backupDelayMs));
+          Object.assign(storage, bin);
+        },
+      },
+    },
+    µb: {
+      userFiltersPath: "user-filters",
+      selfieManager: { destroy() {} },
+      removeCompiledFilterList() {},
+      ardiaCleanHidingRules: (text) => ({ text: text + "!", spans: 1, disabled: 1, neighbours: 0 }),
+    },
+  };
+  const io = `const io = { get: ${JSON.stringify(content)} === null ? () => new Promise(() => {}) : async () => ({ content: ${JSON.stringify(content)} }), put: async (key, text) => recordWrite(text) };`;
+  vm.runInNewContext(`${io}\n${startupFlow()}\nthis.start = () => µb.ardiaRemoveSplitHidingRules();`, context);
+  return { start: context.start, writes };
+}
+
+test("a storage call that never settles holds startup for the deadline only, and nothing is written after it", { timeout: 5000 }, async () => {
+  const stuck = runStartup({});
+  const started = Date.now();
+  await stuck.start();
+  assert.ok(Date.now() - started < 1000, "the gate opens at the deadline");
+  assert.deepEqual(stuck.writes, []);
+
+  const late = runStartup({ content: "example.test##x/*", backupDelayMs: 40 });
+  await late.start();
+  await new Promise((r) => setTimeout(r, 120));
+  assert.deepEqual(late.writes, [], "a cleanup that finishes its backup after the deadline leaves My filters alone");
+
+  const quick = runStartup({ content: "example.test##x/*" });
+  await quick.start();
+  assert.deepEqual(quick.writes, ["example.test##x/*!"], "a cleanup within the deadline writes once");
 });

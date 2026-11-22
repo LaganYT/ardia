@@ -17,10 +17,12 @@ import {
   noteElementPickerFromContextMenu,
   noteHiddenElementsRestored,
   noteHiddenElementWriteFailure,
+  noteUnsafeHidingRulesRemoved,
 } from "../telemetry/hiddenElementCounts";
 import { consentToken } from "../telemetry/client";
+import type { ConsentToken } from "../telemetry/choice";
 
-const HIDING_RULE = /^[a-z0-9.-]+##[^+^\s][^\n{}]*$/;
+const HIDING_RULE = /^[a-z0-9.-]+##(?![+^\s])(?!.*\/\*)[^\0-\x1f\x7f\x85\u2028\u2029{}]+$/;
 const MAX_FILTER = 1024;
 
 export type HiddenElement = { filter: string; host: string; selector: string; session: boolean };
@@ -62,8 +64,48 @@ const changed = () => useHiddenElements.setState((s) => ({ changes: s.changes + 
 
 const privateWindowOf = (profile: string) => (isIncognitoProfile(profile) ? profile.slice("incognito:".length, profile.indexOf("@")) : null);
 
+const UBLOCK_LINE_BREAK = /[\r\n]/;
+
+export const isUnsafeStoredRule = (filter: string) => UBLOCK_LINE_BREAK.test(filter);
+
+const swept = new Set<string>();
+
+const unsafeRulesIn = (profile: string) => getHiddenElements(profile).then((stored) => stored.filter(isUnsafeStoredRule));
+
+export async function removeUnsafeHidingRules(profile: string, consent: ConsentToken | null) {
+  if (swept.has(profile)) return;
+  swept.add(profile);
+  try {
+    const unsafe = await unsafeRulesIn(profile);
+    if (!unsafe.length) return;
+    await restoreElements(profile, unsafe);
+    const left = await unsafeRulesIn(profile);
+    noteUnsafeHidingRulesRemoved(unsafe.length - left.length, consent);
+    if (left.length) throw new Error("unsafe hiding rules are still saved");
+    changed();
+  } catch {
+    swept.delete(profile);
+    noteHiddenElementWriteFailure(consent);
+  }
+}
+
+function sweepProfilesOf(s: BrowserState, tabIds: Iterable<string>, consent: ConsentToken | null) {
+  for (const tabId of tabIds) {
+    const tab = s.tabs[tabId];
+    if (tab && canHideElements(s, tabId)) void removeUnsafeHidingRules(savedProfileOf(engineProfile(s, tab.profileId)), consent);
+  }
+}
+
+export function startUnsafeHidingRuleSweep() {
+  sweepProfilesOf(store(), Object.keys(store().tabs), consentToken());
+  return useBrowser.subscribeTo(["tabs"], (s, prev) => {
+    if (s.tabs !== prev.tabs) sweepProfilesOf(s, changedIds(s.tabs, prev.tabs), consentToken());
+  });
+}
+
 export function startHiddenElements() {
-  return useBrowser.subscribeTo(["windows"], (s, prev) => {
+  const stopSweeping = startUnsafeHidingRuleSweep();
+  const stopWatchingWindows = useBrowser.subscribeTo(["windows"], (s, prev) => {
     if (s.windows === prev.windows) return;
     const session = useHiddenElements.getState().session;
     const kept = Object.entries(session).filter(([profile]) => {
@@ -72,6 +114,10 @@ export function startHiddenElements() {
     });
     if (kept.length !== Object.keys(session).length) useHiddenElements.setState({ session: Object.fromEntries(kept) });
   });
+  return () => {
+    stopSweeping();
+    stopWatchingWindows();
+  };
 }
 
 const store = () => useBrowser.getState();

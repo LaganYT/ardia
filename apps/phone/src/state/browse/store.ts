@@ -4,6 +4,7 @@ import { HISTORY_RETENTION_MS } from "../history/historySummary";
 import { useLibrary } from "../library/store";
 import {
   clearTone,
+  isRefusedSnapshot,
   livePageIds,
   listenToPages,
   pageNavigation,
@@ -23,7 +24,7 @@ import { refreshDefaultBrowser } from "../settings/defaultBrowser";
 import { forgetPosition, saveTabPosition, watchFrontScroll } from "./positions";
 import { noteLocalChange, showSpace } from "../sync/store";
 import { spaceToShow, tabsInSpace } from "../tabs/spaces";
-import { currentPreferences, loadPreferences } from "../settings/store";
+import { currentPreferences, loadPreferences, setPreference } from "../settings/store";
 import type { VisitTransition, Visit } from "../store/browserDatabase";
 import { enterTarget, rowTarget, resolve, type TrayRow } from "../search/omnibox";
 import { applySearchEngine, dismissSearch, presentSearch, refreshSearchRows, searchState, useSearch, beginPasteRead, endPasteRead } from "../search/store";
@@ -69,9 +70,9 @@ import { syncOffered } from "../../platform/system";
 export type Surface = "start" | "browsing" | "deck";
 export type Sheet = "archive" | "spaces" | null;
 
-type BrowseState = { surface: Surface; sheet: Sheet; deckEntrance: string | null; frozenOrder: string[] | null; opening: string | null; openingCardWidth: number | null; veiled: string | null; covered: string | null; leaving: string | null };
+type BrowseState = { surface: Surface; sheet: Sheet; deckEntrance: string | null; frozenOrder: string[] | null; opening: string | null; openingCardWidth: number | null; veiled: string | null; covered: string | null; arriving: string | null; leaving: string | null };
 
-export const useBrowse = create<BrowseState>()(() => ({ surface: "start", sheet: null, deckEntrance: null, frozenOrder: null, opening: null, openingCardWidth: null, veiled: null, covered: null, leaving: null }));
+export const useBrowse = create<BrowseState>()(() => ({ surface: "start", sheet: null, deckEntrance: null, frozenOrder: null, opening: null, openingCardWidth: null, veiled: null, covered: null, arriving: null, leaving: null }));
 
 const lastVisits = new Map<string, Visit>();
 
@@ -212,7 +213,8 @@ export function beginOpeningTab(id: string, veiled = false, cardWidth: number | 
   showSpaceOf(id);
   setIncognito(isPrivateTab(currentTabs(), id));
   selectTabById(id);
-  useBrowse.setState({ opening: id, openingCardWidth: cardWidth, veiled: veiled ? id : null, covered: veiled ? id : null });
+  cancelArrivalWait();
+  useBrowse.setState({ opening: id, openingCardWidth: cardWidth, veiled: veiled ? id : null, covered: veiled ? id : null, arriving: null });
 }
 
 export function unveilOpeningPage(id: string) {
@@ -242,6 +244,8 @@ export function whenPageDrawn(id: string, capMs: number, then: (drawn: boolean) 
 export const pageDrawn = (id: string) => drawnWaiters.get(id)?.();
 
 export const OPENING_COVER_ID = "openingCover";
+
+export const ARRIVAL_COVER_ID = "pagerArrivalCover";
 
 export type CoverHidden = "drawn" | "cap" | "lost";
 
@@ -329,6 +333,7 @@ export function switchDeckIncognito() {
 export function toggleTrayIncognito() {
   const was = useTabs.getState().incognito;
   if (searchState().incognitoOnCancel === null) useSearch.setState({ incognitoOnCancel: was });
+  if (!was) countUsage("tray_incognito_switches");
   setIncognito(!was);
   refreshSearchRows();
 }
@@ -645,10 +650,48 @@ export function swipeOrder(): string[] {
   return [...kept, ...live.filter((id) => !known.has(id))];
 }
 
-export function switchToNeighbour(id: string) {
+export function switchToNeighbour(id: string, swiped = false) {
   const order = swipeOrder();
+  const from = currentTabs().selectedId;
   useBrowse.setState({ frozenOrder: order });
   openTab(id);
+  if (swiped) noteTabSwiped(from, id);
+}
+
+export const swipeToNeighbour = (id: string) => switchToNeighbour(id, true);
+
+const ARRIVAL_COVER_LOST_MS = 400;
+let stopArrivalWait: (() => void) | null = null;
+
+function cancelArrivalWait() {
+  const stop = stopArrivalWait;
+  stopArrivalWait = null;
+  stop?.();
+}
+
+export function arriveAtNeighbour(id: string) {
+  const order = swipeOrder();
+  const from = currentTabs().selectedId;
+  cancelArrivalWait();
+  useBrowse.setState({ frozenOrder: order });
+  openTab(id);
+  useBrowse.setState({ covered: id, arriving: id });
+  stopArrivalWait = whenPageCoverHidden(id, ARRIVAL_COVER_LOST_MS, () => {
+    stopArrivalWait = null;
+    if (useBrowse.getState().arriving === id) useBrowse.setState({ arriving: null, covered: useBrowse.getState().covered === id ? null : useBrowse.getState().covered });
+  });
+  noteTabSwiped(from, id);
+}
+
+export const arrivalCovers = (id: string) => {
+  const { arriving, covered } = useBrowse.getState();
+  return arriving === id && covered === id;
+};
+
+function noteTabSwiped(from: string | null, to: string) {
+  if (!currentPreferences().tabSwipeHintShown) setPreference("tabSwipeHintShown", true);
+  const tabs = currentTabs();
+  if ((from === null || !isPrivateTab(tabs, from)) && !isPrivateTab(tabs, to)) countUsage("tabs_bar_swiped");
 }
 
 const transitions: Record<VisitKind, VisitTransition | null> = {
@@ -713,7 +756,15 @@ export function captureCurrentCover() {
 
 export async function captureSnapshot(id: string, pageTop: number | null = null) {
   if (!snapshotAllowed(id)) return;
-  const snapshot = await snapshotPage(id);
+  const countable = pictureCountable(id);
+  const taken = await snapshotPage(id);
+  const counts = countable && pictureCountable(id);
+  if (taken && isRefusedSnapshot(taken)) {
+    pictureRefused(id, taken.refused, counts);
+    return;
+  }
+  const snapshot = taken;
+  if (snapshot) pictureSaved(id, snapshot.route, counts);
   const top = pageTop ?? (pullCapture?.id === id || deckPullGrowing() === id ? PULLED_PAGE_TOP : null);
   if (snapshot && top !== null) noteSnapshotPageTop(snapshot.uri, top);
   else if (snapshot?.frame) noteSnapshotPageTop(snapshot.uri, snapshot.frame.y);
@@ -724,6 +775,22 @@ export async function captureSnapshot(id: string, pageTop: number | null = null)
     updateTabById(id, { snapshotFileName: step.show });
     showFadingDeckThePicture(id);
   }
+}
+
+function pictureCountable(id: string) {
+  const tab = findTab(currentTabs(), id);
+  return tab !== undefined && !tab.isPrivate && !useTabs.getState().incognito;
+}
+
+function pictureSaved(id: string, route: string | undefined, counts: boolean) {
+  labTrace(`PAGELAB snapshot ${id} saved by ${route ?? "unknown"}`);
+  if (route === "engine" && counts) countUsage("page_pictures_webkit");
+}
+
+function pictureRefused(id: string, reason: "hidden" | "blank", counts: boolean) {
+  labTrace(`PAGELAB snapshot ${id} refused: page ${reason}, the card keeps its last picture`);
+  if (!counts) return;
+  countUsage(reason === "blank" ? "page_pictures_blank" : "page_pictures_hidden");
 }
 
 function showFadingDeckThePicture(id: string) {

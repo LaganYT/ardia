@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { coversHost, hiddenElementTitle, hidingFilter, hidingHost, parseHidingFilter } = await import("./hiddenElements.ts");
+const { coversHost, hiddenElementTitle, hidingFilter, hidingHost, isUnsafeStoredRule, parseHidingFilter } = await import("./hiddenElements.ts");
 const { pickerCall } = await import("./elementPicker.ts");
 
 test("a page's hiding host is its http(s) hostname without www.", () => {
@@ -22,6 +22,21 @@ test("a hiding filter is uBlock Origin's host##selector, and nothing else gets t
   assert.equal(hidingFilter("example.com", "div\nexample.org##p"), null);
   assert.equal(hidingFilter("example.com", ""), null);
   assert.equal(hidingFilter("example.com", "a".repeat(2000)), null);
+});
+
+test("a selector that a page's fake picker smuggles past the line break can't become a scriptlet filter", () => {
+  const CR = String.fromCharCode(13);
+  const [open, close] = ["/" + "*", "*" + "/"];
+  const smuggled = `head${open}${CR}*##+js(trusted-create-html, body, <img hidden src=x onerror="alert(document.cookie)">)${CR}${close}`;
+  assert.equal(hidingFilter("evil.example", smuggled), null);
+  assert.equal(parseHidingFilter(`evil.example##${smuggled}`), null);
+  assert.ok(isUnsafeStoredRule(`evil.example##${smuggled}`));
+  for (const breaker of [0, 9, 10, 11, 12, 13, 0x1f, 0x7f, 0x85, 0x2028, 0x2029])
+    assert.equal(hidingFilter("example.com", `div${String.fromCharCode(breaker)}p`), null, `U+${breaker.toString(16)}`);
+  assert.equal(hidingFilter("example.com", `head${open} x ${close}`), null);
+  assert.equal(hidingFilter("example.com", 'a[data-testid="promo card"]'), 'example.com##a[data-testid="promo card"]');
+  assert.ok(!isUnsafeStoredRule("example.com##div.ad > span:nth-of-type(2)"));
+  assert.ok(!isUnsafeStoredRule(`example.com##div${String.fromCharCode(9)}p`), "a hand-written rule uBlock Origin reads as one line stays");
 });
 
 test("a filter parses back to its host and selector, and other user filters don't", () => {

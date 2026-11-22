@@ -1,7 +1,7 @@
 import type { ConsentToken } from "./choice";
 import { consentOrNow, countFor } from "./countFor";
 
-const NONE = { hidden: 0, hiddenPrivate: 0, restored: 0, cancels: 0, contextMenuStarts: 0, failures: 0 };
+const NONE = { hidden: 0, hiddenPrivate: 0, restored: 0, cancels: 0, contextMenuStarts: 0, failures: 0, unsafeRulesRemoved: 0 };
 let counts = { ...NONE };
 
 export function noteElementHidden(inPrivateWindow: boolean, consent?: ConsentToken | null) {
@@ -13,6 +13,8 @@ export const noteElementPickerCancelled = (consent?: ConsentToken | null) => cou
 export const noteElementPickerFromContextMenu = () => void counts.contextMenuStarts++;
 export const noteHiddenElementWriteFailure = (consent?: ConsentToken | null) => countFor(consentOrNow(consent), () => void counts.failures++);
 
+export const noteUnsafeHidingRulesRemoved = (n: number, consent?: ConsentToken | null) => countFor(consentOrNow(consent), () => void (counts.unsafeRulesRemoved += n));
+
 export function takeHiddenElementCounts() {
   const taken = {
     elements_hidden: counts.hidden,
@@ -21,6 +23,7 @@ export function takeHiddenElementCounts() {
     element_picker_cancels: counts.cancels,
     element_picker_context_menu_starts: counts.contextMenuStarts,
     hidden_element_write_failures: counts.failures,
+    hidden_element_unsafe_rules_removed: counts.unsafeRulesRemoved,
   };
   counts = { ...NONE };
   return taken;

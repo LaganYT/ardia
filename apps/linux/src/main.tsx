@@ -16,6 +16,7 @@ import { peekShown } from "../../browser/src/state/windows/dockMotion";
 import { onPageCovered } from "./shims/web/HostWebView";
 import { toolbarMoving } from "./AutoHideToolbarRegion";
 import { copyLinkToSelection, jumpToSelection, replaceInField, usePageSelection } from "../../browser/src/state/site/selection";
+import { startUnsafeHidingRuleSweep } from "../../browser/src/state/site/hiddenElements";
 import { webviews } from "../../browser/src/platform/webviews";
 import { startMemoryTrim } from "../../browser/src/state/tabs/memoryTrim";
 import { startProfileUnloading } from "../../browser/src/state/profiles/profileUnloading";
@@ -64,10 +65,14 @@ import { inputRegions, startShellAbove } from "./shellAbove";
 import { InWindowPlayer } from "./InWindowPlayer";
 import { startLinuxUpdates } from "./linuxUpdates";
 import { noticeUnsandboxedLaunch } from "./sandboxNotice";
+import { watchWindowDecorations } from "./windowDecorations";
 import { countLoginPasswordChecks } from "./reauthCounts";
 import { startPipPlayer } from "./pipPlayer";
 import { startLinuxShortcuts } from "./shortcutsRuntime";
 import { linuxWindowMenu } from "./linuxWindowMenu";
+import { TrafficLights } from "./TrafficLights";
+import { startWindowButtonStyle } from "../../browser/src/state/windows/windowButtons";
+import { followDesktopButtonLayout } from "./desktopButtonLayout";
 import { followWindowMaximized } from "./windowMaximized";
 import { createUtilitySessionSnapshot, initialLinuxSession, isLinuxUtility, setSessionDeparture, setSessionFlush } from "./session";
 import { startUtility } from "./utility";
@@ -112,12 +117,16 @@ async function start() {
   const restoreSession = launch ? configRestoreSession() : undefined;
   setStoreBatching(unstable_batchedUpdates);
   hydrateLaunchSession(saved, initialLinuxSession(ardiaHost, saved?.settings && restoreSession !== undefined ? { ...saved, settings: { ...saved.settings, restoreSession } } : saved));
+  followDesktopButtonLayout(ardiaHost);
+  startWindowButtonStyle();
   followWindowMaximized(ardiaHost, windowId);
   startConfigFiles(colorRoles, launch);
   startHostTelemetry({ host: ardiaHost, candidate: !utility, locks: navigator.locks as unknown as LeaderLocks });
   countLoginPasswordChecks(linuxTelemetryHooks.leading);
+  watchWindowDecorations(ardiaHost, windowId);
   const capabilities = linuxCapabilities(ardiaHost);
   if (capabilities.cliControl) startProgramControl();
+  if (capabilities.hiddenElements && !utility) startUnsafeHidingRuleSweep();
   await startLinuxShortcuts(ardiaHost);
   if (utility) {
     const persistence = startHostPersistence(ardiaHost, useBrowser, stored ?? {}, createUtilitySessionSnapshot(useBrowser.getState(), saved ?? {}));
@@ -178,6 +187,7 @@ async function start() {
       <div className="ardia-window">
         {!utility && <InWindowPlayer windowId={windowId} />}
         <WindowRoot windowId={windowId} />
+        <TrafficLights windowId={windowId} />
       </div>
       <MenuHost />
       <FirstWindowCommitted typeahead={!utility} />

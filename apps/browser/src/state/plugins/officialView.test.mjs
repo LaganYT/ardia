@@ -139,12 +139,14 @@ test("an installed official plugin keeps its program-link failure and Try Again"
   assert.deepEqual([linking.note, linking.busy], ["installed", true]);
 });
 
-test("the Settings row and the consent sheet say Install for every official plugin, and the row has no switch", () => {
+test("the Settings row says Install… for every official plugin, the sheet takes its words from the record, and the row has no switch", () => {
   const row = readFileSync(new URL("../../components/settings/panes/OfficialPlugins.tsx", import.meta.url), "utf8");
   const sheet = readFileSync(new URL("../../components/plugins/PluginConsentSheet.tsx", import.meta.url), "utf8");
   assert.match(row, /<Button title="Install…"/);
   assert.doesNotMatch(row, /Turn On|<Toggle/);
-  assert.match(sheet, /const install = !!m\?\.official;/);
+  assert.match(sheet, /CONSENT_WORDS\[useConsentVerb\(name, hash\)\]/);
+  assert.match(sheet, /\{`\$\{words\.title\} \$\{m\?\.title \?\? name\}\?`\}/);
+  assert.match(sheet, /<Button title=\{words\.button\}/);
 });
 
 

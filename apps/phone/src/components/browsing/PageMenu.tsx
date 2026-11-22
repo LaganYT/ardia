@@ -94,7 +94,7 @@ export function PageMenu({ tabId, open, onHidden }: { tabId: string; open: boole
   }
   if (redesigned) {
     return (
-      <Sheet open={open} onDismiss={closePageMenu} onHidden={hidden} fill={ink.solid} onTapAway={tappedAway}>
+      <Sheet open={open} onDismiss={closePageMenu} onHidden={hidden} fill={ink.solid} onTapAway={tappedAway} halfOpen={Platform.OS === "android"} onExpand={isPrivate ? undefined : countPageMenuExpansion}>
         {confirmation}
         <PageMenuWords tabId={tabId} model={model} onTranslate={translate} />
       </Sheet>

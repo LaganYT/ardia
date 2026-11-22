@@ -378,6 +378,10 @@ function TrayLayer({ session, closing, onClosed }: LayerProps) {
       back.value = withSpring(0, trayMotion.settle);
     };
   }, [trayOnTop]);
+  const trayMotionNow = () => {
+    "worklet";
+    return landing.value + keyboard.height.value + keyboard.full.value + drag.value + back.value + heldLift.value + dim.value;
+  };
   const trayStyle = useAnimatedStyle(() => {
     const lift = currentLift();
     const rise = reduceMotion ? 1 : Math.max(landing.value, keyboardProgress(keyboard.height.value, keyboard.full.value, 0));
@@ -391,6 +395,7 @@ function TrayLayer({ session, closing, onClosed }: LayerProps) {
   return (
     <DepartContext.Provider value={beginDeparture}>
     <View testID="trayRoot" style={StyleSheet.absoluteFill} pointerEvents={closing ? "none" : "box-none"} collapsable={false} importantForAccessibility={closing ? "no-hide-descendants" : "auto"} accessibilityElementsHidden={closing}>
+      {fabricLagsAnimations && !closing ? <FabricCatchUp motion={trayMotionNow} /> : null}
       <Animated.View testID="trayDim" style={[StyleSheet.absoluteFill, dimStyle]}>
         <Pressable
           accessibilityLabel="Close Search"
@@ -458,6 +463,31 @@ function TrayLayer({ session, closing, onClosed }: LayerProps) {
     </View>
     </DepartContext.Provider>
   );
+}
+
+const FABRIC_CATCH_UP_MS = 120;
+const fabricLagsAnimations = Platform.OS === "android";
+
+function FabricCatchUp({ motion }: { motion: () => number }) {
+  const [commits, commit] = useState(0);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moved = useCallback(() => {
+    if (pending.current) clearTimeout(pending.current);
+    pending.current = setTimeout(() => {
+      pending.current = null;
+      commit((count) => count + 1);
+    }, FABRIC_CATCH_UP_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (pending.current) clearTimeout(pending.current);
+    },
+    [],
+  );
+  useAnimatedReaction(motion, (now, was) => {
+    if (was !== null && now !== was) runOnJS(moved)();
+  });
+  return <View key={commits} testID="trayFabricCatchUp" pointerEvents="none" style={styles.fabricCatchUp} />;
 }
 
 let knownLift = 0;
@@ -1305,6 +1335,7 @@ function ScrubbedRows({ rows, typed, budget, onRefine, onMenu, onContentHeight }
 }
 
 const styles = StyleSheet.create({
+  fabricCatchUp: { position: "absolute", width: 0, height: 0 },
   sheet: {
     position: "absolute",
     left: 0,

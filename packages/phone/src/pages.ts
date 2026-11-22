@@ -8,6 +8,7 @@ import type {
   PageRequestAnswer,
   PageSetup,
   PageSnapshot,
+  RefusedSnapshot,
   PageSummaryProvider,
   PageScrollPosition,
   PageState,
@@ -81,7 +82,7 @@ type PagesNative = {
   translationUrl?(pageUrl: string): Promise<string | null>;
   confirmTranslation?(): Promise<void>;
   presentSystemFind?(pageId: string, text: string | null): Promise<boolean>;
-  snapshot(pageId: string, options: { maxWidth?: number; quality?: number; coveredInsets?: [number, number] }): Promise<PageSnapshot | null>;
+  snapshot(pageId: string, options: { maxWidth?: number; quality?: number; coveredInsets?: [number, number] }): Promise<PageSnapshot | RefusedSnapshot | null>;
   loadHtml(pageId: string, html: string, baseUrl: string): Promise<void>;
   scrollPosition(pageId: string): Promise<PageScrollPosition | null>;
   evaluate(pageId: string, script: string): Promise<string | null>;

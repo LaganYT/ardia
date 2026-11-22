@@ -39,6 +39,7 @@ const replacements = new Map([
   [here("../browser/src/components/extensions/ActionPopup.tsx"), here("./src/ExtensionActionPopup.tsx")],
   [here("../browser/src/platform/windowControls.ts"), here("./src/hostWindowControls.ts")],
   [here("../browser/src/components/window/WindowControls.tsx"), here("./src/WindowControls.tsx")],
+  [here("../browser/src/components/window/LeadingWindowControls.tsx"), here("./src/LeadingWindowControls.tsx")],
 ]);
 const importedPasswordSave = {
   source: here("../browser/src/state/site/passwords.ts"),

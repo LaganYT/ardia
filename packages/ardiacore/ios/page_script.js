@@ -1916,10 +1916,6 @@
     contextMenuAt = null;
     if (asked && performance.now() - asked.at < 60000) send("hideElement", { x: asked.x, y: asked.y });
   });
-  document.addEventListener("ardia-hide-element-in-frame", () => {
-    contextMenuAt = null;
-    send("hideElement", { x: -1, y: -1 });
-  });
 
   const parse = (css) => {
     if (!css) return null;

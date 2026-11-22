@@ -53,7 +53,7 @@ export function PagePull({ tabId, barTop, children }: { tabId: string; barTop: n
   });
   return (
     <>
-      <Animated.View testID="pagePullShadow" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shadow, { backgroundColor: theme.surface }, shadow]} />
+      <Animated.View testID="pagePullShadow" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shadow, { backgroundColor: theme.canvas }, shadow]} />
       <Animated.View testID="pagePull" collapsable={false} style={[StyleSheet.absoluteFill, styles.page, page]}>
         {children}
       </Animated.View>

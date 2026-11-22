@@ -8,6 +8,10 @@ permissions:
   issues: read
   pull-requests: read
 
+concurrency:
+  group: linked-issue-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   linked-issue:
     runs-on: ubuntu-latest

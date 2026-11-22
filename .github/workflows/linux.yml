@@ -51,8 +51,8 @@ on:
         default: nearest
 
 concurrency:
-  group: linux-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: linux-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 permissions:
   contents: read
@@ -63,6 +63,7 @@ env:
 
 jobs:
   gate:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -87,7 +88,7 @@ jobs:
   checks:
     name: checks (${{ matrix.name }})
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -95,9 +96,7 @@ jobs:
       matrix:
         include:
           - { name: "UI", part: ui, shard: 1/1, slug: ui }
-          - { name: "engine fixtures, 1 of 3", part: engine, shard: 1/3, slug: engine-1 }
-          - { name: "engine fixtures, 2 of 3", part: engine, shard: 2/3, slug: engine-2 }
-          - { name: "engine fixtures, 3 of 3", part: engine, shard: 3/3, slug: engine-3 }
+          - { name: "engine fixtures", part: engine, shard: 1/1, slug: engine }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -116,7 +115,7 @@ jobs:
 
   package:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -218,6 +217,8 @@ jobs:
           for built in "${formats[@]}"; do
             (cd "$RUNNER_TEMP/dist" && sha256sum "$PACKAGE_NAME.$built" > "$PACKAGE_NAME.$built.sha256")
           done
+      - name: Content blocker patches
+        run: node --test packages/ardiacore/tests/ubo-scriptlets.test.mjs
       - name: Smoke
         run: |
           set -euo pipefail

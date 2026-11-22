@@ -7,13 +7,13 @@ import { groupLabel, movingGroup, withGroup, withRowsGrouped } from "../pins/tab
 import { withSplitRows } from "../splits/splits";
 import { removeTabs, withNewTab } from "../tabs/tabs";
 import type { BrowserWindow, ClosedGroup, ClosedGroupInfo, GroupColor, Tab, TabGroup } from "../browser/types";
-import { depthOf, descendantIds, innermostGroupOf, nestGroups, reparent } from "./groupNesting";
+import { depthsIn, descendantIds, innermostGroupOf, nestGroups, reparent } from "./groupNesting";
 import { withShownTab, withoutShownTabs } from "./shownTabs";
 import { pinnedGroupMembers } from "../browser/structure";
 import { newTabHome } from "../tabs/newTabHome";
 import { groupingOnto } from "../pins/placing";
 
-export { ancestorIds, canNest, commonGroup, depthOf, descendantIds, groupPath, innermostGroupOf, nestGroups, reparent, rootOf, withParent } from "./groupNesting";
+export { ancestorIds, canNest, commonGroup, depthOf, depthsIn, descendantIds, groupPath, innermostGroupOf, nestGroups, reparent, rootOf, rootsIn, withParent } from "./groupNesting";
 
 export type GroupsSlice = {
   groups: Record<string, TabGroup>;
@@ -72,9 +72,10 @@ export function placeBlock(tabIds: string[], block: string[]): string[] {
 }
 
 export function placeGroups(tabIds: string[], groups: Record<string, TabGroup>, windowId: string): string[] {
+  const depth = depthsIn(groups);
   const own = Object.values(groups)
     .filter((g) => g.windowId === windowId)
-    .map((g) => [g, depthOf(groups, g.id)] as const)
+    .map((g) => [g, depth(g.id)] as const)
     .sort((a, z) => a[1] - z[1]);
   let at = new Map(tabIds.map((id, i) => [id, i]));
   for (const [g] of own) {

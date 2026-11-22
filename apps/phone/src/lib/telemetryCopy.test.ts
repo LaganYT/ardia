@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PHONE_WHATS_SENT } from "./telemetryCopy.ts";
+import { PHONE_SHARING_COPY, PHONE_WHATS_SENT } from "./telemetryCopy.ts";
 import { CONTEXT_FIELDS, EVENT_FIELDS, RESOURCE_FIELDS, resourceFor } from "./telemetrySchema.ts";
 
 test("What’s Sent describes every event and every field the phone can send, and nothing it doesn’t", () => {
@@ -34,4 +34,10 @@ test("What’s Sent says in its own words that menu and confirmation opens are c
   const usage = PHONE_WHATS_SENT.flatMap((section) => section.items).find((item) => item.fields.includes("drawn_menus_opened"))!;
   assert.match(usage.text, /opened a menu or a confirmation/);
   assert.match(usage.text, /never while browsing privately/);
+});
+
+test("What’s Sent is written in US spelling with typographic apostrophes, as the rest of the app’s copy is", () => {
+  const copy = [...Object.values(PHONE_SHARING_COPY), ...PHONE_WHATS_SENT.flatMap((section) => [section.title, ...section.items.map((item) => item.text)])];
+  assert.deepEqual(copy.filter((text) => /colour/i.test(text)), []);
+  assert.deepEqual(copy.filter((text) => text.includes("'")), []);
 });

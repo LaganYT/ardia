@@ -8,7 +8,7 @@ Hosted CI never runs `gclient sync`, GN or a Chromium build.
 
 | Piece | What it does |
 | --- | --- |
-| [`.github/workflows/linux.yml`](../.github/workflows/linux.yml) | Runs on pull requests, pushes to `main` and by hand: a vouch `gate` job, then four `checks` jobs (the UI checks, and the engine fixtures split three ways) and a `package` job on `ubuntu-24.04`. A pull request packages and smoke-tests the tarball alone unless it changes `scripts/linux`, the workflow or its setup action, or carries the `full-ci` label; pushes and manual runs also build, smoke-test and install the `.deb` and the AppImage |
+| [`.github/workflows/linux.yml`](../.github/workflows/linux.yml) | Runs on pull requests, pushes to `main` and by hand: a vouch `gate` job for pull requests from forks, then two `checks` jobs (the UI checks and the engine fixtures) and a `package` job on `ubuntu-24.04`. A pull request packages and smoke-tests the tarball alone unless it changes `scripts/linux`, the workflow or its setup action, or carries the `full-ci` label; pushes and manual runs also build, smoke-test and install the `.deb` and the AppImage |
 | [`.github/actions/linux-setup`](../.github/actions/linux-setup/action.yml) | Ubuntu packages for the fixtures (clang, dbus, NSS tools, gnome-keyring, PyGObject), Node 24, pnpm and `pnpm install --frozen-lockfile` |
 | [`scripts/linux/ci-checks.sh`](../scripts/linux/ci-checks.sh) | The engine-free checks. `--part ui` runs the `apps/linux` and `scripts/linux` checks side by side; `--part engine --shard I/N` runs every Nth Python suite and `engine/ardiacore-linux/tests` module, those in parallel, because the suite takes well over five minutes serially. With no options it runs everything |
 | [`scripts/linux/publish-engine.sh`](../scripts/linux/publish-engine.sh) | Builder side: stages, strips and archives an engine from a Chromium out dir; `--upload` publishes it and adds its table row |
@@ -253,8 +253,11 @@ hand. The one-time setup is in [releasing.md](releasing.md#linux-package).
   `apps/browser`, `plugins`, `packages`, `engine`, `scripts/linux`, `scripts/lib`, `scripts/agent/locked`,
   `infra/feedback/lib`, `patches`, the workspace manifests and lockfile, the Linux setup action and the workflow itself.
   Mac-only changes elsewhere skip it. It can still be started by hand, with `exact` to require this commit's engine.
-- **Gate.** Like `ios.yml` and `android.yml`, a `gate` job runs `vouch.gate` first, and both jobs need it. An unvouched
-  author's pull request waits until a maintainer comments `vouch` or adds `run-ci`; `linux.yml` is in
-  `GATED_WORKFLOWS` (`.github/vouch/vouch.cjs`), so that re-runs its skipped run. Pushes and manual runs always build.
+- **Gate.** Like `ios.yml`, `android.yml`, `windows.yml` and `mac.yml`, a `gate` job runs `vouch.gate` first for a
+  pull request from a fork, and both jobs need it. An unvouched author's pull request waits until a maintainer comments
+  `vouch` or adds `run-ci`; `linux.yml` is in `GATED_WORKFLOWS` (`.github/vouch/vouch.cjs`), so that re-runs its
+  skipped run. Pushes, manual runs and pull requests from a branch of this repository skip the gate and build at once:
+  only people with write access push those branches, and the gate would only spend an `ubuntu-latest` slot to say so.
+  A newer push cancels the run before it, on `main` too; manual runs are never cancelled.
 - **No engine.** With no published engine for this commit's key or the 200 engine commits before it, `package` fails
   and says to publish one.

@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { DeckLookProbe } from "./DeckLookProbe";
+import { actionWords, destinationWords, incognitoWords } from "../../lib/sharedWords";
+import { IncognitoLook } from "../ui/theme";
 import { useDeckOwnsBar, useSheet, useSurface } from "../../state/browse/hooks";
 import { useHeldDeckOrder, useHeldRootSize, useHeldSearchOpen } from "../../state/browse/deckHold";
 import { beginInteraction, countRender, INTERACTION_WINDOW_MS, interactionPerfEnabled } from "../../state/app/interactionPerf";
@@ -80,7 +82,7 @@ import { tabMatchesQuery, type BrowserTab } from "../../state/tabs/tabModels";
 import { DeckBar } from "./DeckBar";
 import { cardMenuItems as deckCardMenu, cardOpen, coverFrame, DECK_PHASE, DeckCard, leavingZ, OPENING_CARD_MOTION, OPENING_CARD_RESPONSE, OpeningCard, type CardOpen, type DeckMotion, type Reads } from "./DeckCard";
 import { ContainedDeckCard, containedCards, containedDeckScroll } from "./ContainedDeck";
-import { MotionView, pageReportsDrawn, type MotionCurve } from "../ui";
+import { iconRoles, LookBackdrop, MotionView, pageReportsDrawn, type MotionCurve } from "../ui";
 import { hideArchiveCard, offerArchiveCard, offerArchiveCardNow, showArchiveCardNow, useArchiveCardShowing } from "../../state/browse/archiveCard";
 import { takeDeckCommand, useDeckCommand } from "../../state/browse/deckCommands";
 import { ArchiveIntervalCard } from "./ArchiveIntervalCard";
@@ -106,6 +108,8 @@ import { barSpanCenter } from "../../lib/bottomBarSpan";
 import { useBarGlyphFade, useDeckPulled } from "./deckPulled";
 
 type Phase = { kind: "opening" | "settled" | "closing"; id: string | null };
+
+type DeckPrivateBackdrop = "instant" | "fade" | null;
 
 const SETTLED: Phase = { kind: "settled", id: null };
 
@@ -1023,9 +1027,9 @@ export const TabDeck = memo(function TabDeck() {
     });
   const confirmLeaveIncognito = () =>
     ask({
-      title: "Close Incognito Tabs?",
+      title: `${incognitoWords.closeIncognitoTabs}?`,
       message: "Their pages, cookies and history are cleared.",
-      action: "Close Incognito Tabs",
+      action: incognitoWords.closeIncognitoTabs,
       run: () => {
         haptics.press();
         leaveIncognito();
@@ -1067,22 +1071,26 @@ export const TabDeck = memo(function TabDeck() {
     [],
   );
   const crossfade = reduceMotion ? tabGridMotion.crossfadeReduced : tabGridMotion.crossfade;
+  const privateLook = redesigned && incognito;
+  const [privateBackdrop, setPrivateBackdrop] = useState<DeckPrivateBackdrop>(privateLook ? "instant" : null);
+  if (privateLook && privateBackdrop === null) setPrivateBackdrop(shown ? "fade" : "instant");
+  if (!privateLook && privateBackdrop !== null && !shown) setPrivateBackdrop(null);
   const gridTabs = gridAvailable && (grid || gridLayer) ? order.flatMap((id) => {
     const tab = tabs.get(id);
     return tab && !hidden.current.has(id) ? [tab] : [];
   }) : [];
   const plusItems: MenuItem[] = incognito
     ? [
-        { label: "New Tab", icon: "plus", onPress: newRegularTab },
-        { label: "New Incognito Tab", icon: "eyes", onPress: newTab },
+        { label: actionWords.newTab, icon: iconRoles.newTab, onPress: newRegularTab },
+        { label: actionWords.newIncognitoTab, icon: "eyes", onPress: newTab },
       ]
     : [
-        { label: "New Incognito Tab", icon: "eyes", onPress: newIncognitoTab },
+        { label: actionWords.newIncognitoTab, icon: "eyes", onPress: newIncognitoTab },
         ...(canReopen ? [{ label: "Reopen Closed Tab", icon: "arrowUturnBackward" as const, onPress: reopenLastClosed }] : []),
       ];
   if (count)
     plusItems.push("divider", {
-      label: incognito ? "Close Incognito Tabs" : "Close All Tabs",
+      label: incognito ? incognitoWords.closeIncognitoTabs : "Close All Tabs",
       icon: "xmark",
       destructive: true,
       onPress: incognito ? confirmLeaveIncognito : confirmCloseAll,
@@ -1090,6 +1098,7 @@ export const TabDeck = memo(function TabDeck() {
 
   return (
     <MenuFloorProvider value={deckBarTop}>
+    <IncognitoLook value={privateLook}>
     <Animated.View
       testID="tabDeck"
       style={[StyleSheet.absoluteFill, shown ? null : pulls ? styles.parked : styles.hidden, handOverStyle]}
@@ -1110,6 +1119,21 @@ export const TabDeck = memo(function TabDeck() {
             <FrostSource name={DECK_FROST} style={StyleSheet.absoluteFill} pointerEvents="none">
               <DeckLookBackdrop baseOutside />
               {redesigned && darkLook ? <View testID="deckDarkDepth" pointerEvents="none" style={[StyleSheet.absoluteFill, { experimental_backgroundImage: linearGradientCss(deckLook.darkDepth, false, 0, 0) }]} /> : null}
+              {privateBackdrop ? (
+                <MotionView
+                  testID="deckIncognitoBackdrop"
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                  from={privateBackdrop === "fade" ? HIDDEN : undefined}
+                  to={privateLook ? SHOWN : HIDDEN}
+                  motion={crossfade}
+                  onMotionEnd={(finished) => {
+                    if (finished && !privateLook) setPrivateBackdrop(null);
+                  }}
+                >
+                  <LookBackdrop incognito />
+                </MotionView>
+              ) : null}
             </FrostSource>
           </>
         )}
@@ -1177,7 +1201,7 @@ export const TabDeck = memo(function TabDeck() {
           </MotionView>
         ) : null}
         {!count && !leavingCards.length && phase.kind === "settled" ? (
-          material ? <MaterialDeckEmpty centerY={g.cardCenterY} showsArchive={hasArchive} onArchive={openArchive} searching={needle !== ""} incognito={incognito} /> : <DeckEmpty centerY={g.cardCenterY} showsArchive={hasArchive && !redesigned} onArchive={openArchive} searching={needle !== ""} incognito={side} />
+          material ? <MaterialDeckEmpty centerY={g.cardCenterY} showsArchive={hasArchive} onArchive={openArchive} searching={needle !== ""} incognito={incognito} /> : <DeckEmpty centerY={g.cardCenterY} showsArchive={hasArchive && !redesigned} onArchive={openArchive} query={needle} incognito={side} />
         ) : null}
         {archiveCard && phase.kind === "settled" && !grid ? <ArchiveIntervalCard edgeY={archiveCardEdgeY(material ? { ...g, barCenterY: g.height - materialBottomRowCenter(insets.bottom) } : g, archiveCardLayout.aboveBarCenter)} /> : null}
         {openingCard && tabs.get(openingCard.id) ? <OpeningCard key={openingCard.id} tab={tabs.get(openingCard.id)!} geometry={g} centerX={openingCard.x} centerY={openingCard.y} growsAtMount={openingCard.path === "coveringCard"} endsSquare={openingCard.path === "coveringCard"} onGrowing={() => openingCardGrowing(openingCard.id)} onLanded={openingCard.path === "coveringCard" ? () => landCoveringCard(openingCard.id) : undefined} /> : null}
@@ -1252,9 +1276,9 @@ export const TabDeck = memo(function TabDeck() {
           >
             <DeckBar
               leading={
-                syncEnabled ? { icon: "laptop", label: "Synced Tabs", onPress: openSpaces } : { icon: "archivebox", label: "Archive", onPress: openArchive }
+                syncEnabled ? { icon: "laptop", label: destinationWords.spaces, onPress: openSpaces } : { icon: "archivebox", label: destinationWords.archive, onPress: openArchive }
               }
-              plusLabel={incognito ? "New Incognito Tab" : "New Tab"}
+              plusLabel={incognito ? actionWords.newIncognitoTab : actionWords.newTab}
               frost={{ source: DECK_FROST, variant: "bar" }}
               covered={trayOpen}
               onPlus={newTab}
@@ -1278,7 +1302,7 @@ export const TabDeck = memo(function TabDeck() {
       ) : null}
       {menu === "chip" ? (
         <Menu
-          items={[{ label: "Close Incognito Tabs", icon: "xmark", destructive: true, onPress: confirmLeaveIncognito }]}
+          items={[{ label: incognitoWords.closeIncognitoTabs, icon: "xmark", destructive: true, onPress: confirmLeaveIncognito }]}
           place={{ top: g.safeTop + tabsLayout.chipHeight + tabsLayout.headerGap * 2, left: (width - tabsLayout.menuWidth) / 2, width: tabsLayout.menuWidth }}
           onDismiss={() => setMenu(null)}
         />
@@ -1286,6 +1310,7 @@ export const TabDeck = memo(function TabDeck() {
       {cardMenu && order.includes(cardMenu.id) ? <CardMenuAt items={cardMenuItems(order.indexOf(cardMenu.id))} privately={tabs.get(cardMenu.id)?.isPrivate === true} at={cardMenu} control={cardMenu.control} floor={deckBarTop} screen={{ width, height }} onDismiss={dismissCardMenu} /> : null}
       {confirmation ? <ConfirmSheet confirmation={confirmation} onClose={() => setConfirmation(null)} /> : null}
     </Animated.View>
+    </IncognitoLook>
     </MenuFloorProvider>
   );
 });

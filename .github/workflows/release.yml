@@ -284,6 +284,13 @@ jobs:
         env:
           DIST: ${{ steps.paths.outputs.dist }}
         run: .github/release/check-sparkle.sh "$DIST" "$VERSION"
+      - name: The app's symbols
+        env:
+          DIST: ${{ steps.paths.outputs.dist }}
+        run: |
+          for file in "$DIST/Ardia-$VERSION-symbols.tar.xz" "$DIST/Ardia-$VERSION-uuids.txt"; do
+            [ -f "$file" ] && [ -s "$file" ] || { echo "::error::no $file: release.sh --phase sign packs the app's symbols, and a release without them can't name its crashes"; exit 1; }
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release
@@ -293,6 +300,8 @@ jobs:
             ${{ steps.paths.outputs.dist }}/appcast.xml
             ${{ steps.paths.outputs.dist }}/release-notes.md
             ${{ steps.paths.outputs.dist }}/provenance.txt
+            ${{ steps.paths.outputs.dist }}/Ardia-${{ inputs.version }}-symbols.tar.xz
+            ${{ steps.paths.outputs.dist }}/Ardia-${{ inputs.version }}-uuids.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -450,6 +459,11 @@ jobs:
         with:
           name: release
           path: dist/${{ inputs.version }}
+      - name: The app's symbols
+        run: |
+          for file in "dist/$VERSION/Ardia-$VERSION-symbols.tar.xz" "dist/$VERSION/Ardia-$VERSION-uuids.txt"; do
+            [ -f "$file" ] && [ -s "$file" ] || { echo "::error::the release artifact has no $(basename "$file"), so v$VERSION would ship without the app's symbols"; exit 1; }
+          done
       - if: needs.linux.result == 'success'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:

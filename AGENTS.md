@@ -21,7 +21,8 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   `target: {providerInstanceId: "codex", model: "gpt-6.2-sol", options: {reasoningEffort: "high", serviceTier: "priority"}}`,
   `role: "review"`, `mode: "async"`, and a new `clientRequestId` per round. Tell it to review only and edit
   nothing, and give it the full brief each round (it doesn't share your context). It reads more than it runs:
-  reproduce each finding before fixing it.
+  reproduce each finding before fixing it. Cap review loops at 5 rounds per PR (stop earlier once approved
+  or only nits remain; if blockers stay open after round 5, stop and escalate to the owner).
 - **Worktrees are fine.** Use a git worktree or a scratch clone for isolated feature, PR and full-send work, so
   you can switch branches, reset and stash without touching anyone else. `scripts/agent/guard-git` only blocks
   `checkout`, `switch`, `restore`, `stash`, `reset --hard` and `clean` in the shared root checkout (the primary

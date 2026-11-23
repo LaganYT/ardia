@@ -5,9 +5,11 @@ import { useSettings } from "../../state/browser/hooks";
 import { tabTitle } from "../../state/browser/model";
 import type { Tab } from "../../state/browser/types";
 import { middleClickTab } from "../../state/sidebar/clearTabs";
+import { pressStripClose } from "../../state/tabs/stripPress";
+import { workspaceSnapshot } from "../../state/browser/current";
 import { dismissHover } from "../../state/sidebar/hover";
 import { openTabMenu } from "../../state/sidebar/menus";
-import { clickHeldTabPress, holdTabPress, pressOutTabPress, type TabPress } from "../../state/sidebar/heldTabPress";
+import { clickHeldTabPress, endPressGesture, holdTabPress, pressOutTabPress, type TabPress } from "../../state/sidebar/heldTabPress";
 import { tabPressTag } from "../../state/tabs/tabReveal";
 import { useInSplit } from "../../state/windows/card";
 import { ContextMenuArea } from "../ui";
@@ -20,6 +22,7 @@ type TabPressProps = {
   tooltip?: string;
   hitSlop?: Insets;
   selected?: boolean;
+  onSwitch?: () => void;
   children: ReactNode | ((state: { pressed: boolean }) => ReactNode);
 };
 
@@ -38,6 +41,7 @@ export function tabPressView({
   tooltip,
   hitSlop,
   selected = false,
+  onSwitch,
   children,
   press,
   inSplit,
@@ -46,7 +50,7 @@ export function tabPressView({
 }: TabPressProps & { press: { current: TabPress | null }; inSplit: boolean; plainTooltip: boolean; onPressChange?: (pressed: boolean) => void }) {
   return (
     <ContextMenuArea
-      onMiddleClick={() => middleClickTab(tab.id)}
+      onMiddleClick={() => pressStripClose(windowId, tab.id, () => middleClickTab(tab.id), (tabId) => !!workspaceSnapshot().tabs[tabId])}
       onContextMenu={() => {
         dismissHover();
         void openTabMenu(windowId, tab);
@@ -56,13 +60,17 @@ export function tabPressView({
       <Pressable
         onPressIn={(e) => {
           onPressChange?.(true);
-          press.current = holdTabPress(windowId, tab.id, e, press.current);
+          const before = press.current;
+          press.current = holdTabPress(windowId, tab.id, e, before);
+          if (press.current !== before && press.current.switched) onSwitch?.();
         }}
         onPress={(e) => clickHeldTabPress(windowId, tab.id, e, press.current)}
         onPressOut={(e) => {
           onPressChange?.(false);
           pressOutTabPress(press.current, e);
         }}
+        onTouchEnd={() => endPressGesture(press.current)}
+        onTouchCancel={() => endPressGesture(press.current)}
         style={pressStyle}
         nativeID={tabPressTag(tab.id, selected, inSplit)}
         collapsable={false}

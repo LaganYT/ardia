@@ -1,26 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { PlatformColor, StyleSheet, useWindowDimensions, View } from "react-native";
-import { BottomSheet, Button, ConfirmationDialog, ContentUnavailableView, ContextMenu, Divider, HStack, Host, Label, List, Menu, NavigationStack, Picker, RNHostView, Section, ShareLink, Spacer, Text, Toolbar, ToolbarItem, VStack, useNativeState } from "@expo/ui/swift-ui";
-import { accessibilityElement, accessibilityHint, buttonStyle, disabled, environment, font, foregroundStyle, frame, lineLimit, listRowInsets, listStyle, navigationBarTitleDisplayMode, navigationTitle, onAppear, pickerStyle, searchable, tag, tint } from "@expo/ui/swift-ui/modifiers";
+import { PlatformColor, StyleSheet } from "react-native";
+import { BottomSheet, Button, ConfirmationDialog, ContentUnavailableView, ContextMenu, Divider, Host, List, Menu, NavigationStack, Picker, Section, Text, Toolbar, ToolbarItem, useNativeState } from "@expo/ui/swift-ui";
+import { accessibilityLabel, disabled, environment, listRowInsets, listStyle, navigationBarTitleDisplayMode, navigationTitle, onAppear, pickerStyle, searchable, tag, tint } from "@expo/ui/swift-ui/modifiers";
+import { actionWords, destinationWords, dismissWords } from "../../lib/sharedWords";
+import { DoneToolbarItem } from "../settings/ExpoSettingsDone";
 import { ARCHIVE_SEARCH_DELAY_MS, archiveDayTitle } from "../../lib/archiveDay";
 import { eagerSections, LIST_PAGE_ROWS, sectionOverscan, sectionsWithin, sheetWasSlow } from "../../lib/sectionWindow";
 import { countUsage } from "../../state/telemetry/telemetry";
 import { haptics } from "../../state/app/haptics";
 import { closeArchive, useBrowse } from "../../state/browse/store";
-import { canShareTab, copyTabLink, deleteArchivedTab, openArchivedTab } from "../../state/browse/tabMenus";
+import { canShareTab, copyTabLink, deleteArchivedTab, deleteArchivedTabs, openArchivedTab } from "../../state/browse/tabMenus";
 import { display } from "../../state/search/omnibox";
 import { usePreferences } from "../../state/settings/hooks";
 import { useArchiveDays, useArchiveLoaded } from "../../state/tabs/hooks";
-import { clearArchivedTabs, loadArchiveUnlessPrepared, searchArchive, setAutoArchiveInterval } from "../../state/tabs/store";
+import { archiveInMemory, clearArchivedTabs, loadArchiveUnlessPrepared, searchArchive, setAutoArchiveInterval } from "../../state/tabs/store";
 import { AUTO_ARCHIVE_INTERVALS, autoArchiveTitle, type AutoArchiveInterval, type BrowserTab } from "../../state/tabs/tabModels";
-import { Favicon, modifierList, settingsChrome } from "../ui";
+import { LinkMenuItems, ListLoading, ListNoResults, ListRow, listSheetWords, opensPage } from "../library/listSheet";
+import { listSheetInsets } from "../library/listSheetTokens";
+import { iconRoles, modifierList, settingsChrome, sfName } from "../ui";
 
-const SECONDARY = { type: "hierarchical", style: "secondary" } as const;
-const FILL = Number.MAX_SAFE_INTEGER;
-const ROW_FAVICON = 20;
-const ROW_FAVICON_SCALE_CAP = 2;
-const ROW_INSETS = { top: 5, bottom: 5, leading: 14, trailing: 14 };
-const ROW_GAP = 14;
 const INTERVALS = Object.keys(AUTO_ARCHIVE_INTERVALS) as AutoArchiveInterval[];
 
 export function ExpoArchiveSheet() {
@@ -28,69 +26,12 @@ export function ExpoArchiveSheet() {
   const requestedAt = useRef<number | null>(null);
   if (!open) requestedAt.current = null;
   else requestedAt.current ??= Date.now();
-  const deckShown = useBrowse((s) => s.surface === "deck");
-  const [warming, setWarming] = useState(false);
-  useEffect(() => {
-    if (!deckShown || sheetWarmed) return;
-    const start = setTimeout(() => {
-      sheetWarmed = true;
-      setWarming(true);
-    }, SHEET_WARM_AFTER_MS);
-    return () => clearTimeout(start);
-  }, [deckShown]);
-  useEffect(() => {
-    if (!warming) return;
-    const cool = setTimeout(() => setWarming(false), SHEET_WARM_MS);
-    return () => clearTimeout(cool);
-  }, [warming]);
   return (
-    <>
-      {warming && !open ? (
-        <View style={styles.anchor} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Host style={styles.anchor}>
-            <WarmArchive />
-          </Host>
-        </View>
-      ) : null}
-      <Host testID="expoArchiveSheet" style={styles.anchor} pointerEvents="none">
-        <BottomSheet isPresented={open} onIsPresentedChange={(presented) => (presented ? undefined : closeArchive())}>
-          <ArchiveNavigation requestedAt={requestedAt} />
-        </BottomSheet>
-      </Host>
-    </>
-  );
-}
-
-const SHEET_WARM_AFTER_MS = 1_000;
-const SHEET_WARM_MS = 700;
-let sheetWarmed = false;
-
-const WARM_ROWS: BrowserTab[] = [{ id: "archive-warm", url: "https://example.com/", title: "", created: 0, lastActive: 0, archivedAt: 0, position: 0, profileSyncId: null, faviconUrl: null, themeColorHex: null, snapshotFileName: null, origin: "typed", receivedKey: null, receivedFromDevice: null, pinnedKey: null, isPrivate: false }];
-
-function WarmArchive() {
-  const searchText = useNativeState("");
-  const page = modifierList(navigationTitle("Archive"), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), searchable(searchText, { placement: "navigationBarDrawer", prompt: "Search Archive" }));
-  return (
-    <NavigationStack>
-      <Toolbar>
-        <List modifiers={modifierList(...page, listStyle("insetGrouped"))}>
-          <Section title="">
-            <ArchiveRows tabs={WARM_ROWS} overscan={0} />
-          </Section>
-        </List>
-        <Toolbar.Content>
-          <ToolbarItem placement="topBarLeading">
-            <Button label="Edit" onPress={noop} />
-          </ToolbarItem>
-          <ToolbarItem placement="primaryAction">
-            <Menu label="Options" systemImage="ellipsis">{null}</Menu>
-          </ToolbarItem>
-          <ToolbarItem placement="confirmationAction">
-            <Button label="Done" onPress={noop} />
-          </ToolbarItem>
-        </Toolbar.Content>
-      </Toolbar>
-    </NavigationStack>
+    <Host testID="expoArchiveSheet" style={styles.anchor} pointerEvents="none">
+      <BottomSheet isPresented={open} onIsPresentedChange={(presented) => (presented ? undefined : closeArchive())}>
+        <ArchiveNavigation requestedAt={requestedAt} />
+      </BottomSheet>
+    </Host>
   );
 }
 
@@ -121,7 +62,9 @@ function ArchiveNavigation({ requestedAt }: { requestedAt: MutableRefObject<numb
   const [shown, setShown] = useState(false);
   const [editing, setEditing] = useState(false);
   const appeared = useCallback(() => setShown(true), []);
-  useEffect(() => loadArchiveUnlessPrepared(), []);
+  useEffect(() => {
+    if (!archiveInMemory()) loadArchiveUnlessPrepared();
+  }, []);
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
@@ -133,14 +76,18 @@ function ArchiveNavigation({ requestedAt }: { requestedAt: MutableRefObject<numb
   }, [query]);
   const results = useMemo(() => (searched ? searchArchive(searched) : null), [searched, days]);
   const hasArchive = days.some((day) => day.tabs.length > 0);
+  const onScreen = shown || (loaded && !hasArchive);
+  useEffect(() => {
+    if (onScreen) loadArchiveUnlessPrepared();
+  }, [onScreen]);
   const now = Date.now();
-  const page = modifierList(navigationTitle("Archive"), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), searchable(searchText, { placement: "navigationBarDrawer", prompt: "Search Archive", onChange: setQuery }));
+  const page = modifierList(navigationTitle(destinationWords.archive), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), searchable(searchText, { placement: "navigationBarDrawer", prompt: SEARCH_PROMPT, onChange: setQuery }));
   const content = !loaded ? (
-    <List modifiers={page}>{null}</List>
+    <ListLoading modifiers={page} />
   ) : !hasArchive ? (
     <ContentUnavailableView title="No Archived Tabs" systemImage="archivebox.fill" description="Closed and inactive tabs show up here." modifiers={page} />
   ) : results && !results.length ? (
-    <ContentUnavailableView title={`No Results for “${searched}”`} systemImage="magnifyingglass" description="Check the spelling or try a new search." modifiers={page} />
+    <ListNoResults query={searched} modifiers={page} />
   ) : (
     <List modifiers={modifierList(...page, listStyle("insetGrouped"), environment("editMode", editing ? "active" : "inactive"), ...(shown ? [] : [onAppear(appeared)]))}>
       {results ? (
@@ -160,7 +107,7 @@ function ArchiveNavigation({ requestedAt }: { requestedAt: MutableRefObject<numb
           <ConfirmationDialog.Actions>
             <Button
               role="destructive"
-              label="Delete All"
+              label={listSheetWords.deleteAll}
               onPress={() => {
                 haptics.warning();
                 clearArchivedTabs();
@@ -173,11 +120,11 @@ function ArchiveNavigation({ requestedAt }: { requestedAt: MutableRefObject<numb
         </ConfirmationDialog>
         <Toolbar.Content>
           <ToolbarItem placement="topBarLeading">
-            <Button label={editing ? "Done" : "Edit"} onPress={() => setEditing((now) => !now)} modifiers={[disabled(!hasArchive && !editing)]} />
+            <Button label={editing ? dismissWords.finishEditing : EDIT} onPress={() => setEditing((now) => !now)} modifiers={[disabled(!hasArchive && !editing)]} />
           </ToolbarItem>
           <ToolbarItem placement="primaryAction">
-            <Menu label="Options" systemImage="ellipsis">
-              {shown ? (
+            <Menu label={actionWords.more} systemImage={sfName(iconRoles.more)} modifiers={[accessibilityLabel(actionWords.more)]}>
+              {shown || (loaded && !hasArchive) ? (
                 <>
                   <Picker label="Archive Inactive Tabs" systemImage="archivebox" selection={interval} onSelectionChange={(next: AutoArchiveInterval) => setAutoArchiveInterval(next)} modifiers={[pickerStyle("menu")]}>
                     {INTERVALS.map((option) => (
@@ -187,14 +134,12 @@ function ArchiveNavigation({ requestedAt }: { requestedAt: MutableRefObject<numb
                     ))}
                   </Picker>
                   <Divider />
-                  <Button label="Delete All…" systemImage="trash" role="destructive" onPress={() => setConfirmingClear(true)} modifiers={[disabled(!hasArchive)]} />
+                  <Button label={listSheetWords.deleteAllEntry} systemImage="trash" role="destructive" onPress={() => setConfirmingClear(true)} modifiers={[disabled(!hasArchive)]} />
                 </>
               ) : null}
             </Menu>
           </ToolbarItem>
-          <ToolbarItem placement="confirmationAction">
-            <Button label="Done" onPress={closeArchive} />
-          </ToolbarItem>
+          <DoneToolbarItem onDone={closeArchive} />
         </Toolbar.Content>
       </Toolbar>
     </NavigationStack>
@@ -216,44 +161,25 @@ function ArchiveDaySection({ title, tabs, eager, onLast }: { title: string; tabs
 }
 
 function ArchiveRows({ tabs, overscan }: { tabs: BrowserTab[]; overscan?: number }) {
-  const { fontScale } = useWindowDimensions();
-  const iconSize = ROW_FAVICON * Math.min(fontScale, ROW_FAVICON_SCALE_CAP);
-  const row = useCallback(({ item }: { item: BrowserTab }) => <ArchiveRow tab={item} iconSize={iconSize} />, [iconSize]);
+  const row = useCallback(({ item }: { item: BrowserTab }) => <ArchiveRow tab={item} />, []);
   return (
-    <List.ForEach data={tabs} keyExtractor={(tab) => tab.id} onDelete={(indices) => indices.forEach((index) => tabs[index] && deleteArchivedTab(tabs[index]))} estimatedItemSize={60} overscanCount={overscan}>
+    <List.ForEach data={tabs} keyExtractor={(tab) => tab.id} onDelete={(indices) => deleteArchivedTabs(indices.flatMap((index) => (tabs[index] ? [tabs[index]] : [])))} estimatedItemSize={60} overscanCount={overscan}>
       {row}
     </List.ForEach>
   );
 }
 
-function ArchiveRow({ tab, iconSize }: { tab: BrowserTab; iconSize: number }) {
+function ArchiveRow({ tab }: { tab: BrowserTab }) {
   const shown = display(tab.url);
-  const restore = () => {
-    haptics.selection();
-    openArchivedTab(tab);
-  };
+  const restore = opensPage(() => openArchivedTab(tab));
   return (
-    <ContextMenu modifiers={[listRowInsets(ROW_INSETS)]}>
+    <ContextMenu modifiers={[listRowInsets(listSheetInsets.archive)]}>
       <ContextMenu.Trigger>
-        <Button onPress={restore} modifiers={[buttonStyle("plain"), accessibilityHint("Reopens the tab.")]}>
-          <HStack alignment="center" spacing={ROW_GAP} modifiers={[frame({ maxWidth: FILL, alignment: "leading" }), accessibilityElement("combine")]}>
-            <RNHostView matchContents>
-              <View style={{ width: iconSize, height: iconSize }}>
-                <Favicon iconUrl={tab.faviconUrl} pageUrl={tab.url} size={iconSize} />
-              </View>
-            </RNHostView>
-            <VStack alignment="leading" spacing={1}>
-              <Text modifiers={[font({ textStyle: "body" }), lineLimit(1)]}>{tab.title || shown.host}</Text>
-              <Text modifiers={[font({ textStyle: "footnote" }), foregroundStyle(SECONDARY), lineLimit(1)]}>{shown.display || shown.host}</Text>
-            </VStack>
-            <Spacer />
-          </HStack>
-        </Button>
+        <ListRow title={tab.title || shown.host} subtitle={shown.display || shown.host} leading={{ favicon: { url: tab.url, iconUrl: tab.faviconUrl } }} hint="Reopens the tab." onPress={restore} />
       </ContextMenu.Trigger>
       <ContextMenu.Items>
-        <Button label="Open" systemImage="arrow.up.forward.square" onPress={restore} />
-        {canShareTab(tab) ? <Button label="Copy Link" systemImage="link" onPress={() => copyTabLink(tab)} /> : null}
-        {canShareTab(tab) ? <ShareLink item={tab.url}><Label title="Share" systemImage="square.and.arrow.up" /></ShareLink> : null}
+        <Button label={actionWords.open} systemImage="arrow.up.forward.square" onPress={restore} />
+        {canShareTab(tab) ? <LinkMenuItems url={tab.url} onCopy={() => copyTabLink(tab)} /> : null}
         <Divider />
         <Button label="Delete" systemImage="trash" role="destructive" onPress={() => deleteArchivedTab(tab)} />
       </ContextMenu.Items>
@@ -261,7 +187,8 @@ function ArchiveRow({ tab, iconSize }: { tab: BrowserTab; iconSize: number }) {
   );
 }
 
-const noop = () => undefined;
+const EDIT = "Edit";
+const SEARCH_PROMPT = "Search Archive";
 
 const styles = StyleSheet.create({
   anchor: { position: "absolute", width: 0, height: 0 },

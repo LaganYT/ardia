@@ -64,7 +64,7 @@ async function warmDemoPictures() {
 
 async function runDemoScenario(args: LaunchArguments) {
   demoWarming = warmDemoPictures();
-  if (args.browseIncognito) setIncognito(true);
+  if (args.browseIncognito && !setIncognito(true)) return;
   if (args.browseOpen) openPage(args.browseOpen, "typed");
   if (args.browseQuery !== null) presentSearch("home", args.browseQuery);
   if (args.browseSurface === "browsing") {
@@ -158,6 +158,16 @@ async function deckStep({ kind, argument }: DeckStep) {
     case "archivecard":
       sendDeckCommand({ kind: "showArchiveCard" });
       return;
+    case "switch": {
+      const order = deckOrder(currentTabs());
+      const at = order.findIndex((tab) => tab.id === currentTabs().selectedId);
+      const other = order[at > 0 ? at - 1 : at + 1];
+      if (!other || useBrowse.getState().surface !== "browsing") return;
+      openTab(other.id);
+      await wait((Number(argument) || 0) * 1000);
+      await showDeck();
+      return;
+    }
     case "browse": {
       const selected = currentTabs().selectedId;
       if (selected) openTab(selected);

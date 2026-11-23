@@ -106,6 +106,7 @@ object PhonePages {
         }
         shared = made
         downloads = SystemDownloads(context, made)
+        host?.get()?.let { activity -> actAsOldWebView(made, activity) }
         host?.get()?.let(made::attach)
         made.warmUp()
         blocking.start()
@@ -119,8 +120,14 @@ object PhonePages {
         host = WeakReference(activity)
         watchDraws(activity.window.decorView)
         if (shared == null && UpgradeGate.pending(activity)) return
-        engine(activity).attach(activity)
+        val attached = engine(activity)
+        actAsOldWebView(attached, activity)
+        attached.attach(activity)
         blocking.refreshIfDue()
+    }
+
+    private fun actAsOldWebView(engine: DevelopmentWebViewEngine, activity: Activity) {
+        if (LaunchExtras.allowedInThisBuild && activity.intent?.getBooleanExtra(WITHOUT_PRIVATE_PAGES_EXTRA, false) == true) engine.multiProfileSupported = false
     }
 
     fun detach(activity: Activity) {
@@ -244,14 +251,14 @@ object PhonePages {
         )
     }
 
-    suspend fun snapshot(pageId: String, maxWidth: Int, quality: Int, covered: Pair<Double, Double>?): Map<String, Any?>? {
+    suspend fun snapshot(pageId: String, maxWidth: Int, quality: Int, covered: Pair<Double, Double>?, windowCopy: Boolean = true): Map<String, Any?>? {
         val page = require(pageId)
         val (generation, shown, frameAtStart) = kotlinx.coroutines.withContext(Dispatchers.Main.immediate) {
             val view = views[pageId]?.get()
             Triple(visuals.generation(pageId), view, view?.takeIf { it.isAttachedToWindow }?.let(::frameInWindow))
         }
         val started = android.os.SystemClock.uptimeMillis()
-        val drawn = page.snapshot(maxWidth) ?: return null
+        val drawn = page.snapshot(maxWidth, windowCopy) ?: return null
         val captured = android.os.SystemClock.uptimeMillis()
         val route = (page as? WebViewPage)?.lastCaptureRoute
         val web = page.view.value
@@ -499,4 +506,6 @@ object PhonePages {
         CodedException("ERR_PRIVATE_PAGES_UNAVAILABLE", "Private pages need a WebView with multi-profile support", null)
 
     private const val SITE_PREFERENCES = "ardia-site-preferences"
+
+    private const val WITHOUT_PRIVATE_PAGES_EXTRA = "ArdiaWithoutPrivatePages"
 }

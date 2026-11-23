@@ -82,7 +82,7 @@ enum PluginProgramLinks {
     guard let folders = PluginFolders.current() else { return ["ok": false, "reason": "Ardia has no data folder"] }
     let pin = PluginFolders.officialPin()
     let legacy = folderId == PluginFolders.legacyId
-    let copy = legacy ? nil : folders.officialCopy(name, folderId: folderId, pin: pin)
+    let copy = legacy ? nil : folders.officialCopy(name, folderId: folderId, pin: pin, fresh: true)
     if legacy && folders.legacyFolder(name, pin: pin) == nil { return ["ok": false, "reason": "its earlier copy is gone"] }
     let unverified = { (reason: String) -> [String: Any] in
       if case .success(let places) = folders.programPlaces(),

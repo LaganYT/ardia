@@ -13,6 +13,7 @@ import { useAppearanceSummary } from "../../state/settings/appearance";
 import { usePreferences } from "../../state/settings/hooks";
 import { closeSettings, settingsRouteKey, type SettingsRoute } from "../../state/settings/nav";
 import { AUTO_ARCHIVE_INTERVALS, autoArchiveTitle, type AutoArchiveInterval } from "../../state/tabs/tabModels";
+import { prepareArchiveNextFrame } from "../../state/tabs/store";
 import { PHONE_SHARING_COPY } from "../../lib/telemetryCopy";
 import { setUsageSharing, useUsageSharing } from "../../state/telemetry/telemetry";
 import { contentMargins, modifierList, PROFILE_COLORS, settingsChrome, settingsLayout, SettingsIconTile, SettingsShortcuts, settingsSwitchStyle, settingsTint, settingsUIAvailable, useWarningInk, type ProfileColor } from "../ui";
@@ -22,13 +23,14 @@ import { syncOffered } from "../../state/sync/offer";
 import { browseForMeOffered, refreshChatGPTConnected, useChatGPTConnected } from "../../state/browseForMe/store";
 import { pageSummariesSwitchable, refreshPageSummariesEnabled, setPageSummariesEnabled, usePageSummariesEnabled } from "../../state/pageSummary/enabled";
 import { PAGE_SUMMARY_COPY } from "../../state/pageSummary/copy";
+import { destinationWords } from "../../lib/sharedWords";
 
 const INTERVALS = (Object.keys(AUTO_ARCHIVE_INTERVALS) as AutoArchiveInterval[]).map((id) => ({ id, title: autoArchiveTitle(id) }));
 const APP_LINKS = [
   { id: "ardia", title: "Ardia" },
   { id: "app", title: "App" },
 ] as const;
-const SHORTCUTS = [{ id: "archive", title: "Archive" }, { id: "spaces", title: "Spaces" }];
+const SHORTCUTS = [{ id: "archive", title: destinationWords.archive }, { id: "spaces", title: destinationWords.spaces }];
 const ARCHIVE_ONLY = SHORTCUTS.filter((shortcut) => shortcut.id === "archive");
 const SYNC_TILE = 56;
 const TOP_SECTION_SPACING = 12;
@@ -61,7 +63,7 @@ export function ExpoSettingsRoot() {
   }, []);
   return (
     <ExpoSettingsDone>
-      <Form modifiers={modifierList(navigationTitle("Settings"), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), contentMargins({ edges: "top", length: settingsLayout.expoListTop }))}>
+      <Form modifiers={modifierList(navigationTitle(destinationWords.settings), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), contentMargins({ edges: "top", length: settingsLayout.expoListTop }))}>
         {syncOffered() ? (
           <Section modifiers={[listSectionSpacing(TOP_SECTION_SPACING)]}>
             <NavigationLink value={link({ page: "sync" })}>
@@ -70,7 +72,7 @@ export function ExpoSettingsRoot() {
           </Section>
         ) : null}
         <Section modifiers={[listRowBackground("clear"), listRowInsets({ top: 0, leading: 0, bottom: 0, trailing: 0 }), listSectionSpacing(TOP_SECTION_SPACING)]}>
-          <SettingsShortcuts shortcuts={syncOffered() ? SHORTCUTS : ARCHIVE_ONLY} onPress={(id) => leaveFor(id === "archive" ? openArchive : openSpaces)} />
+          <SettingsShortcuts shortcuts={syncOffered() ? SHORTCUTS : ARCHIVE_ONLY} onPress={(id) => leaveFor(id === "archive" ? openPreparedArchive : openSpaces)} />
         </Section>
         <Section title="General">
           <NavigationLink value={link({ page: "appearance" })}>
@@ -174,6 +176,11 @@ function leaveFor(open: () => void) {
   open();
 }
 
+function openPreparedArchive() {
+  openArchive();
+  prepareArchiveNextFrame();
+}
+
 function SyncRow() {
   const warningInk = useWarningInk();
   const line = syncRowSubtitle(useSyncStatus());
@@ -185,7 +192,7 @@ function SyncRow() {
         <Image systemName="macbook.and.iphone" size={SYNC_TILE / 2} color={settingsTint.sync} />
       )}
       <VStack alignment="leading" spacing={2}>
-        <Text modifiers={[font({ textStyle: "headline" })]}>Sync With Mac</Text>
+        <Text modifiers={[font({ textStyle: "headline" })]}>{destinationWords.sync}</Text>
         <Text modifiers={[font({ textStyle: "subheadline" }), foregroundStyle(line.isWarning ? warningInk : { type: "hierarchical", style: "secondary" }), contentTransition("opacity")]}>{line.text}</Text>
       </VStack>
     </HStack>

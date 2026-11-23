@@ -1,4 +1,5 @@
 import { deckLeading, deckPileScale, lerp, type DeckGeometry } from "./deckGeometry.ts";
+import { CARD_MOVE_RESPONSE, GLASS_FADE_MS } from "./sharedMotion.ts";
 
 export type PullTarget = {
   id: string;
@@ -27,10 +28,11 @@ export const DECK_PULL = {
   flickTravel: 16,
   back: 250,
   maxSpeed: 14,
-  landResponse: 0.34,
-  landDamping: 1,
-  revealResponse: 0.38,
-  growResponse: 0.18,
+  landResponse: CARD_MOVE_RESPONSE,
+  growResponse: CARD_MOVE_RESPONSE,
+  hurryResponse: 0.07,
+  hurryLanding: 1 + 1e-6,
+  settleEnergy: 1e-4,
   backResponse: 0.28,
   backDamping: 1,
   glyphsGoneAt: 44,
@@ -40,13 +42,10 @@ export const DECK_PULL = {
   barClearance: 4,
   barReturnSlack: 8,
   fadeMs: 150,
-  barBackMs: 150,
+  barBackMs: GLASS_FADE_MS,
   barBackCapMs: 600,
   hitchMs: 50,
-  standbyCapMs: 500,
-  captureCapMs: 180,
-  paintCapMs: 250,
-  paintDeadlineMs: 1000,
+  growLostMs: 600,
 } as const;
 
 const springOf = (response: number, dampingFraction: number) => {
@@ -54,7 +53,36 @@ const springOf = (response: number, dampingFraction: number) => {
   return { stiffness, damping: 2 * dampingFraction * Math.sqrt(stiffness), mass: 1 };
 };
 
-export const DECK_PULL_SPRING = { land: springOf(DECK_PULL.landResponse, DECK_PULL.landDamping), reveal: springOf(DECK_PULL.revealResponse, 1), back: springOf(DECK_PULL.backResponse, DECK_PULL.backDamping), grow: springOf(DECK_PULL.growResponse, 1), follow: springOf(DECK_PULL.followResponse, 1) } as const;
+const settlingSpringOf = (response: number) => ({ ...springOf(response, 1), energyThreshold: DECK_PULL.settleEnergy });
+
+export const DECK_PULL_SPRING = {
+  land: settlingSpringOf(DECK_PULL.landResponse),
+  hurry: settlingSpringOf(DECK_PULL.hurryResponse),
+  back: springOf(DECK_PULL.backResponse, DECK_PULL.backDamping),
+  grow: settlingSpringOf(DECK_PULL.growResponse),
+  follow: springOf(DECK_PULL.followResponse, 1),
+} as const;
+
+export type DeckHit = { ids: readonly string[]; scroll: number; g: DeckGeometry };
+
+export function deckCardAt(hit: DeckHit, x: number, y: number): string | null {
+  "worklet";
+  const { g, ids, scroll } = hit;
+  for (let index = ids.length - 1; index >= 0; index--) {
+    const relative = index - scroll;
+    const scale = deckPileScale(g, relative);
+    const left = deckLeading(g, relative) + (g.cardWidth * (1 - scale)) / 2;
+    const half = (g.cardHeight * scale) / 2;
+    if (x >= left && x <= left + g.cardWidth * scale && y >= g.cardCenterY - half && y <= g.cardCenterY + half) return ids[index] ?? null;
+  }
+  return null;
+}
+
+export function landingVelocity(shrink: number, velocity: number): number {
+  "worklet";
+  const reach = ((2 * Math.PI) / DECK_PULL.landResponse) * (1 - shrink);
+  return reach >= 0 ? Math.min(velocity, reach) : Math.max(velocity, reach);
+}
 
 export function pullTarget(id: string, screenWidth: number, screenHeight: number, frame: { centerX: number; centerY: number; width: number; height: number }, corner: number, screenCorner: number): PullTarget {
   const reach = Math.max(screenHeight - (frame.centerY + frame.height / 2), DECK_PULL.minReach);

@@ -729,6 +729,58 @@ final class OfficialPluginsTests: XCTestCase {
     XCTAssertTrue(FileManager.default.isExecutableFile(atPath: "\(made.copy.path)/bin/tool"))
   }
 
+  func unpack(_ archive: String, into stage: String) -> String? {
+    guard let held = OfficialArchive.snapshot(archive, in: root) else { return "no snapshot" }
+    defer { held.close() }
+    let folder = open(stage, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    guard folder >= 0 else { return "no stage" }
+    defer { close(folder) }
+    return OfficialArchive.unpack(held.fd, top: "tool", into: folder, scratch: root)
+  }
+
+  func testTheBytesHashedAreTheBytesUnpackedEvenIfTheDownloadChangesAfterward() throws {
+    let archive = try pluginArchive(manifest())
+    let sha = try XCTUnwrap(OfficialArchive.sha256(file: archive))
+    let held = try XCTUnwrap(OfficialArchive.snapshot(archive, in: root))
+    defer { held.close() }
+    XCTAssertEqual(held.sha, sha)
+    var info = stat()
+    XCTAssertEqual(fstat(held.fd, &info), 0)
+    XCTAssertEqual(info.st_nlink, 0, "the snapshot has no path, so nothing can open it again")
+    let other = try pluginArchive(manifest(), tool: Data("#!/bin/sh\necho other\n".utf8))
+    try FileManager.default.removeItem(atPath: archive)
+    try FileManager.default.copyItem(atPath: other, toPath: archive)
+    let stage = try XCTUnwrap(store.makeScratch("tool", prefix: ".stage-"))
+    let folder = open(stage, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    defer { close(folder) }
+    XCTAssertNil(OfficialArchive.unpack(held.fd, top: "tool", into: folder, scratch: root))
+    XCTAssertEqual(try String(contentsOfFile: "\(stage)/bin/tool", encoding: .utf8), "#!/bin/sh\necho hi\n", "what is unpacked is what was hashed, not what the path holds now")
+    let made = try store.publish("tool", staged: stage, archive: held, sha: sha).get()
+    XCTAssertEqual(OfficialArchive.sha256(file: store.archivePath("tool", sha)), sha, "the kept download is written from the verified bytes")
+    XCTAssertEqual(made.sha, sha)
+  }
+
+  func testUnpackingOpensEveryFolderWithoutFollowingALink() throws {
+    let stage = "\(root)/stage-links"
+    let outside = "\(root)/outside"
+    try FileManager.default.createDirectory(atPath: "\(outside)/b", withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(atPath: "\(stage)/real/b", withIntermediateDirectories: true)
+    XCTAssertEqual(symlink(outside, "\(stage)/a"), 0)
+    let folder = open(stage, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    defer { close(folder) }
+    XCTAssertNil(OfficialArchive.openParent(folder, of: "a/b/c"), "a folder swapped for a link on the way down is refused")
+    XCTAssertNil(OfficialArchive.openParent(folder, of: "real/../a/c"))
+    let parent = try XCTUnwrap(OfficialArchive.openParent(folder, of: "real/b/c"))
+    XCTAssertEqual(parent.name, "c")
+    close(parent.folder)
+    let archive = try pluginArchive(manifest())
+    let planted = "\(root)/stage-planted"
+    XCTAssertEqual(mkdir(planted, 0o700), 0)
+    XCTAssertEqual(symlink(outside, "\(planted)/bin"), 0)
+    XCTAssertNotNil(unpack(archive, into: planted), "a link already where a folder goes stops the unpack")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: "\(outside)/tool"), "nothing is written through it")
+  }
+
   func testGzipAndTarReadersRefuseDamage() throws {
     let archive = try pluginArchive(manifest())
     var bytes = try Data(contentsOf: URL(fileURLWithPath: archive))
@@ -737,10 +789,10 @@ final class OfficialPluginsTests: XCTestCase {
     try bytes.write(to: URL(fileURLWithPath: damaged))
     let stage = "\(root)/stage-damaged"
     XCTAssertEqual(mkdir(stage, 0o700), 0)
-    XCTAssertNotNil(OfficialArchive.unpack(damaged, top: "tool", into: stage, scratch: root))
+    XCTAssertNotNil(unpack(damaged, into: stage))
     try Data("not gzip".utf8).write(to: URL(fileURLWithPath: "\(root)/plain.tar.gz"))
     let other = "\(root)/stage-plain"
     XCTAssertEqual(mkdir(other, 0o700), 0)
-    XCTAssertEqual(OfficialArchive.unpack("\(root)/plain.tar.gz", top: "tool", into: other, scratch: root), "the download isn't a gzip file")
+    XCTAssertEqual(unpack("\(root)/plain.tar.gz", into: other), "the download isn't a gzip file")
   }
 }

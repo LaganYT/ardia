@@ -15,6 +15,8 @@ on:
       - "apps/phone/patches/**"
       - "apps/phone/pnpm-workspace.yaml"
       - "packages/sync/**"
+      - "packages/core-rs/**"
+      - ".github/actions/core-rs-xcframework/**"
       - "packages/core/**"
       - ".github/workflows/ios.yml"
   push:
@@ -32,6 +34,8 @@ on:
       - "apps/phone/patches/**"
       - "apps/phone/pnpm-workspace.yaml"
       - "packages/sync/**"
+      - "packages/core-rs/**"
+      - ".github/actions/core-rs-xcframework/**"
       - "packages/core/**"
       - ".github/workflows/ios.yml"
 
@@ -40,13 +44,14 @@ permissions:
 
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
 
 jobs:
   gate:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -70,17 +75,19 @@ jobs:
 
   app:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
     runs-on: xcode-27
     timeout-minutes: 75
     env:
       SCRATCH: ${{ github.workspace }}/.ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
+          cache: pnpm
+          cache-dependency-path: apps/phone/pnpm-lock.yaml
       - name: Toolchain
         run: |
           xcodebuild -version
@@ -97,6 +104,7 @@ jobs:
         with:
           path: apps/phone/ios/Pods
           key: phone-pods-${{ hashFiles('apps/phone/ios/Podfile.lock', 'apps/phone/pnpm-lock.yaml') }}
+      - uses: ./.github/actions/core-rs-xcframework
       - name: The Expo app's dependencies and Pods
         run: |
           set -euo pipefail
@@ -120,7 +128,7 @@ jobs:
 
   packages:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
     runs-on: xcode-27
     timeout-minutes: 45
     env:
@@ -143,6 +151,7 @@ jobs:
             .ci/sync
           key: swiftpm-xcode-27.1-${{ github.sha }}
           restore-keys: swiftpm-xcode-27.1-
+      - uses: ./.github/actions/core-rs-xcframework
       - name: The JavaScriptCore bundles match their TypeScript
         run: node apps/phone/scripts/bundle-shared.mjs --check
       - name: ArdiaKit tests

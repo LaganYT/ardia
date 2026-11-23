@@ -224,7 +224,7 @@ NSString *const kTakeHideElementFrameClick =
      "    const click = ublock?.ardiaHideElementFrameClick;"
      "    if (click && Date.now() - click.at < 5000) {"
      "      ublock.ardiaHideElementFrameClick = null;"
-     "      return resolve({tabId: click.tabId, pageUrl: click.pageUrl});"
+     "      return resolve({tabId: click.tabId, pageUrl: click.pageUrl, frameId: click.frameId});"
      "    }"
      "    if (Date.now() > until) return resolve(null);"
      "    setTimeout(look, 25);"
@@ -233,6 +233,41 @@ NSString *const kTakeHideElementFrameClick =
      "}).then((v) => post('result', JSON.stringify({value: v})), (e) => post('result', JSON.stringify({error: String(e && e.message || e)})))";
 
 constexpr double kHideElementFrameClickSeconds = 6;
+constexpr CFTimeInterval kHideElementMenuPointSeconds = 60;
+constexpr unsigned short kReturnKeyCode = 36;
+constexpr unsigned short kEnterKeyCode = 76;
+
+ArdiaWebView *PageViewHolding(NSView *view) {
+  for (; view; view = view.superview)
+    if ([view isKindOfClass:ArdiaWebView.class]) return (ArdiaWebView *)view;
+  return nil;
+}
+
+ArdiaWebView *PageViewUnderPointer(NSEvent *event) {
+  NSView *content = event.window.contentView;
+  NSView *root = content.superview ?: content;
+  return root ? PageViewHolding([root hitTest:[root convertPoint:event.locationInWindow fromView:nil]]) : nil;
+}
+
+ArdiaWebView *PageViewWithKeyFocus(NSEvent *event) {
+  id responder = event.window.firstResponder;
+  return [responder isKindOfClass:NSView.class] ? PageViewHolding(responder) : nil;
+}
+
+void InstallElementPickMonitor() {
+  static id monitor;
+  if (monitor) return;
+  monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp | NSEventMaskKeyDown
+                                                  handler:^NSEvent *(NSEvent *event) {
+                                                    if (!event.window) return event;
+                                                    const BOOL confirmingKey = event.type == NSEventTypeKeyDown &&
+                                                                               (event.keyCode == kReturnKeyCode || event.keyCode == kEnterKeyCode);
+                                                    if (event.type == NSEventTypeKeyDown && !confirmingKey) return event;
+                                                    ArdiaWebView *view = confirmingKey ? PageViewWithKeyFocus(event) : PageViewUnderPointer(event);
+                                                    [view noteElementPickInput];
+                                                    return event;
+                                                  }];
+}
 
 void TakeHideElementFrameClick();
 
@@ -269,10 +304,26 @@ NSDictionary *FindMenuItem(NSArray *items, NSString *label) {
   WatchHideElementMenuPicks();
 }
 
-- (BOOL)startPickerForFrameClickInTab:(int)tabId page:(NSString *)pageUrl {
+- (BOOL)startPickerForFrameClickInTab:(int)tabId page:(NSString *)pageUrl frame:(int)frameId {
   if (!_tab || _tab.closed || _tab.tabId != tabId || ![_tab.url isEqualToString:pageUrl]) return NO;
-  [self emit:@"command" payload:@{@"command" : @"hideElement", @"text" : @"", @"point" : @[ @-1, @-1 ]}];
+  const BOOL pointFresh = frameId == 0 && _elementPick.menuTab == _tab && _elementPick.menuAt >= 0 &&
+                          CACurrentMediaTime() - _elementPick.menuAt < kHideElementMenuPointSeconds;
+  const NSPoint point = pointFresh ? _elementPick.menuPoint : NSMakePoint(-1, -1);
+  _elementPick.menuAt = -1;
+  [self emit:@"command" payload:@{@"command" : @"hideElement", @"text" : @"", @"point" : @[ @(point.x), @(point.y) ]}];
   return YES;
+}
+
+- (void)noteContextMenuPoint {
+  NSWindow *window = self.window;
+  if (!window || !_tab) return;
+  const NSPoint local = [self convertPoint:window.mouseLocationOutsideOfEventStream fromView:nil];
+  if (!NSPointInRect(local, self.bounds)) return;
+  const double zoom = _tab.zoomFactor > 0 ? _tab.zoomFactor : 1;
+  const CGFloat fromTop = self.isFlipped ? local.y - NSMinY(self.bounds) : NSMaxY(self.bounds) - local.y;
+  _elementPick.menuPoint = NSMakePoint((local.x - NSMinX(self.bounds)) / zoom, fromTop / zoom);
+  _elementPick.menuAt = CACurrentMediaTime();
+  _elementPick.menuTab = _tab;
 }
 
 + (void)setSearchEngineName:(NSString *)name {
@@ -345,6 +396,7 @@ NSDictionary *FindMenuItem(NSArray *items, NSString *label) {
 
 - (NSDictionary<NSString *, id> *)tab:(ArdiaCoreTab *)tab runContextMenu:(NSDictionary<NSString *, id> *)menu {
   NSArray *items = Field<NSArray>(menu, @"items") ?: @[];
+  [self noteContextMenuPoint];
   NoteEvent(ardia_host::BrowserId(tab), @"contextMenu", @{@"items" : items});
   ArdiaLaunchConfig *config = ArdiaLaunchConfig.shared;
   if (![config testFlag:@"contextMenu"]) {
@@ -380,14 +432,41 @@ NSDictionary *FindMenuItem(NSArray *items, NSString *label) {
 
 @end
 
+@implementation ArdiaWebView (ElementPick)
+
+- (double)armElementPick {
+  InstallElementPickMonitor();
+  _elementPick.tab = _tab;
+  _elementPick.documents = _tab.committedDocumentCount;
+  _elementPick.armed += 1;
+  _elementPick.input = NO;
+  return _elementPick.armed;
+}
+
+- (void)noteElementPickInput {
+  if (_elementPick.tab && _elementPick.tab == _tab) _elementPick.input = YES;
+}
+
+- (BOOL)takeElementPick:(double)armed {
+  const BOOL confirmed = armed == _elementPick.armed && _elementPick.input && _tab && _elementPick.tab == _tab &&
+                         _tab.committedDocumentCount == _elementPick.documents;
+  _elementPick.armed += 1;
+  _elementPick.input = NO;
+  _elementPick.tab = nil;
+  return confirmed;
+}
+
+@end
+
 namespace {
 
 void StartPickerForFrameClick(NSDictionary *click) {
   NSNumber *tabId = Field<NSNumber>(click, @"tabId");
   NSString *pageUrl = Field<NSString>(click, @"pageUrl");
+  NSNumber *frameId = Field<NSNumber>(click, @"frameId");
   if (!tabId || !pageUrl.length) return;
   for (ArdiaWebView *view in LiveViews().allObjects)
-    if ([view startPickerForFrameClickInTab:tabId.intValue page:pageUrl]) return;
+    if ([view startPickerForFrameClickInTab:tabId.intValue page:pageUrl frame:frameId ? frameId.intValue : -1]) return;
 }
 
 void TakeHideElementFrameClick(NSString *profile) {

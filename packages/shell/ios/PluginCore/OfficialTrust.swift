@@ -6,10 +6,9 @@ enum OfficialTrust {
     return active
   }
 
-  static func copy(_ store: OfficialStore, name: String, folderId: String, pin: OfficialPin?) -> OfficialCopy? {
+  static func copy(_ store: OfficialStore, name: String, folderId: String, pin: OfficialPin?, fresh: Bool = false) -> OfficialCopy? {
     guard let sha = OfficialPin.sha(ofFolderId: folderId), let entry = pin?.entry(name), entry.trusts(sha) else { return nil }
-    if let active = trustedActive(store, entry), active.sha == sha { return active }
-    return store.copy(name, sha: sha)
+    return store.copy(name, sha: sha, fresh: fresh)
   }
 
   static func bundledCopyHolds(_ folder: String, digests: Set<String>) -> Bool {

@@ -8,7 +8,7 @@ public final class SearchStageModule: Module {
 
     View(SearchStageView.self) {
       ViewName("SearchStage")
-      Events("onLift", "onReveal", "onSettled")
+      Events("onLift", "onReveal", "onSettled", "onLanding")
       Prop("shown") { (view: SearchStageView, value: Bool?) in view.shownProp = value ?? false }
       Prop("anchorNativeId") { (view: SearchStageView, value: String?) in view.anchorNativeId = value }
       Prop("faceNativeId") { (view: SearchStageView, value: String?) in view.faceNativeId = value }
@@ -32,6 +32,7 @@ public final class SearchStageModule: Module {
       Prop("morphPanelTint") { (view: SearchStageView, value: UIColor?) in view.look.panelTint = value ?? .clear }
       Prop("morphPanelDark") { (view: SearchStageView, value: Bool?) in view.look.panelStyle = value == true ? .dark : .unspecified }
       Prop("morphClassicPanel") { (view: SearchStageView, value: UIColor?) in view.look.classicPanel = value ?? .secondarySystemBackground }
+      Prop("morphClassicChrome") { (view: SearchStageView, value: ClassicChrome?) in view.look.classicChrome = value ?? ClassicChrome() }
       OnViewDidUpdateProps { (view: SearchStageView) in
         MainActor.assumeIsolated { view.propsDidUpdate() }
       }

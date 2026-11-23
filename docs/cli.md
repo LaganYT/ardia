@@ -44,7 +44,7 @@ it off until the next launch. An `ardia` installed the old way (`~/Library/Appli
 adopted on update with no click when control was on: the plugin counts as installed, the link moves to the new copy,
 and `CLI/current` points into the store, so paths saved through it keep working. When control was off, it isn't
 adopted (`ADOPT_WITH_CONTROL_OFF` in `state/plugins/programs.ts` is false): the old `ardia` stays on PATH, untouched,
-control stays off, and Command Line shows as available. The old command then reports Ardia unreachable with its own
+control stays off, and Command Line shows as available, its row in Settings › Plugins saying "An older ardia is installed. Install Command Line to update it." The old command then reports Ardia unreachable with its own
 old wording until the user installs Command Line, which adopts it and turns control on as the sheet says
 (`usage_counts.plugin_adoptions_waiting` counts these). There's no uninstall from
 Settings; removing the link brings it back at the next launch.
@@ -52,9 +52,34 @@ Settings; removing the link brings it back at the next launch.
 On Linux, Settings › Advanced › Command line installs it from the package (`install.sh --version <app version> --sha256
 <digest>` with a `file://` URL), as before.
 
-`cliControl` (`state/app/cliControl.ts`) stays the stored key, the control pill and the token server stay in the app
-(`docs/automation.md`), and on Linux and in older data folders it means what it always did; Linux keeps its switch in
-Settings › Advanced.
+`cliControl` (`state/app/cliControl.ts`) stays the stored key, the control pill stays in the app, and on Linux and in
+older data folders it means what it always did; Linux keeps its switch in Settings › Advanced. While it is on, `ardia`
+reaches Ardia two ways (`docs/automation.md`, `docs/control-socket.md`):
+- **The control socket** (`ArdiaControl.sock`, mode 0600) carries the owner's methods. It has no token: the server
+  only checks that the peer runs as the same user (`getpeereid`), so every process of that user is admitted.
+- **The engine's token connection** carries `ardia browse`. It listens on loopback with a token written to
+  `ArdiaControl.json`, which the user's own processes can read. It is a full DevTools client of the browser, the same
+  as a `--remote-debugging-port` client (the owner's decision, #2807): every CDP domain and method, every target
+  (`chrome://` and WebUI pages, extension pages, service workers, the browser target), every URL and browser context,
+  and local files, so `ardia browse upload` (`DOM.setFileInputFiles`), `download` and `wait --download`
+  (`Browser.setDownloadBehavior`), emulation on any tab, cookies, storage, request interception, screencasts and the
+  debugger all work. Events and replies pass through unchanged.
+
+  What still guards it is what keeps other users and web pages off the connection, not what a process running as
+  you may do: the token (32 random bytes per start, compared in constant time, only in the 0600 `ArdiaControl.json`),
+  loopback only, no `Origin` header (so no web page can open the socket), and the `RemoteDebuggingAllowed` policy. The
+  engine also keeps its bookkeeping: a command must be a JSON object with an integer `id` and a string `method`
+  (`params`, if present, an object; `sessionId` naming a session this connection attached), one command per
+  (session, id) until its reply, and at most 4096 waiting replies before the connection is closed. Showing a saved
+  password still asks for your Mac's login, as it does in the Passwords page, since that check runs in the browser,
+  not in DevTools. Plugin helpers can't read `ArdiaControl.json`: their sandbox denies the app's data folder and
+  LaunchServices (`docs/plugins.md`, #2857).
+
+  The engine records which tabs the command opened (`Target.createTarget`) for `ardia browse set viewport`'s
+  off-screen move and marks off-screen targets `ardiaOffscreen: true` in `Target.getTargets` and
+  `Target.getTargetInfo`. It never closes a tab on its own: off-screen tabs are closed by the app, through ArdiaCore's
+  normal close, 5 s after the last connection ends (`state/automation/offscreen.ts`). `ac_cli_control`'s status
+  counts commands by domain (`tokenCommands`), sent as `usage_counts.cli_cdp_commands_<domain>`.
 
 ## The contract
 

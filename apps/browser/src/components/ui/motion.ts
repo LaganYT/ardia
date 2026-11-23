@@ -17,12 +17,19 @@ export const curve = {
 
 export const currentValue = (value: Animated.Value): number => (value as unknown as { __getValue(): number }).__getValue();
 
+type AttachableNode = { __attach(): void; __detach(): void };
 type NativeNode = { __nativeTag?: number; __detach(): void };
 
 export function releaseNativeValue(value: Animated.Value) {
   value.removeAllListeners();
   const node = value as unknown as NativeNode;
   if (node.__nativeTag != null) node.__detach();
+}
+
+export function keepAttached(value: Animated.Value): () => void {
+  const anchor = value.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) as unknown as AttachableNode;
+  anchor.__attach();
+  return () => anchor.__detach();
 }
 
 export const animating = (value: Animated.Value): boolean => (value as unknown as { _animation?: unknown })._animation != null;
@@ -98,18 +105,19 @@ export const hoverFade = {
 
 export type Fade = { duration: number; easing: EasingFunction; delay?: number };
 
-export function usePresence<T>(value: T | null, motion: { show: Fade; hide: Fade }) {
+export function usePresence<T>(value: T | null, motion: { show: Fade; hide: Fade }, enter = false) {
   const showing = value !== null;
   const last = useRef(value);
   if (showing) last.current = value;
   const [mounted, setMounted] = useState(showing);
   if (showing && !mounted) setMounted(true);
-  const appear = useRef(new Animated.Value(showing ? 1 : 0)).current;
-  const heading = useRef(showing);
+  const appear = useRef(new Animated.Value(showing && !enter ? 1 : 0)).current;
+  const heading = useRef(showing && !enter);
   useEffect(() => {
-    if (heading.current === showing) return;
+    const target = showing ? 1 : 0;
+    if (heading.current === showing && currentValue(appear) === target) return;
     heading.current = showing;
-    const run = Animated.timing(appear, { toValue: showing ? 1 : 0, ...(showing ? motion.show : motion.hide), useNativeDriver: true });
+    const run = Animated.timing(appear, { toValue: target, ...(showing ? motion.show : motion.hide), useNativeDriver: true });
     run.start(({ finished }) => finished && !showing && setMounted(false));
     return () => run.stop();
   }, [showing]);

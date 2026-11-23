@@ -33,6 +33,13 @@ for file in "$dmg" "$zip" "$feed"; do
   [ -f "$file" ] || die "no $file (scripts/release.sh $version first)"
   assets+=("$file")
 done
+app_symbols="$dist/$(app_symbols_name "$version")"
+app_uuids="$dist/$(app_uuids_name "$version")"
+for file in "$app_symbols" "$app_uuids"; do
+  [ -f "$file" ] && [ -s "$file" ] || die "no $file: a release ships the app's symbols, or its crashes can't be named (scripts/release.sh packs them; in CI the sign job's release artifact carries them)"
+  assets+=("$file")
+done
+echo "PASS  the app's symbols join the release"
 "$root/scripts/release/check-packages.sh" "$dist" "$version" || die "the update zip or the DMG isn't laid out as installs expect (scripts/release/check-packages.sh)"
 linux="$dist/linux"
 if [ -d "$linux" ]; then
@@ -166,6 +173,8 @@ if [ "$channel" = nightly ]; then
   [ "$size" = "$(stat -f %z "$dmg")" ] && echo "PASS  $url is $version's DMG" \
     || { echo "FAIL  $url is $version's DMG (size $size, expected $(stat -f %z "$dmg"))"; status=1; }
   to="$(curl -s -o /dev/null --max-time 15 -w '%{redirect_url}' https://ardia.dev/nightly || true)"
+  legacy_nightly_dmg_url="https://github.com/mantrakp04/ardia/releases/download/nightly/Ardia-Nightly.dmg"
+  [ "$to" = "$legacy_nightly_dmg_url" ] && to="$(curl -s -o /dev/null --max-time 15 -w '%{redirect_url}' "$legacy_nightly_dmg_url" || true)"
   [ "$to" = "$NIGHTLY_DMG_URL" ] && echo "PASS  https://ardia.dev/nightly leads there" \
     || { echo "FAIL  https://ardia.dev/nightly leads there (goes to ${to:-nothing}: deploy the site, infra/site/nginx.conf)"; status=1; }
 fi

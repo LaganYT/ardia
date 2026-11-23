@@ -1,6 +1,6 @@
 import { addHistoryVisits, deleteHistoryUrls } from "../../platform/history";
 import type { Adapter } from "../../platform/sync";
-import { historyOf, historyViewOf, MAX_HISTORY, MAX_VISIT_TIMES, withHistoryList } from "../history/history";
+import { historyOf, historyViewOf, MAX_HISTORY, MAX_VISIT_TIMES, withHistoryList, type HistoryView } from "../history/history";
 import { useBrowser } from "../browser/store";
 import { engineProfile } from "../browser/model";
 import type { HistoryEntry } from "../browser/types";
@@ -14,8 +14,14 @@ const store = () => useBrowser.getState();
 
 const HISTORY_WINDOW_MS = 90 * 86_400_000;
 
-const lastVisitOf = (v: HistoryValue) => Math.max(0, ...v.vt);
+const lastVisitOf = (v: HistoryValue) => v.vt.reduce((m, t) => Math.max(m, t), 0);
 const SAME_VISIT_MS = 1;
+const keptVisits = (vt: number[]) => {
+  if (vt.length <= MAX_VISIT_TIMES) return vt;
+  const out: number[] = [];
+  for (const t of [...vt].sort((a, z) => a - z)) if (!out.length || t - out[out.length - 1]! > SAME_VISIT_MS) out.push(t);
+  return out.slice(-MAX_VISIT_TIMES);
+};
 const sameVisits = (a: number[], b: number[]) => a.length === b.length && a.every((t, i) => Math.abs(b[i]! - t) <= SAME_VISIT_MS);
 
 export function historyExpired(key: string, value: unknown, now: number) {
@@ -50,6 +56,18 @@ function olderThan(view: readonly HistoryEntry[], since: number, keyOf: (e: Hist
   };
 }
 
+type ExtractedWindow = { since: number };
+const extractedWindows = new WeakMap<HistoryView, ExtractedWindow>();
+
+function windowToken(view: HistoryView | undefined, since: number): ExtractedWindow | undefined {
+  if (!view) return undefined;
+  const token = extractedWindows.get(view);
+  if (token && since >= token.since) return token;
+  const fresh = { since };
+  extractedWindows.set(view, fresh);
+  return fresh;
+}
+
 export function historyAdapter(profileId: string): Adapter {
   const ready = () => !!historyViewOf(store(), profileId)?.ready;
   const extracts = historyExtractsOf(profileId);
@@ -71,11 +89,15 @@ export function historyAdapter(profileId: string): Adapter {
   };
   return withSyncWorkCounts("history", {
     prefix: HISTORY,
+    extractsOnlyFrom: () => windowToken(historyViewOf(store(), profileId), Date.now() - HISTORY_WINDOW_MS),
     extract: (_base, _queued, _now, _known, _remote, _stamp, baseJson) => {
       if (!ready()) return null;
       const since = Date.now() - HISTORY_WINDOW_MS;
       const values = new Map<string, unknown>();
-      const { list: view, floor } = historyViewOf(store(), profileId)!;
+      const current = historyViewOf(store(), profileId)!;
+      const token = extractedWindows.get(current);
+      if (token) token.since = Math.max(token.since, since);
+      const { list: view, floor } = current;
       const extractedVisit = (e: HistoryEntry) => {
         let visit = extracts.visits.get(e);
         if (!visit) extracts.visits.set(e, (visit = { key: isWebPageUrl(e.url) ? `${HISTORY}${e.url}` : null, json: undefined, value: null }));
@@ -124,7 +146,7 @@ export function historyAdapter(profileId: string): Adapter {
         const old = byUrl.get(url);
         if (v) {
           const have = old?.visitTimes ?? [];
-          const fresh = v.vt.filter((t) => t >= since && !have.some((h) => Math.abs(h - t) <= SAME_VISIT_MS));
+          const fresh = keptVisits(v.vt).filter((t) => t >= since && !have.some((h) => Math.abs(h - t) <= SAME_VISIT_MS));
           if (fresh.length) add.push({ url, title: v.t, visitTimes: fresh });
           const times = [...have, ...fresh].sort((a, z) => a - z).slice(-MAX_VISIT_TIMES);
           if (!times.length) continue;

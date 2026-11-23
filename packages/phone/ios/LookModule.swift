@@ -73,6 +73,7 @@ public final class LookModule: Module {
       Prop("surface") { (view: GlassView, value: String?) in view.surface = GlassView.Surface(rawValue: value ?? "") ?? .glass }
       Prop("tinted") { (view: GlassView, value: Bool?) in view.tinted = value == true }
       Prop("barShadow") { (view: GlassView, value: Bool?) in view.barShadow = value == true }
+      Prop("classicChrome") { (view: GlassView, value: ClassicChrome?) in view.classicChrome = value ?? ClassicChrome() }
       Prop("shown") { (view: GlassView, value: Bool?) in view.shown = value ?? true }
       Prop("shownMs") { (view: GlassView, value: Double?) in view.shownDuration = max(0, value ?? 200) / 1000 }
       Prop("color") { (view: GlassView, value: String?) in view.colors.color = value }
@@ -223,6 +224,14 @@ final class FilmGrainView: LookHostView {
 
 final class FrostSourceView: ExpoView {}
 
+struct ClassicChrome: Record {
+  @Field var edgeWidth: Double = 0
+  @Field var edge: UIColor? = nil
+  @Field var shadowRadius: Double = 0
+  @Field var shadowY: Double = 0
+  @Field var shadow: UIColor? = nil
+}
+
 final class GlassView: ExpoView {
   enum Shape: String {
     case capsule
@@ -235,11 +244,6 @@ final class GlassView: ExpoView {
     case classic
   }
 
-  static let classicEdge = UIColor.label.withAlphaComponent(0.12)
-  static let classicEdgeWidth: CGFloat = 0.5
-  static let classicShadowRadius: CGFloat = 10
-  static let classicShadowOffset = CGSize(width: 0, height: 2)
-
   var shape: Shape = .capsule
   var cornerRadius: CGFloat = 0
   var tint: UIColor?
@@ -249,6 +253,7 @@ final class GlassView: ExpoView {
   var surface: Surface = .glass
   var tinted = false
   var barShadow = false
+  var classicChrome = ClassicChrome()
   var shown = true
   var shownDuration: TimeInterval = 0.2
   var colors = LookColors()
@@ -290,7 +295,7 @@ final class GlassView: ExpoView {
       applyShape()
       return
     }
-    let appearing = applied?.shown == false && shown
+    let turning = applied.map { $0.shown != shown } ?? false
     applied = (tint, interactive, classic, tinted, shown, colors)
     let surface = { [self] in
       if classic {
@@ -306,12 +311,30 @@ final class GlassView: ExpoView {
         effectView.effect = shown ? glass : nil
       }
     }
-    if appearing, window != nil, shownDuration > 0, !UIAccessibility.isReduceMotionEnabled {
-      UIView.animate(withDuration: shownDuration, delay: 0, options: [.curveEaseOut, .beginFromCurrentState], animations: surface)
+    if turning, PhoneTestBuild.isOn { traceShown("turning") }
+    if turning, window != nil, shownDuration > 0, !UIAccessibility.isReduceMotionEnabled {
+      UIView.animate(withDuration: shownDuration, delay: 0, options: [shown ? .curveEaseOut : .curveEaseIn, .beginFromCurrentState], animations: surface) { [weak self] finished in
+        guard PhoneTestBuild.isOn else { return }
+        MainActor.assumeIsolated {
+          if let view = self { view.traceShown(finished ? "turned" : "interrupted") }
+        }
+      }
     } else {
       surface()
     }
     applyShape()
+  }
+
+  private func traceShown(_ moment: String) {
+    var shownAlpha = alpha
+    var hiddenBy = isHidden ? "self" : "none"
+    var ancestor = superview
+    while let view = ancestor {
+      shownAlpha *= view.alpha
+      if view.isHidden, hiddenBy == "none" { hiddenBy = view.accessibilityIdentifier ?? String(describing: type(of: view)) }
+      ancestor = view.superview
+    }
+    NSLog("PAGELAB glass native %@ %@ shown=%@ ms=%ld window=%@ alpha=%.2f shownAlpha=%.2f hiddenBy=%@ effect=%@ at=%.3f", accessibilityIdentifier ?? "-", moment, shown ? "yes" : "no", Int(shownDuration * 1000), window == nil ? "no" : "yes", alpha, shownAlpha, hiddenBy, effectView.effect == nil ? "none" : "glass", CACurrentMediaTime())
   }
 
   private func applyShape() {
@@ -333,18 +356,17 @@ final class GlassView: ExpoView {
 
   private func applyClassicEdgeAndShadow() {
     let classic = isSolid
-    effectView.layer.borderWidth = classic ? Self.classicEdgeWidth : 0
-    effectView.layer.borderColor = classic ? Self.classicEdge.resolvedColor(with: traitCollection).cgColor : nil
-    let shadows = classic && barShadow
+    effectView.layer.borderWidth = classic ? CGFloat(classicChrome.edgeWidth) : 0
+    effectView.layer.borderColor = classic ? classicChrome.edge?.resolvedColor(with: traitCollection).cgColor : nil
+    let shadows = classic && barShadow && classicChrome.shadow != nil
     layer.shadowOpacity = shadows ? 1 : 0
     guard shadows else {
       layer.shadowPath = nil
       return
     }
-    let dark = traitCollection.userInterfaceStyle == .dark
-    layer.shadowColor = UIColor.black.withAlphaComponent(dark ? 0.4 : 0.12).cgColor
-    layer.shadowRadius = Self.classicShadowRadius / 2
-    layer.shadowOffset = Self.classicShadowOffset
+    layer.shadowColor = classicChrome.shadow?.resolvedColor(with: traitCollection).cgColor
+    layer.shadowRadius = CGFloat(classicChrome.shadowRadius)
+    layer.shadowOffset = CGSize(width: 0, height: classicChrome.shadowY)
     layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: classicRadius).cgPath
   }
 }

@@ -64,8 +64,8 @@ struct PluginFolders {
     Self.isName(name) ? (pluginsLexical as NSString).appendingPathComponent(name) : nil
   }
 
-  func officialCopy(_ name: String, folderId: String, pin: OfficialPin? = PluginFolders.officialPin()) -> OfficialCopy? {
-    OfficialTrust.copy(officialStore(), name: name, folderId: folderId, pin: pin)
+  func officialCopy(_ name: String, folderId: String, pin: OfficialPin? = PluginFolders.officialPin(), fresh: Bool = false) -> OfficialCopy? {
+    OfficialTrust.copy(officialStore(), name: name, folderId: folderId, pin: pin, fresh: fresh)
   }
 
   func legacyFolder(_ name: String, pin: OfficialPin? = PluginFolders.officialPin()) -> String? {

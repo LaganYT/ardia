@@ -285,6 +285,8 @@ export type WebViewHandle = {
   requestPictureInPicture(press: ControlPress): Promise<boolean>;
   takeControlPress(press: ControlPress): Promise<boolean>;
   exitPictureInPicture(): Promise<void>;
+  armElementPick?(): Promise<number | null>;
+  takeElementPick?(armed: number): Promise<boolean>;
 
   getSecurityInfo(): Promise<SecurityInfo | null>;
   pageCookies(urls: string[]): Promise<PageCookie[]>;

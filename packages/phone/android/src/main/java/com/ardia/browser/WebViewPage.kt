@@ -300,25 +300,25 @@ internal class WebViewPage(
         }
     }
 
-    override suspend fun snapshot(maxWidth: Int): Bitmap? = withContext(Dispatchers.Main.immediate) {
+    override suspend fun snapshot(maxWidth: Int, windowCopy: Boolean): Bitmap? = withContext(Dispatchers.Main.immediate) {
         val web = webView ?: return@withContext null
         if (mutableState.value.url == null) return@withContext null
         if (!ErrorPages.capturable(mutableState.value.failure)) return@withContext null
         if (web.parent == null && !web.isAttachedToWindow) {
             return@withContext engine.parked(web) {
                 repeat(PARKED_FRAMES) { awaitPaintedFrame(web) }
-                if (webView === web) drawSnapshot(web, maxWidth) else null
+                if (webView === web) drawSnapshot(web, maxWidth, windowCopy) else null
             }
         }
-        drawSnapshot(web, maxWidth)
+        drawSnapshot(web, maxWidth, windowCopy)
     }
 
-    private suspend fun drawSnapshot(web: WebView, maxWidth: Int): Bitmap? {
+    private suspend fun drawSnapshot(web: WebView, maxWidth: Int, windowCopy: Boolean): Bitmap? {
         if (!PageCapture.isDrawable(web)) return null
-        return captureSnapshot(web, maxWidth)
+        return captureSnapshot(web, maxWidth, windowCopy)
     }
 
-    private suspend fun captureSnapshot(web: WebView, maxWidth: Int): Bitmap? = withContext(Dispatchers.Main.immediate) {
+    private suspend fun captureSnapshot(web: WebView, maxWidth: Int, windowCopy: Boolean): Bitmap? = withContext(Dispatchers.Main.immediate) {
         val scale = min(1f, maxWidth.toFloat() / web.width)
         val width = (web.width * scale).roundToInt().coerceAtLeast(1)
         val height = (web.height * scale).roundToInt().coerceAtLeast(1)
@@ -333,7 +333,7 @@ internal class WebViewPage(
             drawn.recycle()
             if (attempt < DRAW_ATTEMPTS - 1) awaitPaintedFrame(web)
         }
-        if (webView !== web || !PageCapture.windowCopyIsTrustworthy(web)) return@withContext null
+        if (!windowCopy || webView !== web || !PageCapture.windowCopyIsTrustworthy(web)) return@withContext null
         val copied = PageCapture.copyWindow(web, region, width, height) ?: return@withContext null
         if (isSuspect(copied)) {
             copied.recycle()
@@ -459,17 +459,23 @@ internal class WebViewPage(
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                 lastTouchX = event.x
                 lastTouchY = event.y
+                scrollTracker.touched(event.rawY.toDouble())
                 if (isNavigatingHistory) {
                     isNavigatingHistory = false
                     mainHandler.removeCallbacks(clearHistoryNavigationRunnable)
                     scrollTracker.snapTo(web.scrollY.toDouble())
                 }
             }
+            if (event.actionMasked == MotionEvent.ACTION_MOVE) scrollTracker.dragged(event.rawY.toDouble())
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) scrollTracker.released()
             false
         }
         web.setOnLongClickListener { longPressed(web) }
         web.setOnScrollChangeListener { _, _, scrollY, _, _ -> scrolled(web, scrollY) }
-        web.addOnLayoutChangeListener { view, left, top, right, bottom, _, _, _, _ -> engine.notePageSize(view, right - left, bottom - top) }
+        web.addOnLayoutChangeListener { view, left, top, right, bottom, _, oldTop, _, oldBottom ->
+            engine.notePageSize(view, right - left, bottom - top)
+            if (bottom - top != oldBottom - oldTop) scrollTracker.resized(SystemClock.uptimeMillis())
+        }
         installNightShade(web, mutableState.value.url)
         if (engine.supportsDocumentStartScripts && engine.supportsMessageListener) {
             WebViewCompat.addDocumentStartJavaScript(web, TouchScrollers.script, setOf("*"))
@@ -959,8 +965,6 @@ internal class WebViewPage(
     internal fun scrolled(web: WebView, scrollY: Int) {
         if (web !== webView) return
         val atTop = scrollY <= 1
-        @Suppress("DEPRECATION")
-        val contentHeight = web.contentHeight * web.scale.toDouble()
         if (isNavigatingHistory) {
             scrollTracker.snapTo(scrollY.toDouble())
             val current = mutableState.value
@@ -969,7 +973,7 @@ internal class WebViewPage(
             }
             return
         }
-        val direction = scrollTracker.offer(scrollY.toDouble(), contentHeight, web.height.toDouble())
+        val direction = scrollTracker.offer(scrollY.toDouble(), !web.canScrollVertically(1), SystemClock.uptimeMillis())
         val current = mutableState.value
         if (atTop == current.isScrolledToTop && (direction == null || direction == current.scrollDirection)) return
         update { it.copy(isScrolledToTop = atTop, scrollDirection = direction ?: it.scrollDirection) }

@@ -183,9 +183,10 @@ Removed, all in git history:
 The app's build (`apps/browser/macos`) stages `out/Release_GN_arm64/Chromium Framework.framework` itself
 (`packages/ardiacore/scripts/stage-framework.sh`, under the chromium lock) and embeds it (`embed.sh`). A checkout without a
 Chromium tree downloads the prebuilt engine matching its macOS engine key instead (`engine/engine-key.sh --platform
-macos`: one hash of every file the framework is built from, which is `engine/` but for Linux's lines of
-`engine/patches/series` (read with `series.py`'s parser), their patches and layer, and the translation units a
-`BUILD.gn` lists only under `is_linux`, plus `apps/browser/assets/offline-game` with its pipeline; a Linux-only change
+macos`: one hash of every file the framework is built from, which is `engine/` but for the lines of
+`engine/patches/series` only for other platforms (`linux`, `win`, `linux,win`; read with `series.py`'s parser), their
+patches and layers, and the translation units a `BUILD.gn` lists only under conditions the Mac never takes (`is_linux`,
+`is_win`, `is_linux || is_win`, `!is_mac`), plus `apps/browser/assets/offline-game` with its pipeline; a Linux-only change
 keeps the key, and Linux has its own, as Windows does (`--platform win`, the inputs `scripts/windows/engine/key-inputs.json`
 declares; `docs/engine-build-windows.md`), which adds nothing to the other two; `packages/ardiacore/scripts/fetch-engine.sh`,
 published with each release whose engine changed; `docs/releasing.md`). After an engine change, rebuild incrementally

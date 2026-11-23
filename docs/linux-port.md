@@ -1663,13 +1663,13 @@ Linux reads calendars from Evolution Data Server, which GNOME Online Accounts, G
   - A 24-word BIP-39 phrase.
 - **Writes.** Files are staged `O_EXCL|O_NOFOLLOW` at 0600, fsynced, then published with
   `renameat2(RENAME_NOREPLACE)`. Everything below the chosen folder is opened with `openat`.
-- **Folder.** Linux has no cloud drive to default to, so Settings › Sync › Turn On… asks where the folder goes
+- **Folder.** Linux has no cloud drive to default to, so Settings › General › Sync › Turn On… asks where the folder goes
   (`PLATFORM_FEATURES.defaultCloudDrive` is false): the chooser opens in the home folder, and the folder picked gets an
   `Ardia Sync` folder inside it unless it is already named that or already holds sync data
   (`state/sync/folderMove.ts` `syncFolderAt`). A picked folder that holds sync data goes to Enter Recovery Phrase
   instead of starting a second chain. The engine still reports `$HOME/Ardia Sync`, or `--ardia-sync-folder`, as
   `defaultPath`, which the chooser starts beside and nothing creates. Once a folder is chosen, Turn On uses it.
-- **Moving.** While Sync is on, Settings › Sync › Sync Folder › Move… (also Advanced… › Move Sync Folder…) moves it
+- **Moving.** While Sync is on, Settings › General › Sync › Sync Folder › Move… (also Advanced… › Move Sync Folder…) moves it
   (`PLATFORM_FEATURES.movesSyncFolder`). The sync window holds its cycles, then: a folder inside the current folder or
   holding it, or one with another phrase's data, is refused; so is a folder that can't be written; a folder that
   already holds this phrase's chain and every file of the old one is only pointed at; otherwise the files of this

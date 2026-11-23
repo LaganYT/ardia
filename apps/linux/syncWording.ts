@@ -51,7 +51,7 @@ export const SYNC_WORDING: readonly Wording[] = [
       ],
       ["return `Couldn’t save the sync key in ${PLATFORM_TERMS.secretStore}.`;", `return "Couldn’t save the sync key in your system keyring.";`],
       [
-        "On your other ${PLATFORM_TERMS.syncedComputer}, open Ardia › Settings › Sync and choose the same sync folder.",
+        "On your other ${PLATFORM_TERMS.syncedComputer}, open Ardia › Settings › General › Sync and choose the same sync folder.",
         `On your other device, open Ardia › Settings › General › Sync and choose the same sync folder.`,
       ],
       [

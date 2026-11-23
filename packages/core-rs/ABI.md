@@ -83,3 +83,48 @@ Password reads follow Swift exactly, because Swift wrote most existing vaults. B
 `Data(base64Encoded:)`: extra trailing `=` are accepted, and whitespace and missing padding are not. One leading U+FEFF
 is dropped from an opened password. Writes stay canonical. `tests/password-read-cases.json` and
 `tests/phrase-cases.json` record where Linux, Windows and Kotlin read differently today.
+
+## Update manifests: `ardia_update`
+
+`include/ardia_update.h` (`ARDIA_WRITE_HEADER=1 cargo test -p ardia-update-ffi --test header`) is a second, separate
+library, `libardia_update`, built by `crates/ardia-update-ffi` over `crates/ardia-update-core`. It exports exactly the 5
+functions its header declares, every name starts with `ardia_update`, and both headers can be included in one
+translation unit. It stays its own library, outside `ardia_core.h`, `BUILD.gn` and `ardia-ffi`, until a platform calls
+it: the Linux engine copies those three, so adding to them moves the Linux engine key. The cutover that wires the
+Linux or Windows updater to it folds it into `ardia_core` (one `use` in `ardia-ffi` and the GN targets). Until then,
+don't link both cargo static libraries into one binary: each carries Rust's standard library.
+
+It verifies the signed Linux self-update manifest (`ardia-linux-update 1`, see `docs/linux-port.md` › Signed
+manifest) and compares versions and channels, with the rules of the root helper `scripts/linux/ardia-update`:
+
+- `ardia_update_verify_linux` checks, in this order: the kind (`ARDIA_UPDATE_KIND_*`) and the 32-byte public key
+  (`ARDIA_UPDATE_STATUS_INVALID_ARGUMENT`), the requested and installed versions (`VERSION`), the manifest's size,
+  at most 4096 bytes (`TOO_LARGE`), the raw 64-byte Ed25519 signature over the manifest's exact bytes (`SIGNATURE`; any
+  other length is a bad signature and isn't read), the strict canonical parse (`MANIFEST`), that the manifest is for the
+  requested version (`MANIFEST`), that it is newer than the installed one (`NOT_NEWER`), and that it has a line for this
+  kind (`KIND`). On `OK` it writes the package's size and sha256; on any other status it zeroes the output.
+- Versions are `<major>.<minor>.<patch>` or `<major>.<minor>.<patch>-nightly.<n>`, each number 1 to 9 ASCII digits,
+  compared by value (leading zeros don't count). A nightly sorts after the previous stable and before its own stable.
+  `ardia_update_compare_versions` writes -1, 0 or 1. A version over 64 bytes or not UTF-8 is `VERSION`, unread.
+- `ardia_update_check_offer` is `OK` when the candidate is newer than the installed version and the channel takes it:
+  stable takes stable versions only, nightly takes both (`CHANNEL`, `NOT_NEWER`, `VERSION`). A downgrade, the same
+  version again, or a nightly of the installed stable is never offered.
+- Pointer rules are the same as `ardia_core`'s: a `NULL` input with length 0 is empty, with any other length it is
+  `INVALID_ARGUMENT`, and a length check that refuses an input wins over a `NULL` pointer. An output slot only has to
+  be aligned and writable: it may be uninitialized, since every call writes it (its result, or zeroes on a refusal)
+  and none reads it. No call allocates, temporarily or otherwise (`tests/no_allocation.rs` counts every allocation
+  across the vectors), so there is nothing to free, and the library keeps no state.
+
+Ed25519 goes through `ardia-crypto`'s backend, RustCrypto under cargo and BoringSSL in Chromium.
+`tests/boringssl/check.sh` builds the same `ardia-crypto` and `ardia-update-core` sources against a pinned BoringSSL
+release under cargo and runs the crypto known answers and every update vector through the BoringSSL backend. It refuses small-order
+keys and `R` values and a non-canonical `S`. OpenSSL, which the helper uses, accepts a small-order key's trivial
+signature; that can't matter for a release, since installs pin `scripts/linux/linux-update.pem`, but it's recorded.
+
+`tests/update-vectors.json` holds the shared vectors (`ARDIA_WRITE_UPDATE_VECTORS=1 cargo test -p ardia-update-core
+--test vectors` regenerates them from fixed test keys, and fails when they drift). Each manifest case records the full
+`outcome`, the unsigned `parse` the engine does before downloading, whether the signature verifies, and, where another
+implementation answers differently, that implementation's answer (`linuxPolicy`, `helper`, `openssl`).
+`tests/linux-update/test_linux_update.py` runs them against the engine's `ac_linux_self_update_policy.h`, the root
+helper's own bash functions, `openssl pkeyutl -verify -rawin`, Node's `crypto.verify` (which `sign-update.mjs` signs
+with) and the version rules in `apps/linux/src/updateReleases.ts` and `apps/browser/src/lib/versions.ts`.

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { loadDomains, MANIFEST, outputs, ROOT, validate } from "./generate.mjs";
+import { loadDomains, MANIFEST, outputs, ROOT, validate, validateTopics } from "./generate.mjs";
 
 const GENERATOR = fileURLToPath(new URL("./generate.mjs", import.meta.url));
 const runAt = (generator, ...args) => spawnSync(process.execPath, [generator, ...args], { encoding: "utf8" });
@@ -68,12 +68,16 @@ test("the manifest lists every schema call with its service and each host's bind
   for (const [name, schema] of Object.entries(domains)) {
     const listed = manifest.domains[name];
     assert.deepEqual(Object.keys(listed.calls), Object.keys(schema.calls));
-    assert.deepEqual(listed.events, Object.keys(schema.events));
+    assert.deepEqual(Object.keys(listed.events), Object.keys(schema.events));
     for (const [verb, row] of Object.entries(schema.calls)) {
       assert.equal(listed.calls[verb].service, row.service);
       assert.equal(listed.calls[verb].desktop, row.desktop);
       assert.equal(listed.calls[verb].mac, row.mac ?? "service");
       assert.equal(listed.calls[verb].windows, row.windows ?? "service");
+      assert.equal(listed.calls[verb].routeField, row.routeField);
+    }
+    for (const [event, row] of Object.entries(schema.events)) {
+      assert.deepEqual(listed.events[event], { topic: row.topic ?? `${name}.${event}`, mac: row.mac ?? "forward", desktop: row.desktop, windows: row.windows ?? "forward" });
     }
   }
 });
@@ -168,4 +172,53 @@ test("a call may leave out its service only when every host serves it with its o
   assert.equal(mac, "custom");
   assert.throws(() => validate("demo", domain({ fetch: call(macDefault) })), /passes it straight/);
   assert.doesNotThrow(() => validate("demo", domain({ fetch: call({ ...custom, mac: "absent" }) })));
+});
+
+const event = (overrides = {}) => ({ payload: "{ profile: string }", desktop: "forward", ...overrides });
+const withEvents = (events) => ({ kind: "engine", imports: {}, calls: {}, events });
+
+test("a desktop route may answer with one field of the engine's reply, or null, and only a route may say so", () => {
+  for (const routeField of ["null", "components"]) assert.doesNotThrow(() => validate("demo", domain({ watch: call({ routeField }) })));
+  assert.throws(() => validate("demo", domain({ watch: call({ routeField: "components", desktop: "custom" }) })), /goes only with desktop: route/);
+  assert.throws(() => validate("demo", domain({ watch: call({ routeField: "Components" }) })), /lowerCamelCase field/);
+  assert.throws(() => validate("demo", domain({ watch: call({ routeField: "" }) })), /lowerCamelCase field/);
+  for (const routeField of [null, ["components"], 0, true]) {
+    assert.throws(() => validate("demo", domain({ watch: call({ routeField }) })), /routeField is a string: .* or "null" to answer null/, JSON.stringify(routeField));
+  }
+  const manifest = JSON.parse(outputs({ demo: domain({ watch: call(), tasks: call({ service: "ac_tasks_list", routeField: "tasks" }) }) }).get(MANIFEST)).domains.demo;
+  assert.equal("routeField" in manifest.calls.watch, false);
+  assert.equal(manifest.calls.tasks.routeField, "tasks");
+});
+
+test("an event says whether the desktop host forwards it, never by default, and the Mac and Windows forward it unless they say otherwise", () => {
+  assert.doesNotThrow(() => validate("demo", withEvents({ changed: event() })));
+  for (const desktop of ["forward", "custom", "absent"]) assert.doesNotThrow(() => validate("demo", withEvents({ changed: event({ desktop }) })));
+  const { desktop, ...unsaid } = event();
+  assert.equal(desktop, "forward");
+  assert.throws(() => validate("demo", withEvents({ changed: unsaid })), /never implied/);
+  assert.throws(() => validate("demo", withEvents({ changed: "{ profile: string }" })), /is \{ payload, desktop \}/);
+  assert.throws(() => validate("demo", withEvents({ changed: event({ payload: " " }) })), /payload type/);
+  assert.throws(() => validate("demo", withEvents({ changed: event({ mac: "service" }) })), /mac is one of forward, custom, absent/);
+  assert.throws(() => validate("demo", withEvents({ changed: event({ windows: "route" }) })), /windows is one of/);
+  const manifest = JSON.parse(outputs({ demo: withEvents({ changed: event({ mac: "custom" }) }) }).get(MANIFEST)).domains.demo;
+  assert.deepEqual(manifest.events, { changed: { topic: "demo.changed", mac: "custom", desktop: "forward", windows: "forward" } });
+  assert.equal(outputs({ demo: withEvents({ changed: event() }) }).get("packages/ardiacore/src/engine/generated/demo.ts").includes('"demo.changed": { profile: string };'), true);
+});
+
+test("an event renamed from its engine topic names the topic only when it differs, and only for hosts that forward it, never the desktop host", () => {
+  assert.doesNotThrow(() => validate("demo", withEvents({ changed: event({ topic: "demoChanged", desktop: "custom" }) })));
+  assert.throws(() => validate("demo", withEvents({ changed: event({ topic: "demo.changed", desktop: "custom" }) })), /leaves out topic/);
+  assert.throws(() => validate("demo", withEvents({ changed: event({ topic: "demoChanged" }) })), /only under its own name/);
+  assert.throws(() => validate("demo", withEvents({ changed: event({ topic: "demoChanged", desktop: "custom", mac: "custom", windows: "absent" }) })), /only for a host that forwards it/);
+  assert.throws(() => validate("demo", withEvents({ changed: event({ topic: "demo changed", desktop: "custom" }) })), /engine topic/);
+  const manifest = JSON.parse(outputs({ demo: withEvents({ changed: event({ topic: "demoChanged", desktop: "custom" }) }) }).get(MANIFEST)).domains.demo;
+  assert.equal(manifest.events.changed.topic, "demoChanged");
+});
+
+test("a host forwards each engine topic as one event, so two events never claim the same topic", () => {
+  const renamed = event({ topic: "cliControl", desktop: "custom" });
+  assert.doesNotThrow(() => validateTopics({ engine: withEvents({ cliControl: renamed, systemState: event({ desktop: "custom", windows: "custom" }) }) }));
+  assert.throws(() => validateTopics({ engine: withEvents({ cliControl: renamed, systemState: event({ topic: "cliControl", desktop: "custom", mac: "custom" }) }) }), /both take engine topic cliControl on windows/);
+  assert.doesNotThrow(() => validateTopics({ engine: withEvents({ cliControl: renamed, systemState: event({ topic: "cliControl", desktop: "custom", mac: "custom", windows: "custom" }) }) }));
+  assert.throws(() => validateTopics({ demo: withEvents({ changed: event() }), other: withEvents({ changed: event({ topic: "demo.changed", desktop: "custom" }) }) }), /both take engine topic demo\.changed on mac/);
 });

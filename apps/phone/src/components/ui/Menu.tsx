@@ -144,7 +144,7 @@ function MaterialMenu({ items, place, placer, onDismiss, origin = "top", shown =
   const choose = (action: () => void) => {
     if (chosen.current) return;
     chosen.current = true;
-    if (Platform.OS === "android") drawnMenuActionChosen(privately);
+    drawnMenuActionChosen(privately);
     onDismiss(true);
     action();
   };
@@ -314,7 +314,7 @@ function ClassicMenu({ items, place, placer, onDismiss, dimmed = false, origin =
   const choose = (action: () => void) => {
     if (chosen.current) return;
     chosen.current = true;
-    if (Platform.OS === "android") drawnMenuActionChosen(privately);
+    drawnMenuActionChosen(privately);
     onDismiss(true);
     action();
   };

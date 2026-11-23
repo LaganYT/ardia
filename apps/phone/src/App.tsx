@@ -138,7 +138,7 @@ function applyDesign(design: Design) {
 
 onNativeMenuOpened(countNativeMenu);
 onDrawnMenuOpened(countDrawnMenu);
-onDrawnMenuActionChosen(countDrawnMenuAction);
+if (Platform.OS === "android") onDrawnMenuActionChosen(countDrawnMenuAction);
 
 onMaterialBackSwiped(() => {
   if (!useTabs.getState().incognito) countUsage("material_back_swiped");

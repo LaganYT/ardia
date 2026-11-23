@@ -26,3 +26,12 @@ test("without options the seed keeps every tab on the bench origin with no delay
   const session = sessionOf(buildSeed("http://127.0.0.1:47817"));
   assert.ok(session.tabs.every((tab) => hostOf(tab.url) === "127.0.0.1:47817" && !new URL(tab.url).search));
 });
+
+test("the seed's telemetry state carries a crash cursor at the seed time, so the launch crash scan saves nothing inside the launch quiet window whatever crash reports the machine has", () => {
+  const before = Date.now();
+  const seed = buildSeed("http://127.0.0.1:47817");
+  const telemetry = typeof seed["telemetry.json"] === "string" ? JSON.parse(seed["telemetry.json"]) : seed["telemetry.json"];
+  assert.equal(telemetry.version, 2);
+  assert.ok(telemetry.crashCursor >= before && telemetry.crashCursor <= Date.now());
+  assert.deepEqual(Object.keys(telemetry).sort(), ["crashCursor", "version"]);
+});

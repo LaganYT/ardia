@@ -146,6 +146,7 @@ export function buildSeed(origin, appVersion = "", { tabsOrigin = origin, active
     "downloads.json": { version: 2, downloads: [] },
     "release-notes.json": { version: 1, lastVersion: appVersion, pending: null },
     "onboarding.json": { version: 1, completedAt: now },
+    "telemetry.json": { version: 2, crashCursor: now },
     "perf-probe": "",
   };
 }

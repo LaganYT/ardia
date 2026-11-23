@@ -65,6 +65,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ardia-import-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ardia-import-ffi"
+version = "0.1.0"
+dependencies = [
+ "ardia-import-core",
+ "cbindgen",
+ "serde",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
 name = "ardia-sync-core"
 version = "0.1.0"
 dependencies = [

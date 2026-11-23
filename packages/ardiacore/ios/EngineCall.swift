@@ -131,6 +131,12 @@ enum EngineCall {
     }
   }
 
+  static func passingLoaded(_ name: String) -> CallHandler {
+    { args, reply in
+      ArdiaEngineBridge.callLoaded(name, profile: args.profile, args: args.json) { reply.engine($0) }
+    }
+  }
+
   static func passing(_ name: String, profile: String, args: [String: Any], reply: CallReply) {
     guard let data = try? JSONSerialization.data(withJSONObject: args), let json = String(data: data, encoding: .utf8) else {
       return reply.fail("ERR_BAD_ARGS", "\(name): the arguments aren't JSON")

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { loadDomains, MANIFEST, outputs, ROOT, validate, validateTopics } from "./generate.mjs";
+import { clientPackages, loadDomains, MANIFEST, outputs, ROOT, validate, validateTopics } from "./generate.mjs";
 
 const GENERATOR = fileURLToPath(new URL("./generate.mjs", import.meta.url));
 const runAt = (generator, ...args) => spawnSync(process.execPath, [generator, ...args], { encoding: "utf8" });
@@ -96,7 +96,41 @@ test("names, services and bindings outside the schema's forms are refused", () =
   assert.throws(() => validate("demo", domain({ watch: call({ service: "demo_watch" }) })), /ac_\* call/);
   assert.throws(() => validate("demo", domain({ watch: call({ mac: "route" }) })), /mac is one of/);
   assert.throws(() => validate("demo", domain({ watch: call({ args: "" }) })), /args type/);
-  assert.throws(() => validate("demo", { kind: "engine", imports: { "@ardia/core": ["Thing"] }, calls: {}, events: {} }), /relative/);
+  assert.throws(() => validate("demo", { kind: "engine", imports: { "@ardia/elsewhere": ["Thing"] }, calls: {}, events: {} }), /relative to the generated folder, or a package packages\/ardiacore\/package\.json depends on/);
+  assert.throws(() => validate("demo", { kind: "engine", imports: { "generated": ["Thing"] }, calls: {}, events: {} }), /or a package/);
+  assert.throws(() => validate("demo", { kind: "engine", imports: { ".hidden": ["Thing"] }, calls: {}, events: {} }), /or a package/);
+});
+
+test("a type may come from a package the generated client's package depends on, imported ahead of the relative paths", () => {
+  assert.ok(clientPackages.has("@ardia/core"));
+  const imports = { "../wire": ["Profile"], "@ardia/core": ["CleanedUrl"], "../../webkit": ["PageCookie"] };
+  assert.doesNotThrow(() => validate("demo", { kind: "engine", imports, calls: {}, events: {} }));
+  const types = outputs({ demo: { kind: "engine", imports, calls: { copy: call({ args: "Profile & { url: CleanedUrl; cookies: PageCookie[] }" }) }, events: {} } }).get("packages/ardiacore/src/engine/generated/demo.ts");
+  assert.equal(types.split("\n").slice(0, 4).join("\n"), [
+    'import type { CleanedUrl } from "@ardia/core";',
+    'import type { PageCookie } from "../../webkit";',
+    'import type { Profile } from "../wire";',
+    "",
+  ].join("\n"));
+});
+
+test("a domain no host passes any call of straight to the engine gets a call table of handlers only", () => {
+  const custom = { mac: "custom", desktop: "absent", windows: "absent", service: undefined };
+  const files = outputs({ quiet: domain({ list: call(custom), dev: call({ ...custom, desktop: "custom" }) }) });
+  assert.equal(files.has("packages/ardiacore/ios/QuietModule.swift"), false);
+  assert.equal(files.get("packages/ardiacore/ios/QuietCalls.swift"), [
+    "import ExpoModulesCore",
+    "",
+    "func quietCallTable(list listHandler: @escaping CallHandler, dev devHandler: @escaping CallHandler) -> CallTable {",
+    '  CallTable(domain: "quiet", handlers: [',
+    '    "list": listHandler,',
+    '    "dev": devHandler,',
+    "  ])",
+    "}",
+    "",
+  ].join("\n"));
+  const manifest = JSON.parse(files.get(MANIFEST)).domains.quiet;
+  assert.deepEqual(manifest.calls.list, { mac: "custom", desktop: "absent", windows: "absent" });
 });
 
 test("a domain the Mac serves straight from the engine gets its whole Swift module, and a mixed one a call table its module fills with its own handlers", () => {

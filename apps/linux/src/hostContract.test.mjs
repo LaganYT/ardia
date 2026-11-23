@@ -32,18 +32,25 @@ test("domain adapter preserves argument JSON and scalar, string, null and object
   }
 });
 
-test("every call of a schema-generated domain reaches the host under its own name, with its arguments untouched, except the ones the Linux UI serves itself", async () => {
+test("every call of a schema-generated domain reaches a host that serves it under its own name, with its arguments untouched, except the ones the Linux UI routes or answers itself", async () => {
   const manifest = JSON.parse(readFileSync(new URL("../../../packages/ardiacore/src/engine/generated/manifest.json", import.meta.url), "utf8"));
-  const servedByTheUi = new Set([BOOKMARKS_EXPORT_CALL]);
-  for (const name of servedByTheUi) {
+  const everyCall = Object.entries(manifest.domains).flatMap(([domain, entry]) => Object.keys(entry.calls).map((verb) => `${domain}.${verb}`));
+  const servedWhenTheHostCant = [BOOKMARKS_EXPORT_CALL];
+  const routedByTheUi = new Set(["passwords.unlock", "passwords.reveal", "passwords.export", "autofill.cardNumber"]);
+  const reshapedByTheUi = new Set(["passwords.list", "autofill.addresses", "autofill.cards"]);
+  for (const name of [...servedWhenTheHostCant, ...routedByTheUi, ...reshapedByTheUi]) {
     const [domain, verb] = name.split(".");
     assert.equal(manifest.domains[domain]?.calls[verb]?.desktop, "custom", `${name} is a desktop custom call`);
   }
   for (const [domain, entry] of Object.entries(manifest.domains)) {
     const { host, requests } = fixture();
+    host.bootstrap.capabilities = everyCall;
     const call = resolveHostModule(host, `Ardia${domain[0].toUpperCase()}${domain.slice(1)}`, "call");
-    for (const verb of Object.keys(entry.calls).filter((verb) => !servedByTheUi.has(`${domain}.${verb}`))) {
-      assert.equal(await call(verb, "default", '{"profile":"default"}'), "null");
+    for (const verb of Object.keys(entry.calls).filter((verb) => !routedByTheUi.has(`${domain}.${verb}`))) {
+      const reshaped = reshapedByTheUi.has(`${domain}.${verb}`);
+      host.call = async (name, profile, args) => { requests.push({ name, profile, args }); return reshaped ? "{}" : "null"; };
+      const reply = await call(verb, "default", '{"profile":"default"}');
+      if (!reshaped) assert.equal(reply, "null", `${domain}.${verb}`);
       assert.deepEqual(requests.at(-1), { name: `${domain}.${verb}`, profile: "default", args: '{"profile":"default"}' });
     }
   }

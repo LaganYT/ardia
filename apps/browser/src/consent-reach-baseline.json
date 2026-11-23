@@ -119,7 +119,6 @@
     "apps/browser/src/state/automation/omniboxHooks.ts": 1,
     "apps/browser/src/state/bookmarks/engineSync.ts": 1,
     "apps/browser/src/state/config/configFiles.ts": 1,
-    "apps/browser/src/state/favicons/favicons.ts": 1,
     "apps/browser/src/state/history/engineSync.ts": 1,
     "apps/browser/src/state/onboarding/onboardingDocument.ts": 1,
     "apps/browser/src/state/session/persist.ts": 1,

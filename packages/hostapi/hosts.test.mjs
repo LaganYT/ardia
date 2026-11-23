@@ -7,6 +7,7 @@ const read = (path) => readFileSync(ROOT + path, "utf8");
 const manifest = JSON.parse(read(MANIFEST));
 const domains = Object.entries(manifest.domains);
 const LINUX_ONLY_EVENTS = ["downloads.removed", "history.imported"];
+const NO_WINDOWS_MODULE = ["webKit"];
 
 export function stripComments(written) {
   const source = written.replace(/\\[ \t]*\r?\n/g, "");
@@ -93,6 +94,48 @@ export function parseRoutes(header) {
 }
 
 const linuxRoutes = parseRoutes(linuxContract);
+
+const LINUX = "engine/ardiacore-linux/src/ardia/linux/";
+const CUSTOM_ONLY_DOMAINS = ["autofill", "boosts", "contentBlocker", "passwords", "profiles", "webKit", "webView", "windows"];
+
+export function namesIn(source, list) {
+  const opening = new RegExp(`\\b${list}\\[\\]\\s*=\\s*\\{`, "g");
+  const open = opening.exec(source);
+  if (!open || opening.exec(source)) throw new Error(`the source declares ${list} exactly once`);
+  const close = source.indexOf("}", open.index + open[0].length);
+  const body = source.slice(open.index + open[0].length, close);
+  const names = [...body.matchAll(/"([^"\\\n]*)"/g)].map((match) => match[1]);
+  if (body.replace(/"[^"\\\n]*"/g, "").replace(/[\s,]/g, "")) throw new Error(`${list} has an entry the scan can't read: ${JSON.stringify(body.trim().slice(0, 80))}`);
+  return names;
+}
+
+export function constantIn(source, name) {
+  const found = [...source.matchAll(new RegExp(`\\b${name}\\[\\]\\s*=\\s*"([^"\\\\]*)"\\s*;`, "g"))];
+  if (found.length !== 1) throw new Error(`the source declares ${name} exactly once`);
+  return found[0][1];
+}
+
+export function linuxServed(read) {
+  const native = (file) => stripComments(read(LINUX + file));
+  const siteControls = native("ac_linux_site_controls.cc");
+  const notAdvertised = new Set([...between(siteControls, "Capabilities() {", "\n}").matchAll(/name != "([^"]+)"/g)].map((match) => match[1]));
+  const credentials = native("ac_linux_credentials.cc");
+  const typedMethods = new Set(namesIn(native("ac_linux_credentials.h"), "kCapabilities"));
+  const typedMethodOf = (name) => `Ardia${name[0].toUpperCase()}${name.slice(1)}`;
+  const dispatched = [...native("ac_linux_host.cc").matchAll(/\bname == "([a-zA-Z]+\.[a-zA-Z]+)"/g)].map((match) => match[1]);
+  return new Set([
+    ...[...namesIn(siteControls, "kServiceCalls"), ...namesIn(siteControls, "kBlockerCalls")].filter((name) => !notAdvertised.has(name)),
+    ...namesIn(credentials, "kManagedNames"),
+    ...namesIn(credentials, "kSecretNames").filter((name) => typedMethods.has(typedMethodOf(name))),
+    ...namesIn(native("ac_linux_cast_core.h"), "kCastCapabilities"),
+    ...namesIn(native("ac_linux_capture.h"), "kCaptureCapabilities"),
+    ...namesIn(native("ac_linux_page_messages.h"), "kLinuxPageMessageRoutes"),
+    ...namesIn(native("ac_linux_link_tabs.h"), "kLinuxLinkTabRoutes"),
+    constantIn(native("ac_linux_idle_profiles.h"), "kLinuxUnloadIdleProfileCall"),
+    ...dispatched,
+  ]);
+}
+
 const linuxEvents = linuxEventNames(linuxContract);
 const windows = JSON.parse(read("packages/expo-windows/src/engine/domains/forwarded.json"));
 const { topics: macTopics, renamed: macRenamed } = macForwarding(read("packages/ardiacore/ios/ArdiaEngineBridge.mm"));
@@ -167,6 +210,39 @@ test("the EventName scan reads every topic however it's spelled and refuses what
   assert.ok(!macForwarding(bridgeSource.replace('@"extensions.action", ', '\n// @"extensions.action",\n')).topics.includes("extensions.action"));
 });
 
+test("the custom-only domains are exactly the ones no host passes any call of straight to the engine", () => {
+  const engineFree = domains.filter(([, entry]) => Object.values(entry.calls).every((call) => call.service === undefined)).map(([domain]) => domain);
+  assert.deepEqual(engineFree.sort(), CUSTOM_ONLY_DOMAINS);
+});
+
+test("the Linux host serves exactly a custom-only domain's desktop custom calls: each is in a native dispatch list it advertises or a branch of its own, and nothing it refuses is custom", () => {
+  const served = linuxServed(read);
+  assert.ok(served.has("contentBlocker.state") && served.has("passwords.unlock") && served.has("profiles.unloadIdle"));
+  assert.ok(!served.has("contentBlocker.devDelayNextLoad"), "Linux refuses contentBlocker.devDelayNextLoad as unavailable");
+  for (const domain of CUSTOM_ONLY_DOMAINS) {
+    const entry = manifest.domains[domain];
+    const custom = Object.entries(entry.calls).filter(([, call]) => call.desktop === "custom").map(([verb]) => `${domain}.${verb}`).sort();
+    const nativelyServed = Object.keys(entry.calls).map((verb) => `${domain}.${verb}`).filter((name) => served.has(name)).sort();
+    assert.deepEqual(custom, nativelyServed, `${domain}'s desktop custom calls`);
+    for (const [verb, call] of Object.entries(entry.calls)) assert.notEqual(call.desktop, "route", `${domain}.${verb} has no engine service to route to`);
+  }
+});
+
+test("the Linux dispatch scans read every list however it's spelled and refuse what they can't read", () => {
+  assert.deepEqual(namesIn('constexpr std::string_view kNames[] = {\n  "a.b", "c.d",\n};', "kNames"), ["a.b", "c.d"]);
+  assert.throws(() => namesIn('constexpr std::string_view kNames[] = {"a.b", kOther};', "kNames"), /can't read/);
+  assert.throws(() => namesIn('kNames[] = {"a.b"}; kNames[] = {"c.d"};', "kNames"), /exactly once/);
+  assert.equal(constantIn('inline constexpr char kCall[] = "profiles.unloadIdle";', "kCall"), "profiles.unloadIdle");
+  assert.throws(() => constantIn("inline constexpr char kCall[] = kOther;", "kCall"), /exactly once/);
+  const siteControls = read(`${LINUX}ac_linux_site_controls.cc`);
+  const exclusion = 'if (name != "contentBlocker.devDelayNextLoad") names.push_back(name);';
+  assert.ok(siteControls.includes(exclusion));
+  const advertisedAll = (path) => (path.endsWith("ac_linux_site_controls.cc") ? siteControls.replace(exclusion, "names.push_back(name);") : read(path));
+  assert.ok(linuxServed(advertisedAll).has("contentBlocker.devDelayNextLoad"));
+  const commented = (path) => (path.endsWith("ac_linux_host.cc") ? read(path).replace('if (name == "profiles.loaded") {', 'if (false /* name == "profiles.loaded" */) {') : read(path));
+  assert.ok(!linuxServed(commented).has("profiles.loaded"));
+});
+
 test("the Linux host forwards exactly the desktop-forwarded events and its own Linux-only topics, nothing undeclared", () => {
   const forwarded = eventsOf("desktop", "forward");
   for (const { name, topic } of forwarded) assert.equal(topic, name, `${name} reaches Linux under its own topic`);
@@ -191,8 +267,19 @@ test("the Mac forwards exactly each generated domain's Mac-forwarded engine topi
   for (const { name, topic } of forwarded) assert.equal(macRenamed.get(topic) ?? topic, name, `the Mac emits topic ${topic} as ${name}`);
 });
 
+test("a domain Windows has no module for is absent there call by call and event by event, and forwarded.json never names it", () => {
+  for (const domain of NO_WINDOWS_MODULE) {
+    const entry = manifest.domains[domain];
+    assert.ok(entry, `${domain} is a generated domain`);
+    assert.deepEqual(Object.entries(entry.calls).filter(([, call]) => call.windows !== "absent").map(([verb]) => verb), [], `${domain}'s calls Windows serves`);
+    assert.deepEqual(Object.entries(entry.events).filter(([, event]) => event.windows !== "absent").map(([event]) => event), [], `${domain}'s events Windows sends`);
+    assert.equal(Object.hasOwn(windows.forwarded, domain), false, `forwarded.json forwards ${domain}`);
+    assert.equal(Object.hasOwn(windows.missing, domain), false, `forwarded.json lists ${domain} as missing, which gives it a module`);
+  }
+});
+
 test("Windows forwards exactly each generated domain's service-backed calls to the same engine call, and its forwarded events from their engine topics", () => {
-  for (const [domain, entry] of domains) {
+  for (const [domain, entry] of domains.filter(([domain]) => !NO_WINDOWS_MODULE.includes(domain))) {
     const forwarded = Object.fromEntries(Object.entries(entry.calls).filter(([, call]) => call.windows === "service").map(([verb, call]) => [verb, call.service]));
     assert.deepEqual(windows.forwarded[domain] ?? {}, forwarded, `forwarded.json's ${domain} rows`);
     const absent = Object.entries(entry.calls).filter(([, call]) => call.windows === "absent").map(([verb]) => verb).sort();
@@ -215,9 +302,9 @@ test("the Mac's call table for each domain is the generated one: each service-ba
   }
 });
 
-test("a domain the Mac serves partly by hand builds its module's table from the generated one", () => {
+test("a domain the Mac serves partly or wholly by hand builds its module's table from the generated one", () => {
   const mixed = domains.filter(([, entry]) => entry.swift.endsWith("Calls.swift"));
-  assert.deepEqual(mixed.map(([domain]) => domain).sort(), ["bookmarks", "downloads", "engine", "extensions", "favicons", "permissions", "search", "sites", "tabs"]);
+  assert.deepEqual(mixed.map(([domain]) => domain).sort(), ["autofill", "bookmarks", "boosts", "contentBlocker", "downloads", "engine", "extensions", "favicons", "passwords", "permissions", "profiles", "search", "sites", "tabs", "webKit", "webView", "windows"]);
   for (const [domain, entry] of mixed) {
     const module = read(entry.swift.replace(/Calls\.swift$/, "Module.swift"));
     assert.match(module, new RegExp(`static let calls = ${domain}CallTable\\(`), `${domain}'s module`);

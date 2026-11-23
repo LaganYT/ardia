@@ -20,6 +20,9 @@ const NAME = /^[a-z][a-zA-Z]*$/;
 const SERVICE = /^ac_[a-z][a-z_]*$/;
 const TYPE_NAME = /^[A-Z][A-Za-z0-9]*$/;
 const TOPIC = /^[a-z][a-zA-Z]*(\.[a-z][a-zA-Z]*)?$/;
+const CLIENT_PACKAGE = "packages/ardiacore/package.json";
+export const clientPackages = new Set(Object.keys(JSON.parse(readFileSync(ROOT + CLIENT_PACKAGE, "utf8")).dependencies ?? {}));
+const isRelative = (path) => path.startsWith("./") || path.startsWith("../");
 
 const capitalized = (name) => name[0].toUpperCase() + name.slice(1);
 const sortedKeys = (record) => Object.keys(record).sort();
@@ -53,7 +56,7 @@ export function validate(name, domain) {
   if (!NAME.test(name)) fail("the domain's name is lowerCamelCase letters");
   if (domain.kind !== "engine") fail("kind is engine: JSON calls to ac_* services; positional module domains have no generator yet");
   for (const [path, names] of Object.entries(domain.imports ?? {})) {
-    if (!path.startsWith(".")) fail(`import ${path} is relative to the generated folder`);
+    if (!isRelative(path) && !clientPackages.has(path)) fail(`import ${path} is relative to the generated folder, or a package ${CLIENT_PACKAGE} depends on`);
     for (const type of names) if (!TYPE_NAME.test(type)) fail(`import ${type} from ${path} is a type name`);
   }
   for (const [verb, call] of Object.entries(domain.calls ?? {})) {
@@ -87,7 +90,8 @@ const passesStraight = (call, host) => bindingOf(call, host) === (host === "desk
 
 function typescript(name, domain) {
   const lines = [];
-  for (const path of sortedKeys(domain.imports ?? {})) {
+  const paths = sortedKeys(domain.imports ?? {});
+  for (const path of [...paths.filter((path) => !isRelative(path)), ...paths.filter(isRelative)]) {
     lines.push(`import type { ${[...domain.imports[path]].sort().join(", ")} } from "${path}";`);
   }
   if (lines.length) lines.push("");

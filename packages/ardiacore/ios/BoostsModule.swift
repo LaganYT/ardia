@@ -2,11 +2,9 @@ import ExpoModulesCore
 
 public class BoostsModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("ArdiaBoosts")
+    Name(Self.calls.moduleName)
 
-    AsyncFunction("call") { (name: String, profile: String, args: String, promise: Promise) in
-      BoostsModule.calls.run(name, profile, args, promise)
-    }.runOnQueue(.main)
+    Self.calls.function
   }
 
   static func accepted(_ reply: CallReply) -> (Bool) -> Void {
@@ -16,11 +14,11 @@ public class BoostsModule: Module {
     }
   }
 
-  static let calls = CallTable(domain: "boosts", handlers: [
-    "setProfileBoosts": { args, reply in
+  static let calls = boostsCallTable(
+    setProfileBoosts: { args, reply in
       ArdiaHost.setProfileBoosts(profile: args.profile, json: try args.text("json"), completion: accepted(reply))
     },
-    "previewBoost": { args, reply in accepted(reply)(ArdiaHost.previewBoost(tabId: try args.text("tabId"), json: try args.text("json"))) },
-    "clearBoostPreview": { args, reply in accepted(reply)(ArdiaHost.clearBoostPreview(tabId: try args.text("tabId"))) },
-  ])
+    previewBoost: { args, reply in accepted(reply)(ArdiaHost.previewBoost(tabId: try args.text("tabId"), json: try args.text("json"))) },
+    clearBoostPreview: { args, reply in accepted(reply)(ArdiaHost.clearBoostPreview(tabId: try args.text("tabId"))) }
+  )
 }

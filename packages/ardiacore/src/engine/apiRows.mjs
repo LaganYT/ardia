@@ -34,14 +34,11 @@ export function typeRows(source, manifest, name) {
     throw new Error(`${name} is an exported, non-generic type alias: \`export type ${name} = HistoryCalls & {\``);
   }
   const parts = ts.isIntersectionTypeNode(alias.type) ? [...alias.type.types] : [alias.type];
-  const literal = parts.at(-1);
-  if (!literal || !ts.isTypeLiteralNode(literal)) {
-    throw new Error(`${name}'s row literal ends its type: \`};\` with nothing after it, as \`export type ${name} = HistoryCalls & { … };\``);
-  }
-  const operandNodes = parts.slice(0, -1);
+  const literal = ts.isTypeLiteralNode(parts.at(-1)) ? parts.at(-1) : null;
+  const operandNodes = literal ? parts.slice(0, -1) : parts;
   for (const node of operandNodes) {
     if (!ts.isTypeReferenceNode(node) || !ts.isIdentifier(node.typeName) || node.typeArguments) {
-      throw new Error(`${name} is generated domains and one row literal, as \`export type ${name} = HistoryCalls & {\`: got ${JSON.stringify(node.getText(file))}`);
+      throw new Error(`${name} is generated domains and at most one row literal, last, as \`export type ${name} = HistoryCalls & { … };\`: got ${JSON.stringify(node.getText(file))}`);
     }
   }
   const kind = name.endsWith("Calls") ? "calls" : "events";
@@ -68,6 +65,6 @@ export function typeRows(source, manifest, name) {
     const verbs = Object.keys(kind === "calls" ? entry.calls : entry.events);
     rows.push(...verbs.map((verb) => `${domain}.${verb}`));
   }
-  const hand = literalRows(name, literal, file);
+  const hand = literal ? literalRows(name, literal, file) : [];
   return { operands, hand, rows: new Set([...rows, ...hand]) };
 }

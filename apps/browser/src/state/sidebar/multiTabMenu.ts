@@ -26,35 +26,39 @@ type Facts = ReturnType<typeof multiTabMenuFacts>;
 export function multiTabMenuItems(s: BrowserState, windowId: string, ids: string[], f: Facts = multiTabMenuFacts(s, windowId, ids)): ChoiceItem<Destination>[] {
   const n = ids.length;
   const groups = groupItems(s, windowId, undefined);
+  const moveTo: ChoiceItem<Destination> = {
+    id: "moveTo",
+    title: "Move to",
+    symbol: "arrow.up.forward.square",
+    children: sections<ChoiceItem<Destination>>(
+      [
+        ...(f.allTiles ? [] : [{ id: "pinTiles", title: "Top Apps", symbol: "square.grid.2x2" }]),
+        ...(!f.allPinned || f.tabs.every(isPinnedRow) ? [] : [{ id: "pinRows", title: pinnedSectionTitle(s, f.tabs[0]), symbol: "pin" }]),
+      ],
+      [
+        ...(groups.length ? [{ id: "moveToGroup", title: "Group", symbol: "folder", children: groups }] : []),
+        ...(f.tabs.some((t) => groupOf(s, t.id)) ? [{ id: "ungroup", title: "Remove from Group", symbol: "folder.badge.minus" }] : []),
+      ],
+      [
+        { id: "moveToProfile", title: "Profile", symbol: "person", enabled: !f.incognito, children: profileItems(s, (id) => f.tabs.every((t) => t.profileId === id)) },
+        { id: "moveToWindow", title: "Window", symbol: "macwindow", enabled: !f.incognito, children: windowItems(s, windowId) },
+      ],
+      bookmarksShown(s.settings) ? [{ id: "bookmarkTo", title: "Bookmarks Folder", symbol: "bookmark", children: bookmarkFolderItems(s, windowId) }] : [],
+    ),
+  };
   return sections<ChoiceItem<Destination>>(
     [
-      { id: "pin", title: f.allPinned ? `Unpin ${n} Tabs` : `Move ${n} Tabs to Top Apps`, symbol: f.allPinned ? "pin.slash" : "pin" },
-      ...(f.tabs.every(isPinnedRow) ? [] : [{ id: "pinRows", title: `Move ${n} Tabs to ${pinnedSectionTitle(s, f.tabs[0])}` }]),
+      ...withAlternate({ id: "copy", title: `Copy ${n} Links`, symbol: "link" }, { id: "copyMd", title: `Copy ${n} Links as Markdown`, symbol: "link" }, null),
+      { id: "duplicate", title: `Duplicate ${n} Tabs`, symbol: "plus.square.on.square" },
     ],
-    [{ id: "duplicate", title: `Duplicate ${n} Tabs`, symbol: "plus.square.on.square" }],
     [
+      f.allPinned ? { id: "unpin", title: `Unpin ${n} Tabs`, symbol: "pin.slash" } : { id: "pinRows", title: `Pin ${n} Tabs`, symbol: "pin" },
       { id: "newGroup", title: `New Group with ${n} Tabs`, symbol: "folder.badge.plus", enabled: !f.allTiles, ...hintWhen(!f.allTiles, "newGroupWithTabs", s) },
-      ...(f.tabs.some((t) => groupOf(s, t.id)) ? [{ id: "ungroup", title: "Remove from Group", symbol: "folder.badge.minus" }] : []),
-      ...(groups.length ? [{ id: "moveToGroup", title: "Move to Group", symbol: "folder", children: groups }] : []),
-      {
-        id: "moveToProfile",
-        title: `Move ${n} Tabs to Profile`,
-        symbol: "person",
-        enabled: !f.incognito,
-        children: profileItems(s, (id) => f.tabs.every((t) => t.profileId === id)),
-      },
-      { id: "moveToWindow", title: "Move to Window", symbol: "macwindow", enabled: !f.incognito, children: windowItems(s, windowId) },
+      moveTo,
     ],
-    bookmarksShown(s.settings)
-      ? [
-          { id: "bar", title: `Add ${n} Tabs to Bookmarks Bar`, symbol: "bookmark" },
-          { id: "bookmarkTo", title: `Add ${n} Tabs to Bookmarks Folder`, children: bookmarkFolderItems(s, windowId) },
-        ]
-      : [],
-    withAlternate({ id: "copy", title: `Copy ${n} Links`, symbol: "link" }, { id: "copyMd", title: `Copy ${n} Links as Markdown`, symbol: "link" }, null),
     [
       { id: "close", title: `Close ${n} Tabs`, symbol: "xmark" },
-      { id: "closeOthers", title: "Close Other Tabs", enabled: f.others.length > 0 },
+      { id: "closeOthers", title: "Close Other Tabs", symbol: "xmark.square", enabled: f.others.length > 0 },
     ],
   );
 }
@@ -76,14 +80,14 @@ export async function openMultiMenu(windowId: string, shown: string[]) {
   const ids = here(shown);
   if (!choice || !ids.length) return;
   if (typeof choice !== "string") sendTabs(windowId, ids, f.tabs[0]!.profileId, choice);
-  else if (choice === "pin") s.pinTabs(ids, !f.allPinned);
+  else if (choice === "unpin") s.pinTabs(ids, false);
+  else if (choice === "pinTiles") s.pinTabs(ids, true, false);
   else if (choice === "pinRows") s.pinTabs(ids, true, true);
   else if (choice === "duplicate") ids.forEach((id) => store().duplicateTab(id));
   else if (choice === "newGroup") newGroupWithSelection(windowId, ids);
   else if (choice === "ungroup") s.removeTabsFromGroup(ids);
   else if (choice === "copy") copyUrls(ids, false);
   else if (choice === "copyMd") copyUrls(ids, true);
-  else if (choice === "bar") void bookmarkTabs(windowId, ids, { kind: "folder", parentId: undefined });
   else if (choice === "close") s.closeTabs(ids);
   else if (choice === "closeOthers") s.closeTabs(here(f.others));
   if (choice !== "copy" && choice !== "copyMd") store().setSelection(windowId, []);

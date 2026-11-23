@@ -32,11 +32,7 @@ async function pickTabForSplit(c: OrganizeContext) {
 }
 
 async function pickProfileForTab({ s, tab }: OrganizeContext) {
-  const items: MenuItem[] = [
-    ...s.profileOrder.map((id) => ({ id, title: s.profiles[id]?.name ?? "", checked: id === tab.profileId, enabled: id !== tab.profileId })),
-    { separator: true },
-    { id: "new", title: "New Profile…" },
-  ];
+  const items: MenuItem[] = s.profileOrder.map((id) => ({ id, title: s.profiles[id]?.name ?? "", checked: id === tab.profileId, enabled: id !== tab.profileId }));
   const choice = await showMenu(items);
   if (choice) await moveTabToProfile(tab.id, choice);
 }

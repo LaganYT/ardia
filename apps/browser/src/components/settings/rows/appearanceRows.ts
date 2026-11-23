@@ -65,8 +65,8 @@ export const appearanceRows = {
       rows: {
         windowButtons: {
           title: "Window buttons",
-          description: "Native follows your desktop's button layout, and on tiling desktops such as Hyprland or sway draws no window buttons. Traffic lights put close, minimize and maximize at the top left, as on a Mac. Full screen hides both. Hidden draws none on any desktop and keeps no room for them; the menu button stays in the header.",
-          keywords: ["window controls", "title bar", "titlebar", "close button", "minimize", "maximize", "traffic lights", "gnome", "kde", "native", "decorations", "linux", "hidden", "none", "tiling", "i3", "sway", "hyprland"],
+          description: "Native, traffic lights, or none.",
+          keywords: ["window controls", "title bar", "titlebar", "close button", "minimize", "maximize", "traffic lights", "gnome", "kde", "native", "decorations", "linux", "hidden", "none", "tiling", "i3", "sway", "hyprland", "button layout", "desktop", "top left", "mac", "full screen", "menu button", "header"],
           shown: () => windowButtonsChoosable,
         },
       },

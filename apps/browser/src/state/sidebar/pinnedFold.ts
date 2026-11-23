@@ -62,11 +62,11 @@ export function pinnedFoldMenuItem(s: BrowserState, windowId: string): MenuItem[
   const w = s.windows[windowId];
   if (!w || !s.profiles[w.profileId] || tabLayoutOf(s, w.id) !== "sidebar") return [];
   const collapsed = pinnedCollapsed(s, w.profileId);
-  const hasPinned = pinnedSequence(s, live().folders, live().folderOrder, windowId, w.profileId).length > 0;
+  if (!pinnedSequence(s, live().folders, live().folderOrder, windowId, w.profileId).length) return [];
   return [
     collapsed
-      ? { id: "pinnedFold", title: PINNED_FOLD_TITLES.expand, symbol: "rectangle.expand.vertical", enabled: hasPinned }
-      : { id: "pinnedFold", title: PINNED_FOLD_TITLES.collapse, symbol: "rectangle.compress.vertical", enabled: hasPinned },
+      ? { id: "pinnedFold", title: PINNED_FOLD_TITLES.expand, symbol: "rectangle.expand.vertical" }
+      : { id: "pinnedFold", title: PINNED_FOLD_TITLES.collapse, symbol: "rectangle.compress.vertical" },
   ];
 }
 

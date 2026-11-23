@@ -24,15 +24,15 @@ import { useAutomationRuleRows } from "./AutomationRules";
 import { WebEngineSection } from "./WebEngineSection";
 
 const BATTERY_SAVER_DESCRIPTIONS: Record<BatterySaverWhen, string> = {
-  lowBattery: `At 20% battery or less, or in ${PLATFORM_TERMS.lowPowerMode}, busy background tabs pause and animations slow down.`,
-  unplugged: `On battery or in ${PLATFORM_TERMS.lowPowerMode}, busy background tabs pause and animations slow down.`,
-  never: "Background tabs and animations run at full speed on battery.",
+  lowBattery: `Pauses busy background tabs at 20% battery or in ${PLATFORM_TERMS.lowPowerMode}.`,
+  unplugged: `Pauses busy background tabs on battery or in ${PLATFORM_TERMS.lowPowerMode}.`,
+  never: "Background tabs and animations always run at full speed.",
 };
 
 type MemorySaverLevel = "off" | MemorySaverMode | "custom";
 type MemorySaverKeys = Pick<Settings, "memorySaver" | "memorySaverMode" | "loadProfilesWhenOpened" | "unloadProfilesAfter">;
 
-const profilesUnload = (after: string) => (PLATFORM_FEATURES.unloadsIdleProfiles ? ` Profiles you aren't using unload after ${after}.` : "");
+const profilesUnload = (after: string) => (PLATFORM_FEATURES.unloadsIdleProfiles ? ` Idle profiles unload after ${after}.` : "");
 
 type MemorySaverPreset = Exclude<MemorySaverLevel, "custom">;
 
@@ -44,20 +44,22 @@ const MEMORY_SAVER_LEVELS: Record<MemorySaverPreset, { title: string; descriptio
   },
   moderate: {
     title: "Moderate",
-    description: () => "Tabs become inactive after a longer period of time. Profiles load when you first open them.",
+    description: () => "Sleeps tabs slowly. Profiles load on open.",
     settings: { memorySaver: true, memorySaverMode: "moderate", loadProfilesWhenOpened: true, unloadProfilesAfter: "never" },
   },
   balanced: {
     title: "Balanced (recommended)",
-    description: () => "Tabs become inactive after an optimal period of time. Profiles load when you first open them.",
+    description: () => "Sleeps idle tabs automatically. Profiles load on open.",
     settings: { memorySaver: true, memorySaverMode: "balanced", loadProfilesWhenOpened: true, unloadProfilesAfter: "never" },
   },
   maximum: {
     title: "Maximum",
-    description: () => `Tabs become inactive after a shorter period of time. Profiles load when you first open them.${profilesUnload("15 minutes")}`,
+    description: () => (PLATFORM_FEATURES.unloadsIdleProfiles ? "Sleeps tabs aggressively and unloads idle profiles after 15m." : "Sleeps tabs aggressively. Profiles load on open."),
     settings: { memorySaver: true, memorySaverMode: "maximum", loadProfilesWhenOpened: true, unloadProfilesAfter: "15m" },
   },
 };
+const TAB_SLEEP: Record<MemorySaverMode, string> = { moderate: "Sleeps tabs slowly", balanced: "Sleeps idle tabs automatically", maximum: "Sleeps tabs aggressively" };
+
 const MEMORY_SAVER_PRESETS = Object.keys(MEMORY_SAVER_LEVELS) as MemorySaverPreset[];
 
 const UNLOAD_AFTER: Record<Settings["unloadProfilesAfter"], string> = { never: "", "5m": "5 minutes", "15m": "15 minutes", "1h": "an hour", "2h": "2 hours" };
@@ -69,9 +71,9 @@ function memorySaverLevel(s: MemorySaverKeys): MemorySaverLevel {
 }
 
 function customDescription(s: MemorySaverKeys) {
-  const tabs = MEMORY_SAVER_LEVELS[s.memorySaverMode].description().split(". ")[0];
-  const load = s.loadProfilesWhenOpened ? " Profiles load when you first open them." : " Every profile loads when Ardia opens.";
-  return `${tabs}.${load}${s.unloadProfilesAfter === "never" ? "" : profilesUnload(UNLOAD_AFTER[s.unloadProfilesAfter])} Pick a level to use its settings instead.`;
+  const tabs = TAB_SLEEP[s.memorySaverMode];
+  const load = s.loadProfilesWhenOpened ? " Profiles load on open." : " Every profile loads at launch.";
+  return `${tabs}.${load}${s.unloadProfilesAfter === "never" ? "" : profilesUnload(UNLOAD_AFTER[s.unloadProfilesAfter])}`;
 }
 
 export function AdvancedPane(_: SettingsPlace) {
@@ -174,7 +176,7 @@ function ProgramControlRow() {
   const server = useControlServer((s) => s.server);
   const note =
     server?.state === "external"
-      ? "This instance already has a DevTools port from the command line, so the setting leaves it alone."
+      ? "Already has a DevTools port from the command line; left as is."
       : server?.reason
         ? server.reason
         : on && server?.state === "on"
@@ -224,14 +226,14 @@ function CommandLineSection() {
   const ruleRows = useAutomationRuleRows();
   const serverNote =
     server?.state === "external"
-      ? "This instance already has a DevTools port from the command line, so the setting leaves it alone."
+      ? "Already has a DevTools port from the command line; left as is."
       : server?.reason
         ? server.reason
         : on && server?.state === "on"
           ? server.connections
             ? `Connected now: ${server.connections === 1 ? "1 session" : `${server.connections} sessions`}.`
             : "On. Nothing is connected."
-          : "Installs the ardia command and lets it open, read and act in every page you're signed in to. It stays on after you quit.";
+          : "Installs the ardia command to read and act in your signed-in pages.";
   const failed = !!install.error && !install.installing;
   const setOn = (next: boolean) => {
     setProgramControl(next);

@@ -41,11 +41,7 @@ export function withAlternate(primary: Choice, alternate: Choice, commands: read
 }
 
 export function profileItems(s: BrowserState, isCurrent: (profileId: string) => boolean): DestinationItem[] {
-  return [
-    ...s.profileOrder.map((id) => ({ value: { kind: "profile" as const, profileId: id }, title: s.profiles[id]!.name, checked: isCurrent(id), enabled: !isCurrent(id) })),
-    sep,
-    { value: { kind: "profile", profileId: null }, title: "New Profile…" },
-  ];
+  return s.profileOrder.map((id) => ({ value: { kind: "profile" as const, profileId: id }, title: s.profiles[id]!.name, checked: isCurrent(id), enabled: !isCurrent(id) }));
 }
 
 export function windowItems(s: BrowserState, windowId: string): DestinationItem[] {

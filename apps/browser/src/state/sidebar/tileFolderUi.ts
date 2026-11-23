@@ -72,10 +72,9 @@ export function removeFromFolder(tabId: string) {
 
 export function tileFolderContextItems(count: number): MenuItem[] {
   return [
-    { id: "unpin", title: `Unpin ${plural(count, "Tab")}`, symbol: "pin.slash" },
-    { separator: true },
     { id: "rename", title: "Rename…", symbol: "pencil" },
     { separator: true },
+    { id: "unpin", title: `Unpin ${plural(count, "Tab")}`, symbol: "pin.slash" },
     { id: "remove", title: "Remove Folder", symbol: "folder.badge.minus" },
   ];
 }

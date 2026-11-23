@@ -6,6 +6,8 @@ import { PLATFORM_TERMS } from "../../../lib/platformTerms";
 import type { PluginListing, ProcessState, ProgramsState } from "../../../state/plugins/store";
 import {
   consentLines,
+  fullControlLine,
+  FULL_CONTROL_SUMMARY,
   disablePlugin,
   pluginsFolderPath,
   relinkPrograms,
@@ -122,7 +124,7 @@ function PluginRow({ name }: { name: string }) {
   return (
     <Row
       title={m ? `${m.title}${m.version ? ` ${m.version}` : ""}` : name}
-      description={[originText(listing, active), statusOf(m, listing?.problems ?? [], active, review, process, unsaved)].filter(Boolean).join(" · ")}
+      description={[originText(listing, active), m && fullControlLine(m) ? FULL_CONTROL_SUMMARY : null, statusOf(m, listing?.problems ?? [], active, review, process, unsaved)].filter(Boolean).join(" · ")}
       icon={<Symbol name={m?.icon ?? m?.page?.icon ?? "puzzlepiece"} size={14} color={theme.icon} style={ICON} />}
       onPress={() => goToSettingsPane("plugins", null, name)}
     >
@@ -268,7 +270,7 @@ function PluginPage({ name }: { name: string }) {
         <>
           <SectionHeader title="What it gets" />
           <Group>
-            {consentLines(m, { controlOff, official: !!listing.official && !active, movesProfiles }).map((line) => (
+            {consentLines(m, { controlOff, official: !!listing.official && !active, movesProfiles, installed: active }).map((line) => (
               <Row key={line.text} title={line.text} icon={<Symbol name={line.icon} size={13} color={theme.icon} style={ICON} />} />
             ))}
           </Group>

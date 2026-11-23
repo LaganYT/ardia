@@ -9,7 +9,7 @@ export const disablePlugin = (name: string) => turnOffPlugin(name, consentNow())
 export { restartProcess as restartPlugin } from "./process";
 export { removePluginAfterConfirm } from "./removeConfirmed";
 export { openPluginPage, pluginPagePath } from "./pages";
-export { consentLines, type ConsentLine } from "./consent";
+export { consentLines, fullControlLine, FULL_CONTROL_SUMMARY, type ConsentLine } from "./consent";
 export { canRelink, relinkPrograms } from "./programs";
 export { cancelOfficialInstall, installOfficialPlugin, officialPlugins, COMING_SOON, OFFICIAL_CATALOGUE, type OfficialPlugin, type OfficialPluginState } from "./official";
 export type { InstallResult } from "./installWaiters";

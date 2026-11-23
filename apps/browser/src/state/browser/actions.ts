@@ -274,8 +274,8 @@ export async function openProfileMenu(windowId: string) {
       return [switchItem, { value: { open: "window" as const, profileId: id }, title: `${profile.name} ↗`, alternate: true, swatch, ...alternate }];
     }),
     { separator: true },
-    { id: "new", title: "New Profile", symbol: "plus" },
-    { id: "edit", title: "Edit Profiles…", symbol: "pencil" },
+    { id: "new", title: "New Profile…", symbol: "plus" },
+    { id: "edit", title: "Manage Profiles…", symbol: "gearshape" },
   ];
   const choice = await chooseFromMenu(items);
   if (!choice) return;

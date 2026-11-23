@@ -26,7 +26,7 @@ const permissions = closed({
   storage: { type: "boolean", description: "Keep its own data" },
   secrets: { type: "boolean", description: "Keep secrets in the Keychain" },
   network: { anyOf: [{ const: false }, { const: "*" }, { type: "array", minItems: 1, maxItems: LIMITS.allowedHosts, items: { type: "string", pattern: "^(\\*\\.)?[a-z0-9.-]{1,253}$" } }], description: "false, \"*\" or hosts like api.example.com and *.example.com" },
-  control: { type: "boolean", description: "Let programs you run drive your tabs and pages" },
+  control: { type: "boolean", description: "Let programs you run fully control Ardia, including your signed-in sites" },
 });
 
 const menuItem = closed({ command: name, title: textOf(LIMITS.title), icon: symbol, when }, ["command"]);

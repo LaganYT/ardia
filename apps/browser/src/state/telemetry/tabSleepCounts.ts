@@ -2,8 +2,9 @@ import { takeCleanUpCounts } from "./cleanUpCounts";
 import type { ConsentToken } from "./choice";
 import { consentOrNow, countFor } from "./countFor";
 import type { KeptAwakeReason } from "../tabs/sleepRefusals";
+import type { SleepVeto } from "../tabs/sleepPolicy";
 
-const none = () => ({ captureIndicatorsCleared: 0, mediaCardsCleared: 0, pinnedTabsSleptByMemorySaver: 0, tabsSleptOverBudget: 0, tabsSleptOverBudgetReopened: 0, tabsOverBudgetSkippedLoading: 0, tabsOverBudgetAsksPassedOn: 0, topAppsKeptRunning: 0, topAppWindowsClosedFromNewTab: 0, topAppsUnloadedFromMenu: 0, tabsSleptFromMenu: 0, groupsSleptFromMenu: 0, menuSleepsKeptAwake: 0, menuSleepsPastAutomatic: 0, menuSleepKeptReason: null as KeptAwakeReason | null });
+const none = () => ({ captureIndicatorsCleared: 0, mediaCardsCleared: 0, pinnedTabsSleptByMemorySaver: 0, tabsSleptOverBudget: 0, tabsSleptOverBudgetReopened: 0, tabsOverBudgetSkippedLoading: 0, tabsOverBudgetAsksPassedOn: 0, topAppsKeptRunning: 0, topAppWindowsClosedFromNewTab: 0, topAppsUnloadedFromMenu: 0, tabsSleptFromMenu: 0, groupsSleptFromMenu: 0, menuSleepsKeptAwake: 0, menuSleepsPastAutomatic: 0, menuSleepKeptReason: null as KeptAwakeReason | null, sleepVetoes: {} as Partial<Record<SleepVeto, number>> });
 
 let pending = none();
 
@@ -22,6 +23,25 @@ export function noteTabSlept(pinned: boolean, reason: string | null) {
 export function noteTabSleptOverBudget(consent?: ConsentToken | null) {
   countFor(consentOrNow(consent), () => void pending.tabsSleptOverBudget++);
 }
+
+export function noteSleepVeto(veto: SleepVeto, consent?: ConsentToken | null) {
+  countFor(consentOrNow(consent), () => void (pending.sleepVetoes[veto] = (pending.sleepVetoes[veto] ?? 0) + 1));
+}
+
+const VETO_FIELDS: Partial<Record<SleepVeto, string>> = {
+  call: "sleep_kept_call",
+  pictureInPicture: "sleep_kept_picture_in_picture",
+  audible: "sleep_kept_audible",
+  recentlyAudible: "sleep_kept_recently_audible",
+  frequentlyUsed: "sleep_kept_frequently_used",
+  typedInput: "sleep_kept_typed_input",
+  postedDocument: "sleep_kept_posted_document",
+  beforeUnload: "sleep_kept_before_unload",
+  other: "sleep_kept_other",
+};
+
+const vetoCounts = (vetoes: Partial<Record<SleepVeto, number>>) =>
+  Object.fromEntries(Object.entries(VETO_FIELDS).map(([veto, field]) => [field, vetoes[veto as SleepVeto] ?? 0]));
 
 export function noteTabSleptOverBudgetReopened() {
   pending.tabsSleptOverBudgetReopened++;
@@ -96,5 +116,6 @@ export function takeTabSleepCounts() {
     tabs_slept_over_budget_reopened: taken.tabsSleptOverBudgetReopened,
     tabs_over_budget_skipped_loading: taken.tabsOverBudgetSkippedLoading,
     tabs_over_budget_asks_passed_on: taken.tabsOverBudgetAsksPassedOn,
+    ...vetoCounts(taken.sleepVetoes),
   };
 }

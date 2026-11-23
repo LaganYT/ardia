@@ -10,10 +10,16 @@ import { useKeyed, watchWindowRecord } from "../browser/keyedWatch";
 import { eligibleKind } from "../automation/automationWindows";
 import { valuesOf } from "./values";
 import { consentVerbOf } from "./consentWords";
+import { fullControlLine } from "./consent";
 
 export const usePluginOrder = () => usePlugins((s) => s.order);
 export { useOfficialPlugins } from "./official";
 export const usePluginListing = (name: string) => usePlugins((s) => s.listings[name]);
+export const usePluginFullControl = (name: string) =>
+  usePlugins((s) => {
+    const listing = Object.hasOwn(s.listings, name) ? s.listings[name] : Object.hasOwn(s.candidates, name) ? s.candidates[name] : undefined;
+    return !!listing?.manifest && fullControlLine(listing.manifest) !== null;
+  });
 export const useConsentListing = (name: string, hash: string) => usePlugins((s) => consentListing(s, name, hash));
 export const useConsentVerb = (name: string, hash: string) => usePlugins((s) => consentVerbOf(s, name, hash));
 export const useOfficialFetch = (name: string) => usePlugins((s) => (Object.hasOwn(s.fetches, name) ? s.fetches[name] : undefined));

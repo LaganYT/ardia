@@ -3,7 +3,6 @@ import { fileExists, moveToTrash, revealFile } from "../../platform/files";
 import { openDownload } from "./openDownload";
 import { showMenu, type MenuItem } from "../../platform/menus";
 import { menuSections } from "../app/menuSections";
-import { openInternalPage } from "../pages/urls";
 import { removeDownload } from "../windows/actions";
 import { opensWhenDone, toggleOpenWhenDone } from "../windows/downloadWatch";
 import { cancelDownload, keepDownload, pauseDownload, resumeDownload, type Download } from "./actions";
@@ -30,10 +29,7 @@ export function downloadMenuItems(d: DownloadMenuState): MenuItem[] {
         ];
   return menuSections(
     lead,
-    [
-      { id: "copy", title: "Copy Link", symbol: "link" },
-      { id: "page", title: "Show All Downloads", symbol: "arrow.down.circle" },
-    ],
+    [{ id: "copy", title: "Copy Link", symbol: "link" }],
     [
       { id: "remove", title: "Remove from List", symbol: "minus.circle", enabled: !d.downloading },
       d.fileExists && { id: "trash", title: `Move to ${PLATFORM_TERMS.trash}`, symbol: "trash" },
@@ -41,7 +37,7 @@ export function downloadMenuItems(d: DownloadMenuState): MenuItem[] {
   );
 }
 
-export async function downloadMenu(d: Download, windowId: string) {
+export async function downloadMenu(d: Download) {
   const exists = d.state === "finished" && fileExists(d.path);
   const choice = await showMenu(
     downloadMenuItems({ held: awaitsKeep(d), downloading: d.state === "downloading", paused: d.paused, opensWhenDone: opensWhenDone(d.id), fileExists: exists }),
@@ -54,7 +50,6 @@ export async function downloadMenu(d: Download, windowId: string) {
   if (choice === "open") void openDownload(d.path);
   if (choice === "reveal") void revealFile(d.path);
   if (choice === "copy") copyText(d.url);
-  if (choice === "page") openInternalPage("downloads", windowId);
   if (choice === "trash") void trashDownload(d);
   if (choice === "remove") removeDownload(d.id);
 }

@@ -6,7 +6,7 @@ import type { CommandEvent } from "../../platform/commands";
 import { markdownLink } from "@ardia/core";
 import { useBrowser } from "../browser/store";
 import { requestCreateProfile } from "../profiles/createProfileRequest";
-import { activeTabId, bookmarkProfileId, isPinnedRow, resolveWindowId } from "../browser/model";
+import { activeTabId, bookmarkProfileId, isPinnedRow, resolveWindowId, tabLayoutOf } from "../browser/model";
 import {
   closeGroup,
   closeTab,
@@ -42,7 +42,7 @@ import { runReaderCommand } from "../reader/reader";
 import { goBack, goForward } from "../tabs/navigation";
 import { awaitsFirstPage } from "../tabs/pendingAddress";
 import { focusSplitPane, openSplitPane } from "../splits/actions";
-import { switchTabLayout } from "../settings/actions";
+import { chooseSidebarSide, switchTabLayout } from "../settings/actions";
 import { isAppCommand, settingChange, variantArg } from "./commandCatalog";
 import { APP_COMMAND_HANDLERS } from "./appCommands";
 import { runSidebarCommand } from "../sidebar/commands";
@@ -68,8 +68,21 @@ import { runHidingCommand } from "../site/hiddenElements";
 import { requestWindowClose } from "../windows/windowClose";
 import { commandTarget } from "./commandTarget";
 import { runLittleArdiaCommand } from "./littleArdiaCommands";
-
 const newOrId = (arg: string) => (arg === "new" ? null : arg);
+
+const LITTLE_ARDIA_BLOCKED_LAYOUT: ReadonlySet<string> = new Set([
+  "setTabLayout",
+  "toggleTabLayout",
+  "toggleSidebarSide",
+  "toggleSidebar",
+  "toggleAddressBar",
+  "toggleCompactToolbar",
+  "toggleFullUrl",
+  "toggleMinimalism",
+  "setBookmarksBar",
+  "toggleBookmarksBar",
+  "togglePinnedFold",
+]);
 
 export class NoCommandWindowError extends Error {}
 
@@ -92,6 +105,10 @@ export function runCommand({ command, arg, windowId: given }: CommandEvent, { st
   }
   const requested = target.invokedFrom;
   const targeted = target.targeted;
+  const invokedWindow = s.windows[resolveWindowId(s, requested) ?? ""];
+  if (invokedWindow?.kind === "small" && LITTLE_ARDIA_BLOCKED_LAYOUT.has(command)) return;
+  if ((command === "setBookmarksBar" || command === "toggleBookmarksBar") && invokedWindow?.kind === "private") return;
+  if (command === "toggleCompactToolbar" && (s.settings.minimalismMode || (invokedWindow && tabLayoutOf(s, invokedWindow.id) === "sidebar" && s.settings.addressBar === "sidebar"))) return;
   const settings = settingChange(command, arg, s.settings);
   if (settings) return s.updateSettings(settings);
 
@@ -237,6 +254,15 @@ export function runCommand({ command, arg, windowId: given }: CommandEvent, { st
       return void (tabId && withLivePage(tabId, (page) => page.forceReload()));
     case "toggleTabLayout":
       return switchTabLayout(windowId);
+    case "setTabLayout": {
+      const choice = variantArg("setTabLayout", arg);
+      if (!choice) return;
+      if (choice === "sidebarLeft") chooseSidebarSide("left");
+      else if (choice === "sidebarRight") chooseSidebarSide("right");
+      const want = choice === "top" ? "top" : "sidebar";
+      if (tabLayoutOf(useBrowser.getState(), windowId) !== want) switchTabLayout(windowId);
+      return;
+    }
     case "openSplitPane":
       return void openSplitPane(windowId);
     case "focusNextPane":

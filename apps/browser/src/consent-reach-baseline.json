@@ -12,7 +12,7 @@
     "apps/browser/src/state/commands/commands.ts": 2,
     "apps/browser/src/state/commands/platformCommands.ts": 1,
     "apps/browser/src/state/config/configFiles.ts": 1,
-    "apps/browser/src/state/extensions/actions.ts": 3,
+    "apps/browser/src/state/extensions/actions.ts": 2,
     "apps/browser/src/state/extensions/sidePanels.ts": 1,
     "apps/browser/src/state/find/actions.ts": 3,
     "apps/browser/src/state/history/showHistory.ts": 1,

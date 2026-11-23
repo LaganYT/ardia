@@ -344,3 +344,107 @@ test("tabs the engine kept give their asks to tabs not kept yet, so a sweep wher
   assert.equal(takeTabSleepCounts().tabs_over_budget_asks_passed_on, 1, "one ask went from a kept tab to a tab not kept yet");
   webviews.clear();
 });
+
+test("a tab switched to 15 times stays loaded, and each kind of protection that kept a tab is counted once per tab", async (t) => {
+  const { sleepTabsOverBudget, tabsOverBudget } = await import("./loadedTabBudget.ts");
+  const { countSwitches, clearSwitches } = await import("./tabSwitches.ts");
+  const { webviews } = await import("../../platform/webviews.ts");
+  const { takeTabSleepCounts } = await import("../telemetry/tabSleepCounts.ts");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const now = Date.now() + 480 * 60 * minute;
+  const { ids, active } = windowOfHiddenTabs(4, now);
+  clearSwitches();
+  const unsubscribe = useBrowser.subscribe((s, prev) => countSwitches(prev, s));
+  for (let i = 0; i < 15; i++) {
+    S().activate(ids[3]);
+    S().activate(active);
+  }
+  unsubscribe();
+  ids.forEach((id, i) => S().updateTab(id, { lastActiveAt: now - (60 + i * 60) * minute }));
+  const budget = { tabs: 1, hiddenMs: 30 * minute };
+  assert.ok(!tabsOverBudget(S(), [active, ...ids], budget, now).includes(ids[3]), "the oldest tab is kept because it is used all the time");
+  webviews.clear();
+  const answers = { [ids[2]]: [100], [ids[1]]: [101, 26] };
+  for (const id of [active, ...ids]) webviews.set(id, { sleepIfHidden: () => Promise.resolve(answers[id] ?? []) });
+  takeTabSleepCounts();
+  const sweep = async (at) => {
+    const done = sleepTabsOverBudget(budget, at);
+    for (let i = 0; i < 8; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+      t.mock.timers.tick(1500);
+    }
+    return done;
+  };
+  assert.deepEqual(await sweep(now), [ids[0]], "the page left by a form post and the one with an unload prompt stay; the idle one sleeps");
+  lifecycle.noteDiscarded(ids[0]);
+  await sweep(now + minute);
+  const counts = takeTabSleepCounts();
+  assert.equal(counts.sleep_kept_frequently_used, 1, "counted once, not once per sweep");
+  assert.equal(counts.sleep_kept_posted_document, 1);
+  assert.equal(counts.sleep_kept_before_unload, 1, "an unload prompt outranks typed input");
+  assert.equal(counts.sleep_kept_typed_input, 0);
+  assert.equal(counts.tabs_slept_over_budget, 1);
+  webviews.clear();
+  clearSwitches();
+});
+
+test("a candidate that starts playing sound while an earlier tab's answer is awaited isn't asked, and each tab is counted once per reason", async (t) => {
+  const { sleepTabsOverBudget } = await import("./loadedTabBudget.ts");
+  const { webviews } = await import("../../platform/webviews.ts");
+  const { takeTabSleepCounts } = await import("../telemetry/tabSleepCounts.ts");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const now = Date.now() + 900 * 60 * minute;
+  const { ids, active } = windowOfHiddenTabs(3, now);
+  ids.forEach((id, i) => S().updateTab(id, { lastActiveAt: now - (60 + i * 60) * minute }));
+  const asked = [];
+  let answers = {
+    [ids[2]]: () => {
+      S().updateLive(ids[1], { playingAudio: true });
+      return Promise.resolve([26]);
+    },
+  };
+  webviews.clear();
+  for (const id of [active, ...ids]) webviews.set(id, { sleepIfHidden: () => (asked.push(id), answers[id]?.() ?? Promise.resolve([])) });
+  takeTabSleepCounts();
+  const sweep = async (at) => {
+    const done = sleepTabsOverBudget({ tabs: 1, hiddenMs: 30 * minute }, at);
+    for (let i = 0; i < 8; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+      t.mock.timers.tick(1500);
+    }
+    return done;
+  };
+  assert.deepEqual(await sweep(now), [ids[0]]);
+  assert.deepEqual(asked, [ids[2], ids[0]], "the tab that began playing mid-sweep is skipped, not sent to Chromium");
+  answers = { [ids[2]]: () => Promise.resolve([26]) };
+  await sweep(now + 11 * minute);
+  const counts = takeTabSleepCounts();
+  assert.equal(counts.sleep_kept_typed_input, 1, "typed input kept the tab twice, counted once");
+  assert.equal(counts.sleep_kept_audible, 1);
+  S().updateLive(ids[1], { playingAudio: false });
+  webviews.clear();
+});
+
+test("a protection seen while sharing is off is still counted the first time it is seen after sharing turns on", async (t) => {
+  const { sleepTabsOverBudget } = await import("./loadedTabBudget.ts");
+  const { takeTabSleepCounts } = await import("../telemetry/tabSleepCounts.ts");
+  const { webviews } = await import("../../platform/webviews.ts");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const now = Date.now() + 1200 * 60 * minute;
+  const { ids, active } = windowOfHiddenTabs(2, now);
+  ids.forEach((id, i) => S().updateTab(id, { lastActiveAt: now - (60 + i * 60) * minute }));
+  S().updateLive(ids[1], { playingAudio: true });
+  webviews.clear();
+  for (const id of [active, ...ids]) webviews.set(id, { sleepIfHidden: () => Promise.resolve([7]) });
+  takeTabSleepCounts();
+  setConsentPeriod(false, null);
+  await sleepTabsOverBudget({ tabs: 1, hiddenMs: 30 * minute }, now);
+  setConsentPeriod(true, "tab-lifecycle-test-2");
+  await sleepTabsOverBudget({ tabs: 1, hiddenMs: 30 * minute }, now + minute);
+  await sleepTabsOverBudget({ tabs: 1, hiddenMs: 30 * minute }, now + 2 * minute);
+  assert.equal(takeTabSleepCounts().sleep_kept_audible, 1, "counted once in the period sharing was on, though first seen before it");
+  setConsentPeriod(true, "tab-lifecycle-test");
+  S().updateLive(ids[1], { playingAudio: false });
+  webviews.clear();
+});
+

@@ -1,6 +1,6 @@
 import type { MenuItem } from "../../platform/menus";
 import { chooseFromMenu, type ChoiceItem } from "../app/menuChoice";
-import { closeTab, moveTabsToProfile, moveTabToWindow, openWindow, toggleMute, toggleSiteMute } from "../browser/actions";
+import { closeTab, moveTabsToProfile, moveTabToWindow, toggleMute, toggleSiteMute } from "../browser/actions";
 import { muteState, muteSymbol, muteTitle, siteMuteTitle } from "../tabs/mute";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, pinnedSectionTitle, pinSection, tabTitle, togglePinTitle, viewTabIds, tabLayoutOf } from "../browser/model";
@@ -21,7 +21,7 @@ import { calendarMenuItem, dismissNowMenuItems, runCalendarMenu } from "./liveMe
 import { newFolderWithTab, removeFromFolder } from "./tileFolderUi";
 import { togglePageEngine } from "../engines/actions";
 import { ENGINE_NAMES, otherEngine, switchableEngine, tabEngine } from "../engines/engines";
-import { bookmarkFolderItems, groupItems, hintWhen, profileItems, sections, windowItems, withAlternate, type Destination } from "./menuParts";
+import { groupItems, hintWhen, profileItems, sections, windowItems, withAlternate, type Destination } from "./menuParts";
 import { openMultiMenu } from "./multiTabMenu";
 import { boostTarget, newBoostForTab } from "../boostUi/actions";
 import { tileFolderOf } from "../pins/tileFolders";
@@ -33,6 +33,7 @@ import { canSleep, sleepTabsFromMenu } from "../tabs/manualSleep";
 import { isPluginMenuChoice, pluginMenuItems, runPluginMenuChoice, type PluginMenuContext } from "../plugins/menus";
 import { urlParts } from "../../lib/urlParts";
 import { ALL_UNREAD_TITLE, canChooseSiteUnread, isUnreadSiteHidden, showUnreadCounts, toggleSiteUnread, unreadSiteTitle } from "../tabs/unreadSites";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 
 const store = () => useBrowser.getState();
 
@@ -60,43 +61,30 @@ export function tabMenuFacts(s: BrowserState, windowId: string, tab: Tab) {
 type Facts = ReturnType<typeof tabMenuFacts>;
 
 function pinItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
-  const toRows = `Move to ${pinnedSectionTitle(s, tab)}`;
-  const backToPin: MenuItem[] = f.housed
-    ? [{ id: "backToPin", title: "Reset Pinned Tab", symbol: "arrow.uturn.backward", enabled: awayFromPin(tab), ...hintWhen(f.active, "returnToPinnedUrl", s) }]
-    : [];
-  const editPinned: MenuItem[] = f.housed
-    ? [
-        {
-          id: "pinnedPage",
-          title: "Edit Pinned Page",
-          children: [{ id: "replacePin", title: "Replace Pinned URL with Current", enabled: awayFromPin(tab) }, { separator: true }, { id: "editPin", title: "Edit Pinned URL…" }],
-        },
-      ]
-    : [];
-  if (f.memberPin) return [{ id: "unpinMember", title: "Unpin", symbol: "pin.slash" }, ...backToPin, ...editPinned];
-  const row = f.section === "row";
-  const toggle: MenuItem = { id: "pin", title: togglePinTitle(tab), symbol: tab.pin ? "pin.slash" : "pin", ...(row ? hintWhen(f.active, "togglePinnedRow", s) : {}) };
-  const other: MenuItem[] = f.splitRow
-    ? []
-    : f.section === "none"
-      ? [{ id: "pinRow", title: toRows, ...hintWhen(f.active, "togglePinnedRow", s) }]
-      : f.section === "tile"
-        ? [{ id: "pinRow", title: toRows }]
-        : [{ id: "pinTile", title: "Move to Top Apps" }];
-  return [toggle, ...backToPin, ...other, ...editPinned];
+  const reset: MenuItem[] = f.housed && awayFromPin(tab) ? [{ id: "backToPin", title: "Reset Pinned Tab", symbol: "arrow.uturn.backward", ...hintWhen(f.active, "returnToPinnedUrl", s) }] : [];
+  if (f.memberPin) return [{ id: "unpinMember", title: "Unpin", symbol: "pin.slash" }, ...reset];
+  if (f.section === "none") return f.splitRow ? [] : [{ id: "pinRow", title: "Pin Tab", symbol: "pin", ...hintWhen(f.active, "togglePinnedRow", s) }];
+  return [{ id: "pin", title: togglePinTitle(tab), symbol: "pin.slash", ...(f.section === "row" ? hintWhen(f.active, "togglePinnedRow", s) : {}) }, ...reset];
 }
 
-function openItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
-  const engine = switchableEngine(s, tab.url) ? ENGINE_NAMES[otherEngine(tabEngine(s, tab.id))] : null;
+function splitItems(s: BrowserState, f: Facts): MenuItem[] {
+  if (f.split) return [{ id: "unsplit", title: "Remove from Split View", symbol: "rectangle.split.2x1.slash" }];
+  if (f.section === "tile" || !splitViewAvailable) return [];
+  return [{ id: "split", title: "Open in Split View", symbol: "rectangle.split.2x1", ...hintWhen(f.active, "openSplitPane", s) }];
+}
+
+function quickItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
   return [
-    ...(f.split
-      ? [{ id: "unsplit", title: "Remove from Split View", symbol: "rectangle.split.2x1.slash" }]
-      : f.section === "tile" || !splitViewAvailable
-        ? []
-        : [{ id: "split", title: "Open as Split", symbol: "rectangle.split.2x1", ...hintWhen(f.active, "openSplitPane", s) }]),
+    ...withAlternate(
+      { id: "copy", title: "Copy Link", symbol: "link", enabled: !!tab.url },
+      { id: "copyMd", title: "Copy Link as Markdown", symbol: "link", enabled: !!tab.url },
+      f.active ? ["copyUrl", "copyUrlAsMarkdown"] : null,
+      s,
+    ),
     { id: "duplicate", title: "Duplicate", symbol: "plus.square.on.square" },
-    ...(f.housed ? [{ id: "newWindow", title: "Open in New Window", symbol: "macwindow.badge.plus", enabled: !!tab.url && !f.incognito }] : []),
-    ...(engine ? [{ id: "engine", title: `Open in ${engine}` }] : []),
+    ...splitItems(s, f),
+    ...muteItems(s, tab),
+    ...pictureInPictureItems(tab),
   ];
 }
 
@@ -107,41 +95,51 @@ function calendarItems(tab: Tab): MenuItem[] {
 
 type TabMenuItem = ChoiceItem<Destination>;
 
-function organiseItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): TabMenuItem[] {
-  const groups = f.section === "tile" ? [] : groupItems(s, windowId, f.group?.id);
-  const grouping: TabMenuItem[] =
-    f.section === "tile"
-      ? tileFolderOf(tab)
-        ? [{ id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" }]
-        : s.settings.topAppFolders
-          ? [{ id: "newFolder", title: "New Folder…", symbol: "folder.badge.plus" }]
-          : []
-      : [
-          ...(f.memberPin
-            ? []
-            : f.group
-              ? [{ id: "ungroupTab", title: "Remove from Group", symbol: "folder.badge.minus" }]
-              : [{ id: "newGroup", title: "New Group with Tab", symbol: "folder.badge.plus", ...hintWhen(f.active, "newGroupWithTabs", s) }]),
-          ...(groups.length ? [{ id: "moveToGroup", title: "Move to Group", symbol: "folder", children: groups }] : []),
-        ];
+function groupingItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): TabMenuItem[] {
+  if (f.section === "tile") {
+    if (tileFolderOf(tab)) return [{ id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" }];
+    return s.settings.topAppFolders ? [{ id: "newFolder", title: "New Folder…", symbol: "folder.badge.plus" }] : [];
+  }
+  const groups = groupItems(s, windowId, f.group?.id);
   return [
-    ...grouping,
-    { id: "moveToProfile", title: "Move to Profile", symbol: "person", enabled: !f.incognito, children: profileItems(s, (id) => id === tab.profileId) },
-    { id: "moveToWindow", title: "Move to Window", symbol: "macwindow", enabled: !f.incognito, children: windowItems(s, windowId) },
+    ...(f.memberPin
+      ? []
+      : f.group
+        ? [{ id: "ungroupTab", title: "Remove from Group", symbol: "folder.badge.minus" }]
+        : [{ id: "newGroup", title: "New Group", symbol: "folder.badge.plus", ...hintWhen(f.active, "newGroupWithTabs", s) }]),
+    ...(groups.length ? [{ id: "moveToGroup", title: "Group", symbol: "folder", children: groups }] : []),
   ];
+}
+
+function moveToItem(s: BrowserState, windowId: string, tab: Tab, f: Facts): TabMenuItem {
+  const place: TabMenuItem[] =
+    f.memberPin || f.splitRow
+      ? []
+      : f.section === "tile"
+        ? [{ id: "pinRow", title: pinnedSectionTitle(s, tab), symbol: "pin" }]
+        : [{ id: "pinTile", title: "Top Apps", symbol: "square.grid.2x2" }];
+  return {
+    id: "moveTo",
+    title: "Move to",
+    symbol: "arrow.up.forward.square",
+    children: sections<TabMenuItem>(place, groupingItems(s, windowId, tab, f), [
+      { id: "moveToProfile", title: "Profile", symbol: "person", enabled: !f.incognito, children: profileItems(s, (id) => id === tab.profileId) },
+      { id: "moveToWindow", title: "Window", symbol: "macwindow", enabled: !f.incognito, children: windowItems(s, windowId) },
+    ]),
+  };
 }
 
 function pictureInPictureItems(tab: Tab): MenuItem[] {
   return useMedia.getState().pipOpen[tab.id] ? [{ id: "exitPip", title: "Exit Picture in Picture", symbol: "pip.exit" }] : [];
 }
 
-function bookmarkItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): TabMenuItem[] {
+function bookmarkItems(s: BrowserState, windowId: string, tab: Tab, f: Facts): MenuItem[] {
+  if (!bookmarksShown(s.settings)) return [];
   const saved = !!tab.url && isBookmarked(s, bookmarkProfileId(s, s.windows[windowId]), tab.url);
-  return [
-    { id: "bookmark", title: saved ? "Edit Bookmark…" : "Add to Bookmarks…", symbol: saved ? "bookmark.fill" : "bookmark", enabled: !!tab.url, ...hintWhen(f.active, "bookmarkPage", s) },
-    ...(saved ? [{ id: "unbookmark", title: "Remove Bookmark" }] : []),
-    { id: "bookmarkTo", title: "Add Bookmark to Folder", enabled: !!tab.url, children: bookmarkFolderItems(s, windowId) },
-  ];
+  if (!saved) return [{ id: "bookmark", title: "Bookmark Tab…", symbol: "bookmark", enabled: !!tab.url, ...hintWhen(f.active, "bookmarkPage", s) }];
+  const edit: MenuItem = { id: "bookmark", title: "Edit Bookmark…", symbol: "bookmark.fill" };
+  const remove: MenuItem = { id: "unbookmark", title: "Remove Bookmark", symbol: "minus.circle" };
+  return PLATFORM_FEATURES.menuAlternates ? withAlternate(edit, remove, null) : [edit, remove];
 }
 
 function muteItems(s: BrowserState, tab: Tab): MenuItem[] {
@@ -161,25 +159,58 @@ function unreadItems(s: BrowserState, tab: Tab): MenuItem[] {
   return [{ id: "siteUnread", title: unreadSiteTitle(hidden), symbol: "app.badge" }];
 }
 
+function customizeItem(s: BrowserState, tab: Tab, f: Facts): MenuItem {
+  const engine = switchableEngine(s, tab.url) ? ENGINE_NAMES[otherEngine(tabEngine(s, tab.id))] : null;
+  return {
+    id: "customize",
+    title: "Customize",
+    symbol: "slider.horizontal.3",
+    children: sections(
+      [
+        { id: "rename", title: "Rename…", symbol: "pencil" },
+        ...(tab.customTitle ? [{ id: "resetName", title: "Reset Name", symbol: "arrow.counterclockwise" }] : []),
+        { id: "icon", title: "Change Icon…", symbol: "photo" },
+        ...(tab.customIcon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
+      ],
+      f.housed
+        ? [
+            { id: "replacePin", title: "Replace Pinned URL with Current", symbol: "pin", enabled: awayFromPin(tab) },
+            { id: "editPin", title: "Edit Pinned URL…", symbol: "link" },
+          ]
+        : [],
+      [...(boostTarget(tab.id) ? [{ id: "boost", title: "Boost This Site", symbol: "paintbrush" }] : []), ...(engine ? [{ id: "engine", title: `Open in ${engine}`, symbol: "globe" }] : []), ...unreadItems(s, tab)],
+    ),
+  };
+}
+
 function unloadTopApp(tabId: string) {
   const s = store();
   noteTopAppUnloadedFromMenu();
   s.closeTabs(closeIntent(s, tabId).ids, { keepTopApps: false });
 }
 
-function closeItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
-  const sleep: MenuItem[] = canSleep(s, tab.id) ? [{ id: "sleep", title: "Sleep Tab", symbol: "moon.zzz" }] : [];
-  if (f.housed) return f.section === "tile" && s.settings.keepTopAppsRunning && openPages(s, tab.id).length > 0 ? [{ id: "unloadTopApp", title: "Unload", symbol: "moon.zzz" }] : sleep;
+function sleepItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
+  if (f.housed && f.section === "tile" && s.settings.keepTopAppsRunning && openPages(s, tab.id).length > 0) return [{ id: "unloadTopApp", title: "Unload", symbol: "moon.zzz" }];
+  return canSleep(s, tab.id) ? [{ id: "sleep", title: "Sleep Tab", symbol: "moon.zzz" }] : [];
+}
+
+function closeItems(f: Facts): MenuItem[] {
+  if (f.housed) return [];
   return [
-    ...sleep,
-    { id: "close", title: "Close", symbol: "xmark", ...hintWhen(f.active, "closeTab") },
-    ...(f.split ? [{ id: "closeSplit", title: "Close Split View" }] : []),
-    { id: "closeOthers", title: "Close Other Tabs", enabled: f.others.length > 0 },
-    ...withAlternate(
-      { id: "closeBelow", title: f.across ? "Close Tabs to the Right" : "Close Tabs Below", enabled: f.below.length > 0 },
-      { id: "closeAbove", title: f.across ? "Close Tabs to the Left" : "Close Tabs Above", enabled: f.above.length > 0 },
-      null,
-    ),
+    { id: "close", title: "Close Tab", symbol: "xmark", ...hintWhen(f.active, "closeTab") },
+    {
+      id: "closeTabs",
+      title: "Close Tabs",
+      symbol: "xmark.square",
+      children: sections(
+        [
+          { id: "closeOthers", title: "Close Other Tabs", enabled: f.others.length > 0 },
+          { id: "closeBelow", title: f.across ? "Close Tabs to the Right" : "Close Tabs Below", enabled: f.below.length > 0 },
+          { id: "closeAbove", title: f.across ? "Close Tabs to the Left" : "Close Tabs Above", enabled: f.above.length > 0 },
+        ],
+        f.split ? [{ id: "closeSplit", title: "Close Split View" }] : [],
+      ),
+    },
   ];
 }
 
@@ -200,32 +231,11 @@ const pluginItems = (s: BrowserState, windowId: string, tab: Tab, f: Facts): Men
 
 export function tabMenuItems(s: BrowserState, windowId: string, tab: Tab, f: Facts = tabMenuFacts(s, windowId, tab)): TabMenuItem[] {
   return sections<TabMenuItem>(
-    pinItems(s, tab, f),
-    openItems(s, tab, f),
-    calendarItems(tab),
-    organiseItems(s, windowId, tab, f),
-    bookmarksShown(s.settings) ? bookmarkItems(s, windowId, tab, f) : [],
-    [
-      ...withAlternate(
-        { id: "copy", title: "Copy Link", symbol: "link", enabled: !!tab.url },
-        { id: "copyMd", title: "Copy Link as Markdown", symbol: "link", enabled: !!tab.url },
-        f.active ? ["copyUrl", "copyUrlAsMarkdown"] : null,
-        s,
-      ),
-      ...sendItems(tab, f),
-    ],
-    [
-      { id: "rename", title: "Rename…", symbol: "pencil" },
-      ...(tab.customTitle ? [{ id: "resetName", title: "Reset Name" }] : []),
-      { id: "icon", title: "Change Icon…", symbol: "photo" },
-      ...(tab.customIcon ? [{ id: "resetIcon", title: "Reset Icon" }] : []),
-      ...muteItems(s, tab),
-      ...(boostTarget(tab.id) ? [{ id: "boost", title: "Boost This Site", symbol: "paintbrush" }] : []),
-      ...pictureInPictureItems(tab),
-      ...unreadItems(s, tab),
-    ],
+    quickItems(s, tab, f),
+    [...pinItems(s, tab, f), moveToItem(s, windowId, tab, f), ...bookmarkItems(s, windowId, tab, f), ...sendItems(tab, f), ...calendarItems(tab)],
     pluginItems(s, windowId, tab, f),
-    closeItems(s, tab, f),
+    [customizeItem(s, tab, f), ...sleepItems(s, tab, f)],
+    closeItems(f),
   );
 }
 
@@ -281,7 +291,6 @@ function runTabChoice(windowId: string, tab: Tab, f: Facts, choice: string | Des
   else if (choice === "pinTile") s.pinTabs([tab.id], true, false);
   else if (choice === "pinRow") s.pinTabs([tab.id], true, true);
   else if (choice === "split") openAsSplit(windowId, tab.id, f.active);
-  else if (choice === "newWindow") openWindow({ profileId: tab.profileId, url: tab.url });
   else if (choice === "newFolder") newFolderWithTab(windowId, tab.id);
   else if (choice === "leaveFolder") removeFromFolder(tab.id);
   else if (choice === "duplicate") s.duplicateTab(tab.id);

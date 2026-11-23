@@ -205,7 +205,7 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
   return (
     <View {...hoverProps}>
       <MouseArea path={done ? d.path : null}>
-        <ContextMenuArea onContextMenu={() => void downloadMenu(d, windowId)}>
+        <ContextMenuArea onContextMenu={() => void downloadMenu(d)}>
           <Pressable onPress={() => done && void openDownload(d.path)}>
             {({ pressed }) => (
               <View

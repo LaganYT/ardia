@@ -7,7 +7,7 @@ import { useBrowser } from "../browser/store";
 import { webviews } from "../../platform/webviews";
 import { focusHeroBar } from "../omnibox/barState";
 import { ancestorIds } from "../groups/groups";
-import { activeTabId, bookmarkProfileId, inPinnedContainer, pinSection, tabLayoutOf, tabsShownIn, tabTitle, viewTabIds } from "../browser/model";
+import { activeTabId, bookmarkProfileId, inPinnedContainer, pinSection, tabLayoutOf, tabsShownIn, tabTitle } from "../browser/model";
 import { anchorOutdated, type ClickMods } from "../drag/drops";
 import { selectedTabIds } from "../pins/organize";
 import { groupLabel, groupOf } from "../pins/tabGrouping";
@@ -158,13 +158,3 @@ export async function editPinnedPage(windowId: string, tabId: string) {
   });
   if (url) store().setPinnedUrl(tabId, url.includes("://") ? url : `https://${url}`);
 }
-
-export function muteAll(windowId: string, muted: boolean) {
-  store().setMuted(viewTabIds(store(), windowId), muted);
-}
-
-export const allMuted = (windowId: string) => {
-  const s = store();
-  const view = viewTabIds(s, windowId).filter((id) => s.tabs[id]!.url);
-  return view.length > 0 && view.every((id) => s.tabs[id]!.muted);
-};

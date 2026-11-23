@@ -220,9 +220,13 @@ final class WebKitContextMenu {
   private func addLinkItems() {
     let link = target.link
     add(WebKitMenuAction.item("Open Link in New Tab") { [run] in run.open(link, "background") })
-    add(WebKitMenuAction.item("Open Link in New Window") { [run] in run.open(link, "window") })
     add(WebKitMenuAction.item("Open Link in Split View") { [run] in run.open(link, "split") })
-    add(WebKitMenuAction.item("Open Link in Incognito Window") { [run] in run.open(link, "incognito") })
+    let openIn = NSMenuItem(title: "Open Link in", action: nil, keyEquivalent: "")
+    let places = NSMenu(title: "Open Link in")
+    places.addItem(WebKitMenuAction.item("New Window") { [run] in run.open(link, "window") })
+    places.addItem(WebKitMenuAction.item("Incognito Window") { [run] in run.open(link, "incognito") })
+    openIn.submenu = places
+    add(openIn)
     separate()
     add(take("DownloadLinkedFile", as: "Save Link As…"))
     add(WebKitMenuAction.item("Copy Link Address") { [run] in run.copyAddress(link) })

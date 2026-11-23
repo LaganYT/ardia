@@ -371,7 +371,7 @@ plugin that isn't needed yet costs nothing: no host process, no memory. The firs
 | `storage` | `true` | A private key-value store in `PluginData/<name>/storage.json`, at most 2 MB in all and 256 KB a value (`plugin_storage_writes`). `storage.get` answers `{found: true, value}` or `{found: false}`. A file Ardia can't read or parse, an empty one included, fails every call; Ardia never overwrites it with an empty store |
 | `secrets` | `true` | Keychain items of its own (`ardia.plugin.<name>.<key>`, at most 64, 16 KB each; `plugin_secret_writes`). If the Keychain's list of them can't be read, Ardia keeps it, fails secret writes and deletes, and says removing the plugin left its secrets |
 | `network` | `false`, `"*"`, or 1 to 32 host patterns | main's `fetch` reaches only these hosts (`*.example.com` included); a sidecar gets the network as in v1. A web view the plugin shows (its page, a `file` panel) goes online only with `"*"`: WebKit's traffic can't be held to a list of hosts, so with a list it stays offline and the plugin reaches its hosts through `net.fetch` |
-| `control` | `true` | Turning it on turns on `cliControl`, unless you turned control off yourself: an Off you chose wins, and the consent sheet points to the switch, Settings › Advanced › Let programs control Ardia |
+| `control` | `true` | Turning it on turns on `cliControl`, unless you turned control off yourself: an Off you chose wins, and the consent sheet points to the switch, Settings › Advanced › Let programs control Ardia. While control is on, any program you run has the `ardia` command's reach: the control socket and the engine's token connection, a full DevTools client of the browser (every tab and page, signed-in sites and their cookies, downloads and uploads; `docs/cli.md`). So the consent sheet and the plugin's page in Settings › Plugins put that first ("Turns on control in Settings › Advanced. While it's on, any program you run can fully control Ardia: every tab and page, your signed-in sites and their cookies, and uploads and downloads of any file on this Mac"; "While control is on …" when you turned control off yourself, and naming the commands Ardia runs for it after updates when it has any), and its row in the list, the official ones' included (also while an update has failed), says "Can fully control Ardia" (`fullControlLine`, `FULL_CONTROL_SUMMARY` in `state/plugins/consent.ts`) |
 
 The old list form (`["tabs", "network"]`) still reads, as above. Contributions grant their own reach and are shown on
 the consent sheet too: a toolbar button, a sidebar view, a context-menu item, a theme, a decide hook, site switches in
@@ -684,7 +684,15 @@ Ardia never runs a plugin's program itself, with one exception for official plug
   sandbox nor the plugin's other permissions apply to it, and the consent sheet says so ("Adds ardia to your PATH. It runs as you,
   outside Ardia's sandbox", and "Adds ~/.local/bin to your PATH in your shell's login file"). It reaches Ardia the way any program does, while "Let the ardia command control Ardia" is on: the
   control socket, which checks only that its peer runs as the same user, and the engine's token connection, whose token
-  sits in `ArdiaControl.json` for the user's processes to read (`docs/cli.md`, `docs/control-socket.md`).
+  sits in `ArdiaControl.json` for the user's processes to read (`docs/cli.md`, `docs/control-socket.md`). Nothing can
+  hold a program running as you to less, so a plugin with programs says so first, whether or not it asks for `control`
+  ("The <name> command runs as you, so while control is on in Settings › Advanced, it can fully control Ardia: …",
+  or "…, as do the commands Ardia runs for it after updates" for `afterUpdate`), and its row in Settings › Plugins says "Can fully
+  control Ardia". A plugin's own code can't reach either. main and a sidecar run under `sandbox-exec`, which denies
+  `ArdiaControl.json` and Unix sockets outside the plugin's folder (`PluginSandboxEscapeTests`); a sidecar with the
+  network can reach the engine's loopback port, but only the token opens it. Its pages are WebKit views that load the
+  plugin's own folder through its scheme handler (`PluginPageView.swift`), with no file access to the data folder, and
+  anything they send to the port carries an `Origin`, which the engine refuses.
 
 Code: `PluginCore/PluginPrograms.swift` (the store, links and leases; `plugin-tests/PluginProgramsTests.swift`),
 `PluginCore/PluginProgramRegistry.swift` (claims and legacy installs; `plugin-tests/PluginProgramRegistryTests.swift`),

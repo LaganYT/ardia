@@ -25,7 +25,7 @@ import { finishAnimatedCloses } from "../windows/closeAnimated";
 import { followHandedBack, startKeyboardFollows } from "../focus/keyboardFollows";
 import { cancelAbandonedFocusMoves, settlingCommandFocus } from "../focus/focusHandoff";
 import { flushPersistence, resumePersistence } from "../session/persist";
-import { flushLive } from "../live/store";
+import { flushLive, useLive } from "../live/store";
 import { startWindowCloseGuard } from "../windows/windowClose";
 import { openLastWindowOrNew } from "../windows/lastWindow";
 import { noteDockReopen } from "../telemetry/usage";
@@ -172,6 +172,9 @@ export function startNativeSync() {
   });
   useReader.subscribe((r, prev) => {
     if (readerChangesMenu(r, prev)) menuTimer ??= setTimeout(syncMenu, 120);
+  });
+  useLive.subscribe((l, prev) => {
+    if (l.folderOrder !== prev.folderOrder || l.folders !== prev.folders) menuTimer ??= setTimeout(syncMenu, 120);
   });
   void windows.sweep();
   startCaptionRegionSync();

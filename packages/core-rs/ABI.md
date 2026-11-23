@@ -127,7 +127,7 @@ signature; that can't matter for a release, since installs pin `scripts/linux/li
 implementation answers differently, that implementation's answer (`linuxPolicy`, `helper`, `openssl`).
 `tests/linux-update/test_linux_update.py` runs them against the engine's `ac_linux_self_update_policy.h`, the root
 helper's own bash functions, `openssl pkeyutl -verify -rawin`, Node's `crypto.verify` (which `sign-update.mjs` signs
-with) and the version rules in `apps/linux/src/updateReleases.ts` and `apps/browser/src/lib/versions.ts`.
+with) and the version rules in `apps/desktop/src/platform/linux/updateReleases.ts` and `apps/browser/src/lib/versions.ts`.
 
 ## Chromium bookmarks import: `ardia_import`
 

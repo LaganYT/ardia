@@ -7,7 +7,7 @@ const REPO = new URL("../../../../../", import.meta.url);
 
 const COPY_NAMING_THE_SYNC_PATH = [
   "apps/browser/src/components/settings/panes/SyncSheets.tsx",
-  "apps/linux/syncWording.ts",
+  "apps/desktop/src/platform/linux/wording/syncWording.ts",
   "apps/phone/src/state/sync/syncRules.ts",
   "apps/phone/ios/Config/TestFlight-WhatToTest.txt",
   "packages/phone/android/src/main/java/com/ardia/sync/SyncJoin.kt",

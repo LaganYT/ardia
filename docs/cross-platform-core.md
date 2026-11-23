@@ -4,7 +4,7 @@ Ardia runs one browser UI on three platforms today. Below the UI boundary it run
 
 | | macOS | Linux | Windows |
 | --- | --- | --- | --- |
-| UI runtime | React Native macOS | Chromium `chrome://ardia/` WebUI (`apps/linux`) | React Native Windows (`apps/browser/windows`, `packages/expo-windows`) |
+| UI runtime | React Native macOS | Chromium `chrome://ardia/` WebUI (`apps/desktop`) | React Native Windows (`apps/browser/windows`, `packages/expo-windows`) |
 | Host code | Swift pods + `engine/ardiacore` (Objective-C++) | `engine/ardiacore-linux` (C++) | RNW C++/WinRT modules + `scripts/windows/engine` (C++) |
 | JS → native | Expo modules, `CallTable` | `chrome.send("ardiaRequest")`, `kRoutes`, `ShellHostView::Invoke` | RNW turbo modules, `forwarded.json` |
 | Engine call registry | dlsym of `ac_*` | `gen_engine_dispatch.py` table | `series_win.py` `ac_calls.cc` |

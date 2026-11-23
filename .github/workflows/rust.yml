@@ -17,7 +17,7 @@ on:
       - "engine/ardiacore-linux/src/ardia/linux/ac_linux_self_update_policy.h"
       - "scripts/linux/ardia-update"
       - "scripts/linux/linux-update.pem"
-      - "apps/linux/src/updateReleases.ts"
+      - "apps/desktop/src/platform/linux/updateReleases.ts"
       - "apps/browser/src/lib/versions.ts"
       - "packages/import/ios/Core/**"
       - "packages/expo-windows/src/import/**"

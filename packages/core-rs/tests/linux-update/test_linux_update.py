@@ -260,7 +260,7 @@ class LinuxUpdateParityTests(unittest.TestCase):
         pairs_path = self.dir / 'pairs.json'
         pairs_path.write_text(json.dumps([[a, b] for a, b, _ in pairs]))
         result = subprocess.run([node, *flags, str(script), str(HERE.parent / 'update-vectors.json'), str(pairs_path),
-                                 str(REPO / 'apps/linux/src/updateReleases.ts'),
+                                 str(REPO / 'apps/desktop/src/platform/linux/updateReleases.ts'),
                                  str(REPO / 'apps/browser/src/lib/versions.ts')], capture_output=True, text=True,
                                 timeout=120)
         if result.returncode != 0 and ('ERR_UNKNOWN_FILE_EXTENSION' in result.stderr or 'strip-types' in result.stderr):

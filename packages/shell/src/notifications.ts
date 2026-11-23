@@ -16,7 +16,7 @@ export type NotificationOptions = {
   data?: Record<string, unknown>;
 };
 
-export type NotificationIconStatus = "none" | "attached" | "invalid_url" | "download_failed" | "empty" | "write_failed" | "attachment_rejected";
+export type NotificationIconStatus = "none" | "attached" | "invalid_url" | "download_failed" | "empty" | "write_failed" | "attachment_rejected" | "too_large";
 
 export type NotificationPostResult = {
   id?: string;

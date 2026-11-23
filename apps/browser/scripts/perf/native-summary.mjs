@@ -40,8 +40,14 @@ export function summary(res) {
     add(`idle wakeups/s, ${t.slice(4)} tab(s) (renderers)`, S.map((r) => r.idle[t]?.kinds.renderer?.wakeups), "/s", 1);
   }
   for (const m of ["tabs1", "tabs10", "tabs20", "closed"]) add(`memory (phys_footprint), ${m === "closed" ? "after closing back to 1 tab" : m.slice(4) + " tab(s)"}`, S.map((r) => r.memory[m]?.totalMB), "MB");
+  add("memory, browser process, 10 tabs", S.map((r) => r.memory.tabs10?.kinds.browser), "MB");
   add("memory, browser process, 20 tabs", S.map((r) => r.memory.tabs20?.kinds.browser), "MB");
   add("memory, browser process, after closing", S.map((r) => r.memory.closed?.kinds.browser), "MB");
+  for (const m of ["tabs1", "tabs10", "tabs20", "closed"]) {
+    const at = m === "closed" ? "after closing" : `${m.slice(4)} tab(s)`;
+    add(`JS heap (Hermes), ${at}`, S.map((r) => r.heap?.[m]?.heapMB), "MB", 1);
+    add(`JS allocated, incl. garbage not yet collected (Hermes), ${at}`, S.map((r) => r.heap?.[m]?.allocatedMB), "MB", 2);
+  }
   const used = (r, k) => {
     const windows = [r.idle.tabs1, r.idle.tabs20].filter(Boolean);
     return windows.length ? windows.reduce((n, w) => n + (w.input?.[k] ?? NaN), 0) : NaN;

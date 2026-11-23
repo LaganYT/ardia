@@ -425,6 +425,7 @@ third to half of runs, kept 60 to 70 MB until quit, so the memory rows swung by 
 | launch → first page's first frame | The restored tab's first `requestAnimationFrame` |
 | idle CPU, idle wakeups/s | rusage over the whole process tree (or one process kind) across `--idle` seconds, with the channel paused, at 1 tab and at 20 tabs |
 | memory (phys_footprint) | The tree's footprint at 1, 10 and 20 tabs, and 30 s after closing back to 1. The "browser process" rows count that process alone. |
+| JS heap (Hermes), JS allocated (Hermes) | `HermesInternal.getInstrumentedStats()` right after each memory reading: `js_heapSize` (what the GC holds, which grows and shrinks in 4 MB segments, so a few hundred KB of live objects can move the browser process by 4 MB) and `js_allocatedBytes` (every allocated object, including garbage the GC hasn't collected yet, so it reads above the live set until a collection) (#3344) |
 | idle windows: someone used the Mac (…with the pointer moving over the window) | Seconds of mouse, trackpad or keyboard input during the run's idle windows (HIDIdleTime polled every 250 ms), and of those, with the pointer moving over the instance's window |
 | after an idle minute: command answered | The first command's latency after the 1-tab idle (catches App Nap) |
 | samples left out | Switches and new tabs dropped because the page got fewer than 5 frames in 250 ms |

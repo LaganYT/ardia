@@ -12,7 +12,7 @@ export type SentWebNotification = {
   iconSent: boolean;
 };
 
-const ICON_STATUSES = new Set(["none", "invalid_url", "attached", "attachment_rejected", "empty", "download_failed", "write_failed"]);
+const ICON_STATUSES = new Set(["none", "invalid_url", "attached", "attachment_rejected", "empty", "download_failed", "write_failed", "too_large"]);
 const ERROR_DOMAINS = new Set(["UNErrorDomain", "NSCocoaErrorDomain", "NSPOSIXErrorDomain", "NSOSStatusErrorDomain"]);
 const known = (names: Set<string>, value: unknown) => (typeof value === "string" && names.has(value) ? value : "other");
 

@@ -36,6 +36,7 @@ test("every protection vetoes on its own, read against the injected clock", () =
   assert.equal(veto({}), null, "an idle web tab may sleep");
   assert.equal(veto({ sleepable: false }), "notSleepable");
   assert.equal(veto({ shown: true }), "shown");
+  assert.equal(veto({ cliSession: true }), "cliSession", "an ardia command session holds it");
   assert.equal(veto({ call: true }), "call", "camera, microphone or screen share");
   assert.equal(veto({ pictureInPicture: true }), "pictureInPicture");
   assert.equal(veto({ audible: true }), "audible");

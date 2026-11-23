@@ -4,7 +4,7 @@ import { consentOrNow, countFor } from "./countFor";
 import type { KeptAwakeReason } from "../tabs/sleepRefusals";
 import type { SleepVeto } from "../tabs/sleepPolicy";
 
-const none = () => ({ captureIndicatorsCleared: 0, mediaCardsCleared: 0, pinnedTabsSleptByMemorySaver: 0, tabsSleptOverBudget: 0, tabsSleptOverBudgetReopened: 0, tabsOverBudgetSkippedLoading: 0, tabsOverBudgetAsksPassedOn: 0, topAppsKeptRunning: 0, topAppWindowsClosedFromNewTab: 0, topAppsUnloadedFromMenu: 0, tabsSleptFromMenu: 0, groupsSleptFromMenu: 0, menuSleepsKeptAwake: 0, menuSleepsPastAutomatic: 0, menuSleepKeptReason: null as KeptAwakeReason | null, sleepVetoes: {} as Partial<Record<SleepVeto, number>> });
+const none = () => ({ captureIndicatorsCleared: 0, mediaCardsCleared: 0, pinnedTabsSleptByMemorySaver: 0, tabsSleptOverBudget: 0, tabsSleptOverBudgetReopened: 0, tabsOverBudgetSkippedLoading: 0, tabsOverBudgetAsksPassedOn: 0, topAppsKeptRunning: 0, topAppWindowsClosedFromNewTab: 0, topAppsUnloadedFromMenu: 0, tabsSleptFromMenu: 0, groupsSleptFromMenu: 0, menuSleepsKeptAwake: 0, menuSleepsPastAutomatic: 0, menuSleepKeptReason: null as KeptAwakeReason | null, sleepVetoes: {} as Partial<Record<SleepVeto, number>>, cliTabsHeld: 0, profilesKeptForCli: 0 });
 
 let pending = none();
 
@@ -28,7 +28,16 @@ export function noteSleepVeto(veto: SleepVeto, consent?: ConsentToken | null) {
   countFor(consentOrNow(consent), () => void (pending.sleepVetoes[veto] = (pending.sleepVetoes[veto] ?? 0) + 1));
 }
 
+export function noteProfileKeptForCli(consent?: ConsentToken | null) {
+  countFor(consentOrNow(consent), () => void pending.profilesKeptForCli++);
+}
+
+export function noteCliTabsHeld(tabs: number, consent?: ConsentToken | null) {
+  if (tabs > 0) countFor(consentOrNow(consent), () => void (pending.cliTabsHeld += tabs));
+}
+
 const VETO_FIELDS: Partial<Record<SleepVeto, string>> = {
+  cliSession: "sleep_kept_cli_session",
   call: "sleep_kept_call",
   pictureInPicture: "sleep_kept_picture_in_picture",
   audible: "sleep_kept_audible",
@@ -117,5 +126,7 @@ export function takeTabSleepCounts() {
     tabs_over_budget_skipped_loading: taken.tabsOverBudgetSkippedLoading,
     tabs_over_budget_asks_passed_on: taken.tabsOverBudgetAsksPassedOn,
     ...vetoCounts(taken.sleepVetoes),
+    cli_tabs_held: taken.cliTabsHeld,
+    profiles_kept_for_cli: taken.profilesKeptForCli,
   };
 }

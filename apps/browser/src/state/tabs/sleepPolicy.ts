@@ -6,6 +6,7 @@ export type SleepRules = { tabs: number; hiddenMs: number; pressure: MemoryPress
 export type SleepVeto =
   | "notSleepable"
   | "shown"
+  | "cliSession"
   | "call"
   | "pictureInPicture"
   | "audible"
@@ -23,6 +24,7 @@ export type TabSleepFacts = {
   id: string;
   sleepable: boolean;
   shown: boolean;
+  cliSession: boolean;
   lastSeenAt: number;
   switches: number;
   audible: boolean;
@@ -65,6 +67,7 @@ export const seenWindowMs = (rules: Pick<SleepRules, "hiddenMs" | "pressure">) =
 export function sleepVeto(tab: TabSleepFacts, now: number, rules: Pick<SleepRules, "hiddenMs" | "pressure">): SleepVeto | null {
   if (!tab.sleepable) return "notSleepable";
   if (tab.shown) return "shown";
+  if (tab.cliSession) return "cliSession";
   if (tab.call) return "call";
   if (tab.pictureInPicture) return "pictureInPicture";
   if (tab.audible) return "audible";

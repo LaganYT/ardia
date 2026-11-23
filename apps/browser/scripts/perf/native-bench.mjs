@@ -124,6 +124,9 @@
 //   idle CPU / idle wakeups/s (…)           sessionRun  idle: idleWindow(), acperf rusage over the process tree --idle
 //                                                        secs apart with the channel paused, at 1 tab (--launch-settle
 //                                                        secs after the first page paints) and at 20
+//   JS heap / JS allocated (Hermes)         sessionRun  memory: HermesInternal.getInstrumentedStats() right after each
+//                                                        footprint: js_heapSize (the GC's capacity, in 4 MB segments) and
+//                                                        js_allocatedBytes
 //   memory (phys_footprint), …              sessionRun  memory: footprint() of the tree at 1 tab (after the idle
 //                                                        window), 10 tabs (+10 s), 20 tabs (+15 s), and closed back to
 //                                                        1 (+--close-settle secs); "browser process" rows: that process
@@ -1089,26 +1092,29 @@ async function profilesRun(side, i) {
 
 const SESSION_PARTS = ["idle", "memory", "switch", "newtab", "newwindow"];
 
+const jsHeap = (app) => app.run(`const s = globalThis.HermesInternal?.getInstrumentedStats?.(); return s ? { heapMB: s.js_heapSize / 1048576, allocatedMB: s.js_allocatedBytes / 1048576 } : null;`).catch(() => null);
+
 async function sessionRun(side, i, parts) {
   const has = (part) => parts.has(part);
   const secs = +opt.idle;
   const app = new Instance(side, freshDir(side, `session-${i}`));
-  const r = { memory: {}, idle: {}, tabSwitch: [], newTab: [], newTabFrame: [], newWindow: [], processes: {}, throttled: { tabSwitch: 0, newTab: 0 } };
+  const r = { memory: {}, heap: {}, idle: {}, tabSwitch: [], newTab: [], newTabFrame: [], newWindow: [], processes: {}, throttled: { tabSwitch: 0, newTab: 0 } };
   if (parts.size < SESSION_PARTS.length) r.parts = [...parts];
   try {
     await app.launch();
     await app.pageState("id=seed", 30_000, (s) => s.fcp);
     if (has("idle") || has("memory")) await sleep(+opt["launch-settle"] * 1000);
     if (has("idle")) r.idle.tabs1 = await idleWindow(app, secs);
-    if (has("memory")) r.memory.tabs1 = footprint(usage(app.pid));
+    if (has("memory")) r.memory.tabs1 = footprint(usage(app.pid)), r.heap.tabs1 = await jsHeap(app);
     await openTabs(app, 1, 10);
     if (has("memory")) {
       await sleep(10_000);
       r.memory.tabs10 = footprint(usage(app.pid));
+      r.heap.tabs10 = await jsHeap(app);
     }
     await openTabs(app, 10, 20);
     await sleep(15_000);
-    if (has("memory")) r.memory.tabs20 = footprint(usage(app.pid));
+    if (has("memory")) r.memory.tabs20 = footprint(usage(app.pid)), r.heap.tabs20 = await jsHeap(app);
     if (has("idle")) r.idle.tabs20 = await idleWindow(app, secs);
 
     const tabs = has("switch") ? (await tabIds(app)).filter(([, url]) => url.includes("/static?id=t")) : [];
@@ -1147,6 +1153,7 @@ async function sessionRun(side, i, parts) {
         ac.store.getState().activate(keep); for (const id of s.windows[w].tabIds) if (id !== keep) ac.store.getState().closeTab(id); return true;`);
       await sleep(+opt["close-settle"] * 1000);
       r.memory.closed = footprint(usage(app.pid));
+      r.heap.closed = await jsHeap(app);
       r.processes.closed = r.memory.closed.processes;
     }
   } finally {

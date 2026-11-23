@@ -24,6 +24,7 @@ import { automationWindows, type AutomationWindow } from "./automationWindows";
 import { consentToken, type ConsentToken } from "../telemetry/client";
 import { warnFor } from "../telemetry/logs";
 import { controlTabTargets } from "../../platform/control";
+import { releaseAllCliHolds } from "../tabs/cliHolds";
 import { TAB_IDLE_EVENTS, USER_IDLE_EVENTS, type AutomationEventName } from "./eventNames";
 import { clientProtocolProblem, commands, failure, hello, parseRequest, parseSubscription, planRun, type RequestId, type Subscription } from "./automationMethods";
 import { changeSubscription, feedNeeds, stopFeed, updateFeed } from "./automationFeed";
@@ -316,6 +317,7 @@ async function stop() {
   dismissSocketAsks();
   dropAllHistoryHandles();
   forgetTabCalls();
+  releaseAllCliHolds();
   noteSocketServing(false);
   void capturePageMenus(false).catch(() => undefined);
   subscriptions.clear();
@@ -338,6 +340,7 @@ function sync() {
     dismissSocketAsks();
     dropAllHistoryHandles();
     forgetTabCalls();
+    releaseAllCliHolds();
     noteSocketServing(false);
     void capturePageMenus(false).catch(() => undefined);
     stopResponders();

@@ -240,6 +240,8 @@ jobs:
     needs: [preflight, build]
     runs-on: xcode-27
     timeout-minutes: 150
+    env:
+      APPCAST_DELTAS: ${{ vars.APPCAST_DELTAS }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -328,6 +330,7 @@ jobs:
           path: |
             ${{ steps.paths.outputs.dist }}/Ardia-${{ inputs.version }}.dmg
             ${{ steps.paths.outputs.dist }}/Ardia-${{ inputs.version }}.zip
+            ${{ steps.paths.outputs.dist }}/*.delta
             ${{ steps.paths.outputs.dist }}/appcast.xml
             ${{ steps.paths.outputs.dist }}/release-notes.md
             ${{ steps.paths.outputs.dist }}/provenance.txt

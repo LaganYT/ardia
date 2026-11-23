@@ -19,6 +19,7 @@ import { isSleeping } from "./sleepingTabs";
 import { engineVeto, MINUTE, sleepRules, sleepVeto, tabsToSleep, type SleepPlan, type SleepRules, type SleepVeto, type TabSleepFacts } from "./sleepPolicy";
 import { liveOf, onLiveChange } from "./tabLive";
 import { countSwitches, forgetSwitchesExcept, switchesOf } from "./tabSwitches";
+import { heldByCli } from "./cliHolds";
 
 export type LoadedTabBudget = Pick<SleepRules, "tabs" | "hiddenMs"> & Partial<SleepRules>;
 
@@ -55,6 +56,7 @@ export function sleepFacts(s: BrowserState, id: string, shown: ReadonlySet<strin
     id,
     sleepable: tabEngine(s, id) === "chromium" && /^https?:\/\//i.test(tab.url),
     shown: shown.has(id),
+    cliSession: heldByCli(id),
     lastSeenAt: Math.max(tab.lastActiveAt, seenAt.get(id) ?? 0),
     switches: switchesOf(id),
     audible: audibleNow(id),
@@ -98,7 +100,7 @@ export function tabsOverBudget(
   return plan.sleep;
 }
 
-const COUNTED_VETOES: ReadonlySet<SleepVeto> = new Set(["call", "pictureInPicture", "audible", "recentlyAudible", "frequentlyUsed", "typedInput", "postedDocument", "beforeUnload", "other"]);
+const COUNTED_VETOES: ReadonlySet<SleepVeto> = new Set(["cliSession", "call", "pictureInPicture", "audible", "recentlyAudible", "frequentlyUsed", "typedInput", "postedDocument", "beforeUnload", "other"]);
 const countedVetoes = new Set<string>();
 let countedIn: ConsentToken | null = null;
 

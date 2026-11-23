@@ -8,6 +8,8 @@ GitHub Actions. Each has these assets:
 - `Ardia-<version>.dmg`: what people download (the app and an `/Applications` link, in a window with the
   site's poster behind them: `scripts/dmg`, where `render.sh` redraws the picture and `layout.sh` the layout).
 - `Ardia-<version>.zip`: the archive Sparkle installs updates from.
+- `Ardia<build>-<earlier build>.delta`, up to three: Sparkle deltas from the newest earlier builds ("Deltas" below), so
+  an update downloads only what changed. The appcast lists each under the item's `sparkle:deltas`, EdDSA signed.
 - `appcast.xml`: the Sparkle feed, both channels' items in one file. The latest stable release's appcast is the feed
   (a nightly rewrites that asset; "Channels" below). Builds after 0.2.13 poll
   `https://ardia.dev/appcast.xml` (`SUFeedURL`), which counts the check by version and day (and whether
@@ -228,6 +230,7 @@ stays up. That's GPL-3.0 §6(d) for the GPL parts (uBlock Origin today), and it'
      `<sparkle:channel>nightly</sparkle:channel>`. The new item embeds the notes' headline and body
      (Markdown, shown in Sparkle's update dialog) and links the page as its full release notes
      (`sparkle:fullReleaseNotesLink`: "You're up to date" › Version History opens it in a tab),
+     and lists the Sparkle deltas `appcast.sh` built from the earlier builds' zips ("Deltas" below),
    - copies `LICENSE*` and `NOTICE` into `Contents/Resources/Licenses` before signing, and checks they're there,
    - writes `release-notes.md` (the notes' body, then the standard Install and Source sections) and
      `provenance.txt` (the commit and the engine build it shipped).
@@ -239,7 +242,7 @@ stays up. That's GPL-3.0 §6(d) for the GPL parts (uBlock Origin today), and it'
 4. Tag and publish (the Release workflow does this itself): `git tag v<version> && git push origin main v<version>`,
    then `.claude/skills/release/scripts/publish.sh <version>` (`--dry-run` prints what it would do). It merges the
    appcast onto the feed as published right now (`appcast.py merge`), creates the release (a stable one as latest, a
-   nightly as a prerelease that's never latest) with the DMG, zip and appcast,
+   nightly as a prerelease that's never latest) with the DMG, zip, deltas and appcast,
    and checks the feed lists the version on GitHub and on ardia.dev. A nightly also re-uploads the merged feed onto the
    latest stable release and `Ardia-Nightly.dmg` onto the `nightly` release. A new engine tree is published before the release
    by `scripts/publish-engine.sh` (`engine-<tree:12>`), never packed by release.sh. Last,
@@ -354,7 +357,8 @@ the engine if `engine/` changed (below).
   run if the checkout changed, and only then it runs the launch check (`--phase check`, the final app opened hidden, uBO
   must be ready, the signature must survive), checks the zip's EdDSA signature against the app's `SUPublicEDKey`
   (`.github/release/check-sparkle.sh <dist> <version>`, so a `SPARKLE_ED_PRIVATE_KEY` that doesn't match the app
-  fails here instead of on every update) and uploads the DMG, zip, appcast, notes and the app's symbols
+  fails here instead of on every update; it checks each delta's length and signature the same way, and that `dist`
+  holds no delta the appcast doesn't list) and uploads the DMG, zip, deltas, appcast, notes and the app's symbols
   (`Ardia-<version>-symbols.tar.xz` and `-uuids.txt`, which `release.sh --phase sign` packs from the build artifact's
   `Ardia.xcarchive/dSYMs`). A failed launch check fails the run, so nothing publishes.
   Every `actions/*` step is pinned by commit SHA.
@@ -371,6 +375,59 @@ the engine if `engine/` changed (below).
   runs only. The staged-rollout step that opens a release to everyone (`rollout-everyone.sh`, in the release skill)
   takes the same lock. The Homebrew tap needs a token that can push
   to `ardia-browser/homebrew-tap` (`HOMEBREW_TAP_TOKEN`); without it, run `update-tap.sh <version>` here afterwards.
+  The merge always starts from the live feed: when the latest stable release lists `appcast.xml` but it won't
+  download (3 tries), `publish.sh` stops instead of merging onto the sign job's older copy, which would drop what
+  shipped since. When the latest stable release has no usable `appcast.xml` (missing, or one that isn't a whole Sparkle
+  appcast with items, by preflight's `feedFacts` through `scripts/release/feed-check.mjs`), a real publish stops too, unless
+  `PUBLISH_NEW_FEED=1` says this release starts the feed; a dry run only notes it.
+
+### Feed recovery
+
+When `publish.sh` stops because the latest stable release has no usable `appcast.xml` (a nightly's `--clobber` re-upload
+that deleted the old file and then failed, or an asset removed by hand), put the last good feed back and re-run the
+publish (in CI, re-run the Release workflow's failed jobs):
+
+```bash
+gh run download <id of the last Release run that published> -R ardia-browser/ardia -n release -D /tmp/feed
+gh release upload "$(gh release view -R ardia-browser/ardia --json tagName -q .tagName)" -R ardia-browser/ardia --clobber /tmp/feed/appcast.xml
+```
+
+The sign job's `appcast.xml` in that run's `release` artifact (kept 14 days) is the live feed of that moment plus its
+release; when it's gone, take the latest stable release's own `appcast.xml` from the release before it
+(`gh release download <tag> -p appcast.xml`) and accept that nightlies since then drop out of the feed until the next
+publish. `PUBLISH_NEW_FEED=1` with a local `publish.sh` is only for a genuinely new feed (the first release on a new
+repo), never to get past a lost one: it publishes a feed without any earlier release. A dry run only notes a missing
+feed, so it can pass while the real run would stop.
+
+### Deltas
+
+`appcast.sh` reads the published appcast for the newest earlier zips (`appcast.py delta-bases`, 3 by default;
+`APPCAST_DELTAS` changes it, the repository variable of the same name in CI, and 0 turns deltas off with a warning). A
+stable builds deltas from earlier stables only, since stable copies only ever run a stable; a nightly from the newest
+releases of either channel, since nightly copies run both. It downloads each from its GitHub release within one time
+budget (`APPCAST_DELTA_FETCH_SECONDS`, 30 min: up to 3 attempts per zip, each given only what's left of it), each into
+its own folder, and keeps it only if its length matches the appcast's and the appcast's EdDSA signature (strict base64
+of 64 bytes, or the zip is skipped unread) verifies with the exported app's own `SUPublicEDKey` (`ed25519.swift`). A zip
+named like the new one, or one already staged, is skipped; without the app's key nothing is downloaded. It runs `generate_appcast --maximum-deltas <kept>` on
+them with the new zip, under its own `HOME` cleared each run (a stale `.delta..ignore` in
+`~/Library/Caches/Sparkle_generate_appcast` would suppress a delta), keeps only the new item (`appcast.py only`) and
+merges it onto the published feed (`appcast.py merge`), so earlier items keep their own URLs. Each delta must sit
+under `v<version>`'s release, be signed, verify with `sign_update --verify`, match its length and be smaller than the
+zip.
+
+Missing deltas never stop a release; they warn. When `generate_appcast` fails with the earlier zips, or lists a delta
+that isn't signed, doesn't verify with the app's key or isn't right, `appcast.sh` warns and builds the appcast again
+from the new zip alone; only that build failing stops the release (and `check-sparkle.sh`'s check of the zip's own
+signature). That covers earlier zips that wouldn't download, didn't match the
+appcast or ran out of time, no earlier release to build from (a note), and earlier zips that were there but
+`generate_appcast` made no delta from (a warning on a stable as on a nightly: check the sign job's log, since every
+update then downloads the whole zip). The run's summary says how many deltas shipped and from which builds.
+
+Sparkle picks the delta whose `sparkle:deltaFrom` is the running build and falls back to the full zip if the delta
+doesn't apply (an app bundle changed on disk), so a delta never blocks an update. Delta URLs are absolute GitHub
+release URLs; `ardia.dev/appcast.xml` only redirects to the feed, and `AppUpdater`'s feed override changes the feed URL
+alone. `appcast.py retarget` (the update test's local feed) drops the deltas, since the retagged test apps can't match
+them.
 
 `dry_run` (on by default) builds a release candidate (`release.sh --rc`, after a preflight as strict as a real run's
 but for "already released"),

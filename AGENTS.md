@@ -71,6 +71,12 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
 - **Pick the free Mac.** Before CPU-heavy work (Xcode or Chromium builds, full test runs, video renders), check the
   MacBook and the linked Mac mini for free CPU, RAM and disk and for the shorter queue of builds and runs, and use
   that one. Stay on it until it's short of resources while the other has room or a shorter queue; then move.
+- **Coordinate compute across running threads.** When blocked on compute (Boat VM start quota, a busy Chromium
+  builder, a Windows 11 QEMU guest, or a loaded Mac), inspect all running threads across both machines
+  (`t3_thread_list` with `includeSubagents: true`, plus `boat list`) and message the owning thread or subagent
+  (`t3_thread_send`) to hand off warm resources instead of waiting. Coordinators relay to their subagents to keep
+  a live builder or guest running across handoffs (skip `boat stop` when another thread is queued behind you),
+  pass its layout and lock state along, and stop it only once no thread needs it.
 - **Progress reports.** Keep them short and plain: what shipped, what's left, what needs the owner.
 - **Clean up.** Quit your test instances, stop the servers and background jobs you started, and never
   kill processes you didn't start.

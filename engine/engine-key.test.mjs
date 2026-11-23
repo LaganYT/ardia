@@ -134,6 +134,13 @@ const files = {
   'engine/ardiacore/src/ardia/core/ac_mac_only.cc': 'not copied to windows\n',
   'engine/ardiacore-linux/copies.tsv': copies.map((row) => row.join('\t')).join('\n') + '\n',
   'engine/ardiacore-linux/src/ardia/linux/shell.cc': 'linux shell\n',
+  'engine/ardiacore-linux/src/ardia/linux/ac_linux_contract.h': 'linux ac_linux_contract.h\n',
+  'engine/ardiacore-linux/src/ardia/linux/ac_linux_policy.h': 'linux ac_linux_policy.h\n',
+  'engine/ardiacore-linux/src/ardia/linux/ac_linux_session.cc': 'linux ac_linux_session.cc\n',
+  'engine/ardiacore-linux/src/ardia/linux/ac_linux_session.h': 'linux ac_linux_session.h\n',
+  'engine/ardiacore-linux/src/ardia/linux/ac_linux_window_state.h': 'linux ac_linux_window_state.h\n',
+  'engine/ardiacore-linux/src/ardia/linux/bootstrap.js': 'linux bootstrap.js\n',
+  'engine/ardiacore-linux/src/ardia/linux/generate_bootstrap.py': 'linux generate_bootstrap.py\n',
   'engine/ardiacore-linux/src/ardia/core/ac_linux_core.cc': 'linux core\n',
   'apps/browser/assets/offline-game/game.js': 'game\n',
   'apps/browser/assets/offline-game-pipeline/inline.py': 'inline\n',
@@ -219,6 +226,7 @@ const cases = [
   ['a macOS-only patch', 'engine/patches/chromium-mac-only.patch', { macos: true, linux: false, win: true }],
   ['a shared patch', 'engine/patches/chromium-shared.patch', { macos: true, linux: true, win: true }],
   ['the Linux layer', 'engine/ardiacore-linux/src/ardia/linux/shell.cc', { macos: false, linux: true, win: false }],
+  ['a Linux layer file the Windows WebUI shell compiles', 'engine/ardiacore-linux/src/ardia/linux/ac_linux_session.cc', { macos: false, linux: true, win: true }],
   ['the Linux layer apply.sh', 'engine/ardiacore-linux/apply.sh', { macos: false, linux: true, win: false }],
   ['the Linux layer copies.tsv', 'engine/ardiacore-linux/copies.tsv', { macos: false, linux: true, win: false }],
   ['the macOS layer', 'engine/ardiacore/src/ardia/core/ardiacore_engine.mm', { macos: true, linux: false, win: false }],
@@ -393,7 +401,7 @@ test(
         }
       }
       walk(src)
-      const own = ['ardia/linux/shell.cc', 'ardia/core/ac_linux_core.cc']
+      const own = Object.keys(files).filter((path) => path.startsWith('engine/ardiacore-linux/src/')).map((path) => path.slice('engine/ardiacore-linux/src/'.length))
       assert.deepEqual(written.sort(), [...copies.map(([, target]) => target), ...own].sort())
       for (const [source, target] of copies) assert.equal(readFileSync(join(src, target), 'utf8'), readFileSync(join(root, source), 'utf8'))
       const listed = spawnSync(join(root, 'engine/ardiacore-linux/apply.sh'), ['--paths'], { encoding: 'utf8' })
@@ -733,7 +741,10 @@ test('the real checkout has a Windows key and --paths scoped to the Windows buil
     assert.ok(specs.includes(spec), spec)
   }
   assert.ok(!specs.includes('engine'))
-  assert.ok(!specs.some((spec) => spec.startsWith('engine/ardiacore-linux')))
+  const linux = specs.filter((spec) => spec.startsWith('engine/ardiacore-linux'))
+  assert.ok(linux.length > 0)
+  assert.ok(linux.every((spec) => spec.startsWith('engine/ardiacore-linux/src/ardia/linux/')), linux.join(', '))
+  assert.ok(!specs.includes('engine/ardiacore-linux/src/ardia/linux/ac_linux_host.cc'))
   assert.ok(!specs.includes('engine/patches/chromium-linux-window-state.patch'))
   assert.ok(specs.includes('engine/patches/chromium-window-hosted-mac.patch'))
   for (const line of readFileSync(join(repo, win, 'series-win'), 'utf8').split('\n')) {

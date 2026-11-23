@@ -58,7 +58,7 @@ export const contentBlocker = defineDomain({
     removeAllowed: {
       args: "{ host: string }",
       result: "{ removed: boolean }",
-      desktop: "absent",
+      desktop: "custom",
       mac: "custom",
       windows: "absent",
     },

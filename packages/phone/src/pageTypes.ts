@@ -209,7 +209,8 @@ export type PageEngineEvent =
   | { name: "page.scrollSettled"; pageId: string; y: number }
   | { name: "page.externalAppMissing"; pageId: string; url: string }
   | { name: "page.desktop"; pageId: string; line: string }
-  | { name: "pages.privateSessionEnded" };
+  | { name: "pages.privateSessionEnded" }
+  | { name: "pages.webVideo"; outcome: "floated" | "keptPlaying"; isPrivate: boolean };
 
 export type PageEventPayload =
   | ({ name: "state" } & Partial<Omit<PageState, "url" | "title" | "progress" | "isLoading" | "canGoBack" | "canGoForward">> &

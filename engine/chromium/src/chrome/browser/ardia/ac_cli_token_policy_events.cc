@@ -118,6 +118,9 @@ void TokenClient::ForgetSession(const std::string& session) {
   std::erase_if(outstanding_, [&](const auto& entry) {
     return entry.first.first == session;
   });
+  std::erase_if(running_, [&](const auto& entry) {
+    return entry.first.first == session;
+  });
 }
 
 void TokenClient::ForgetSessionTree(const std::string& session) {

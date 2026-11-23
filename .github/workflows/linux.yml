@@ -43,6 +43,7 @@ on:
       - "packages/shaders/ios/Meadow/**"
       - "packages/shaders/windows/**"
       - "engine/ardiacore-linux/**"
+      - "engine/ardiacore-desktop/**"
       - "engine/ardiacore/src/**"
       - "engine/chromium/**"
       - "engine/patches/**"

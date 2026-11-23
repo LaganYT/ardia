@@ -1,6 +1,6 @@
 import ExpoModulesCore
 
-func engineCallTable(info infoHandler: @escaping CallHandler, components componentsHandler: @escaping CallHandler, tasks tasksHandler: @escaping CallHandler, childProcessCpu childProcessCpuHandler: @escaping CallHandler, beginTracing beginTracingHandler: @escaping CallHandler, endTracing endTracingHandler: @escaping CallHandler, isTracing isTracingHandler: @escaping CallHandler, systemState systemStateHandler: @escaping CallHandler, validateKeepActiveSite validateKeepActiveSiteHandler: @escaping CallHandler, setCliControl setCliControlHandler: @escaping CallHandler, setCliActiveTab setCliActiveTabHandler: @escaping CallHandler, cliTabTargets cliTabTargetsHandler: @escaping CallHandler, setCliHeldTabs setCliHeldTabsHandler: @escaping CallHandler, cliOwnsTab cliOwnsTabHandler: @escaping CallHandler, cliMoveOffscreen cliMoveOffscreenHandler: @escaping CallHandler, cliCloseOffscreenTabs cliCloseOffscreenTabsHandler: @escaping CallHandler) -> CallTable {
+func engineCallTable(info infoHandler: @escaping CallHandler, components componentsHandler: @escaping CallHandler, tasks tasksHandler: @escaping CallHandler, childProcessCpu childProcessCpuHandler: @escaping CallHandler, beginTracing beginTracingHandler: @escaping CallHandler, endTracing endTracingHandler: @escaping CallHandler, isTracing isTracingHandler: @escaping CallHandler, systemState systemStateHandler: @escaping CallHandler, validateKeepActiveSite validateKeepActiveSiteHandler: @escaping CallHandler, setCliControl setCliControlHandler: @escaping CallHandler, setCliActiveTab setCliActiveTabHandler: @escaping CallHandler, cliTabTargets cliTabTargetsHandler: @escaping CallHandler, setCliHeldTabs setCliHeldTabsHandler: @escaping CallHandler, cliOwnsTab cliOwnsTabHandler: @escaping CallHandler, cliConsoleDelta cliConsoleDeltaHandler: @escaping CallHandler, cliMoveOffscreen cliMoveOffscreenHandler: @escaping CallHandler, cliCloseOffscreenTabs cliCloseOffscreenTabsHandler: @escaping CallHandler) -> CallTable {
   CallTable(domain: "engine", handlers: [
     "info": infoHandler,
     "components": componentsHandler,
@@ -21,6 +21,7 @@ func engineCallTable(info infoHandler: @escaping CallHandler, components compone
     "cliTabTargets": cliTabTargetsHandler,
     "setCliHeldTabs": setCliHeldTabsHandler,
     "cliOwnsTab": cliOwnsTabHandler,
+    "cliConsoleDelta": cliConsoleDeltaHandler,
     "cliMoveOffscreen": cliMoveOffscreenHandler,
     "cliCloseOffscreenTabs": cliCloseOffscreenTabsHandler,
   ])

@@ -1,4 +1,4 @@
-import type { BatterySaverMode, BatterySaverState, ChildProcessCpu, CliControlStatus, CliTabTarget, CursorRestore, EngineComponent, EngineInfo, EngineTask, HoverLostEpisode, MemorySaverRequest, MemorySaverState, PopupProtectedMedia, PressLoopLongReport, SystemState, WindowUnpaintedRecord } from "../../engineDomain";
+import type { BatterySaverMode, BatterySaverState, ChildProcessCpu, CliConsoleDelta, CliControlStatus, CliTabTarget, CursorRestore, EngineComponent, EngineInfo, EngineTask, HoverLostEpisode, MemorySaverRequest, MemorySaverState, PopupProtectedMedia, PressLoopLongReport, SystemState, WindowUnpaintedRecord } from "../../engineDomain";
 import type { Done } from "../wire";
 
 export type EngineCalls = {
@@ -19,8 +19,9 @@ export type EngineCalls = {
   "engine.setCliControl": [{ on: boolean }, CliControlStatus];
   "engine.setCliActiveTab": [{ tabId: string | null }, CliControlStatus];
   "engine.cliTabTargets": [{ tabIds: string[] }, Record<string, CliTabTarget>];
-  "engine.setCliHeldTabs": [{ tabs: { tabId: string; until: number }[] }, { kept: number; marked: string[] }];
+  "engine.setCliHeldTabs": [{ tabs: { tabId: string; until: number; live?: boolean }[] }, { kept: number; marked: string[] }];
   "engine.cliOwnsTab": [{ tabId: string }, { owned: boolean; shown: boolean }];
+  "engine.cliConsoleDelta": [{ tabId: string; after?: number; generation?: number; limit?: number }, CliConsoleDelta];
   "engine.cliMoveOffscreen": [{ tabId: string }, { ok: boolean; reason?: string }];
   "engine.cliCloseOffscreenTabs": [{}, Done];
 };

@@ -7,7 +7,7 @@ const client = await import("./client.ts");
 client.loadChoice();
 client.setSharing(true, "settings");
 after(() => client.setSharing(false, "settings"));
-const { noteTokenCommands, noteWindowlessPages, takeCliCounts } = await import("./cliCounts.ts");
+const { notePageSignals, noteTokenCommands, noteWindowlessPages, takeCliCounts } = await import("./cliCounts.ts");
 
 const windowless = (counts) => [counts.windowless_pages_given_geometry, counts.windowless_pages_missing_geometry];
 
@@ -57,4 +57,21 @@ test("an expired token counts nothing, and the next valid reading only sets the 
   assert.equal(takeCliCounts().cli_cdp_commands_dom, 0);
   noteTokenCommands({ dom: 118 }, client.consentNow());
   assert.equal(takeCliCounts().cli_cdp_commands_dom, 3);
+});
+
+test("the engine's page check totals turn into counts since the last take, and Ardia's own commands count in their own area", () => {
+  notePageSignals({ hitTests: 0 }, client.consentNow());
+  takeCliCounts();
+  notePageSignals({ consoleReads: 2, hitTests: 3, hitTestsFailed: 1, occluded: 1, focusedOrigins: 1, originMismatches: 0 });
+  notePageSignals({ consoleReads: 1, hitTests: 2 });
+  notePageSignals({ consoleReads: 5, hitTests: 4, hitTestsFailed: 1, occluded: 2, focusedOrigins: 2, originMismatches: 1 });
+  noteTokenCommands({ ardia: 7 }, client.consentNow());
+  const counts = takeCliCounts();
+  assert.deepEqual(
+    [counts.cli_page_signal_console_reads, counts.cli_page_signal_hit_tests, counts.cli_page_signal_hit_tests_failed, counts.cli_page_signal_occluded, counts.cli_page_signal_focused_origins, counts.cli_page_signal_origin_mismatches],
+    [5, 4, 1, 2, 2, 1],
+  );
+  assert.equal(counts.cli_cdp_commands_ardia, 7);
+  notePageSignals({ consoleReads: 99 }, null);
+  assert.equal(takeCliCounts().cli_page_signal_console_reads, 0);
 });

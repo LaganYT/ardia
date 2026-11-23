@@ -31,8 +31,10 @@
 #include "build/build_config.h"
 #include "ardia/core/ac_host_visibility.h"
 #include "ardia/core/ac_windowless_page.h"
+#include "chrome/browser/ardia/ac_cli_console_ring.h"
 #include "chrome/browser/ardia/ac_cli_control_file.h"
 #include "chrome/browser/ardia/ac_cli_owned_tabs.h"
+#include "chrome/browser/ardia/ac_cli_page_signals.h"
 #include "chrome/browser/ardia/ac_cli_token_policy.h"
 #include "chrome/browser/ardia/ac_engine.h"
 #include "chrome/browser/browser_process.h"
@@ -175,6 +177,8 @@ class ControlServer {
                                       .Set("given", windowless.given)
                                       .Set("missed", windowless.missed));
     status.Set("tokenCommands", TokenCommandTotals());
+    status.Set("pageSignals", PageSignalTotals());
+    status.Set("consoleRing", ConsoleRingTotals());
     if (ardiacore::TestFlag("nativeDragRefused")) {
       status.Set("nativeDragsRefused", true);
     }
@@ -468,4 +472,35 @@ AC_ARGS_CALL(ac_cli_owns_tab) {
                .Set("owned", ardia::IsCliOwnedTab(contents))
                .Set("shown",
                     contents && ardiacore::TabWasInShownSlot(contents)));
+}
+
+AC_ARGS_CALL(ac_cli_console_delta) {
+  ardia::Reply out = call.TakeReply();
+  std::optional<int> tab = call.args().FindInt("tab");
+  content::WebContents* contents = tab ? ardia::TabWithId(*tab) : nullptr;
+  if (!contents) {
+    return out.Error("no such tab");
+  }
+  constexpr double kMaxWatermark = 9007199254740991.0;
+  const auto whole = [&](std::optional<double> value) {
+    return !value || (*value >= 0 && *value <= kMaxWatermark &&
+                      *value == static_cast<double>(
+                                    static_cast<uint64_t>(*value)));
+  };
+  const std::optional<double> after = call.args().FindDouble("after");
+  const std::optional<double> generation =
+      call.args().FindDouble("generation");
+  const std::optional<int> limit = call.args().FindInt("limit");
+  if (!whole(after) || !whole(generation) ||
+      (limit && (*limit < 1 ||
+                 *limit > static_cast<int>(ardia::kConsoleDeltaMax)))) {
+    return out.Error("bad watermark, generation or limit");
+  }
+  base::expected<base::DictValue, std::string> delta = ardia::ConsoleDelta(
+      contents, after ? static_cast<uint64_t>(*after) : 0, generation,
+      limit ? static_cast<size_t>(*limit) : ardia::kConsoleDeltaMax);
+  if (!delta.has_value()) {
+    return out.Error(delta.error());
+  }
+  out.Send(std::move(delta.value()));
 }

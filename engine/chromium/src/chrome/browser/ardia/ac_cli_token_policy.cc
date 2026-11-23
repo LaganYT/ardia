@@ -10,15 +10,20 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 #include "ardia/core/ac_content_hooks.h"
 #include "ardia/core/ac_host_visibility.h"
 #include "base/json/json_reader.h"
+#include "base/containers/span.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/values.h"
+#include "chrome/browser/ardia/ac_cli_page_signals.h"
 #include "chrome/browser/ardia/ac_cli_token_policy_internal.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
@@ -35,8 +40,9 @@ struct CountedDomain {
   std::string_view field;
 };
 
-constexpr std::array<CountedDomain, 11> kCountedDomains = {{
+constexpr std::array<CountedDomain, 12> kCountedDomains = {{
     {"Accessibility", "accessibility"},
+    {"Ardia", "ardia"},
     {"Browser", "browser"},
     {"DOM", "dom"},
     {"Emulation", "emulation"},
@@ -110,8 +116,9 @@ void CountCommand(std::string_view method) {
   ++CommandTotals()[kOtherDomain];
 }
 
-TokenClient::TokenClient(content::DevToolsAgentHostClient* client)
-    : client_(client) {
+TokenClient::TokenClient(content::DevToolsAgentHostClient* client,
+                         content::DevToolsAgentHost* host)
+    : client_(client), host_(host) {
   Registry()[client_] = this;
 }
 
@@ -170,6 +177,10 @@ bool TokenClient::FilterCommand(std::string& message, std::string* reply) {
     return false;
   }
   CountCommand(*method);
+  if (IsPageSignalMethod(*method)) {
+    return StartPageSignal(*id, session, *method, command.FindDict("params"),
+                           reply);
+  }
   outstanding_[key] = NeedsResponse(*method) ? *method : std::string();
   message = base::WriteJson(command).value_or(std::string());
   if (message.empty()) {
@@ -177,6 +188,63 @@ bool TokenClient::FilterCommand(std::string& message, std::string* reply) {
     return false;
   }
   return true;
+}
+
+bool TokenClient::StartPageSignal(int id,
+                                  const std::string& session,
+                                  const std::string& method,
+                                  const base::DictValue* params,
+                                  std::string* reply) {
+  auto bound = targets_.find(session);
+  content::DevToolsAgentHost* target =
+      session.empty() || bound == targets_.end()
+          ? nullptr
+          : content::ArdiaDevToolsAgentHostForId(bound->second);
+  const std::string type = target ? target->GetType() : std::string();
+  content::WebContents* contents = target ? target->GetWebContents() : nullptr;
+  if (!contents || (type != content::DevToolsAgentHost::kTypePage &&
+                    type != content::DevToolsAgentHost::kTypeTab)) {
+    *reply = ErrorReply(id, session, kInvalidParams,
+                        "ardia: send this on a session attached to a tab");
+    return false;
+  }
+  const base::DictValue empty;
+  const std::pair<std::string, int> key(session, id);
+  outstanding_[key] = std::string();
+  running_[key] = RunPageSignal(
+      method, params ? *params : empty, contents,
+      base::BindOnce(&TokenClient::PageSignalAnswered,
+                     weak_factory_.GetWeakPtr(), id, session));
+  return false;
+}
+
+void TokenClient::PageSignalAnswered(
+    int id,
+    const std::string& session,
+    base::expected<base::DictValue, std::string> outcome) {
+  if (auto running = running_.find({session, id}); running != running_.end()) {
+    std::ignore = running->second.Release();
+    running_.erase(running);
+  }
+  if (!outstanding_.contains({session, id}) || !host_) {
+    return;
+  }
+  std::string message;
+  if (outcome.has_value()) {
+    base::DictValue answer;
+    answer.Set("id", id);
+    if (!session.empty()) {
+      answer.Set("sessionId", session);
+    }
+    answer.Set("result", std::move(outcome.value()));
+    message = base::WriteJson(answer).value_or(std::string());
+  }
+  if (message.empty()) {
+    message = ErrorReply(id, session, kRefused,
+                         outcome.has_value() ? "ardia: the answer isn't JSON"
+                                             : outcome.error());
+  }
+  client_->DispatchProtocolMessage(host_.get(), base::as_byte_span(message));
 }
 
 bool TokenClient::ShouldClose() const {
@@ -196,7 +264,7 @@ bool TokenClient::MayAttachToRenderFrameHost(content::RenderFrameHost* frame) {
 std::unique_ptr<ArdiaDevToolsTokenClient> CreateTokenClient(
     content::DevToolsAgentHostClient* client,
     content::DevToolsAgentHost* host) {
-  return std::make_unique<cli_token_policy_internal::TokenClient>(client);
+  return std::make_unique<cli_token_policy_internal::TokenClient>(client, host);
 }
 
 bool IsTokenClient(content::DevToolsAgentHostClient* root_client) {

@@ -45,7 +45,7 @@
     "autofill": ["settings", "setSettings", "showSuggestions"],
     "boosts": ["setProfileBoosts", "previewBoost", "clearBoostPreview"],
     "contentBlocker": ["state", "setEnabled", "setListEnabled", "isAllowed", "setAllowed", "removeAllowed", "hiddenElements", "hideElements", "restoreElements", "addList", "removeList", "devFailNextMessage", "devDelayNextLoad"],
-    "engine": ["beginTracing", "endTracing", "isTracing", "cliTabTargets", "cliOwnsTab", "cliMoveOffscreen", "cliCloseOffscreenTabs", "setCliHeldTabs", "childProcessCpu"],
+    "engine": ["beginTracing", "endTracing", "isTracing", "cliTabTargets", "cliOwnsTab", "cliConsoleDelta", "cliMoveOffscreen", "cliCloseOffscreenTabs", "setCliHeldTabs", "childProcessCpu"],
     "extensions": ["resolveInstallPrompt", "actionStates", "sidePanelUrl"],
     "media": [
       "displayMediaSources",

@@ -145,6 +145,12 @@ Test hygiene the run keeps (each was a real failure):
   those for hidden tabs. Checks that need "no user activation" reload the page first (CDP's `userGesture` leaves
   one behind).
 
+`node packages/ardiacore/scripts/token-signals-check.mjs <app> [metro host:port] [scratch dir]` runs the engine-answered
+`Ardia.*` DevTools methods and `tabs.hold {untilDisconnect, live}` over the real token connection and control socket in
+one hidden instance (no DevTools port): the console ring, watermarks and generations, hit tests (listeners, cover,
+delegation, a cross-site iframe as a remote frame, cancellation on disconnect, the 4-probe cap), the focused frame's
+origin and document id, refusals off a tab session and for bad parameters, and SIGKILL ending a live hold.
+
 `node packages/ardiacore/scripts/drag-end-check.mjs <Debug app> [scratch dir]` checks that a page keeps taking clicks and keys
 after a drag nobody ends (`chromium-drag-always-ends.patch`, `docs/engine-build.md`): a DevTools session that took a drag and went
 away, a drag DevTools input started that no session took, and a drag macOS refuses to start. It launches its own hidden

@@ -196,6 +196,8 @@ const PARAMS = (f) => ({
   "autofill.respond": { tab: f.loose, id: 1, decision: "accept" },
   "menus.dismiss": { menu: "m1" },
   "menus.runBar": { path: [1, 0], ref: "cmd:newTab@File\u001fNew Tab", window: f.w2 },
+  "devtools.logpoint": { tab: f.one, url: "https://shop.example/app.js", line: 1, expression: "1" },
+  "devtools.clearLogpoint": {},
 });
 
 const stores = () => [S(), useLive.getState(), useAirTraffic.getState()];

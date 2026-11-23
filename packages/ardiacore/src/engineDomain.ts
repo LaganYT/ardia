@@ -122,9 +122,17 @@ type CliDragsEnded = { ownerGone: number; debuggerUnowned: number; nativeRefused
 
 type CliWindowlessPages = { given: number; missed: number };
 
-type CliTokenCommands = Partial<Record<"accessibility" | "browser" | "dom" | "emulation" | "fetch" | "input" | "network" | "page" | "runtime" | "storage" | "target" | "other", number>>;
+type CliTokenCommands = Partial<Record<"accessibility" | "ardia" | "browser" | "dom" | "emulation" | "fetch" | "input" | "network" | "page" | "runtime" | "storage" | "target" | "other", number>>;
 
-export type CliControlStatus = { dragsEnded?: CliDragsEnded; windowlessPages?: CliWindowlessPages; tokenCommands?: CliTokenCommands } & (
+type CliPageSignals = { consoleReads: number; focusedOrigins: number; originMismatches: number; hitTests: number; hitTestsFailed: number; hitTestsCancelled: number; remoteFrames: number; occluded: number };
+
+type CliConsoleRing = { captured: number; evicted: number; reads: number; rings: number };
+
+export type CliConsoleEntry = { seq: number; level: "warning" | "error"; exception: boolean; mainFrame: boolean; text: string; source: string; line: number; time: number };
+
+export type CliConsoleDelta = { entries: CliConsoleEntry[]; generation: number; reset: boolean; next: number; last: number; dropped: number; withheld: number; errors: number; more: boolean };
+
+export type CliControlStatus = { dragsEnded?: CliDragsEnded; windowlessPages?: CliWindowlessPages; tokenCommands?: CliTokenCommands; pageSignals?: CliPageSignals; consoleRing?: CliConsoleRing } & (
   | { state: "external" }
   | ({ state: "off" | "starting" } & CliServer)
   | ({ state: "on"; port: number } & CliServer)

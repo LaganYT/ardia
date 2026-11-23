@@ -44,7 +44,7 @@ class LiveServiceTests(unittest.TestCase):
         includes, core = core_rs_flags(cls(), cls.scratch.name)
         compiled = subprocess.run([
             compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-fsanitize=address,undefined',
-            '-fno-omit-frame-pointer', '-I', str(ROOT / 'src'), *includes, *[str(LINUX / source) for source in HELPERS],
+            '-fno-omit-frame-pointer', '-I', str(ROOT / 'src'), '-I', str(ROOT.parent / 'ardiacore-desktop' / 'src'), *includes, *[str(LINUX / source) for source in HELPERS],
             str(ROOT / 'tests/fixtures/live_host_tool.cc'), '-o', str(cls.tool), *core, '-ldl', '-lpthread',
         ], capture_output=True, text=True, timeout=300)
         if compiled.returncode:

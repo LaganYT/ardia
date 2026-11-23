@@ -1723,8 +1723,8 @@ key's `key-inputs.json`, so a change to one moves the Windows key too:
 | `bootstrap.js` + `generate_bootstrap.py` | as is | the `chrome.send` bridge, `window.__ardiaHost` |
 | `ac_linux_contract.h` | as is | `kRoutes`: `engine.call` names to `ac_*` services |
 | `ac_linux_session.{h,cc}` | as is | `MergeLinuxSession` for `session.read`/`session.write` |
-| `ac_linux_policy.h` | as is | asset path validation |
-| `ac_linux_window_state.h` | as is | `ArdiaShell.windowState`/`windowButtonLayout` names |
+| `ac_desktop_policy.h` | as is | asset path validation |
+| `ac_desktop_window_state.h` | as is | `ArdiaShell.windowState`/`windowButtonLayout` names |
 
 Rewritten for the pilot (each marks code the desktop host should own once, shared):
 
@@ -1826,7 +1826,7 @@ Two RNW features the desktop host must carry over:
 1. **Crash reports** (#2442): the RNW app reads Crashpad minidumps itself (`apps/browser/windows/Ardia/CrashDumps.h`,
    native API v25). On the desktop host this is `ac_linux_crash_dumps(_core)`, which already compiles on Windows; the
    Crashpad database path and the dump format reader are Windows'.
-2. **Report a Problem** (#3666): Windows has no native uploader today. `ac_linux_report_core` compiles on Windows as
+2. **Report a Problem** (#3666): Windows has no native uploader today. `ac_desktop_report_core` compiles on Windows as
    is; `ac_linux_report` needs its `FilePath` strings made UTF-16-safe.
 
 ## Order of work

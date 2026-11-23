@@ -27,7 +27,7 @@ def build(test, directory, name, fixture):
     includes, core = core_rs_flags(test, directory)
     compiled = subprocess.run([
         compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-fsanitize=address,undefined',
-        '-fno-omit-frame-pointer', '-I', str(ROOT / 'src'), *includes, *[str(LINUX / source) for source in HELPERS],
+        '-fno-omit-frame-pointer', '-I', str(ROOT / 'src'), '-I', str(ROOT.parent / 'ardiacore-desktop' / 'src'), *includes, *[str(LINUX / source) for source in HELPERS],
         str(ROOT / 'tests/fixtures' / fixture), '-o', str(executable), *core, '-ldl',
     ], capture_output=True, text=True, timeout=300)
     test.assertEqual(compiled.returncode, 0, compiled.stderr)

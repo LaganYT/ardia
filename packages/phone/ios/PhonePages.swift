@@ -21,7 +21,7 @@ final class PhonePages {
   var blockingSink: EventSink?
 
   private let container: ModelContainer
-  private var tabIDs: [String: UUID] = [:]
+  private(set) var tabIDs: [String: UUID] = [:]
   private var pageIDs: [UUID: String] = [:]
   private var watchers: [String: PageWatcher] = [:]
   private let visuals = PageVisuals.shared
@@ -30,6 +30,7 @@ final class PhonePages {
   private var finds: [String: PageFind] = [:]
   private var blockingGeneration = 0
   private var shareGeneration = 0
+  private var videoFloat: WebVideoFloat?
 
   private struct PendingPopup {
     var tabID: UUID?
@@ -73,6 +74,7 @@ final class PhonePages {
     engine.onPopup = { [weak self] opener, popup in self?.popupOpened(from: opener, popup: popup) }
     engine.onOpenLink = { [weak self] url, opener, inBackground in self?.linkOpened(url, from: opener, inBackground: inBackground) }
     engine.onPrivateBrowsingEnded = { [weak self] in self?.privateBrowsingEnded() }
+    videoFloat = WebVideoFloat(liveWebViews: { [weak self] in self?.liveWebViews() ?? [] }) { [weak self] outcome in self?.webVideoLeftForeground(outcome) }
     engine.downloads.onStart = { [weak self] start, webView in self?.downloadStarted(start, in: webView) }
     engine.downloads.onProgress = { [weak self] list in
       self?.downloadSink?(["name": "downloads.progress", "downloads": list.map(PagePayloads.download)])

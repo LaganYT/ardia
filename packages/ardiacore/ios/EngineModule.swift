@@ -50,6 +50,14 @@ public class EngineModule: Module {
       let tab = ArdiaHost.chromeTabId(ofTab: try args.text("tabId"))
       EngineCall.passing("ac_cli_owns_tab", profile: args.profile, args: ["tab": tab], reply: reply)
     },
+    cliConsoleDelta: { args, reply in
+      let tab = ArdiaHost.chromeTabId(ofTab: try args.text("tabId"))
+      var delta: [String: Any] = ["tab": tab]
+      if let after = try args.optionalDouble("after") { delta["after"] = after }
+      if let generation = try args.optionalDouble("generation") { delta["generation"] = generation }
+      if let limit = try args.optionalDouble("limit") { delta["limit"] = Int(exactly: limit) ?? 0 }
+      EngineCall.passing("ac_cli_console_delta", profile: args.profile, args: delta, reply: reply)
+    },
     cliMoveOffscreen: { args, reply in
       ArdiaHost.cliMoveOffscreen(try args.text("tabId")) { reply.ok($0) }
     },

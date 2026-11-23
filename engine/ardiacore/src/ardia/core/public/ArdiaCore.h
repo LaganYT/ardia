@@ -109,6 +109,7 @@ ARDIACORE_EXPORT
 @interface ArdiaCoreEngine (CliHolds)
 + (NSInteger)holdTabsForCli:(NSArray<ArdiaCoreTab*>*)tabs
                       until:(NSArray<NSNumber*>*)untilMs
+                       live:(NSArray<NSNumber*>*)live
                      marked:(NSMutableIndexSet*)marked;
 @end
 

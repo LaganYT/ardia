@@ -25,10 +25,8 @@ action("webui_bootstrap") {
 source_set("win") {
   sources = [
     "//ardia/linux/ac_linux_contract.h",
-    "//ardia/linux/ac_linux_policy.h",
     "//ardia/linux/ac_linux_session.cc",
     "//ardia/linux/ac_linux_session.h",
-    "//ardia/linux/ac_linux_window_state.h",
     "ac_calls.cc",
     "ac_calls.h",
     "api.cc",
@@ -72,6 +70,7 @@ source_set("win") {
     "tab_state.h",
     "test_gate.cc",
     "test_gate.h",
+    "webui/desktop_platform_win.cc",
     "webui/webui_caption_script.h",
     "webui/webui_mode.cc",
     "webui/webui_mode.h",
@@ -85,6 +84,7 @@ source_set("win") {
   deps = [
     ":launch_switches",
     ":webui_bootstrap",
+    "//ardia/desktop",
     "//components/input",
     "//services/network/public/mojom",
     "//ui/display",

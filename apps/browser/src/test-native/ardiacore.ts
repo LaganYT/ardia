@@ -6,6 +6,7 @@ import type {
   CallName,
   CallResult,
   ChromeWindowState,
+  CliConsoleDelta,
   CliControlStatus,
   CliTabTarget,
   EngineBookmark,
@@ -43,10 +44,11 @@ const testGlobals = globalThis as {
   acTestCliControl?: (on: boolean | null) => Promise<CliControlStatus> | undefined;
   acTestCliActive?: (tabId: string | null) => Promise<CliControlStatus> | undefined;
   acTestCliTargets?: (tabId: string) => CliTabTarget | undefined;
-  acTestCliHeld?: (tabs: { tabId: string; until: number }[]) => { kept: number; marked?: string[] } | Promise<{ kept: number; marked?: string[] }> | undefined;
+  acTestCliHeld?: (tabs: { tabId: string; until: number; live?: boolean }[]) => { kept: number; marked?: string[] } | Promise<{ kept: number; marked?: string[] }> | undefined;
   acTestCliOwns?: (tabId: string) => { owned: boolean; shown: boolean };
   acTestCliMoveOffscreen?: (tabId: string) => { ok: boolean; reason?: string };
   acTestCliCloseOffscreen?: () => void;
+  acTestCliConsole?: (args: { tabId: string; after?: number; generation?: number; limit?: number }) => CliConsoleDelta;
   acTestTasks?: () => EngineTask[];
   acTestComponents?: () => EngineComponent[];
   acTestEngineInfo?: () => CallResult<"engine.info">;
@@ -460,6 +462,7 @@ const fakeModules = {
       cliOwnsTab: ({ tabId }) => testGlobals.acTestCliOwns?.(tabId) ?? { owned: false, shown: false },
       cliMoveOffscreen: ({ tabId }) => testGlobals.acTestCliMoveOffscreen?.(tabId) ?? { ok: false },
       cliCloseOffscreenTabs: () => (testGlobals.acTestCliCloseOffscreen?.(), null),
+      cliConsoleDelta: (args) => testGlobals.acTestCliConsole?.(args) ?? { entries: [], generation: 1, reset: false, next: args.after ?? 0, last: 0, dropped: 0, withheld: 0, errors: 0, more: false },
       setCliHeldTabs: async ({ tabs }) => {
         const answer = (await testGlobals.acTestCliHeld?.(tabs)) ?? { kept: 0 };
         return { kept: answer.kept, marked: answer.marked ?? tabs.filter((t) => t.until > Date.now()).map((t) => t.tabId) };

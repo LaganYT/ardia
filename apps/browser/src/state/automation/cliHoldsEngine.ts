@@ -1,9 +1,9 @@
 import { withDeadline } from "../../lib/deadline";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { setControlHeldTabs } from "../../platform/control";
-import { cliHoldsLeft, onCliHoldsChanged } from "../tabs/cliHolds";
+import { cliHoldsLeft, drainDisconnectReleases, onCliHoldsChanged } from "../tabs/cliHolds";
 import { consentToken, type ConsentToken } from "../telemetry/client";
-import { noteChromeDiscardsKeptForCli } from "../telemetry/tabSleepCounts";
+import { noteChromeDiscardsKeptForCli, noteCliHoldsReleasedOnDisconnect } from "../telemetry/tabSleepCounts";
 
 export const CLI_HOLD_REFRESH_MS = 10_000;
 export const CLI_HOLD_PUSH_MS = 3_000;
@@ -15,6 +15,7 @@ let refresh: ReturnType<typeof setInterval> | null = null;
 
 export function pushCliHoldsToEngine(consent: ConsentToken | null): Promise<ReadonlySet<string> | null> {
   keepRefreshing(cliHoldsLeft().length > 0);
+  noteCliHoldsReleasedOnDisconnect(drainDisconnectReleases(), consent);
   pushing = pushing.then(async () => {
     const tabs = cliHoldsLeft();
     try {

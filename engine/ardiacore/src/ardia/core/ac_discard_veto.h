@@ -1,7 +1,6 @@
 #ifndef ARDIA_CORE_AC_DISCARD_VETO_H_
 #define ARDIA_CORE_AC_DISCARD_VETO_H_
 
-#include <utility>
 #include <vector>
 
 #include "base/time/time.h"
@@ -24,8 +23,13 @@ std::vector<DiscardVeto> DiscardVetoesFor(content::WebContents* contents);
 
 void NotePostedDocument(content::NavigationHandle* handle);
 
-std::vector<bool> SetCliHeldTabs(
-    const std::vector<std::pair<content::WebContents*, base::Time>>& held);
+struct CliHold {
+  content::WebContents* contents = nullptr;
+  base::Time until;
+  bool live = false;
+};
+
+std::vector<bool> SetCliHeldTabs(const std::vector<CliHold>& held);
 
 int TakeCliHoldVetoes();
 

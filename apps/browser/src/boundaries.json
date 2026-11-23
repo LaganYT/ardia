@@ -1420,6 +1420,21 @@
    ]
   },
   {
+   "id": "socket-family:devtools",
+   "source": "socket",
+   "guard": "Native listener checks the peer UID and a 0600 socket; params checked against the method's JSON schema (socketSchema.schemaProblem); tabs through tabOf; reload and logpoints only on tabs the command opened (controlOwnsTab); a session sends only INSPECTION_METHODS, never an emulation or network override, and every session ends when its connection closes or control stops (closeInspectionsFor); logpoint conditions always answer false (D3: any same-user process is the owner)",
+   "checks": [
+    "apps/browser/src/state/automation/socketSchema.ts#schemaProblem",
+    "apps/browser/src/state/automation/devToolsSession.ts#INSPECTION_METHODS",
+    "apps/browser/src/state/automation/devToolsSession.ts#closeInspectionsFor",
+    "apps/browser/src/state/automation/devToolsLogpoints.ts#logpointCondition",
+    "apps/browser/src/state/automation/socketDevToolsLogpoints.ts#controlOwnsTab"
+   ],
+   "findings": [
+    "D3"
+   ]
+  },
+  {
    "id": "raw-settings-write:state/engines/actions.ts",
    "source": "native",
    "guard": "Sets engineMode to one of the engine modes from a user action",
@@ -1645,6 +1660,26 @@
    "detected": false
   },
   {
+   "id": "engine-token-connection:ardia-page-signals",
+   "source": "socket",
+   "guard": "Ardia.consoleDelta, Ardia.focusedFrameOrigin and Ardia.hitTest are answered by the engine, not the page: TokenClient::StartPageSignal takes them only after FilterCommand's framing checks and only on a session this client attached to a page or tab target, so they pass the same inspection gate as that attach (Chrome's DevTools availability policy and the frame checks in ShouldAllowSession); the browser session, an iframe's session and any targetId are refused, and RunPageSignal checks IsInspectionAllowed for the tab again at answer time (ContentsInspectable), the focused frame's own policy before reading its origin, and the ring withholds entries from frames the policy keeps from inspection (FrameInspectable). RunPageSignal refuses any parameter it doesn't know (UnknownParam), takes after, generation and limit only as whole numbers in range (WholeNumber), x and y only as finite numbers within a million CSS pixels (Coordinate), backendNodeId only as a positive integer, and expectedOrigin only as a bare http or https origin that serializes back to itself (the hostile corpus caught chrome:// and chrome-untrusted:// origins getting through before); the focused frame's origin and document id come from the browser's own RenderFrameHost, never from the page; the hit test's DevTools answers are parsed field by field with types checked, its ancestor walk runs in an isolated world the page can't reach, at most 32 ancestors, node names cut to 64 characters, a 3 second deadline, at most 4 probes at once, refused for a frame at the point the policy keeps from inspection (FrameInspectable), re-run when the page scrolled between reading the scroll position and hit-testing, cancelled when the session detaches or the client goes (teardown deferred to a later task) and stopped when the page or the hit frame navigates, and a cross-site iframe is reported as a remote frame rather than a blocker; console text the ring keeps is sliced in UTF-16 before conversion and cut to 2048 bytes and source URLs to 512 at a UTF-8 boundary, at most 200 entries per tab, with a generation so a replaced ring reads as reset. Replies go back only to the asking connection while its session is still attached. Live: packages/ardiacore/scripts/token-signals-check.mjs, which also sends every value of the shared hostile-input corpus as each parameter and as a parameter name and checks each reply is refused unless the value is valid",
+   "checks": [
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_token_policy.cc#StartPageSignal",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_signals.cc#UnknownParam",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_signals.cc#WholeNumber",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_signals.cc#Coordinate",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_signals.cc#ReadFocusedFrameOrigin",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_console_ring.cc#ContentsInspectable",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_console_ring.cc#FrameInspectable",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_console_ring.cc#Truncated",
+    "packages/ardiacore/scripts/token-signals-check.mjs#check",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_hit_probe.cc#kMaxProbesInFlight",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_hit_probe_helpers.cc#FrameInspectable",
+    "packages/ardiacore/scripts/token-signals-check.mjs#HOSTILE_VALUES"
+   ],
+   "detected": false
+  },
+  {
    "id": "import:bookmarks",
    "source": "import",
    "guard": "Imported bookmarks keep their URLs; javascript: entries become bookmarklets as in Chrome (C4)",
@@ -1803,6 +1838,43 @@
    "checks": [
     "packages/expo-windows/src/engine/rendererEfficiency.ts",
     "scripts/windows/engine/src/ardia/win/renderer_efficiency.cc"
+   ],
+   "detected": false
+  },
+  {
+   "id": "devtools-page-data:trace",
+   "source": "page",
+   "guard": "Trace events describe what the page did: each field is type-checked and length-capped, event count capped at MAX_TRACE_EVENTS; only the inspected tab's main frame navigation, frames and renderer process count, bounded to the selected navigation; only numbers, enums and capped URLs reach the reply; nothing is stored",
+   "checks": [
+    "apps/browser/src/state/automation/devToolsInsights.ts#analyzeTrace"
+   ],
+   "detected": false
+  },
+  {
+   "id": "devtools-page-data:issues",
+   "source": "page",
+   "guard": "Audits issues are read field by field into a fixed shape; codes must be letters only; cookie names, domains and paths only, never the raw cookie line or value; capped at MAX_ISSUES",
+   "checks": [
+    "apps/browser/src/state/automation/devToolsIssues.ts#describeIssue"
+   ],
+   "detected": false
+  },
+  {
+   "id": "devtools-page-data:styles",
+   "source": "page",
+   "guard": "Matched styles are read into a fixed shape with capped strings, rule and inheritance counts; the selector goes to DOM.querySelector as data and property names must match a CSS identifier pattern",
+   "checks": [
+    "apps/browser/src/state/automation/devToolsCascade.ts#cascadeFor"
+   ],
+   "detected": false
+  },
+  {
+   "id": "devtools-page-data:source-maps",
+   "source": "page",
+   "guard": "Source maps come only from what the caller passes (a map, its JSON, a data: URL, or a script's text whose inline data: map is read) or a script's own inline data: sourceMapURL from Debugger.scriptParsed; Ardia fetches nothing, so a page's sourceURL or sourceMappingURL can't make it reach the network. Size, section, line and segment counts capped; all logpoint sessions together keep at most MAX_HELD_MAP_BYTES of maps, each keeps at most MAX_HELD_FRAMES frames, and a navigated frame's scripts are dropped; mappings with a wrong segment length or a negative position, and negative section offsets, are refused",
+   "checks": [
+    "apps/browser/src/state/automation/devToolsSourceMaps.ts#inlineMapText",
+    "apps/browser/src/state/automation/devToolsSourceMaps.ts#parseSourceMap"
    ],
    "detected": false
   }

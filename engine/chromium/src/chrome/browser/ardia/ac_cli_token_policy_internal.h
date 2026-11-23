@@ -9,12 +9,18 @@
 #include <string_view>
 #include <utility>
 
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/types/expected.h"
+#include "base/values.h"
 #include "chrome/browser/ardia/ac_cli_token_policy.h"
 
 class GURL;
 
 namespace content {
+class DevToolsAgentHost;
 class DevToolsAgentHostClient;
 class RenderFrameHost;
 }
@@ -23,6 +29,7 @@ namespace ardia {
 namespace cli_token_policy_internal {
 
 inline constexpr int kInvalidRequest = -32600;
+inline constexpr int kInvalidParams = -32602;
 inline constexpr int kParseError = -32700;
 inline constexpr int kRefused = -32000;
 inline constexpr size_t kMaxPending = 4096;
@@ -42,7 +49,8 @@ std::map<content::DevToolsAgentHostClient*, TokenClient*>& Registry();
 
 class TokenClient : public ArdiaDevToolsTokenClient {
  public:
-  explicit TokenClient(content::DevToolsAgentHostClient* client);
+  TokenClient(content::DevToolsAgentHostClient* client,
+              content::DevToolsAgentHost* host);
   ~TokenClient() override;
 
   bool FilterCommand(std::string& message, std::string* reply) override;
@@ -56,12 +64,23 @@ class TokenClient : public ArdiaDevToolsTokenClient {
   void ForgetSessionTree(const std::string& session);
   void NoteTargetEvent(std::string_view method, const std::string& message);
   bool FilterResponse(int id, const std::string& method, std::string& message);
+  bool StartPageSignal(int id,
+                       const std::string& session,
+                       const std::string& method,
+                       const base::DictValue* params,
+                       std::string* reply);
+  void PageSignalAnswered(int id,
+                          const std::string& session,
+                          base::expected<base::DictValue, std::string> outcome);
 
   const raw_ptr<content::DevToolsAgentHostClient> client_;
+  const scoped_refptr<content::DevToolsAgentHost> host_;
   std::map<std::string, std::string> targets_;
   std::map<std::string, std::string> parents_;
   std::map<std::pair<std::string, int>, std::string> outstanding_;
+  std::map<std::pair<std::string, int>, base::ScopedClosureRunner> running_;
   bool wedged_ = false;
+  base::WeakPtrFactory<TokenClient> weak_factory_{this};
 };
 
 }

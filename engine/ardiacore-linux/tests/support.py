@@ -306,7 +306,7 @@ def compile_and_run(test, name, sources, args=(), extra_includes=()):
         compiled = subprocess.run([
             compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
             '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
-            *[f'-I{path}' for path in extra_includes], '-I', str(ROOT / 'src'),
+            *[f'-I{path}' for path in extra_includes], '-I', str(ROOT / 'src'), '-I', str(ROOT.parent / 'ardiacore-desktop' / 'src'),
             *[str(source) for source in sources], '-o', str(executable),
         ], capture_output=True, text=True, timeout=120)
         test.assertEqual(compiled.returncode, 0, compiled.stderr)
@@ -462,7 +462,7 @@ class ImportFixture(unittest.TestCase):
         cls.binary = root / 'import-scenarios'
         compiled = subprocess.run([
             compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-fsanitize=address,undefined',
-            '-fno-omit-frame-pointer', f'-I{include}', '-I', str(ROOT / 'src'),
+            '-fno-omit-frame-pointer', f'-I{include}', '-I', str(ROOT / 'src'), '-I', str(ROOT.parent / 'ardiacore-desktop' / 'src'),
             *[str(LINUX / name) for name in IMPORT_SOURCES],
             str(FIXTURES / 'import_scenarios.cc'), '-lsqlite3', '-lcrypto', '-ldl', '-o', str(cls.binary),
         ], capture_output=True, text=True, timeout=300)

@@ -354,6 +354,11 @@
           "desktop": "custom",
           "windows": "absent"
         },
+        "cliConsoleDelta": {
+          "mac": "custom",
+          "desktop": "absent",
+          "windows": "absent"
+        },
         "cliMoveOffscreen": {
           "mac": "custom",
           "desktop": "custom",

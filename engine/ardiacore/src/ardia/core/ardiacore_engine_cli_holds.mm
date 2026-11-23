@@ -1,6 +1,5 @@
 #import "ardia/core/public/ArdiaCore.h"
 
-#include <utility>
 #include <vector>
 
 #include "ardia/core/ac_discard_veto.h"
@@ -12,12 +11,14 @@
 
 + (NSInteger)holdTabsForCli:(NSArray<ArdiaCoreTab*>*)tabs
                       until:(NSArray<NSNumber*>*)untilMs
+                       live:(NSArray<NSNumber*>*)live
                      marked:(NSMutableIndexSet*)marked {
-  std::vector<std::pair<content::WebContents*, base::Time>> held;
+  std::vector<ardiacore::CliHold> held;
   for (NSUInteger i = 0; i < tabs.count && i < untilMs.count; ++i) {
-    held.emplace_back(tabs[i].contents,
-                      base::Time::FromMillisecondsSinceUnixEpoch(
-                          untilMs[i].doubleValue));
+    held.push_back({tabs[i].contents,
+                    base::Time::FromMillisecondsSinceUnixEpoch(
+                        untilMs[i].doubleValue),
+                    i < live.count && live[i].boolValue});
   }
   const std::vector<bool> placed = ardiacore::SetCliHeldTabs(held);
   for (size_t i = 0; i < placed.size(); ++i) {

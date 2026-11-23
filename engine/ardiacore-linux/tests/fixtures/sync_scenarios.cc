@@ -18,7 +18,7 @@
 #include <tuple>
 #include <vector>
 
-#include "ardia/linux/ac_linux_policy.h"
+#include "ardia/desktop/ac_desktop_policy.h"
 #include "ardia/linux/ac_linux_sync.h"
 #include "ardia/linux/ac_linux_sync_json.h"
 #include "ardia/linux/ac_linux_sync_keys.h"

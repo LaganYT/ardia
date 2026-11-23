@@ -4,7 +4,7 @@ export const engine = defineDomain({
   kind: "engine",
   imports: {
     "../wire": ["Done"],
-    "../../engineDomain": ["BatterySaverMode", "BatterySaverState", "ChildProcessCpu", "CliControlStatus", "CliTabTarget", "CursorRestore", "EngineComponent", "EngineInfo", "EngineTask", "HoverLostEpisode", "MemorySaverRequest", "MemorySaverState", "PopupProtectedMedia", "PressLoopLongReport", "SystemState", "WindowUnpaintedRecord"],
+    "../../engineDomain": ["BatterySaverMode", "BatterySaverState", "ChildProcessCpu", "CliConsoleDelta", "CliControlStatus", "CliTabTarget", "CursorRestore", "EngineComponent", "EngineInfo", "EngineTask", "HoverLostEpisode", "MemorySaverRequest", "MemorySaverState", "PopupProtectedMedia", "PressLoopLongReport", "SystemState", "WindowUnpaintedRecord"],
   },
   calls: {
     info: {
@@ -126,7 +126,7 @@ export const engine = defineDomain({
       windows: "absent",
     },
     setCliHeldTabs: {
-      args: "{ tabs: { tabId: string; until: number }[] }",
+      args: "{ tabs: { tabId: string; until: number; live?: boolean }[] }",
       result: "{ kept: number; marked: string[] }",
       desktop: "absent",
       mac: "custom",
@@ -136,6 +136,13 @@ export const engine = defineDomain({
       args: "{ tabId: string }",
       result: "{ owned: boolean; shown: boolean }",
       desktop: "custom",
+      mac: "custom",
+      windows: "absent",
+    },
+    cliConsoleDelta: {
+      args: "{ tabId: string; after?: number; generation?: number; limit?: number }",
+      result: "CliConsoleDelta",
+      desktop: "absent",
       mac: "custom",
       windows: "absent",
     },

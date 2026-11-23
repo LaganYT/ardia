@@ -716,6 +716,9 @@ function pageEvent(event: PageEngineEvent) {
     case "page.summarySettled":
       if (!event.isPrivate) for (const field of [...pageSummarySettledCounts(event.outcome, event.chatGPTFellBack), ...geminiNanoMissingCount(event.geminiNanoMissing)]) countUsage(field);
       return;
+    case "pages.webVideo":
+      if (!event.isPrivate) countUsage(event.outcome === "floated" ? "web_videos_floated" : "web_videos_kept_playing");
+      return;
     default:
       return;
   }

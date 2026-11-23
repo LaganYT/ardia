@@ -1013,7 +1013,7 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
     keyboard focus where it was, as the native buttons do, and lights slid off the window with a hidden sidebar are
     inert, so Tab never lands on them.
   - Desktop layout and window state: the engine answers two calls, each advertised in the bootstrap's capabilities
-    (`ac_linux_window_state.h`), and sends an `ArdiaShell` event of the same name when a value changes:
+    (`ac_desktop_window_state.h`), and sends an `ArdiaShell` event of the same name when a value changes:
     - `ArdiaShell.windowButtonLayout` → `{ layout, desktop }`: `layout` is GTK's raw `gtk-decoration-layout` string
       (GNOME fills it from `org.gnome.desktop.wm.preferences button-layout`: Ubuntu `:minimize,maximize,close`, upstream
       GNOME `appmenu:close`, elementary `close:maximize`), or `null` without GTK's Linux UI; `desktop` is the browser's
@@ -1053,7 +1053,7 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
 - **Header drag and double-click.** Dragging the header moves the window (`DispatchHostWindowDragMovement`).
   Double-clicking it runs the desktop's titlebar action.
 - **Outer frame.** The host overlays Chromium's client view, and what happens to Chromium's frame around it depends on
-  who decorates the window, decided per window (`CompositorDecorates`, `ac_linux_window_corners.h`). A window's own
+  who decorates the window, decided per window (`CompositorDecorates`, `ac_desktop_window_corners.h`). A window's own
   xdg-decoration answer wins: server-side means the compositor decorates it, client-side means Ardia does. Only with no
   answer (X11, or a compositor without the protocol) does `XDG_CURRENT_DESKTOP` decide: a tiling desktop (hyprland,
   sway, niri, i3, river, dwl, bspwm, awesome, qtile, xmonad, dwm, herbstluftwm, regolith; the window-buttons shell
@@ -1149,7 +1149,7 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
     (`ui::Clipboard`, plain text from the copy and paste buffer, as the Mac reads `NSPasteboard`). An older engine
     without it leaves the shell's `navigator.clipboard.readText()`, which answers empty in `chrome://ardia`.
   - **Back and forward swipes over a page.** A two-finger horizontal touchpad scroll the page doesn't consume
-    (`ac_linux_page_swipe.h`, from the page channel's gesture acks) is sent to the shell as
+    (`ac_desktop_page_swipe.h`, from the page channel's gesture acks) is sent to the shell as
     `ArdiaShell`/`onPageSwipe` and drives the same swipe overlay as a swipe over the shell
     (`shims/web/motion/swipe.ts`). Chromium's own overscroll navigation is off in every bound tab. A swipe the page
     starts by scrolling stays with the page, and the momentum after the fingers lift ends the swipe. Untested on
@@ -2022,7 +2022,7 @@ Both are ports of the Mac's native code (`ArdiaWebView+Peek.mm`, `ArdiaWebView+T
 
 - **Link status.** The `status` page event carries `fromBottom` beside `text`, as on the Mac: the pointer's distance
   from the page's bottom edge, in the shell's points, when the pointer is over the page
-  (`ShellHostView::PointerFromPageBottom`, `ac_linux_status_geometry.h`). The shared UI moves the bubble to the top
+  (`ShellHostView::PointerFromPageBottom`, `ac_desktop_status_geometry.h`). The shared UI moves the bubble to the top
   when the pointer is near the bottom.
 - **`ArdiaSystem.setThinScrollBars(thin)`** (Settings › Appearance › Scroll bars). Helium turns on Chromium's
   overlay scroll bars in the mode that follows the OS, which on Linux is GTK's `gtk-overlay-scrolling`.
@@ -2065,7 +2065,7 @@ Both are ports of the Mac's native code (`ArdiaWebView+Peek.mm`, `ArdiaWebView+T
 - **Escape a page leaves unhandled.** `chromium-linux-unhandled-key.patch` hands a key a tab's page left unhandled to
   the host before the window gets it. For a key-down of Escape without Ctrl, Alt or Super, in a tab the window
   shows, the host sends that tab's page the Mac's `command` event `{command: "escape", text: ""}`
-  (`ac_linux_page_keys.h`), which closes Peek and a Little Ardia window while the page has focus. Chromium still
+  (`ac_desktop_page_keys.h`), which closes Peek and a Little Ardia window while the page has focus. Chromium still
   gets the key afterwards (it stops a loading page). An Escape that leaves full screen or a page that handles Escape
   never gets here. Advertised as `tab.unhandledEscape`.
 - **App activation.** When an Ardia window loses activation and no other Ardia window (a Settings or Import window
@@ -2089,7 +2089,7 @@ Both are ports of the Mac's native code (`ArdiaWebView+Peek.mm`, `ArdiaWebView+T
 ### Problem reports
 
 The engine serves the part of the Mac's `ArdiaReport` that needs no recording (`ac_linux_report.cc`, rules in
-`ac_linux_report_core.cc`). It advertises `report.files` (drafts and gzip) and `report.send` (the requests), not
+`ac_desktop_report_core.cc`). It advertises `report.files` (drafts and gzip) and `report.send` (the requests), not
 the method names: the shell sends a module method straight to a host that advertises it by name, and four of these
 answer at once on the Mac and with a promise here, so the shell has to opt in.
 
@@ -2128,7 +2128,7 @@ answer at once on the Mac and with a promise here, so the shell has to opt in.
 ### Ardia's notifications
 
 `ArdiaApp.notificationPermission`, `requestNotificationPermission`, `postNotification` and `removeNotifications`
-(`ac_linux_notifications.cc`, with the checks and the ledger in `ac_linux_notifications_core.cc`) show Ardia's own
+(`ac_linux_notifications.cc`, with the checks and the ledger in `ac_desktop_notifications_core.cc`) show Ardia's own
 notifications, such as a meeting reminder, through Chromium's Linux notification stack
 (`NotificationDisplayService`, then `org.freedesktop.Notifications`), the one sites' notifications use.
 
@@ -2273,7 +2273,7 @@ Newest first. Each entry names the upstream commit `linux-support` was rebased o
   `e3f26f7253b3` to `756f755c2bf0`. Linux changes:
   - `extensions.loadHealth` is routed to `ac_extensions_load_health`, so `extensions_loaded` reports from Linux.
   - Google suggestions moved to `www.google.com/complete/search?client=chrome`; the native allowlist
-    (`ac_linux_suggest_policy.h`) and the F10 fixture follow it. Linux keeps its own `ArdiaSearch.suggest` (no cookies,
+    (`ac_desktop_suggest_policy.h`) and the F10 fixture follow it. Linux keeps its own `ArdiaSearch.suggest` (no cookies,
     the endpoint allowlist) rather than upstream's `search.suggest`, which sends the profile's cookies to any URL. The
     Linux fetcher counts `search_suggest_ok` and `search_suggest_failed`; `search_suggest_blocked` stays 0.
   - Onboarding is three steps, and the default browser and Dock questions moved to the last one. Its probes refuse on

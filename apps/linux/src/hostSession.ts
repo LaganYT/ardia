@@ -207,7 +207,7 @@ function withLaunchWindowAdopted(saved: HydrateData, windowId: string): HydrateD
   });
 }
 
-export function initialHostSession(host: ArdiaHost, saved: HydrateData | null | undefined, now = Date.now()): HydrateData {
+export function initialHostSession(host: ArdiaHost, saved: HydrateData | null | undefined, now = Date.now(), onRestored?: (windowId: string) => void): HydrateData {
   const { windowId } = host.bootstrap;
   const profileId = seedProfile(host.bootstrap);
   if (!windowId || !profileId || /[\\/\0]/.test(windowId + profileId)) throw new Error("Invalid Ardia host bootstrap IDs");
@@ -222,7 +222,10 @@ export function initialHostSession(host: ArdiaHost, saved: HydrateData | null | 
   const profile = { id: profileId, name: "Personal", color: "plum" as const, icon: null, createdAt: now };
   const profiles = { ...saved?.profiles };
   profiles[profileId] ??= profile;
-  if (saved?.windows?.[windowId]?.tabIds.some((id) => saved.tabs?.[id])) return { ...saved, profiles, focusedWindowId: windowId };
+  if (saved?.windows?.[windowId]?.tabIds.some((id) => saved.tabs?.[id])) {
+    onRestored?.(windowId);
+    return { ...saved, profiles, focusedWindowId: windowId };
+  }
   const seeds = seedTabs(host.bootstrap);
   const tabs: Tab[] = seeds.map(({ url, page }) => ({
     id: `t_${crypto.randomUUID()}`, windowId, profileId, url, title: "", favicon: null, pin: null, muted: false, zoom: 1,

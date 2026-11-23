@@ -170,11 +170,19 @@ stays up. That's GPL-3.0 §6(d) for the GPL parts (uBlock Origin today), and it'
    `http://localhost:4321/release-notes#<version>`.
 3. Commit both ("Release <version>" or "Nightly <version>"), push, and dispatch the Release workflow ("CI releases"
    below), which runs the rest. Or run it here: `scripts/release.sh <version>` (a `-nightly.<n>`
-   version is a nightly). It stops right away if the notes file is missing or lacks its `date` and
-   `headline`, if the tree under `apps/browser`, `plugins`, `packages`, `engine` or `scripts/dmg` has uncommitted changes, or if the engine
+   version is a nightly). It starts with `scripts/release/preflight.mjs <version>` (about a second, one request for the
+   published appcast, which release.sh then builds the new feed on): it stops if the version fits no channel, the notes
+   file is missing, empty or lacks its `date` and `headline`, `MARKETING_VERSION` or `CURRENT_PROJECT_VERSION` has more
+   than one value across the project's configurations or the version isn't `<version>`, `Info.plist` doesn't take
+   `$(MARKETING_VERSION)` and `$(CURRENT_PROJECT_VERSION)`, the Arch `pkgver` that `update-pkgbuild.sh` derives isn't
+   right or the committed `.SRCINFO` drifted, the feed can't be read or is empty (only `APPCAST_BASE=none`, or a 404
+   with `RELEASE_FEED_MAY_BE_MISSING=1`, means there's no feed yet), the version is already in it, a stable isn't above the latest
+   stable in it (`publish.sh` would refuse it), or the build number isn't above every other build in it, stable or
+   nightly. The feed is one request with a 4-second limit and an 8 MB cap (counted in bytes as it streams, and on a feed file), parsed
+   with Python's ElementTree (no DTD, one plain `<channel>` with its items directly in it, as `appcast.py` reads it). Every later step takes the version, build number and
+   minimum macOS from the values it checked. Then it stops if the tree under `apps/browser`, `plugins`, `packages`, `engine` or `scripts/dmg` has uncommitted changes, or if the engine
    framework is older than the tree's ArdiaCore sources or the Chromium tree differs from `engine/ardiacore`
-   (`apply.sh --check`), if the version doesn't fit the channel or the notes' `channel`, if it can't read the published
-   appcast, if the build number isn't above every build in it, or (outside `--rc`) if `prebuilt-engines.tsv` lists no
+   (`apply.sh --check`), or (outside `--rc`) if `prebuilt-engines.tsv` lists no
    published engine for HEAD's `engine/` tree. Then it runs the stages in `scripts/release/` (`archive.sh`,
    `export-sign.sh`, `verify.sh`, `launch-check.sh`, `notarize.sh`, `package.sh`, `notes.sh`, `appcast.sh`; each
    prints its usage and runs alone). It writes `dist/<version>/`:
@@ -226,7 +234,8 @@ stays up. That's GPL-3.0 §6(d) for the GPL parts (uBlock Origin today), and it'
 
    `scripts/release.sh <version> --rc` builds a candidate into `dist/<version>-rc/` from the working tree, as
    `<version>` with the next build number, notarized but never published: no notes file or clean tree needed (it
-   lists the uncommitted files it included).
+   lists the uncommitted files it included). Its preflight runs as `--mode candidate`: the version already being in
+   the feed only warns, a feed it can't read gives an appcast that starts from nothing, and the rest still fails it.
 4. Tag and publish (the Release workflow does this itself): `git tag v<version> && git push origin main v<version>`,
    then `.claude/skills/release/scripts/publish.sh <version>` (`--dry-run` prints what it would do). It merges the
    appcast onto the feed as published right now (`appcast.py merge`), creates the release (a stable one as latest, a
@@ -305,8 +314,15 @@ See [linux-ci.md](linux-ci.md) › Linux releases.
 releases the commit it runs on, so first commit and push the version bump and the notes (steps 1 and 2), and publish
 the engine if `engine/` changed (below).
 
-- **preflight** checks the version against the channel, `MARKETING_VERSION`, the notes file and that `v<version>` isn't
-  out yet.
+- **preflight**, on Ubuntu in a few seconds, runs `scripts/release/preflight.mjs` (above) and checks that `v<version>`
+  isn't out yet. A real run fails on any of it. A dry run fails on all of it too, except a nightly that's already
+  released, listed in the feed at the checkout's build and still the newest build, which only warns, since
+  `publish.sh --dry-run` accepts that one and refuses an already released stable. The tag check follows the same rule:
+  a published `v<version>` only warns in a dry run when the preflight confirmed exactly that (`already_released=nightly-newest`
+  in its `--values-out`); with a feed that answers 404, or for anything else, it fails. A stable must also be above the
+  latest stable release's tag (`gh release view`), which catches the order `publish.sh` checks even when there's no feed. Both lookups tell GitHub's "release not
+  found" from a failed request, and a failed one stops the job instead of passing for "not published". So a dry run on a commit catches
+  whatever would stop the real run on it.
 - **checks**: `pnpm typecheck`, `pnpm test`, `pnpm shaders:check`.
 - **build**, on the `xcode-27` runner (Xcode 27.1, the same build as here), with no secrets: fetches the engine for
   this exact `engine/` tree (`fetch-engine.sh`), installs (pnpm, Pods), runs
@@ -314,7 +330,10 @@ the engine if `engine/` changed (below).
   `apps/browser/official-plugins.json`, fetched and SHA-256 checked by `scripts/release/official-plugins.py bundle`)
   and uploads them as one tar. Caches: pnpm, Pods with Hermes, uBO, the engine and Xcode's
   compilation cache (per Xcode build and month).
-- **sign** installs nothing and restores no cache, so no dependency code runs next to the keys. It
+- **sign** installs nothing and restores no cache, so no dependency code runs next to the keys. A dry run's sign step runs the preflight as `--mode dry-run` (`RELEASE_PREFLIGHT_MODE`), not as a local
+  candidate, so a feed it can't read fails it there too. The step no
+  longer probes the feed with `curl -I`: `RELEASE_FEED_MAY_BE_MISSING=1` lets only a 404 mean there's no feed yet, so a
+  network error fails instead of building the appcast from nothing. It
   treats the build as untrusted: `.github/release/unpack-build.py` unpacks it into a new directory outside the checkout
   only if every member is the archive, `provenance.txt` or a file or folder under `plugins/<name>/` (no symlinks there;
   `plugins/cli/plugin.json` must be there), with no absolute or `..` path, hard link, device or path through a symlink,
@@ -353,7 +372,8 @@ the engine if `engine/` changed (below).
   takes the same lock. The Homebrew tap needs a token that can push
   to `ardia-browser/homebrew-tap` (`HOMEBREW_TAP_TOKEN`); without it, run `update-tap.sh <version>` here afterwards.
 
-`dry_run` (on by default) builds a release candidate (`release.sh --rc`: the next build number, no notes needed),
+`dry_run` (on by default) builds a release candidate (`release.sh --rc`, after a preflight as strict as a real run's
+but for "already released"),
 signed and notarized like a release, and runs `publish.sh --dry-run`: nothing is tagged or published. The site's `VERSION`, the landing page and the stable perf gate stay local (the release skill); the
 site redeploys by itself when the notes are pushed (`.github/workflows/deploy.yml`).
 

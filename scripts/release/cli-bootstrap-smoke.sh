@@ -25,7 +25,7 @@ case "$earlier" in /Applications/*) echo "error: never an installed app" >&2; ex
 read -r pinned file sha < <(python3 -I -c 'import json, sys; p = next(p for p in json.load(open(sys.argv[1]))["plugins"] if p["name"] == "cli"); a = p["artifacts"]["macos-arm64"]; print(p["version"], a["file"], a["sha256"])' "$root/apps/browser/official-plugins.json")
 [ -f "$fixtures/$file" ] || { echo "error: $fixtures has no $file; run scripts/release/official-plugins.py fixtures $fixtures" >&2; exit 1; }
 [ "$(shasum -a 256 "$fixtures/$file" | cut -d' ' -f1)" = "$sha" ] || { echo "error: $fixtures/$file isn't the pinned $sha" >&2; exit 1; }
-work="$(cd "$(mktemp -d /tmp/ac-cli.XXXXXX)" && pwd -P)"
+work="$(cd "$(mktemp -d "${AC_SCRATCH_TMP:-/tmp}/ac-cli.XXXXXX")" && pwd -P)"
 pid=""
 stop() {
   [ -n "$pid" ] && { kill "$pid" 2>/dev/null; for _ in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done; kill -KILL "$pid" 2>/dev/null; } || true

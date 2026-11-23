@@ -121,7 +121,13 @@ is the only source of which version may be fetched.
     60 s, deadline 15 min. It goes into a private scratch folder under `OfficialPlugins/<name>/.fetch-*`.
   - refuses the download unless its SHA-256 is the pinned one.
   - unpacks it with its own gzip and tar reader. Only files and folders are accepted, all under `<name>/`: no links,
-    devices, `..`, absolute paths, duplicates or PAX `size`/`linkpath` overrides, and the expanded tree is capped.
+    devices, `..`, absolute paths, duplicates or PAX `size`/`linkpath` overrides. The caps (`OfficialArchive.Limits`):
+    512 MB downloaded, 1 GB unpacked, 20,000 entries (files and folders, however they're named), 32 levels deep, and no more than 100 times the download's size
+    unpacked overall or 200 times its compressed size for any one file. Neither ratio applies below 4 MB, so small text
+    files that compress well are fine. Folders a path implies count as entries. zlib reads the one gzip member,
+    checking its CRC and length; bytes after it (a second member, padding) are refused. The per-file ratio comes from
+    how much of the stream zlib consumed while that file came out, taken every 4 KB of output. Verifying a kept copy
+    applies the same caps. A file's ratio is checked before its staged file is created.
   - requires the unpacked `plugin.json` to be the pinned name and version, claiming only programs the pin reserves
     for it.
   - trusts nothing but the pin, as VS Code does with its own extensions: no Developer ID signature or notarization is
@@ -503,6 +509,39 @@ approval covers the manifest's declarations, not the code. An absolute path or a
 it is whatever is at that path when the helper starts. The approval names it ("Runs a program in the background:
 /usr/bin/python3 helper.py"), it may not live in Ardia's data or config folder, and beyond that it is trusted as
 installed, like a hook's program in `hooks.json`.
+
+### The sandbox
+
+Every helper starts under `/usr/bin/sandbox-exec` with a Seatbelt profile built by `PluginCore/PluginSandbox.swift`,
+and so does main's `ArdiaPluginHost`. The profile starts from `(deny default)` and allows only what is listed below.
+Paths go in as `-D` parameters, never into the profile's text.
+
+- **Everyone:** reading and mapping the system (`/System`, less `/System/Volumes` except dyld's cryptexes, `/usr/lib`,
+  `/usr/share`, `/Library/Apple`, the time zone database), metadata (`stat`) outside the protected folders below,
+  `/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom` and `/dev/fd`, reading the plugin's own folder and program,
+  reading and writing `PluginData/<name>/`, descriptor 3 (the channel), `sysctl` reads, the Mach services on
+  `machAllowed`, the global preferences domain, and inspecting or signalling only its own processes.
+- **A sidecar** may also fork and start programs: those in its own folder, the tools in `/bin`, `/sbin`, `/usr/bin`,
+  `/usr/sbin`, `/usr/libexec`, the `bin`, `sbin`, `lib`, `libexec`, `opt`, `Cellar`, `Frameworks` and `share` folders of
+  `/usr/local` and `/opt/homebrew` (nothing else there, so no `etc`, `var` or a database beside them), the Command Line Tools and
+  the Xcode `xcode-select` points to, so `/usr/bin/python3` and `git` work. It reads those trees, `/etc/ssl` and a few
+  files programs look up (`passwd`, `group`, `services`, `localtime`, Xcode's license choice). An absolute program also
+  reads its own install folder (`/opt/homebrew/opt/node` for its `bin/node`), except in a shared temp folder or straight
+  in `/usr`, `/usr/local` or `/opt/homebrew` (`/usr/bin/python3`, `/opt/homebrew/bin/brew`), where it reads only itself.
+- **main's host** may start nothing, not even a file in its own folder, and can't fork. It reads only the system, its own
+  binary and the plugin's folder.
+- **With network** (a sidecar whose plugin is granted it), outbound and local IP, the resolver's socket, the
+  `machAllowedOnline` services and `/etc/hosts` and `resolv.conf`. Without it, no IP at all: no loopback, no listening,
+  no names. main's host is always offline.
+- **An official plugin's folder** is its verified, read-only copy, `OfficialPlugins/<name>/<sha256>/`, the one place in
+  Ardia's data folder a plugin may run from: only the copy `OfficialTrust` just verified for that plugin, compared by
+  real path, so a local plugin linked to a folder there is refused. It can't read or list another copy.
+- **Never:** your home folder, Ardia's data and config folders, `/Users` and `/Volumes` (an absolute program elsewhere
+  reads only itself), any other app's temp files, `/Applications`, `/etc` beyond the files above, pathname sockets,
+  shared memory, IOKit, Apple Events, Launch Services, launchd jobs, preference writes and notifications.
+
+`PluginSandboxEscapeTests.swift` proves each line from inside a sandbox, and `mac.yml`'s Swift job runs it on pull
+requests that touch `PluginCore`, `PluginProcess.swift`, `plugin-*` or the import readers.
 
 ### programs
 

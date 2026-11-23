@@ -81,3 +81,12 @@ export function sidesProblems(records, limits = TEMPLATE_LIMITS) {
   const ratio = Math.max(...stores) / Math.min(...stores);
   return ratio > limits.sidesUboStoreRatio ? [`the templates' uBO stores differ ${ratio.toFixed(2)}× (${stores.map((s) => s.toFixed(1)).join(" vs ")} MB)`] : [];
 }
+
+export const jointProblems = (records) => [...sidesProblems(records), ...componentsMismatch(records)];
+
+export function componentsMismatch(records) {
+  if (records.length < 2) return [];
+  const names = new Set(records.flatMap((r) => Object.keys(r.components ?? {})));
+  return [...names].filter((name) => new Set(records.map((r) => r.components?.[name]?.version ?? null)).size > 1)
+    .map((name) => `component ${name} differs (${records.map((r) => r.components?.[name]?.version ?? "none").join(" vs ")})`);
+}

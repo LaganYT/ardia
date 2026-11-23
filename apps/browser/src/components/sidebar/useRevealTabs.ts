@@ -4,6 +4,7 @@ import { inShownProfile, selectedTabIn, showsProfile, watchRevealTargets, window
 import { reduceMotion } from "../ui/reduceMotion";
 import { GLOW_ROOM, type SidebarGeometry } from "./pageLayout";
 import { locateTab } from "./selectedRow";
+import { releaseLaunchRows } from "../../state/sidebar/launchRows";
 import { REVEAL_ROW_MARGIN } from "./tokens";
 
 export type RevealScroll = { y: number; animated: boolean };
@@ -48,6 +49,7 @@ export function startRevealTabs(windowId: string, scroll: RefObject<Scroller | n
       switched = opened = null;
       viaPill = false;
       if (!tabId) return;
+      releaseLaunchRows(windowId, "reveal");
       const scroller = scroll.current;
       const from = scrollY.current ?? 0;
       const row = locateTab(windowId, tabId, geometry.current, scroller as ScrollView, () => scrollY.current ?? 0);

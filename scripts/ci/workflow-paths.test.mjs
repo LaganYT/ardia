@@ -187,6 +187,34 @@ test("the repository job starts on the parity doc, the promises lock and every t
   for (const path of [DOC, LOCK, ...locked, ...cited]) assert.ok(matched(repo, path), `a change to ${path} runs the repository job`);
 });
 
+test("Mac starts on the paths its jobs read, and its Swift tests run for the plugin sandbox, archive and import readers", () => {
+  const text = workflow("mac.yml");
+  const filters = changeFilters(text);
+  assert.deepEqual(Object.keys(filters).sort(), ["app", "swift"]);
+  assertTriggersMatchFilters(triggerPaths(text, "pull_request"), filters, ".github/workflows/mac.yml");
+  assert.match(text, /^  push:\n    branches: \[main\]\n    paths: \*native$/m);
+  for (const path of [
+    "packages/shell/ios/PluginCore/PluginSandbox.swift",
+    "packages/shell/ios/PluginProcess.swift",
+    "packages/shell/plugin-tests/PluginSandboxEscapeTests.swift",
+    "packages/import/ios/Core/ZipArchive.swift",
+  ]) {
+    assert.ok(existsSync(join(REPO, path)), `${path} exists`);
+    assert.ok(matched(filters.swift, path), `a change to ${path} runs the Swift tests`);
+  }
+  const suites = filesUnder("packages/shell/plugin-tests", (name) => name.endsWith(".swift"));
+  const read = new Set();
+  for (const file of suites) {
+    for (const [, path] of readFileSync(join(REPO, file), "utf8").matchAll(/"(?:\.\.\/)+((?:scripts|apps|docs)\/[A-Za-z0-9_./-]+)"/g)) read.add(path);
+  }
+  assert.ok(read.size >= 3, "the plugin tests still name the repository files they read");
+  for (const path of read) assert.ok(matched(filters.swift, path), `a change to ${path}, which the plugin tests read, runs the Swift tests`);
+  for (const name of ["app", "swift"]) {
+    assert.ok(text.includes(`      ${name}: \${{ steps.filter.outcome != 'success' || steps.filter.outputs.${name} == 'true' }}`), `${name} falls back to running`);
+    assert.match(text, new RegExp(`\\(needs\\.changes\\.result != 'success' \\|\\| needs\\.changes\\.outputs\\.${name} == 'true'\\)`), `${name} runs when the changes job failed`);
+  }
+});
+
 test("Deploy starts on main only for the paths one of its services deploys from", () => {
   const text = workflow("deploy.yml");
   assertTriggersMatchFilters(triggerPaths(text, "push"), changeFilters(text), ".github/workflows/deploy.yml");

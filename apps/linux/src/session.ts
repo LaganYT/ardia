@@ -5,9 +5,15 @@ import { mergeSession } from "./hostSessionMerge";
 
 export const isLinuxUtility = (id: string) => id === "settings" || id === "import";
 
-export function initialLinuxSession(host: ArdiaHost, saved: HydrateData | null | undefined): HydrateData {
-  if (!isLinuxUtility(host.bootstrap.windowId)) return initialHostSession(host, saved);
+
+export function initialLinuxSession(host: ArdiaHost, saved: HydrateData | null | undefined, onRestored?: (windowId: string) => void): HydrateData {
+  if (!isLinuxUtility(host.bootstrap.windowId)) return initialHostSession(host, saved, undefined, onRestored);
   return saved ? linuxSessionShape(saved) : {};
+}
+
+export function initialLinuxLaunch(host: ArdiaHost, saved: HydrateData | null | undefined): { initial: HydrateData; restored: string[] } {
+  const restored: string[] = [];
+  return { initial: initialLinuxSession(host, saved, (id) => restored.push(id)), restored };
 }
 
 const utilitySnapshot = (state: BrowserState, canonical: HydrateData): HydrateData => ({ ...snapshotHostSession(state), focusedWindowId: canonical.focusedWindowId, lastProfileId: canonical.lastProfileId });

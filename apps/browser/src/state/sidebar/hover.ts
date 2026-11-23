@@ -5,6 +5,7 @@ import { noteSidebarHoverHeld, noteSidebarScrolled, noteSidebarTeardownHeld } fr
 import { sidebarSliding, useDockMotion } from "../windows/dockMotion";
 import { cardReach, pointInRect, type Point, type Rect } from "./hoverAim";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./sidebarUi";
+import { releaseLaunchRows } from "./launchRows";
 
 export type HoverPointerEvent = { nativeEvent?: { screenX?: unknown; screenY?: unknown } } | undefined;
 type Row = { windowId: string; id: string };
@@ -247,6 +248,7 @@ function settleWhenStill(windowId: string) {
 }
 
 export function noteRowsScrolled(windowId: string) {
+  releaseLaunchRows(windowId, "scroll");
   const now = Date.now();
   noteSidebarScrolled(now);
   scrolledAt.set(windowId, now);

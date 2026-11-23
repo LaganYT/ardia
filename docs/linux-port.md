@@ -680,7 +680,10 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   unprivileged user namespaces. `scripts/linux/arch/update-pkgbuild.sh <version> --package <tarball>` (or `--sha256`) sets
   `pkgver` (`0.2.47-nightly.3` becomes `0.2.47nightly.3`, which pacman sorts before `0.2.47`), resets `pkgrel` and writes the matching `.SRCINFO` without makepkg;
   `update-pkgbuild.sh --check` fails when the committed `.SRCINFO` drifts from the PKGBUILD. The committed pair
-  pins the 0.2.47-nightly.2 test build this was verified with; the AUR copy moves with each stable release.
+  pins the 0.2.47-nightly.2 test build this was verified with, on purpose: its sha256 is a real tarball's, and every
+  release writes its own pair with `--out` instead of moving it. The release preflight
+  (`scripts/release/preflight.mjs`) checks the `pkgver` and tarball URL `update-pkgbuild.sh` derives for the version and
+  that the committed `.SRCINFO` matches. The AUR copy moves with each stable release.
   `scripts/linux/arch/publish-aur.sh <version> --sha256 <digest>` clones `ssh://aur@aur.archlinux.org/ardia-bin.git`
   (host keys pinned in `aur_known_hosts`), refuses to go back a version (a nightly counts as older than its stable), checks that the release's tarball has the
   digest, commits and pushes; `--dry-run` clones over HTTPS and pushes nothing. The Release workflow runs it after

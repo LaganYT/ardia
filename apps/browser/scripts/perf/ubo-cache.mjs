@@ -2,7 +2,8 @@ import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 export const UBO_ID = "fajbdaomknpkicfjcpipdmcpoamdmilh";
-export const UBO_ENGINE_KEYS = ["cache/selfie/staticMain", "cache/selfie/staticNetFilteringEngine", "cache/selfie/staticExtFilteringEngine"];
+export const UBO_ENGINE_KEY_SETS = ["", "Ardia2"].map((infix) => ["Main", "NetFilteringEngine", "ExtFilteringEngine"].map((engine) => `cache/selfie/static${infix}${engine}`));
+export const UBO_ENGINE_KEYS = UBO_ENGINE_KEY_SETS[0];
 
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
@@ -38,10 +39,10 @@ export const uboSettled = (dataDir) => uboLogBytes(dataDir) < UBO_LOG_FLUSHED_BY
 export const UBO_IDB_NAME = "uBlock0CacheStorage";
 
 export const engineSaved = ({ local = [], indexedDB = [] } = {}) =>
-  UBO_ENGINE_KEYS.every((key) => local.includes(key) && indexedDB.includes(key));
+  UBO_ENGINE_KEY_SETS.some((keys) => keys.every((key) => local.includes(key) && indexedDB.includes(key)));
 
 const STORED_KEYS = `(async () => {
-  const wanted = ${JSON.stringify(UBO_ENGINE_KEYS)};
+  const wanted = ${JSON.stringify(UBO_ENGINE_KEY_SETS.flat())};
   const local = Object.keys(await chrome.storage.local.get(wanted));
   const names = (await indexedDB.databases()).map((d) => d.name);
   if (!names.includes(${JSON.stringify(UBO_IDB_NAME)})) return { local, indexedDB: [] };

@@ -26,6 +26,7 @@ import { PLUGIN_CHROME, usePluginChrome } from "../../state/plugins/chrome";
 import { sidebarTokens, TAB_ROW } from "./tokens";
 import { tailKey } from "./dragModel";
 import type { ListViewport } from "./listViewport";
+import { useLaunchGrowth } from "./useLaunchGrowth";
 
 type PageRowsProps = {
   windowId: string;
@@ -60,11 +61,13 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
   }
   const cap = offScreen ? 0 : visited ? undefined : rows;
   const growing = cap === undefined && mountedRows < all.length;
+  const launch = useLaunchGrowth(windowId, { lazy, current, total: all.length, shownRows: Math.min(mountedRows, all.length), controller });
+  const growNow = growing && !launch.holding;
   useEffect(() => {
-    if (!growing) return;
+    if (!growNow) return;
     const frame = requestAnimationFrame(() => setMountedRows((n) => (n + ROWS_PER_FRAME >= all.length ? Infinity : n + ROWS_PER_FRAME)));
     return () => cancelAnimationFrame(frame);
-  }, [growing, mountedRows, all.length]);
+  }, [growNow, mountedRows, all.length]);
   const limit = cap ?? (growing ? mountedRows : undefined);
   const list = limit === undefined ? all : all.slice(0, limit);
   const pending = usePendingEntriesHeight(windowId, profileId, all, mountedRows, growing);
@@ -124,6 +127,7 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
         <View
           ref={(v) => {
             controller?.regions.set("list", v);
+            launch.list.current = v;
           }}
           onLayout={(e) => void (regions.list = e.nativeEvent.layout.y)}
           removeClippedSubviews

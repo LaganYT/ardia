@@ -285,3 +285,22 @@ test("with Reduce Motion on, the pill's click jumps to the row instead of scroll
   assert.equal(scrolls[0].animated, false);
   still();
 });
+
+test("a reveal while the launch holds this window's rows lets them in before it scrolls there", async () => {
+  const launch = await import("../../state/sidebar/launchRows.ts");
+  delete geometry.current.ownerShown;
+  const watching = startRevealTabs(w, scroll, scrollY, geometry);
+  launch.resetLaunchRowsForTests();
+  launch.startLaunchRows();
+  assert.equal(launch.launchRowsHolding(w), true);
+  const ids = S().windows[w].tabIds;
+  scrollY.current = 0;
+  scrolls.length = 0;
+  S().activate(ids[50]);
+  runFrames();
+  assert.equal(launch.launchRowsHolding(w), false);
+  assert.equal(launch.launchRowsReport().release, "reveal");
+  assert.equal(scrolls.length, 1, JSON.stringify(scrolls));
+  watching();
+  launch.resetLaunchRowsForTests();
+});

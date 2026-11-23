@@ -267,13 +267,29 @@ export async function launch(app, dataDir, port, extraEnv = {}) {
   execFileSync("open", ["-g", "-n", ...Object.entries(env).flatMap(([k, v]) => ["--env", `${k}=${v}`]), app]);
   for (let i = 0; i < 200; i++) {
     const [pid] = pidsOf(binary);
-    if (pid) return { pid, launchedAt };
+    if (pid) {
+      launched.add(pid);
+      return { pid, launchedAt };
+    }
     await sleep(50);
   }
   throw new Error("app did not start");
 }
 
+const launched = new Set();
+
+export function quitOnSignals(...closers) {
+  for (const [sig, code] of [["SIGINT", 130], ["SIGTERM", 143]])
+    process.once(sig, async () => {
+      process.stderr.write(`js-bench: ${sig}: quitting ${launched.size} instance(s)\n`);
+      for (const pid of [...launched]) await quit(pid).catch(() => {});
+      for (const close of closers) await Promise.resolve(close()).catch(() => {});
+      process.exit(code);
+    });
+}
+
 export async function quit(pid) {
+  launched.delete(pid);
   if (!alive(pid)) return;
   process.kill(pid, "SIGTERM");
   for (let i = 0; i < 150 && alive(pid); i++) await sleep(100);
@@ -338,6 +354,7 @@ async function run() {
   const version = execFileSync("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleShortVersionString", join(clone, "Contents/Info.plist")], { encoding: "utf8" }).trim();
   const origin = `http://127.0.0.1:${port}`;
   const server = await startServer(Number(port));
+  quitOnSignals(() => server.close());
   const libs = (flags.lib ? flags.lib.split(",") : [join(here, "bench-app.js")]).map((file) => readFileSync(file, "utf8"));
   const results = [];
   try {

@@ -1567,7 +1567,7 @@
   {
    "id": "plugin-install:official",
    "source": "native",
-   "guard": "Official copies checked against the signed pin on every lookup; one verified snapshot is unpacked (Swift tests in packages/shell/plugin-tests)",
+   "guard": "Official copies checked against the signed pin on every lookup; one verified snapshot is unpacked within caps of 512 MB downloaded, 1 GB unpacked, 100 times the download and 200 times an entry's compressed size past 4 MB, 20,000 entries and 32 levels (Swift tests in packages/shell/plugin-tests)",
    "checks": [
     "packages/shell/ios/PluginCore/OfficialTrust.swift",
     "packages/shell/ios/PluginCore/OfficialArchive.swift"
@@ -1575,6 +1575,16 @@
    "findings": [
     "D1",
     "D2"
+   ],
+   "detected": false
+  },
+  {
+   "id": "plugin-process:sandbox",
+   "source": "plugin",
+   "guard": "Every helper and the JavaScript host start under a deny-default Seatbelt profile: system libraries, the plugin's own folder and program, its data folder, descriptor 3 and the network only when granted; the JavaScript host can't fork or start programs (Swift tests in packages/shell/plugin-tests)",
+   "checks": [
+    "packages/shell/ios/PluginCore/PluginSandbox.swift#profile",
+    "packages/shell/ios/PluginProcess.swift#spawn"
    ],
    "detected": false
   },
@@ -1625,9 +1635,10 @@
   {
    "id": "import:files",
    "source": "import",
-   "guard": "Native readers in packages/import (profile roots, ZIP sizes, extension metadata; C11, C12)",
+   "guard": "Native readers in packages/import (profile roots, ZIP sizes, extension metadata; C11, C12); a ZIP holds at most 10,000 entries, 1 GB an entry and 4 GB in all, no entry past 200 times its compressed size above 4 MB, members that run past the file or share bytes are refused, every member is inflated exactly and its CRC checked, and its links and traversing names are never read",
    "checks": [
-    "packages/import/ios/Core/Discovery.swift"
+    "packages/import/ios/Core/Discovery.swift",
+    "packages/import/ios/Core/ZipArchive.swift"
    ],
    "findings": [
     "C11",

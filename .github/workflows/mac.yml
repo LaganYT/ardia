@@ -29,6 +29,14 @@ on:
       - "scripts/lib/paths.sh"
       - "patches/**"
       - "pnpm-lock.yaml"
+      - "packages/shell/plugin-*/**"
+      - "packages/shell/Package.swift"
+      - "packages/import/tests/**"
+      - "packages/import/fixtures/**"
+      - "packages/import/Package.swift"
+      - "scripts/release/plugin-digest.py"
+      - "apps/browser/official-plugins.json"
+      - "apps/browser/official-plugins-history.json"
       - ".github/workflows/mac.yml"
   push:
     branches: [main]
@@ -69,10 +77,73 @@ jobs:
             const vouch = require(`${process.env.GITHUB_WORKSPACE}/.github/vouch/vouch.cjs`);
             await vouch.gate({ github, context, core });
 
+  changes:
+    name: which Mac jobs run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      app: ${{ steps.filter.outcome != 'success' || steps.filter.outputs.app == 'true' }}
+      swift: ${{ steps.filter.outcome != 'success' || steps.filter.outputs.swift == 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: github.event_name == 'push'
+        with:
+          persist-credentials: false
+      - id: filter
+        if: github.event_name != 'pull_request' || github.event.pull_request.changed_files < 3000
+        continue-on-error: true
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+        with:
+          filters: |
+            app:
+              - "apps/browser/macos/**"
+              - "apps/browser/package.json"
+              - "apps/browser/react-native.config.js"
+              - "package.json"
+              - "pnpm-workspace.yaml"
+              - "packages/ardiacore/ios/**"
+              - "packages/ardiacore/scripts/**"
+              - "packages/ardiacore/extensions/**"
+              - "packages/ardiacore/prebuilt-engines.tsv"
+              - "packages/shell/ios/**"
+              - "packages/shell/docktile/**"
+              - "packages/shell/plugin-host/**"
+              - "packages/shaders/ios/**"
+              - "packages/import/ios/**"
+              - "packages/sync/ios/**"
+              - "packages/sync/Sources/**"
+              - "packages/sync/Package.swift"
+              - "packages/core-rs/**"
+              - ".github/actions/core-rs-xcframework/**"
+              - "packages/*/expo-module.config.json"
+              - "engine/ardiacore/src/ardia/core/public/**"
+              - "engine/engine-key.sh"
+              - "engine/engine-key.py"
+              - "scripts/lib/paths.sh"
+              - "patches/**"
+              - "pnpm-lock.yaml"
+              - ".github/workflows/mac.yml"
+            swift:
+              - "packages/shell/ios/PluginCore/**"
+              - "packages/shell/ios/PluginProcess.swift"
+              - "packages/shell/plugin-*/**"
+              - "packages/shell/Package.swift"
+              - "packages/import/ios/Core/**"
+              - "packages/import/tests/**"
+              - "packages/import/fixtures/**"
+              - "packages/import/Package.swift"
+              - "scripts/release/plugin-digest.py"
+              - "apps/browser/official-plugins.json"
+              - "apps/browser/official-plugins-history.json"
+              - ".github/workflows/mac.yml"
+
   app:
     name: compile (Debug)
-    needs: gate
-    if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
+    needs: [gate, changes]
+    if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) && (needs.changes.result != 'success' || needs.changes.outputs.app == 'true') }}
     runs-on: xcode-27
     timeout-minutes: 75
     env:
@@ -204,3 +275,19 @@ jobs:
             apps/browser/macos/Pods
             ~/Library/Caches/CocoaPods
           key: ${{ steps.pods-key.outputs.key }}
+
+  swift:
+    name: plugin sandbox, archive and import Swift tests
+    needs: [gate, changes]
+    if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) && (needs.changes.result != 'success' || needs.changes.outputs.swift == 'true') }}
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Plugin core, its sandbox and the official archive reader
+        run: swift test --package-path packages/shell --scratch-path "$RUNNER_TEMP/shell" --filter ArdiaPluginCoreTests
+      - name: The import package, its zip reader included
+        if: ${{ !cancelled() }}
+        run: swift test --package-path packages/import --scratch-path "$RUNNER_TEMP/import"

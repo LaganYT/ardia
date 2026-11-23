@@ -322,4 +322,4 @@ jobs:
         run: node --run test:root
       - name: Vouch and stale tests
         if: ${{ !cancelled() }}
-        run: node --test .github/vouch/vouch.test.cjs .github/stale/stale.test.cjs
+        run: node --test .github/vouch/vouch.test.cjs .github/stale/stale.test.cjs .github/cla/cla.test.cjs

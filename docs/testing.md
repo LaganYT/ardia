@@ -98,8 +98,8 @@ holds the rest.
 - The heavy workflows (`ios.yml`, `android.yml`, `linux.yml`, `windows.yml`, `mac.yml`, `rust.yml`) run their vouch
   `gate` job only for pull requests from forks. Pushes, manual runs and branches of this repository skip it and start
   the build at once. A newer push or pull request run cancels the one before it; manual and release runs each have their own
-  group and are never cancelled. `windows.yml` reads the `full-ci` label in its `identity` job, live, so adding the
-  label and re-running all jobs gives the full run.
+  group and are never cancelled. `windows.yml` reads the `full-ci` label in its `identity` job: from the event on a
+  first attempt, with no API call, and live on a re-run, so adding the label and re-running all jobs gives the full run.
 - Caches that would fill the 10 GB limit are saved on pushes to `main` only and pruned to the newest per branch by
   `caches.yml`: Gradle (`gradle-phone-`, which `--main-only` also deletes from every other branch), Xcode compilation
   caches (`xcode-cas-`), Pods (`pods-`, shared by `mac.yml` and the Release workflow, and `phone-pods-`).

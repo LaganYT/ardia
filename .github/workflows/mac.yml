@@ -160,7 +160,8 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
       - id: engine-key
         run: echo "key=$(engine/engine-key.sh --platform macos)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - id: engine-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: apps/browser/build-ardiacore/prebuilt
           key: engine-${{ steps.engine-key.outputs.key }}
@@ -192,6 +193,7 @@ jobs:
             echo "### Mac engine $short (older than this commit's ${ENGINE_KEY:0:12}; strict: $strict)" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "strict=$strict" >> "$GITHUB_OUTPUT"
+          echo "match=$(packages/ardiacore/scripts/engine-match.sh get match "$line")" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
@@ -264,6 +266,11 @@ jobs:
         with:
           path: .ci/cas
           key: ${{ steps.cas-key.outputs.prefix }}${{ github.sha }}
+      - if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.engine.outcome == 'success' && steps.engine.outputs.match == 'exact' && steps.engine-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: apps/browser/build-ardiacore/prebuilt
+          key: engine-${{ steps.engine-key.outputs.key }}
       - if: ${{ !cancelled() && github.event_name == 'push' && steps.install.outcome == 'success' && steps.pods.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:

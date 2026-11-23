@@ -28,6 +28,7 @@ export const LIMITS_URL = "https://boat.dev/api/v1/limits";
 export const GITHUB_API = "https://api.github.com";
 export const REQUEST_TIMEOUT_MS = 5000;
 export const ROUTE_DEADLINE_MS = 25000;
+export const JOB_READS_FIRST = 4;
 
 export const DEFAULTS = {
   mode: "auto",
@@ -267,7 +268,6 @@ export async function githubPressure({ fetchJson, token, settings, ownRepo, ownR
     }
   }
   const newest = [...runs.values()].sort((a, b) => b.created - a.created);
-  const inspected = newest.filter(() => spend("jobs"));
   const jobsOf = async (run) => {
     const jobs = [];
     for (let page = 1; ; page += 1) {
@@ -282,12 +282,16 @@ export async function githubPressure({ fetchJson, token, settings, ownRepo, ownR
       if (data.jobs.length < 100 || jobs.length >= total || !spend("jobs")) return jobs;
     }
   };
-  const jobLists = await Promise.all(inspected.map(jobsOf));
-  return {
-    ...pressureOf([...new Map(jobLists.flat().map((job) => [job.id, job])).values()], { now, queuedAge: settings.queuedAge }),
-    runs: runs.size,
-    inspected: inspected.length,
+  const seen = new Map();
+  const measured = () => pressureOf([...seen.values()], { now, queuedAge: settings.queuedAge });
+  let inspected = 0;
+  const readJobs = async (batch) => {
+    inspected += batch.length;
+    for (const jobs of await Promise.all(batch.map(jobsOf))) for (const job of jobs) seen.set(job.id, job);
   };
+  await readJobs(newest.slice(0, JOB_READS_FIRST).filter(() => spend("jobs")));
+  if (!overflowOf(measured(), settings)) await readJobs(newest.slice(JOB_READS_FIRST).filter(() => spend("jobs")));
+  return { ...measured(), runs: runs.size, inspected };
 }
 
 const decision = (target, reason, facts = {}) => ({ target, reason, ...facts });

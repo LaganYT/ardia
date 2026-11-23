@@ -45,6 +45,7 @@ const testGlobals = globalThis as {
   acTestCliTargets?: (tabId: string) => CliTabTarget | undefined;
   acTestCliOwns?: (tabId: string) => { owned: boolean; shown: boolean };
   acTestCliMoveOffscreen?: (tabId: string) => { ok: boolean; reason?: string };
+  acTestCliCloseOffscreen?: () => void;
   acTestTasks?: () => EngineTask[];
   acTestComponents?: () => EngineComponent[];
   acTestEngineInfo?: () => CallResult<"engine.info">;
@@ -70,6 +71,7 @@ export const emitEvent = <E extends EventName>(name: E, data: EventData<E>) => {
 };
 
 export const chromeWindowList: ChromeWindowState[] = [];
+export const pagerSnapshots = new Map<string, { sequence: number; selectionSequence: number; position: number; selected: number; phase: string; velocity: number; count: number; profileId?: string | null }>();
 export const engineCalls: { domain: string; verb: string; profile: string }[] = [];
 export const commitReports: boolean[] = [];
 export const commitReportFailures = { next: 0 };
@@ -445,7 +447,7 @@ const fakeModules = {
       setCliActiveTab: ({ tabId }) => testGlobals.acTestCliActive?.(tabId) ?? cliStatus(null),
       cliOwnsTab: ({ tabId }) => testGlobals.acTestCliOwns?.(tabId) ?? { owned: false, shown: false },
       cliMoveOffscreen: ({ tabId }) => testGlobals.acTestCliMoveOffscreen?.(tabId) ?? { ok: false },
-      cliCloseOffscreenTabs: () => null,
+      cliCloseOffscreenTabs: () => (testGlobals.acTestCliCloseOffscreen?.(), null),
       cliTabTargets: ({ tabIds }) => Object.fromEntries(tabIds.map((id) => [id, testGlobals.acTestCliTargets?.(id) ?? { targetId: null, pageGeneration: 0 }])),
     },
     { inputIdleSeconds: () => 3600 },
@@ -699,7 +701,7 @@ const fakeModules = {
     switchPager: () => Promise.resolve(false),
     stepPager: () => Promise.resolve(false),
     selectPager: () => Promise.resolve(false),
-    pagerState: () => null,
+    pagerState: (key: string) => pagerSnapshots.get(key) ?? null,
     devPagerState: () => Promise.resolve(null),
     devSimulate: () => unfaked("ArdiaSwipe", "devSimulate"),
   },

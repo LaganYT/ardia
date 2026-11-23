@@ -49,6 +49,7 @@
     "extensions": ["resolveInstallPrompt", "actionStates", "sidePanelUrl"],
     "media": [
       "displayMediaSources",
+      "displayMediaThumbnails",
       "screenRecordingAllowed",
       "requestScreenRecording",
       "selectDevice",

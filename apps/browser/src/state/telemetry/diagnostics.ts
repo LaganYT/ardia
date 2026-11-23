@@ -135,6 +135,8 @@ export const takeContentDriftCounts = (): Promise<Record<string, number>> =>
     return { content_layer_layouts: drift.layouts, content_layer_refits: drift.fits, content_layer_drift_max_pt: drift.maxPoints };
   });
 
+export { takeStopBreathing } from "./stopBreathing";
+
 export const takeColdTabHoldCounts = (): Promise<Record<string, number>> =>
   inTurn(async (): Promise<Record<string, number>> => {
     const holds = await call("webView.takeFirstPaintHolds", {}).catch(() => null);

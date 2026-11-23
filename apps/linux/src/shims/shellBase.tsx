@@ -16,6 +16,7 @@ import { useBrowser } from "../../../browser/src/state/browser/store";
 export { Symbol } from "./web/Symbol";
 export { FolderIcon } from "./web/FolderIcon";
 export { ActivitySpinner } from "./web/motion/ActivitySpinner";
+export { Breathe } from "./web/motion/Breathe";
 export {
   ContextMenuArea,
   DockSelection,

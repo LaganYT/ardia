@@ -1,3 +1,4 @@
+import { asSecret } from "@ardia/core";
 import { savePassword } from "../../platform/passwords";
 import {
   importModule,
@@ -85,7 +86,7 @@ async function importPasswords(profileId: string, credentials: Credential[]): Pr
   for (const c of credentials) {
     const origin = originOfLogin(c.realm?.startsWith("http") ? c.realm : c.url);
     if (!origin || !c.password) continue;
-    if (await tally.attempt(savePassword(engineProfile(useBrowser.getState(), profileId), origin, c.username, c.password))) saved++;
+    if (await tally.attempt(savePassword(engineProfile(useBrowser.getState(), profileId), origin, c.username, asSecret("password", c.password)))) saved++;
   }
   tally.done();
   return saved;

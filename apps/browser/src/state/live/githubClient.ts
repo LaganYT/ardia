@@ -78,7 +78,7 @@ export function createGithubClient(send: GithubSend, clock: () => number = Date.
       if (graphqlRateLimited(json.errors, headers)) throw limited();
       limits.succeeded(scope);
       const error = json.errors?.[0];
-      if (error && !json.data) throw new LiveError("other", error.message);
+      if (error && !json.data) throw new LiveError("other", "GitHub couldn't answer that request");
       return json;
     });
   }

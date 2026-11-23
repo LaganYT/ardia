@@ -42,7 +42,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
   {
     title: "Crashes and errors",
     items: [
-      "The error's type and message, and those of up to 3 errors it says caused it, with web addresses, paths, file names, quoted text and long numbers taken out",
+      "The error's type and message, and those of up to 3 errors it says caused it, with web addresses, paths, file names, quoted text, long numbers and anything shaped like a password, key or access token taken out",
       "Function names, script file names and line numbers from the stack trace",
       "After a crash: the exception type and name (never its message), and the function names where it was thrown and on the crashing thread, from this app's crash report",
       "The same for crashes of Ardia's page, graphics and helper processes, plus the version that crashed, how long the process had run, the total size of its writable memory regions, and how the system ended it (its termination reason, like a signal or a code-signing kill)",
@@ -53,6 +53,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
       "When a window may be showing a black page: whether it is a regular or a private window, how many windows are open, whether it had just been seen or had just gained or lost focus, whether the system counts it as visible and whether Ardia overruled that, whether Ardia is the app in front, whether Share tabs across windows is on, how many pages it showed and how many of them looked unpainted, and why (see-through, hidden, detached from its window, still waiting for a first frame, lent to another page, or covered while it opens). Sent once per episode, never which page",
       "When a press on the window's title strip or a window move holds the pointer for 5 seconds or more: which of the two it was, whether it was still holding when noticed and whether a mouse button was still down. At most 10 per session, never which window or page",
       "Warning and error log lines, cleaned the same way, with the type, message and code of an error logged beside them",
+      "How many saved passwords, keys or tokens Ardia caught and left out on their way to a report, a log line, a sync file or a plugin: a count, never the value or whose it was",
     ],
   },
   {

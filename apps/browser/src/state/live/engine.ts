@@ -19,6 +19,7 @@ import { usePages } from "../tabs/pageState";
 import { liveOf, onLiveChange } from "../tabs/tabLive";
 import { capturing, whenCaptureEndsUnderHiddenCompleted } from "./captureEnds";
 import { during } from "../app/jobActivity";
+import { scrubTokens } from "../telemetry/sanitize";
 
 const INTERVAL_MS: Record<LiveFolderKind, number> = { pullRequests: 3 * 60_000, documents: 10 * 60_000 };
 const STALE_ON_FOCUS_MS = 60_000;
@@ -186,8 +187,8 @@ async function run(folderId: string, interactive: boolean, allowed: () => boolea
 }
 
 function describe(source: LiveSourceId, error: unknown) {
-  if (error instanceof LiveError) return { kind: error.kind, message: error.message, source };
-  return { kind: "other" as const, message: String((error as Error)?.message ?? error), source };
+  if (error instanceof LiveError) return { kind: error.kind, message: scrubTokens(error.message), source };
+  return { kind: "other" as const, message: "Something went wrong", source };
 }
 
 export function statusText(folderId: string, now = Date.now()): string {

@@ -1,3 +1,4 @@
+import { asSecret, reveal } from "@ardia/core";
 import { confirm, showMenu } from "../../../state/app/system";
 import { Box, Button, Checkbox, DialogActions, DialogTitle, ink, lineHeight, proseLineHeight, radius, Sheet, space, Symbol, tabularNums, Text, TextField } from "../../ui";
 import {
@@ -141,7 +142,7 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
     setBusy(true);
     setError(null);
     const joining = !syncing;
-    const result = await enterRecoveryPhrase(folder.path, text);
+    const result = await enterRecoveryPhrase(folder.path, asSecret("syncPhrase", text));
     setBusy(false);
     const message = phraseError(result);
     if (message) setError(message);
@@ -317,7 +318,7 @@ function ConnectDeviceSheet() {
       <DialogActions
         leading={
           <>
-            <Button title={words ? "Hide Words" : "Show Words"} onPress={() => (words ? setWords(null) : void recoveryWords()?.then(setWords))} />
+            <Button title={words ? "Hide Words" : "Show Words"} onPress={() => (words ? setWords(null) : void recoveryWords().then((phrase) => setWords(phrase && reveal(phrase).split(" "))))} />
             <Button title="Copy Words" onPress={() => void copyRecoveryPhrase()} />
           </>
         }

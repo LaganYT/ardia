@@ -1,3 +1,4 @@
+import type { SecretFree } from "@ardia/core";
 import { noteSocketLineShrunk } from "../telemetry/cliCounts";
 import type { ConsentToken } from "../telemetry/client";
 
@@ -80,7 +81,7 @@ function compactWrite(id: unknown, result: unknown): string {
   return JSON.stringify({ id, result: { ok, oversized: true, ...(typeof fields.applied === "number" ? { applied: fields.applied } : {}), ...(bare ? { error: bare } : {}), hint } });
 }
 
-export function fittedReply(id: unknown, body: WireBody, method: WireMethod, consent: ConsentToken | null): string {
+export function fittedReply<B extends WireBody>(id: unknown, body: B & SecretFree<B>, method: WireMethod, consent: ConsentToken | null): string {
   const line = JSON.stringify({ id, ...body });
   if (fitsOnLine(line)) return line;
   noteSocketLineShrunk(consent);
@@ -92,7 +93,7 @@ export function fittedReply(id: unknown, body: WireBody, method: WireMethod, con
   return JSON.stringify({ id, error: { code: "failed", message: TOO_BIG(method?.narrow ?? "ask for less (a smaller limit, a later offset, a folder, a window or a lower depth)") } });
 }
 
-export function fittedEvent(name: string, time: number, data: Record<string, unknown>, consent: ConsentToken | null): string {
+export function fittedEvent<D extends Record<string, unknown>>(name: string, time: number, data: D & SecretFree<D>, consent: ConsentToken | null): string {
   const line = JSON.stringify({ event: name, time, data });
   if (fitsOnLine(line, DROPPED_MARKER_ROOM)) return line;
   noteSocketLineShrunk(consent);

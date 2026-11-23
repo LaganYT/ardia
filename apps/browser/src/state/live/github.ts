@@ -110,12 +110,18 @@ export function blockedNodes(errors: readonly GraphqlError[] | undefined): Graph
 export function blockedError(blocked: readonly GraphqlError[]): LiveError | null {
   if (!blocked.length) return null;
   const sso = blocked.find((e) => ORG_SSO.test(e.message));
-  return sso ? new LiveError("sso", sso.message) : new LiveError("tokenBlocked", blocked[0]!.message);
+  if (sso) return new LiveError("sso", withLink("An organization needs single sign-on for this token", sso.message));
+  return new LiveError("tokenBlocked", withLink("This token can't read some pull requests", blocked[0]!.message));
 }
 
 export function blockedLink(message: string): string | null {
-  return message.match(/https:\/\/github\.com\/(?:settings|orgs)\/[^\s"')]+/)?.[0]?.replace(/[.,]$/, "") ?? null;
+  return message.match(/https:\/\/github\.com\/(?:settings|orgs)\/[\w./-]+/)?.[0]?.replace(/[.,]$/, "") ?? null;
 }
+
+const withLink = (text: string, providerMessage: string) => {
+  const link = blockedLink(providerMessage);
+  return link ? `${text}: ${link}` : text;
+};
 
 export function checkState(c: RawCheck): CheckState {
   if (c.__typename === "StatusContext") {
@@ -200,9 +206,9 @@ export type DetailsResponse = { data?: { rateLimit?: RateLimitInfo | null; nodes
 export function detailNodes(ids: string[], res: DetailsResponse): RawPR[] {
   const errors = res.errors ?? [];
   const limited = errors.find((e) => e.type === "RATE_LIMITED");
-  if (limited) throw new LiveError("rateLimited", limited.message);
+  if (limited) throw new LiveError("rateLimited", "Rate Limit Exceeded");
   const nodes = res.data?.nodes;
-  const fail = (error?: GraphqlError) => new LiveError("other", (error ?? errors[0])?.message ?? "Missing pull request details");
+  const fail = (_error?: GraphqlError) => new LiveError("other", "GitHub couldn't read the pull request details");
   if (!nodes || nodes.length !== ids.length) throw fail();
   return nodes.filter((node, i): node is RawPR => {
     if (node) return true;

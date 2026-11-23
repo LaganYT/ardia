@@ -19,6 +19,7 @@ import { hostFetch } from "./hostIo";
 import { pluginPageOf } from "./pages";
 import { acceptsRun } from "./process";
 import { activeManifest, currentPlugins } from "./store";
+import { reveal } from "@ardia/core";
 import { deletePluginSecret, getPluginSecret, setPluginSecret, type SecretOutcome } from "./secrets";
 import { storageDelete, storageGet, storageKeys, storageSet, type StorageOutcome } from "./storage";
 
@@ -50,7 +51,7 @@ export function storageMethod(c: Caller, m: PluginManifest, method: string, para
 
 export function secretsMethod(c: Caller, m: PluginManifest, method: string, params: Record<string, unknown>): Promise<Body> | Body {
   if (!m.permissions.secrets) return failure("refused", `${method} needs the secrets permission.`);
-  if (method === "secrets.get") return getPluginSecret(c.name, params.key).then(settled);
+  if (method === "secrets.get") return getPluginSecret(c.name, params.key).then((o) => (o.ok ? { result: o.value && reveal(o.value) } : settled(o)));
   if (method === "secrets.set") {
     const consent = consentToken();
     return setPluginSecret(c.name, params.key, params.value).then((o) => (o.ok ? (notePlugin("plugin_secret_writes", consent), { result: { ok: true } }) : settled(o)));

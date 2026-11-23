@@ -187,6 +187,7 @@ __define("packages/core/src/index.ts", function (exports, __require) {
   __exportAll(exports, __require("packages/core/src/providerNetwork.ts"));
   __exportAll(exports, __require("packages/core/src/providerRows.ts"));
   __exportAll(exports, __require("packages/core/src/quickCreate.ts"));
+  __exportAll(exports, __require("packages/core/src/secret.ts"));
   __exportAll(exports, __require("packages/core/src/siteSearch.ts"));
   __exportAll(exports, __require("packages/core/src/suggest.ts"));
   __exportAll(exports, __require("packages/core/src/suggestFetcher.ts"));
@@ -194,6 +195,7 @@ __define("packages/core/src/index.ts", function (exports, __require) {
   __exportAll(exports, __require("packages/core/src/textFragment.ts"));
   __exportAll(exports, __require("packages/core/src/theme.ts"));
   __exportAll(exports, __require("packages/core/src/webStore.ts"));
+
 
 
 
@@ -2637,6 +2639,171 @@ function matchQuickCreate(query        , limit = 3)                {
     .slice(0, limit)
     .map((x) => x.c);
 }
+
+});
+__define("packages/core/src/secret.ts", function (exports, __require) {
+  __export(exports, "SECRET_KINDS", () => SECRET_KINDS);
+  __export(exports, "REDACTED_SECRET", () => REDACTED_SECRET);
+  __export(exports, "SecretEscapeError", () => SecretEscapeError);
+  __export(exports, "Secret", () => Secret);
+  __export(exports, "asSecret", () => asSecret);
+  __export(exports, "isSecret", () => isSecret);
+  __export(exports, "reveal", () => reveal);
+  __export(exports, "sameSecret", () => sameSecret);
+  __export(exports, "noteSecretEscape", () => noteSecretEscape);
+  __export(exports, "setSecretEscapeMode", () => setSecretEscapeMode);
+  __export(exports, "onSecretEscape", () => onSecretEscape);
+  __export(exports, "secretsDropped", () => secretsDropped);
+  __export(exports, "withoutSecrets", () => withoutSecrets);
+const SECRET_KINDS = ["password", "oauthToken", "oauthClientSecret", "apiToken", "pluginSecret", "syncPhrase"]         ;
+
+                                                       
+
+                                                                                     
+
+                                                
+
+const REDACTED_SECRET = "<secret>";
+
+const plaintext = new WeakMap                ();
+const kinds = new WeakMap                    ();
+const listeners = new Set                                                 ();
+let mode                   = "drop";
+let dropped = 0;
+
+class SecretEscapeError extends Error {
+           where              ;
+           kind            ;
+
+  constructor(where              , kind            ) {
+    super(`A ${kind} secret reached a ${where} sink`);
+    this.name = "SecretEscapeError";
+    this.where = where;
+    this.kind = kind;
+  }
+}
+
+class Secret                                    {
+                   secretKind    ;
+
+          constructor() {}
+
+  get kind()    {
+    return kinds.get(this)     ;
+  }
+
+  toJSON()            {
+    noteSecretEscape("json", this);
+    return undefined;
+  }
+
+  toString()         {
+    noteSecretEscape("text", this);
+    return REDACTED_SECRET;
+  }
+
+  valueOf()         {
+    return this.toString();
+  }
+}
+
+Object.defineProperty(Secret.prototype, Symbol.toPrimitive, { value: Secret.prototype.toString });
+Object.defineProperty(Secret.prototype, Symbol.for("nodejs.util.inspect.custom"), { value: () => `Secret(${REDACTED_SECRET})` });
+
+function asSecret                      (kind   , value        )            {
+  if (typeof value !== "string") throw new TypeError("A secret is text");
+  if (!SECRET_KINDS.includes(kind)) throw new TypeError("Unknown secret kind");
+  const box = Object.create(Secret.prototype)             ;
+  plaintext.set(box, value);
+  kinds.set(box, kind);
+  Object.freeze(box);
+  return box;
+}
+
+const isSecret = (value         )                  => typeof value === "object" && value !== null && plaintext.has(value);
+
+function reveal(secret        )         {
+  const value = plaintext.get(secret);
+  if (value === undefined) throw new TypeError("Not a secret");
+  return value;
+}
+
+const sameSecret = (a                           , b                           )          =>
+  !!a && !!b && (a === b || (a.kind === b.kind && reveal(a) === reveal(b)));
+
+function noteSecretEscape(where              , secret        )       {
+  const kind = kinds.get(secret) ?? "password";
+  if (mode === "throw") throw new SecretEscapeError(where, kind);
+  dropped++;
+  for (const listener of listeners) {
+    try {
+      listener(where, kind);
+    } catch {}
+  }
+}
+
+function setSecretEscapeMode(next                  )                   {
+  const previous = mode;
+  mode = next;
+  return previous;
+}
+
+function onSecretEscape(listener                                                 )             {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
+
+const secretsDropped = () => dropped;
+
+function withoutSecrets   (value   , where              , seen = new WeakSet        ())    {
+  if (isSecret(value)) {
+    noteSecretEscape(where, value);
+    return undefined     ;
+  }
+  if (!value || typeof value !== "object" || seen.has(value)) return value;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    let changed = false;
+    const out = value.map((item) => {
+      const kept = withoutSecrets(item, where, seen);
+      if (kept !== item) changed = true;
+      return kept;
+    });
+    return (changed ? out : value)     ;
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return value;
+  let out                                 = null;
+  for (const [key, item] of Object.entries(value)) {
+    const kept = withoutSecrets(item, where, seen);
+    if (kept === item) continue;
+    out ??= { ...(value                           ) };
+    if (kept === undefined) delete out[key];
+    else out[key] = kept;
+  }
+  return (out ?? value)     ;
+}
+
+                                               
+                                           
+
+                                                         
+                       
+           
+                             
+             
+                        
+              
+                                                 
+                 
+                                             
+                                                    
+                              
+                                                                                                  
+                      
+                       
+                      
+
+                                                                       
 
 });
 __define("packages/core/src/siteSearch.ts", function (exports, __require) {

@@ -1,3 +1,4 @@
+import { reveal, type Secret } from "@ardia/core";
 import { mapBitbucket, mapConfluence, mapDrive, mapNotion, type BitbucketPR, type BitbucketStatuses, type ConfluenceSearch, type DriveFiles, type NotionSearch, type NotionUsers } from "../../browser/src/state/live/documents";
 import { createGithubClient } from "../../browser/src/state/live/githubClient";
 import { live, setAccount, updateConfig } from "../../browser/src/state/live/store";
@@ -163,8 +164,8 @@ export function linuxLiveSources(client: LiveClient) {
     setAccount("confluence", account(me.accountId, me.displayName, null));
   }
 
-  async function connectGoogle(clientId: string, clientSecret: string, code: string, verifier: string, redirectUri: string) {
-    const reply = await client.connect<{ about: { user?: { displayName: string; emailAddress: string; photoLink?: string } } | null }>("gdrive", { clientId, clientSecret, code, verifier, redirectUri });
+  async function connectGoogle(clientId: string, clientSecret: string, code: Secret<"oauthToken">, verifier: Secret<"oauthToken">, redirectUri: string) {
+    const reply = await client.connect<{ about: { user?: { displayName: string; emailAddress: string; photoLink?: string } } | null }>("gdrive", { clientId, clientSecret, code: reveal(code), verifier: reveal(verifier), redirectUri });
     const about = reply.about;
     updateConfig({ googleClientId: clientId });
     setAccount("gdrive", account(about?.user?.emailAddress ?? "Google Drive", about?.user?.displayName ?? null, about?.user?.photoLink ?? null));

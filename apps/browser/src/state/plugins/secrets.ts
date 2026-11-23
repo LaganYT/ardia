@@ -1,4 +1,5 @@
-import { keychainDelete, keychainRead, keychainSet } from "../../platform/keychain";
+import { asSecret, type Secret } from "@ardia/core";
+import { keychainDelete, keychainRead, keychainReadSecret, keychainSet, keychainSetSecret } from "../../platform/keychain";
 
 export const SECRET_LIMITS = { keys: 64, valueBytes: 16 * 1024 } as const;
 const SECRET_KEY = /^[A-Za-z0-9_-]{1,64}$/;
@@ -61,17 +62,24 @@ async function writeIndex(plugin: string, keys: string[]): Promise<boolean> {
   return (await keychainSet(indexAccount(plugin), JSON.stringify(keys)).catch(() => false)) !== false;
 }
 
-export function getPluginSecret(plugin: string, key: unknown): Promise<SecretOutcome<string | null>> {
+export function getPluginSecret(plugin: string, key: unknown): Promise<SecretOutcome<Secret<"pluginSecret"> | null>> {
   if (!isSecretKey(key)) return Promise.resolve(fail("bad_request", "key is 1 to 64 letters, digits, - and _."));
   return queued(plugin, async () => {
-    const read = await readKeychain(secretAccount(plugin, key));
-    return read.ok ? { ok: true as const, value: read.value } : fail<string | null>("failed", read.message);
+    try {
+      const read = await keychainReadSecret(secretAccount(plugin, key), "pluginSecret");
+      if (read.status === "ok") return { ok: true as const, value: read.value };
+      if (read.status === "missing") return { ok: true as const, value: null };
+      return fail<Secret<"pluginSecret"> | null>("failed", `The Keychain couldn't be read: ${read.reason}`);
+    } catch (error) {
+      return fail<Secret<"pluginSecret"> | null>("failed", `The Keychain didn't answer: ${String(error)}`);
+    }
   });
 }
 
 export function setPluginSecret(plugin: string, key: unknown, value: unknown): Promise<SecretOutcome<true>> {
   if (!isSecretKey(key)) return Promise.resolve(fail("bad_request", "key is 1 to 64 letters, digits, - and _."));
   if (typeof value !== "string" || new TextEncoder().encode(value).length > SECRET_LIMITS.valueBytes) return Promise.resolve(fail("bad_request", `value is text of at most ${SECRET_LIMITS.valueBytes / 1024} KB.`));
+  const secret = asSecret("pluginSecret", value);
   return queued(plugin, async () => {
     const index = await indexOf(plugin);
     if (!index.ok) return fail<true>("failed", index.message);
@@ -80,7 +88,7 @@ export function setPluginSecret(plugin: string, key: unknown, value: unknown): P
       if (keys.length >= SECRET_LIMITS.keys) return fail<true>("bad_request", `A plugin keeps at most ${SECRET_LIMITS.keys} secrets.`);
       if (!(await writeIndex(plugin, [...keys, key]))) return fail<true>("failed", "The Keychain didn't save it.");
     }
-    const saved = await keychainSet(secretAccount(plugin, key), value).catch(() => false);
+    const saved = await keychainSetSecret(secretAccount(plugin, key), secret).catch(() => false);
     return saved === false ? fail<true>("failed", "The Keychain didn't save it.") : { ok: true as const, value: true as const };
   });
 }

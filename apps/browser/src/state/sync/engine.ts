@@ -1,3 +1,4 @@
+import { asSecret, reveal, type Secret } from "@ardia/core";
 import { emptyScope, EXTENSION_PREFIX, folderTransport, syncScope, SyncNative, visible, type FolderInfo, type PhraseResult } from "../../platform/sync";
 import { create } from "zustand";
 import { useBrowser } from "../browser/store";
@@ -271,12 +272,12 @@ export async function turnOnSync(folder: string, how?: TurnOnFolder): Promise<{ 
   return { ok: true };
 }
 
-export async function enterRecoveryPhrase(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" }> {
+export async function enterRecoveryPhrase(folder: string, phrase: Secret<"syncPhrase">): Promise<PhraseResult | { error: "unavailable" }> {
   const native = SyncNative;
   if (!native) return { error: "unavailable" };
   await moveSettled();
   if (doc.enabled && doc.deviceId && useSync.getState().status === "locked") {
-    const result = await native.enterPhrase(doc.deviceId, text, doc.folder ?? folder);
+    const result = await native.enterPhrase(doc.deviceId, reveal(phrase), doc.folder ?? folder);
     if ("ok" in result) {
       await loadSavedState();
       publishUi({ status: "starting", error: null });
@@ -285,7 +286,7 @@ export async function enterRecoveryPhrase(folder: string, text: string): Promise
     return result;
   }
   const deviceId = native.newDeviceId();
-  const result = await native.enterPhrase(deviceId, text, folder);
+  const result = await native.enterPhrase(deviceId, reveal(phrase), folder);
   if ("ok" in result) begin(folder, deviceId, true);
   return result;
 }
@@ -394,5 +395,5 @@ export function startSync() {
   });
   watchBoosts(() => doc.types.boosts && scheduleSync());
   if (__DEV__)
-    exposeDevSync({ useSync, syncNow, turnOnSync, enterRecoveryPhrase, stopSync, setTypeSynced, setProfileSynced, setOpenTabsSynced, addRemoteProfile, removeRemoteProfile, removeSyncedDevice, setSyncFolder, moveSyncFolder, folderInfo, doc: () => doc, native: SyncNative });
+    exposeDevSync({ useSync, syncNow, turnOnSync, enterRecoveryPhrase: (folder: string, text: string) => enterRecoveryPhrase(folder, asSecret("syncPhrase", text)), stopSync, setTypeSynced, setProfileSynced, setOpenTabsSynced, addRemoteProfile, removeRemoteProfile, removeSyncedDevice, setSyncFolder, moveSyncFolder, folderInfo, doc: () => doc, native: SyncNative });
 }

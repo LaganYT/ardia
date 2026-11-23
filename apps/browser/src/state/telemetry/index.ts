@@ -20,6 +20,7 @@ import { diagnosticsText } from "./diagnosticsSnapshot";
 import { watchPasteRefused } from "./pasteRefused";
 import { startFreezeWatch } from "./freezes";
 import { watchFreezes } from "./freezeEvents";
+import { watchSecretDrops } from "./secretDrops";
 
 export { installErrorReporting };
 export { telemetryIdentity, reportIdentity, resetAnonymousId, type ReportIdentity, type TelemetryIdentity } from "./identity";
@@ -28,6 +29,7 @@ export { localEventsSince, exportLocalCopy } from "./localStore";
 export { diagnosticsSnapshot, type DiagnosticsSnapshot } from "./diagnosticsSnapshot";
 
 export function startTelemetry({ continuing = false }: { continuing?: boolean } = {}) {
+  watchSecretDrops();
   startUsage(continuing);
   watchPlatformCounts();
   watchPasteRefused();

@@ -1,3 +1,4 @@
+import type { CleanedUrl } from "@ardia/core";
 import {
   call,
   on,
@@ -33,6 +34,8 @@ export const onWebKitSiteDataWanted = (listener: (e: { id: string; profile: stri
 export const onWebKitSiteCookiesChanged = (listener: (e: { profile: string; domains: string[]; epoch?: string }) => void) => on("webKit.siteCookiesChanged", listener);
 export const setWebKitZoom = (profile: string, host: string, zoom: number) => call("webKit.setZoom", { profile, host, zoom });
 export const onWebKitCount = (listener: (e: { name: WebKitCount; epoch?: string }) => void) => on("webKit.counted", listener);
+export const onWebKitCopyAddress = (listener: (e: EngineEvents["webKit.copyAddress"]) => void) => on("webKit.copyAddress", listener);
+export const writeCopiedWebKitAddress = (request: number, url: CleanedUrl) => call("webKit.writeCopiedAddress", { request, url });
 export const webKitNotificationAction = (id: string, action: "click" | "close") => call("webKit.notificationAction", { id, action });
 export const onWebKitNotification = (listener: (e: EngineEvents["webKit.notification"]) => void) => on("webKit.notification", listener);
 export const onWebKitNotificationClose = (listener: (e: { id: string }) => void) => on("webKit.notificationClose", listener);

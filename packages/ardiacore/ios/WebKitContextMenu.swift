@@ -78,10 +78,8 @@ struct WebKitMenuCommands {
 
   func copyAddress(_ url: URL?) {
     guard let url else { return }
-    let board = NSPasteboard.general
-    board.clearContents()
-    board.writeObjects([url as NSURL])
-    board.setString(url.absoluteString, forType: .string)
+    let request = WebKitCopiedAddresses.ask()
+    ArdiaEvents.emit("webKit.copyAddress", data: ArdiaConsentStamp.begin().onto(["url": url.absoluteString, "request": request]))
   }
 
   static let findMedia = """
@@ -477,5 +475,26 @@ extension WebKitTab {
       DispatchQueue.main.async { owner.performActionForItem(at: index) }
     }
     return NSMenu()
+  }
+}
+
+enum WebKitCopiedAddresses {
+  private static var latest = 0
+  private static var latestAskedAt = 0
+
+  static func ask() -> Int {
+    latest += 1
+    latestAskedAt = NSPasteboard.general.changeCount
+    return latest
+  }
+
+  static func write(_ request: Int, _ address: String) -> Bool {
+    let board = NSPasteboard.general
+    guard request == latest, board.changeCount == latestAskedAt else { return false }
+    board.clearContents()
+    if let url = URL(string: address), url.scheme != nil { board.writeObjects([url as NSURL]) }
+    let wrote = board.setString(address, forType: .string)
+    latestAskedAt = board.changeCount
+    return wrote
   }
 }

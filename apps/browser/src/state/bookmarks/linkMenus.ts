@@ -1,5 +1,5 @@
-import { cleanUrl, markdownLink } from "@ardia/core";
-import { copyText } from "../../platform/clipboard";
+import { cleanUrl, linkLines, markdownLink } from "@ardia/core";
+import { copyLink } from "../../platform/clipboard";
 import type { MenuItem } from "../../platform/menus";
 import { withOptionAlternate, type MenuEntry } from "../app/menuSections";
 import { openLinks, openUrl, type OpenAllMode } from "./actions";
@@ -71,6 +71,6 @@ export function runLinkChoice(choice: string | null, links: Link[], windowId: st
 
 export function copyLinks(links: Link[], markdown: boolean) {
   if (!links.length) return;
-  const lines = links.map((l) => (markdown ? markdownLink(l.title || l.url, l.url) : cleanUrl(l.url)));
-  copyText(markdown && lines.length > 1 ? lines.map((l) => `- ${l}`).join("\n") : lines.join("\n"));
+  const lines = links.map((l) => (markdown ? markdownLink(l.title ?? "", l.url) : cleanUrl(l.url)));
+  copyLink(linkLines(lines, markdown));
 }

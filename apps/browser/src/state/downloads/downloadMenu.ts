@@ -1,4 +1,4 @@
-import { copyText } from "../../platform/clipboard";
+import { copyUncleanedUrl } from "../../platform/clipboard";
 import { fileExists, moveToTrash, revealFile } from "../../platform/files";
 import { openDownload } from "./openDownload";
 import { showMenu, type MenuItem } from "../../platform/menus";
@@ -8,6 +8,8 @@ import { opensWhenDone, toggleOpenWhenDone } from "../windows/downloadWatch";
 import { cancelDownload, keepDownload, pauseDownload, resumeDownload, type Download } from "./actions";
 import { PLATFORM_TERMS } from "../../lib/platformTerms";
 import { awaitsKeep } from "./status";
+import { noteUncleanedUrlCopied } from "../telemetry/urlCopies";
+import { consentToken } from "../telemetry/client";
 
 export type DownloadMenuState = { held: boolean; downloading: boolean; paused: boolean; opensWhenDone: boolean; fileExists: boolean };
 
@@ -38,6 +40,7 @@ export function downloadMenuItems(d: DownloadMenuState): MenuItem[] {
 }
 
 export async function downloadMenu(d: Download) {
+  const consent = consentToken();
   const exists = d.state === "finished" && fileExists(d.path);
   const choice = await showMenu(
     downloadMenuItems({ held: awaitsKeep(d), downloading: d.state === "downloading", paused: d.paused, opensWhenDone: opensWhenDone(d.id), fileExists: exists }),
@@ -49,7 +52,10 @@ export async function downloadMenu(d: Download) {
   if (choice === "cancel") void cancelDownload(d.id);
   if (choice === "open") void openDownload(d.path);
   if (choice === "reveal") void revealFile(d.path);
-  if (choice === "copy") copyText(d.url);
+  if (choice === "copy") {
+    copyUncleanedUrl(d.url);
+    noteUncleanedUrlCopied(consent);
+  }
   if (choice === "trash") void trashDownload(d);
   if (choice === "remove") removeDownload(d.id);
 }

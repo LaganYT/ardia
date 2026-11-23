@@ -65,6 +65,8 @@ const eventsOf = (domain: string) => {
   if (!domainEvents.has(domain)) domainEvents.set(domain, nativeEvents());
   return domainEvents.get(domain)!;
 };
+export const webKitAddressWrites = { written: [] as { request: number; url: string }[], answer: (request: number, url: string) => (webKitAddressWrites.written.push({ request, url }), true) };
+
 export const emitEvent = <E extends EventName>(name: E, data: EventData<E>) => {
   const domain = name.slice(0, name.indexOf("."));
   eventsOf(domain).emit(domain, { name, data });
@@ -695,6 +697,7 @@ const fakeModules = {
     passkeyAccess: () => ({ entitled: false, status: "entitlementRequired" }),
     requestPasskeyAccess: () => ({ entitled: false, status: "entitlementRequired" }),
     setFraudWarnings: () => null,
+    writeCopiedAddress: ({ request, url }) => webKitAddressWrites.answer(request, url),
   }),
   ArdiaSwipe: {
     haptic: () => {},

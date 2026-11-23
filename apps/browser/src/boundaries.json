@@ -1670,6 +1670,16 @@
     "D9"
    ],
    "detected": false
+  },
+  {
+   "id": "webkit-event:copyAddress",
+   "source": "page",
+   "guard": "WebKit's page menu sends the link, image or media address the page holds as an app-wide event with a native request number; only a non-empty string with an integer request is passed on, after cleanUrlReport strips tracking parameters, and native writes it only for its latest request while the pasteboard is unchanged since that menu action",
+   "checks": [
+    "apps/browser/src/state/site/pageLinkCopy.ts#copyLinkFromPageMenu",
+    "packages/ardiacore/ios/WebKitContextMenu.swift#WebKitCopiedAddresses"
+   ],
+   "detected": false
   }
  ]
 }

@@ -1,6 +1,7 @@
 import type { SystemState } from "../../platform/performance";
-import { everySlowly } from "../../platform/slowTimers";
-import { webviews } from "../../platform/webviews";
+import { everySlowly, reschedule } from "../../platform/slowTimers";
+import { onWebviewsChanged, webviews } from "../../platform/webviews";
+import { afterFirstRoot } from "../../lib/afterFirstWindow";
 import { withDeadline } from "../../lib/deadline";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { useBrowser, type BrowserState } from "../browser/store";
@@ -15,7 +16,7 @@ import type { ConsentToken } from "../telemetry/choice";
 import { hasPage } from "./pageSession";
 import { usePages } from "./pageState";
 import { shownTabIds } from "./shownTabs";
-import { isSleeping } from "./sleepingTabs";
+import { isSleeping, useLifecycle } from "./sleepingTabs";
 import { engineVeto, MINUTE, sleepRules, sleepVeto, tabsToSleep, type SleepPlan, type SleepRules, type SleepVeto, type TabSleepFacts } from "./sleepPolicy";
 import { liveOf, onLiveChange } from "./tabLive";
 import { countSwitches, forgetSwitchesExcept, switchesOf } from "./tabSwitches";
@@ -24,6 +25,8 @@ import { heldByCli } from "./cliHolds";
 export type LoadedTabBudget = Pick<SleepRules, "tabs" | "hiddenMs"> & Partial<SleepRules>;
 
 const SWEEP_MS = MINUTE;
+const PRESSURE_TICK_MS = 5_000;
+const PRESSURE_ARMS_AFTER_MS = 10_000;
 const ANSWER_WITHIN_MS = 1500;
 const ASK_AGAIN_MS = 10 * MINUTE;
 const KEPT_RECENTLY_MS = 60 * MINUTE;
@@ -130,9 +133,15 @@ const askAgainAt = new Map<string, number>();
 const sleptAt = new Map<string, number>();
 const keptAt = new Map<string, number>();
 let sweeping = false;
+let lastAutomaticSweepAt = -Infinity;
+let pressureGeneration = 0;
+let pressureArmed = false;
 
-export async function sleepTabsOverBudget(budget: LoadedTabBudget | null, now = Date.now()): Promise<string[]> {
+export const sleepTabsOverBudget = (budget: LoadedTabBudget | null, now = Date.now()) => sweepOverBudget(budget, now, consentToken());
+
+async function sweepOverBudget(budget: LoadedTabBudget | null, now: number, consent: ConsentToken | null): Promise<string[]> {
   if (!budget || sweeping) return [];
+  const generation = pressureGeneration;
   const s = useBrowser.getState();
   for (const id of shownTabIds(s)) seenAt.set(id, now);
   for (const id of seenAt.keys()) if (!s.tabs[id]) seenAt.delete(id);
@@ -142,16 +151,16 @@ export async function sleepTabsOverBudget(budget: LoadedTabBudget | null, now = 
   for (const [id, at] of askAgainAt) if (!s.tabs[id] || at <= now) askAgainAt.delete(id);
   for (const [id, at] of keptAt) if (!s.tabs[id] || now - at >= KEPT_RECENTLY_MS) keptAt.delete(id);
   const plan = planOverBudget(s, webviews.keys(), budget, now, seenAt, askAgainAt);
-  const consent = consentToken();
   for (const { id, veto } of plan.vetoed) noteVeto(id, veto, consent);
   const candidates = plan.sleep;
   const perTick = budget.perTick ?? 4;
   const asking = [...candidates.filter((id) => !keptAt.has(id)), ...candidates.filter((id) => keptAt.has(id))].slice(0, perTick);
-  noteBudgetSweep(plan.vetoed.filter((v) => v.veto === "loading").length, candidates.slice(0, perTick).filter((id) => !asking.includes(id)).length);
+  noteBudgetSweep(plan.vetoed.filter((v) => v.veto === "loading").length, candidates.slice(0, perTick).filter((id) => !asking.includes(id)).length, consent);
   const slept: string[] = [];
   sweeping = true;
   try {
     for (const id of asking) {
+      if (generation !== pressureGeneration) break;
       const vetoed = vetoNow(id, budget, now);
       if (vetoed) {
         if (vetoed !== "gone") noteVeto(id, vetoed, consent);
@@ -164,7 +173,7 @@ export async function sleepTabsOverBudget(budget: LoadedTabBudget | null, now = 
         slept.push(id);
         sleptAt.set(id, now);
         keptAt.delete(id);
-        noteTabSleptOverBudget(consent);
+        noteTabSleptOverBudget(consent, budget.pressure ?? "normal");
       } else if (veto === "recentlySeen") seenAt.set(id, now);
       else {
         noteVeto(id, veto, consent);
@@ -194,19 +203,66 @@ export function noteAudibleEnded(tabId: string, now = Date.now()) {
 }
 
 let started = false;
+let budgetNow: () => LoadedTabBudget | null = () => null;
+
+const overBudget = (budget: LoadedTabBudget | null) => !!budget && awakeOf(useBrowser.getState(), webviews.keys()).length > budget.tabs;
+
+const underPressure = (budget: LoadedTabBudget | null) => !!budget?.pressure && budget.pressure !== "normal";
+
+export function sweepIfDue(budget: LoadedTabBudget | null, consent: ConsentToken | null, at = Date.now()): Promise<string[]> {
+  if (!budget || sweeping || (underPressure(budget) && !pressureArmed)) return Promise.resolve([]);
+  if (at - lastAutomaticSweepAt < (budget.everyMs ?? SWEEP_MS)) return Promise.resolve([]);
+  lastAutomaticSweepAt = at;
+  return sweepOverBudget(budget, at, consent);
+}
+
+export function pressureChanged(consent: ConsentToken | null, budget = budgetNow(), at = Date.now()) {
+  pressureGeneration++;
+  if (underPressure(budget) && overBudget(budget)) void sweepIfDue(budget, consent, at);
+  reschedule();
+}
+
+export function watchOverBudget(budget: () => LoadedTabBudget | null, changed: () => void): () => void {
+  let was = overBudget(budget());
+  const check = () => {
+    const now = overBudget(budget());
+    if (now === was) return;
+    was = now;
+    changed();
+  };
+  const stopViews = onWebviewsChanged(check);
+  const stopLifecycle = useLifecycle.subscribe(check);
+  return () => {
+    stopViews();
+    stopLifecycle();
+  };
+}
+
+export function armPressureSweeps() {
+  pressureArmed = true;
+  reschedule();
+}
 
 export function startLoadedTabBudget(system: () => SystemState | null) {
   if (started) return;
   started = true;
-  const budget = () => loadedTabBudget(useBrowser.getState().settings, system());
+  const budget = (budgetNow = () => loadedTabBudget(useBrowser.getState().settings, system()));
   useBrowser.subscribeTo(["windows"], (s, prev) => countSwitches(prev, s));
   onLiveChange((tabId, live, prev) => {
     if (prev.playingAudio && !live.playingAudio) noteAudibleEnded(tabId);
   });
   everySlowly({
     every: SWEEP_MS,
-    run: () => void sleepTabsOverBudget(budget()),
-    needed: () => awakeOf(useBrowser.getState(), webviews.keys()).length > (budget()?.tabs ?? Infinity),
+    run: () => void sweepIfDue(budget(), consentToken()),
+    needed: () => overBudget(budget()),
+    watch: (changed) => watchOverBudget(budget, changed),
   });
+  everySlowly({
+    every: PRESSURE_TICK_MS,
+    run: () => void sweepIfDue(budget(), consentToken()),
+    needed: () => pressureArmed && underPressure(budget()) && overBudget(budget()),
+    watch: (changed) => watchOverBudget(budget, changed),
+  });
+  afterFirstRoot(() => setTimeout(armPressureSweeps, PRESSURE_ARMS_AFTER_MS));
   if (__DEV__) (globalThis as { acLoadedTabBudget?: unknown }).acLoadedTabBudget = { sleepTabsOverBudget, budget, tabsOverBudget, planOverBudget };
 }

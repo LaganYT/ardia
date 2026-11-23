@@ -8,7 +8,7 @@ export type WhatsSentGroup = { title: string; items: string[] };
 type FeatureFlag = { [K in keyof PlatformFeatures]: PlatformFeatures[K] extends boolean ? K : never }[keyof PlatformFeatures];
 
 export const PHRASES_ONLY_WITH: Readonly<Partial<Record<FeatureFlag, string | readonly string[]>>> = {
-  memoryPressure: ", the Mac's memory pressure",
+  memoryPressure: [", the Mac's memory pressure", " how many of those while the Mac reported its memory running low or critically low, how many times it reported each, and"],
   launchLoad: ". Also at launch: the Mac's load average (one number, how busy it was) and whether the app was started as a login item",
   holdsColdPagesUntilPainted:
     ". Also how many times a tab that hadn't loaded yet kept the New Tab page's background until its page first drew, how many of those waits ended because the page drew, finished loading, was clicked or took over 4 seconds, and how long they took in all",

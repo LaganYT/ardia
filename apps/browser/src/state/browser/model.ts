@@ -207,7 +207,8 @@ export function tabLabel(t: Pick<Tab, "url" | "title" | "customTitle">): string 
 }
 
 const urlLabel = (url: string) => url.replace(/^[a-z][\w+.-]*:\/\//i, "").replace(/^www\./, "").replace(/\/$/, "");
-export const tabTitle = (t: Pick<Tab, "customTitle" | "title" | "url">) => singleLine(t.customTitle || t.title || "") || (t.url && urlLabel(t.url)) || "New Tab";
+export const ownTabTitle = (t: Pick<Tab, "customTitle" | "title">) => singleLine(t.customTitle || t.title || "");
+export const tabTitle = (t: Pick<Tab, "customTitle" | "title" | "url">) => ownTabTitle(t) || (t.url && urlLabel(t.url)) || "New Tab";
 
 export const tabTooltip = (t: Pick<Tab, "customTitle" | "title" | "url">) => (t.url ? `${tabTitle(t)}\n${t.url}` : tabTitle(t));
 

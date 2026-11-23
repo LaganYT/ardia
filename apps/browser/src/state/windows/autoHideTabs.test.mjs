@@ -228,10 +228,11 @@ test("the toggle count is this Mac's choices: ⌘S and Settings count, a value a
   assert.equal(takeAutoHideTabsChoices(), 0);
 });
 
-test("a saved session that disagreed with the setting is written back in line at launch, before anything else changes", () => {
+test("a saved session that disagreed with the setting is written back in line at launch, before anything else changes", async () => {
   stub.docs.clear();
   stub.docs.set(SESSION_DOCUMENT, session({ tabLayout: "top", autoHideTabs: false }, [false, true]));
   const stop = startPersistence();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   flushPersistence();
   const saved = JSON.parse(stub.docs.get(SESSION_DOCUMENT));
   assert.deepEqual(saved.windows.map((w) => w.sidebarOpen), [true, true]);

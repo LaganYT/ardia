@@ -40,6 +40,13 @@ export const docs = new Map<string, string>();
 export const stagedDocs = new Map<string, string>();
 export const unreadableDocs = new Set<string>();
 export const asyncExists = { on: false };
+export const copiedDocs: [string, string][] = [];
+export const refusedCopies = { on: false, of: new Set<string>() };
+export const takenNames = new Set<string>();
+export const syncedDocs: string[] = [];
+export const refusedSyncs = { on: false };
+export const linkedButUnsynced = { on: false };
+export const heldCopies = { on: false, queue: [] as (() => void)[] };
 export const heldSaves = { on: false, queue: [] as (() => void)[] };
 export const refusedSaves = { on: false };
 export const refusedWrites = { on: false, returnsFalse: false, landingFails: false };
@@ -251,6 +258,39 @@ const documents: Modules["ArdiaDocuments"] = {
     }),
   documentSaved: () => (refusedWrites.on || refusedWrites.landingFails ? Promise.reject(new Error("save refused")) : Promise.resolve()),
   removeDocument: (name) => void (docs.delete(name), stagedDocs.delete(name), unreadableDocs.delete(name)),
+  listDocuments: (prefix) => [...new Set([...docs.keys(), ...unreadableDocs])].filter((name) => name.startsWith(prefix)),
+  syncDocument: (name) => {
+    syncedDocs.push(name);
+    if (!docs.has(name)) return Promise.reject(Object.assign(new Error("gone"), { code: "ERR_DOCUMENT_GONE" }));
+    return refusedSyncs.on ? Promise.reject(new Error("sync refused")) : Promise.resolve();
+  },
+  createDocument: (name, contents) => {
+    if (docs.has(name) || unreadableDocs.has(name) || takenNames.has(name)) return Promise.reject(Object.assign(new Error("exists"), { code: "ERR_DOCUMENT_EXISTS" }));
+    if (refusedSaves.on) return Promise.reject(new Error("create refused"));
+    if (linkedButUnsynced.on) {
+      docs.set(name, contents);
+      return Promise.reject(new Error("folder sync failed"));
+    }
+    return new Promise((resolve) => {
+      const land = () => {
+        docs.set(name, contents);
+        resolve();
+      };
+      if (heldSaves.on) heldSaves.queue.push(land);
+      else land();
+    });
+  },
+  copyDocument: (name, copyName) => {
+    copiedDocs.push([name, copyName]);
+    if (refusedCopies.on || refusedCopies.of.has(name)) return Promise.reject(new Error("copy refused"));
+    if (!unreadableDocs.has(name) && !docs.has(name)) return Promise.reject(Object.assign(new Error("nothing to copy"), { code: "ERR_DOCUMENT_GONE" }));
+    const land = () => {
+      if (unreadableDocs.has(name)) unreadableDocs.add(copyName);
+      else if (docs.has(name)) docs.set(copyName, docs.get(name)!);
+    };
+    if (!heldCopies.on) return Promise.resolve(land());
+    return new Promise<void>((resolve) => heldCopies.queue.push(() => (land(), resolve())));
+  },
 };
 
 const app: Modules["ArdiaApp"] = {

@@ -1,9 +1,9 @@
 import { foreignWriteHooks } from "../browser/foreignWriteHooks";
-import { copyText } from "../../platform/clipboard";
+import { copyLink } from "../../platform/clipboard";
 import { openExternalURL } from "../../platform/app";
 import { pickFiles, prompt } from "../../platform/dialogs";
 import type { CommandEvent } from "../../platform/commands";
-import { markdownLink } from "@ardia/core";
+import { cleanLinkTitle, cleanUrl, cleanUrlReport, markdownLink, type CleanedTitle, type CleanedUrl } from "@ardia/core";
 import { useBrowser } from "../browser/store";
 import { requestCreateProfile } from "../profiles/createProfileRequest";
 import { activeTabId, bookmarkProfileId, isPinnedRow, resolveWindowId, tabLayoutOf } from "../browser/model";
@@ -220,9 +220,7 @@ export function runCommand({ command, arg, windowId: given }: CommandEvent, { st
       return void web?.runPageCommand("caretBrowsing");
     case "emailPageLocation":
       if (!page || !/^https?:/i.test(page.url)) return;
-      return void openExternalURL(
-        `mailto:?subject=${encodeURIComponent(page.customTitle || page.title || page.url)}&body=${encodeURIComponent(page.url)}`,
-      );
+      return void openExternalURL(emailPageLink(cleanLinkTitle(page.customTitle || page.title, page.url), cleanUrl(page.url)));
     case "stop":
       return void web?.stopLoading();
     case "share":
@@ -231,8 +229,8 @@ export function runCommand({ command, arg, windowId: given }: CommandEvent, { st
       return (!targeted && copySelectedTabUrls(s, windowId, false)) || !page ? undefined : void copyPageUrl(page.id);
     case "copyUrlAsMarkdown":
       if ((!targeted && copySelectedTabUrls(s, windowId, true)) || !page) return;
-      noteUrlCopied(awaitsFirstPage(page.id));
-      return copyText(markdownLink(page.customTitle || page.title, page.url));
+      noteUrlCopied(awaitsFirstPage(page.id), cleanUrlReport(page.url).removedTracker);
+      return copyLink(markdownLink(page.customTitle || page.title, page.url));
     case "findInPage":
       if (page) expectFocus(windowId, findFocus(page.id));
       return page ? openFind(page.id, { replace: false }) : undefined;
@@ -398,3 +396,5 @@ async function openFiles(windowId: string | null) {
     if (last) useBrowser.getState().activate(last);
   });
 }
+
+export const emailPageLink = (title: CleanedTitle, url: CleanedUrl) => `mailto:?subject=${encodeURIComponent(title || url)}&body=${encodeURIComponent(url)}`;

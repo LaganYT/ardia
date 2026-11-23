@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ENGINE_KEPT, engineVeto, FREQUENT_SWITCHES, MINUTE, RECENTLY_AUDIBLE_MS, RECENTLY_SEEN_MS, sleepRules, sleepVeto, tabsToSleep } from "./sleepPolicy.ts";
+import { capWarmPanes, warmOrder, ENGINE_KEPT, engineVeto, FREQUENT_SWITCHES, MINUTE, RECENTLY_AUDIBLE_MS, RECENTLY_SEEN_MS, sleepRules, sleepVeto, tabsToSleep } from "./sleepPolicy.ts";
 import { countSwitches } from "./tabSwitches.ts";
 
 const NOW = 1_000_000_000_000;
@@ -85,4 +85,18 @@ test("a tab switch counts once per change of a window's front tab, including a r
   assert.equal(counts.get("x"), 2, "the same windows count nothing");
   countSwitches(prev, at("p2", { p1: "b", p2: "x" }), counts);
   assert.equal(counts.get("b"), 1, "a change on a profile page that isn't shown is no visit");
+});
+
+test("warm pages are capped after split tabs expand into their panes, the next tab first, and shown panes don't count", () => {
+  const splits = { a: ["a", "a2"], b: ["b", "b2"] };
+  const panesOf = (id) => splits[id] ?? [id];
+  const none = new Set();
+  assert.deepEqual(warmOrder(["a", "b"], "s"), ["s", "a", "b"]);
+  assert.deepEqual(capWarmPanes(warmOrder(["a", "b"], "s"), panesOf, none, "normal"), ["s", "a", "a2", "b", "b2"]);
+  assert.deepEqual(capWarmPanes(["a", "b"], panesOf, none, "warning"), ["a", "a2"], "two split tabs keep two panes warm on a warning, not four");
+  assert.deepEqual(capWarmPanes(warmOrder(["a"], "s"), panesOf, none, "warning"), ["s", "a"], "the tab a close lands on keeps its place");
+  assert.deepEqual(capWarmPanes(["a", "b"], panesOf, new Set(["a"]), "warning"), ["a2", "b"], "a pane already shown is left to the shown layout");
+  assert.deepEqual(capWarmPanes(["a", "b"], panesOf, none, "critical"), []);
+  const third = { s: ["x1", "x2", "s"], x1: ["x1", "x2", "s"] };
+  assert.deepEqual(capWarmPanes(warmOrder(["x1"], "s"), (id) => third[id] ?? [id], none, "warning"), ["s", "x1"], "the next tab keeps its place even as a split's third pane");
 });

@@ -48,9 +48,10 @@ const MODES: Record<SleepMode, { floor: number; perGib: number; hiddenMs: number
   maximum: { floor: 5, perGib: 0.5, hiddenMs: 30 * MINUTE },
 };
 const UNDER_PRESSURE: Record<Exclude<MemoryPressure, "normal">, { hiddenMs: number; everyMs: number }> = {
-  warning: { hiddenMs: 10 * MINUTE, everyMs: MINUTE },
-  critical: { hiddenMs: 10 * MINUTE, everyMs: MINUTE },
+  warning: { hiddenMs: 5 * MINUTE, everyMs: 15_000 },
+  critical: { hiddenMs: 2 * MINUTE, everyMs: 10_000 },
 };
+const WARM_VIEWS: Record<MemoryPressure, number> = { normal: Infinity, warning: 2, critical: 0 };
 
 export const pressureOf = (level: unknown): MemoryPressure => (level === "warning" || level === "critical" ? level : "normal");
 
@@ -60,6 +61,22 @@ export function sleepRules(settings: { memorySaver: boolean; memorySaverMode: st
   const pressure = pressureOf(sys.memoryPressure);
   if (pressure !== "normal") return { tabs: mode.floor, hiddenMs: Math.min(mode.hiddenMs, UNDER_PRESSURE[pressure].hiddenMs), pressure, perTick: SLEEPS_PER_TICK, everyMs: UNDER_PRESSURE[pressure].everyMs };
   return { tabs: Math.max(mode.floor, Math.round((sys.physicalMemory / GIB) * mode.perGib)), hiddenMs: mode.hiddenMs, pressure, perTick: SLEEPS_PER_TICK, everyMs: MINUTE };
+}
+
+export const warmViewCap = (pressure: MemoryPressure) => WARM_VIEWS[pressure];
+
+export function warmOrder(neighbours: readonly string[], successor: string | undefined): string[] {
+  return successor && !neighbours.includes(successor) ? [successor, ...neighbours] : [...neighbours];
+}
+
+export function capWarmPanes(order: readonly string[], panesOf: (id: string) => readonly string[], shown: ReadonlySet<string>, pressure: MemoryPressure): string[] {
+  const panes: string[] = [];
+  for (const id of order) {
+    const own = panesOf(id);
+    for (const pane of own.includes(id) ? [id, ...own.filter((p) => p !== id)] : own) if (!shown.has(pane) && !panes.includes(pane)) panes.push(pane);
+  }
+  const cap = warmViewCap(pressure);
+  return panes.length > cap ? panes.slice(0, cap) : panes;
 }
 
 export const seenWindowMs = (rules: Pick<SleepRules, "hiddenMs" | "pressure">) => (rules.pressure === "normal" ? Math.max(rules.hiddenMs, RECENTLY_SEEN_MS) : rules.hiddenMs);

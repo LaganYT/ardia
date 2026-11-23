@@ -3,9 +3,12 @@ import { unavailableError } from "./hostCapabilities.ts";
 import { linuxIconAccent } from "./iconAccent.ts";
 import { TELEMETRY_LOCAL_METHODS } from "./hostTelemetryLocal.ts";
 import { hostReportMethod } from "./hostReport.ts";
+import { cleanLinkTitle, cleanUrl } from "@ardia/core/src/cleanUrl.ts";
 import { shareLink, shareLinkVia, shareText, type ShareAnchor } from "./linkShare.ts";
 
 type Fallback = (...args: unknown[]) => unknown;
+
+const text = (value: unknown) => (typeof value === "string" ? value : "");
 
 const answer = (value: unknown): Fallback => () => Promise.resolve(value);
 const refuse = (feature: string): Fallback => () => Promise.reject(unavailableError(feature));
@@ -19,8 +22,8 @@ const APP_FALLBACKS: Record<string, Fallback> = {
   setAutomaticUpdateDownloads: refuse("Automatic update downloads"),
   setUpdateChannel: refuse("The update channel"),
   setWindowActivity: refuse("Handoff"),
-  share: (url, title, windowId, anchor) => shareLink(url as string, title as string | null, windowId as string | null, anchor as ShareAnchor | null),
-  shareVia: (service, url, title, windowId) => shareLinkVia(service as string, url as string, title as string | null, windowId as string | null),
+  share: (url, title, windowId, anchor) => shareLink(cleanUrl(text(url)), cleanLinkTitle(text(title), text(url)) || null, windowId as string | null, anchor as ShareAnchor | null),
+  shareVia: (service, url, title, windowId) => shareLinkVia(service as string, cleanUrl(text(url)), cleanLinkTitle(text(title), text(url)) || null, windowId as string | null),
   shareText: (text, windowId, anchor) => shareText(text as string, windowId as string | null, anchor as ShareAnchor | null),
   isInDock: refuse("The Dock"),
   addToDock: refuse("The Dock"),

@@ -45,11 +45,12 @@ test("an old Mac's battery saver turned off stays both chosen and inferred, so s
   assert.equal(S().settings.batterySaverWhen, "never");
 });
 
-test("settings and their bookkeeping save apart, read back the same, and a change marks the key chosen", () => {
+test("settings and their bookkeeping save apart, read back the same, and a change marks the key chosen", async () => {
   stub.docs.clear();
   stub.docs.set("session.json", JSON.stringify(doc(7, structuredClone(CASES.chosen))));
   const stop = startPersistence();
   S().updateSettings({ appearance: "light" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
   flushPersistence();
   stop();
   const saved = JSON.parse(stub.docs.get("session.json"));

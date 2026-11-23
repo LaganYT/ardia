@@ -34,6 +34,7 @@ import { AddressesPage, CardsPage } from "./ProfileAutofill";
 import { ExtensionPage, ExtensionsSection } from "./ProfileExtensions";
 import { BoostsSection } from "./ProfileBoosts";
 import { SitePage, SitesPage } from "./SiteSettings";
+import { homeRelative } from "../../../lib/homePath";
 
 export function ProfilesPane({ profileId: chosen, detail }: SettingsPlace) {
   const profileId = useSelectedProfile(chosen);
@@ -128,8 +129,6 @@ function iconTitle(icon: string | null): string {
   if (symbol) return PROFILE_SYMBOLS.find((s) => s.name === symbol)?.title ?? "Symbol";
   return icon ?? "None";
 }
-
-const homeRelative = (path: string) => path.replace(/^\/Users\/[^/]+(?=\/|$)/, "~");
 
 function ThisProfileSection({ profileId }: { profileId: string }) {
   const profile = useProfile(profileId, (p) => p);

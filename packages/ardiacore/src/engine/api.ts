@@ -45,6 +45,7 @@ export type EngineCalls = BookmarksCalls & FaviconsCalls & HistoryCalls & {
   "engine.setCliControl": [{ on: boolean }, CliControlStatus];
   "engine.setCliActiveTab": [{ tabId: string | null }, CliControlStatus];
   "engine.cliTabTargets": [{ tabIds: string[] }, Record<string, CliTabTarget>];
+  "engine.setCliHeldTabs": [{ tabs: { tabId: string; until: number }[] }, { kept: number; marked: string[] }];
   "engine.cliOwnsTab": [{ tabId: string }, { owned: boolean; shown: boolean }];
   "engine.cliMoveOffscreen": [{ tabId: string }, { ok: boolean; reason?: string }];
   "engine.cliCloseOffscreenTabs": [{}, Done];

@@ -71,6 +71,11 @@ variables) is in `docs/conventions.md`, enforced by `apps/browser/src/convention
   `apply.sh` copies the whole working tree, so other agents' uncommitted engine files get compiled too.
   A new framework changes every agent's next build, so say so in your report. To try one privately, build the app with
   `ARDIACORE_FRAMEWORK=<framework> scripts/agent/build-app --as <you>` (it stages into your own derived data).
+- Every Mac build records its engine in the app's Info.plist (`ArdiaEngineMatch` exact, nearest or local, plus
+  `ArdiaEngineKey`, `ArdiaEngineVersion`, `ArdiaEngineSource`), from the `engine-match` line `fetch-engine.sh` writes
+  beside a published engine (`packages/ardiacore/scripts/engine-match.sh`). A nearest engine whose
+  `engine/ardiacore/src/ardia/core/public` differs from the checkout's stops the build before it compiles;
+  `ARDIACORE_ALLOW_PUBLIC_MISMATCH=1` builds anyway.
 - New engine code goes in `//chrome/browser/ardia` (`engine/chromium/src`) or `//ardia/core`
   (`engine/ardiacore/src`), never straight into the tree (`docs/engine-build.md` › "Our own code in the tree").
   `engine/patches/series` is the apply order of our patches to Chromium; `engine/patches/series.py check` proves the

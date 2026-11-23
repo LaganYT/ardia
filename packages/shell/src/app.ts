@@ -29,6 +29,7 @@ export type SystemInfo = {
   feedbackEmail?: string | null;
   videoTourURL?: string | null;
   releaseNotesURL?: string | null;
+  engineMatch?: string | null;
   isolatedInstance?: boolean;
   forceReleaseNotes?: boolean;
   processStart?: number | null;

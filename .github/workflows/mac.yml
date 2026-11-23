@@ -178,17 +178,12 @@ jobs:
           echo "ARDIACORE_FRAMEWORK=$framework" >> "$GITHUB_ENV"
           short=$(basename "$(dirname "$framework")")
           public=engine/ardiacore/src/ardia/core/public
+          line=$(packages/ardiacore/scripts/engine-match.sh resolve . "$(cat "$(dirname "$framework")/engine-match")")
           strict=true
-          if [ "$short" = "${ENGINE_KEY:0:12}" ]; then
+          if [ "$(packages/ardiacore/scripts/engine-match.sh get match "$line")" = exact ]; then
             echo "### Mac engine $short (exact)" >> "$GITHUB_STEP_SUMMARY"
           else
-            read -r -a key_paths <<<"$(engine/engine-key.sh --platform macos --paths | xargs)"
-            base=""
-            while read -r commit; do
-              candidate=$(engine/engine-key.sh --platform macos "$commit" 2>/dev/null || true)
-              if [ "${candidate:0:12}" = "$short" ]; then base=$commit; break; fi
-            done < <(git rev-list HEAD -- "${key_paths[@]}")
-            if [ -z "$base" ] || [ -n "$(git diff --no-renames --name-only "$base" HEAD -- "$public")" ]; then
+            if [ "$(packages/ardiacore/scripts/engine-match.sh get public "$line")" != same ]; then
               strict=false
               echo "::warning::compiling against engine $short, older than this commit's ${ENGINE_KEY:0:12}, and $public changed since: this run fails after the build"
             else
@@ -245,6 +240,7 @@ jobs:
         id: build
         env:
           SKIP_BUNDLING: "1"
+          ARDIACORE_ALLOW_PUBLIC_MISMATCH: ${{ steps.engine.outputs.strict == 'false' && '1' || '' }}
         run: >-
           xcodebuild -workspace apps/browser/macos/Ardia.xcworkspace -scheme Ardia-macOS -configuration Debug
           -destination 'generic/platform=macOS' -derivedDataPath "$SCRATCH/dd"

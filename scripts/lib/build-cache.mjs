@@ -35,7 +35,7 @@ export const isDeps = (rel) => DEPS.some((r) => r.test(rel));
 export const isPodsInput = (rel) => PODS.some((r) => r.test(rel));
 
 const BUILD_ENV = new RegExp(
-  "^(RCT_|EXPO_|USE_|HERMES_|COCOAPODS_|SWIFT_|CLANG_|GCC_|OTHER_|BUNDLE_|ARDIACORE_(STAGE|PREBUILT)|HSTS_|UBO_|UBOL_|RUST|CARGO_)|" +
+  "^(RCT_|EXPO_|USE_|HERMES_|COCOAPODS_|SWIFT_|CLANG_|GCC_|OTHER_|BUNDLE_|ARDIACORE_(STAGE|PREBUILT|ENGINE_MATCH)|HSTS_|UBO_|UBOL_|RUST|CARGO_)|" +
     "^(NODE_BINARY|NODE_OPTIONS|ENTRY_FILE|SKIP_BUNDLING|FORCE_BUNDLING|EXTRA_PACKAGER_ARGS|EXTRA_COMPILER_ARGS|CONFIG_JSON|" +
     "ARDIA_PRUNE|CHROMIUM_TAG|TOOLCHAINS|DEVELOPER_DIR|SDKROOT|MACOSX_DEPLOYMENT_TARGET|CC|CXX|LD|CPP|CFLAGS|CXXFLAGS|" +
     "OBJCFLAGS|LDFLAGS|CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJC_INCLUDE_PATH|LIBRARY_PATH|CP_HOME_DIR|LANG|LC_ALL)$",
@@ -279,6 +279,58 @@ export function stampInputs({ framework, env = process.env, hashCache, toolchain
   if (!toolchain) return { blocked: "the Xcode toolchain didn't answer" };
   if (!rust) return { blocked: "the Rust toolchain rust-toolchain.toml pins didn't answer" };
   return { framework: identity, toolchain, rust, env: fingerprint };
+}
+
+export const engineRecordField = (line, name) =>
+  line
+    .trim()
+    .split(" ")
+    .find((pair) => pair.startsWith(`${name}=`))
+    ?.slice(name.length + 1) ?? "";
+
+export function engineRecordComplete(path, key) {
+  let line;
+  try {
+    line = fs.readFileSync(path, "utf8");
+  } catch {
+    return false;
+  }
+  return engineRecordField(line, "key") === key && engineRecordField(line, "public_tree") !== "";
+}
+
+export function engineRecordNamesAnotherKey(path, key) {
+  let line;
+  try {
+    line = fs.readFileSync(path, "utf8");
+  } catch {
+    return false;
+  }
+  const recorded = engineRecordField(line, "key");
+  return recorded !== "" && recorded !== key;
+}
+
+export function judgeSyncedEngine(repo, recorded, manifest) {
+  const matchScript = join(repo, "packages/ardiacore/scripts/engine-match.sh");
+  const judged = spawnSync(matchScript, ["resolve", repo, recorded], { encoding: "utf8" });
+  if (judged.status !== 0) throw new Error(`judging the engine against the synced tree failed: ${judged.stderr.trim()}`);
+  const line = judged.stdout.trim();
+  if (hashManifest(manifestOf(repo, listFiles(repo))) !== hashManifest(manifest)) {
+    throw new Error("the tree changed while its engine was judged after syncing; build again");
+  }
+  const checked = spawnSync(matchScript, ["check", line], { encoding: "utf8" });
+  if (checked.status !== 0) throw new Error(checked.stderr.trim());
+  return line;
+}
+
+export function describeEngineOffline(fetchEngine, key, commit) {
+  const r = spawnSync(fetchEngine, ["--describe", "--offline"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 60_000,
+    env: { ...process.env, ARDIACORE_ENGINE_COMMIT: commit },
+  });
+  const line = r.status === 0 ? r.stdout.trim() : "";
+  return /^match=(exact|nearest|unknown) /.test(line) && engineRecordField(line, "key") === key ? line : `match=unknown key=${key}`;
 }
 
 export function cloneTree(src, dst) {

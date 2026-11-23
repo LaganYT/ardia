@@ -40,7 +40,7 @@ NSArray<NSString *> *AppTestKeys() {
     @"pipSelfTest", @"pipHover", @"fakeFullScreenMs", @"shadersKeyWindow", @"peekStrict", @"peekMesh", @"peekReady", @"peekReduceMotion", @"peekSlow", @"importSecret", @"importDiaBundleId", @"importDiaWindows",
     @"cliInstallScript", @"legacySource", @"legacyCrashAfter", @"bangsUrl", @"onboarding", @"whatsNew", @"telemetry",
     @"liveMock", @"calendarFixture", @"appMenu", @"appDialog", @"loginsTimeout", @"screenRecording", @"systemLocationPermission", @"officialPin",
-    @"applePasswordsPanel", @"systemPanelRace",
+    @"applePasswordsPanel", @"systemPanelRace", @"controlDoorbell",
   ];
 }
 

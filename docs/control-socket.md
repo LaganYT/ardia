@@ -7,6 +7,14 @@ per request (`{"id", "result"}` or `{"id", "error": {"code", "message"}}`), and 
 on; with it off every request answers `failed` "Control is off." (`state/automation/controlSocket.ts`). The contract
 with the command (protocol numbers, `hello`) is in `docs/cli.md` › The contract.
 
+On macOS a client that isn't the bundled `ardia` (or another hardened program signed with Ardia's Team ID) is held
+before its first line is read until the user allows it in the doorbell; a client that's refused reads one line,
+`{"id": null, "error": {"code": "refused", "message": …}}`, and the socket closes. Who gets in, how approvals are kept
+and revoked, and the test-instance rule are in `docs/automation.md` › Who the program is. Every admitted connection is
+the owner: the methods below don't vary by client. `usage_counts.cli_socket_doorbells_shown` and
+`cli_socket_doorbell_<outcome>` (`once`, `half_hour`, `always`, `deny`, `unshown`, `timeout`, `left`, `stopped`,
+`unsaved`) count the doorbells and how they ended.
+
 This page is the map of the whole profile against the socket: every data point Ardia keeps, where it lives, and which
 methods read and change it. The goal is full control: anything a person can see or change in Ardia, the command can
 read and change, through the same store actions the UI calls, so every invariant, sync write, undo, saved document and

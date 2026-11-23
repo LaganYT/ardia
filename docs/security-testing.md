@@ -82,8 +82,9 @@ detected forms, the boundary test names it. Anything else needs a hand-kept row.
    the guard's return value alone. A guard that should refuse everything in a class needs a positive control too, so
    the test can't pass because nothing ran.
 3. If the guard lets something through, write the failing case. Fix it in the same change when the fix is small and
-   clearly right; otherwise open an issue and mark the case `{ todo: "<finding> open: ..." }` so it runs, shows up
-   and turns green when fixed.
+   clearly right; otherwise open an issue and mark the case `{ todo: "@<owner> until <YYYY-MM-DD>: <finding> open, #<issue>" }` so it
+   runs, shows up and turns green when fixed; once the date passes the conventions check warns about it
+   (`docs/conventions.md` › Skips and accepted risks carry an expiry).
 
 A regression case is named after the finding it guards (`A1`, `D5`) and should fail with the fix reverted. Check that
 once by reverting the fix's lines in your checkout before you commit the case.

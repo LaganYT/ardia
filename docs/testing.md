@@ -81,6 +81,10 @@ holds the rest.
   runs. `scripts/ci/workflow-paths.test.mjs` keeps the trigger paths and the filters in step, follows the meadow
   check's site imports, and fails when a Linux fixture or a root test names a file its job doesn't start on. Each share restores the TSX it transpiled last time (`ardia-test-tsx-I-of-6-…`); only pushes to
   `main` save it, so pull requests add no caches. A newer push cancels the run before it, on `main` too.
+- `conventions.yml` runs the conventions check (`docs/conventions.md` › The check) on every pull request and every
+  push to `main`, with no paths filter and no install, so a file in a folder no other workflow watches is checked
+  too. `expiring-skips.yml` runs its expiry part every Monday and lists skips past their date, as warnings, in the
+  run's summary.
 - When GitHub's runners are busy, the long jobs of `checks.yml`, `linux.yml` and `android.yml` move to Boat CI
   (`boat-large`); the `which checks run` job or a `route` job decides, and each run's summary says why
   ([ci-boat-overflow.md](ci-boat-overflow.md)).

@@ -69,7 +69,7 @@ test("built-in and unsafe names never reach the network", async () => {
 test("synced boosts download missing fonts once and skip ones that failed", async () => {
   const calls = mockFetch((url) => (url.startsWith("https://fonts.googleapis.com/") ? new Response(CSS) : new Response(WOFF2)));
   ensureGoogleFonts([{ font: "Lora" }, { font: "Charter" }, { font: null }, { font: "Inter" }, { font: "Roboto" }, { font: "Roboto" }]);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  for (let attempt = 0; attempt < 200 && useGoogleFonts.getState().status.Roboto !== "ready"; attempt++) await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(
     calls.map((c) => c.url).filter((url) => url.includes("googleapis")),
     ["https://fonts.googleapis.com/css2?family=Roboto:wght@400;700"],

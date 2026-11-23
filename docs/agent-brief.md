@@ -367,6 +367,7 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | | `peekStrict` | Peek's test hooks stop relaxing its click checks |
 | | `peekMesh=unavailable\|throws` · `peekReady=never` · `peekReduceMotion` · `peekSlow=<n>` | Peek's motion (`docs/peek-motion.md`): the Genie mesh reported missing or throwing on build, a page that never reports a drawn frame (the 150 ms timeout), Reduce Motion, and the Genie <n> times slower for captures |
 | | `importSecret=<s>` · `importDiaBundleId=<id>` · `importDiaWindows=<json>` | Import's Safe Storage secret · the app Dia's tabs come from (opened hidden and quit by the import) · fixture windows answering for it, with no Automation prompt |
+| | `controlDoorbell` | The control socket asks before admitting a program not signed with Ardia's Team ID, as a release does (test instances otherwise admit every process of the user; `docs/automation.md`). With `appDialog` the doorbell goes to `dialog.json` |
 | | `cliInstallScript=<path>` | Another `ardia` installer script (the Linux and Windows hosts' installer; macOS no longer runs one) |
 | | `applePasswordsPanel` | Background mode really opens macOS's Passwords panel for the key and Edit › AutoFill › Passwords… instead of logging it (`docs/testing.md`); the panel is another process's window and can show on screen |
 | | `systemPanelRace` | Runs AppKit's delayed autofill show-or-hide pass right after the Passwords command, to check the panel survives it (`docs/testing.md`) |

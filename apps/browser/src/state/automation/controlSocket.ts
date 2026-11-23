@@ -43,6 +43,8 @@ import { dropAllHistoryHandles, dropHistoryHandles } from "./historyHandles";
 import { dropLateResults, forgetTabCalls } from "./tabCalls";
 import { backgroundInstance } from "../app/appSettings";
 import { programControlOn } from "../app/programControlSetting";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
+import { startPeerDoorbell } from "./peerDoorbell";
 
 export const useControlSocket = create<{ status: ControlSocketStatus | null }>()(() => ({ status: null }));
 
@@ -299,6 +301,7 @@ function listen() {
   });
   onControlClose(handleClose);
   onControlWritten(({ tickets }) => runWritten(tickets));
+  if (PLATFORM_FEATURES.controlDoorbell) startPeerDoorbell();
 }
 
 async function start(consent: ConsentToken | null) {

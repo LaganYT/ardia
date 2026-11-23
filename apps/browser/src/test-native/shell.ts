@@ -218,10 +218,26 @@ const menus: Modules["ArdiaMenus"] = {
   mouseShortcutMonitor: () => Promise.resolve({ installed: false, installs: 0 }),
 };
 
+export const controlPeers = {
+  chosen: [] as unknown[],
+  chooseResult: { choice: -1, unshown: true } as { choice: number; unshown?: boolean },
+  dismissed: [] as (string | null)[],
+  answers: [] as [number, string][],
+  approvals: [] as { key: string; name: string; signedBy: string; added: number; until?: number }[],
+  revoked: [] as string[],
+};
+
 const dialogs: Modules["ArdiaDialogs"] = {
+  choose: (options) => {
+    controlPeers.chosen.push(options);
+    return Promise.resolve(controlPeers.chooseResult);
+  },
   confirm: () => Promise.resolve({ confirmed: false, suppressed: false }),
   dismissesShownOnly: true,
-  dismissShownOnly: () => Promise.resolve(),
+  dismissShownOnly: (key) => {
+    controlPeers.dismissed.push(key);
+    return Promise.resolve();
+  },
   prompt: () => Promise.resolve(null),
   pickFiles: () => Promise.resolve([]),
   pickFolder: () => Promise.resolve(null),
@@ -492,6 +508,8 @@ export const controlSocket = {
 const controlEvents = nativeEvents();
 export const emitControlRequest = (request: { connection: number; generation: number; line: string }) => controlEvents.emit("onRequest", request);
 export const emitControlClose = (connection: number) => controlEvents.emit("onClose", { connection });
+export const emitControlPeerAsk = (ask: { ask: number; name: string; signedBy: string; path: string; identifier: string; remember: boolean; deadline: number }) => controlEvents.emit("onPeerAsk", ask);
+export const emitControlPeerAskEnded = (ask: number, outcome: string) => controlEvents.emit("onPeerAskEnded", { ask, outcome });
 export function writeHeldReplies() {
   const tickets = controlSocket.held.splice(0);
   if (tickets.length) controlEvents.emit("onWritten", { tickets });
@@ -511,6 +529,17 @@ const automation: Modules["ArdiaAutomation"] = {
     if (!controlSocket.holdWrites) writeHeldReplies();
   },
   broadcast: (connections, line) => void controlSocket.broadcasts.push({ connections, line }),
+  answerPeer: (ask, outcome) => {
+    controlPeers.answers.push([ask, outcome]);
+    return Promise.resolve(true);
+  },
+  approvals: () => Promise.resolve({ approvals: [...controlPeers.approvals], doorbell: true }),
+  revokeApproval: (key) => {
+    controlPeers.revoked.push(key);
+    const before = controlPeers.approvals.length;
+    controlPeers.approvals = controlPeers.approvals.filter((a) => a.key !== key);
+    return Promise.resolve(controlPeers.approvals.length !== before);
+  },
   addListener: controlEvents.addListener,
 };
 

@@ -143,6 +143,13 @@ export const advancedRows = {
           keywords: ["control", "cli", "automation", "agent", "stop", "turn control back on", "devtools", "remote debugging", "control pill", "let the ardia command control ardia", "programs you run", "open", "read", "logins", "ardia command"],
           shown: () => PLATFORM_FEATURES.plugins,
         },
+        allowedPrograms: {
+          title: "Programs you let in",
+          explained: true,
+          description: "A program that isn't part of Ardia asks before it can control Ardia. The ones you allowed for 30 minutes or always are listed here.",
+          keywords: ["control", "socket", "allow", "always allow", "doorbell", "revoke", "programs", "agent", "script", "python", "cli", "permission"],
+          shown: () => PLATFORM_FEATURES.controlDoorbell,
+        },
         programs: {
           title: "Programs on your PATH",
           keywords: ["cli", "command line", "terminal", "shell", "path", "programs", "commands", "plugin programs", "try again", "relink"],

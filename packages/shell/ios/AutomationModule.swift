@@ -5,7 +5,7 @@ public class AutomationModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ArdiaAutomation")
 
-    Events("onRequest", "onClose", "onWritten")
+    Events("onRequest", "onClose", "onWritten", "onPeerAsk", "onPeerAskEnded")
 
     OnCreate {
       ControlSocket.shared.attach(self) { [weak self] name, body in self?.sendEvent(name, body) }
@@ -25,6 +25,18 @@ public class AutomationModule: Module {
 
     Function("broadcast") { (connections: [Int], line: String) in
       ControlSocket.shared.broadcast(connections, line)
+    }
+
+    AsyncFunction("answerPeer") { (ask: Int, outcome: String, promise: Promise) in
+      ControlSocket.shared.answerPeer(ask, outcome) { promise.resolve($0) }
+    }
+
+    AsyncFunction("approvals") { (promise: Promise) in
+      ControlSocket.shared.approvals { promise.resolve($0) }
+    }
+
+    AsyncFunction("revokeApproval") { (key: String, promise: Promise) in
+      ControlSocket.shared.revokeApproval(key) { promise.resolve($0) }
     }
 
     OnDestroy {

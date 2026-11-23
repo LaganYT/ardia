@@ -221,7 +221,7 @@ final class ControlConnection {
       pendingRequests += 1
       guard pendingRequests <= Self.maxPendingRequests else { return retire() }
       onLine(self, String(decoding: input[lineStart..<newline], as: UTF8.self))
-      if closed { return }
+      if closed || finishingLine { return }
       lineStart = newline + 1
       index = lineStart
       consumed = true

@@ -59,7 +59,9 @@ On Linux, Settings › Advanced › Command line installs it from the package (`
 older data folders it means what it always did; Linux keeps its switch in Settings › Advanced. While it is on, `ardia`
 reaches Ardia two ways (`docs/automation.md`, `docs/control-socket.md`):
 - **The control socket** (`ArdiaControl.sock`, mode 0600) carries the owner's methods. It has no token: the server
-  only checks that the peer runs as the same user (`getpeereid`), so every process of that user is admitted.
+  checks that the peer runs as the same user (`getpeereid`) and, on macOS, who the program is: a hardened program
+  signed with Ardia's Team ID (the bundled `ardia` and anything else Ardia ships) gets in at once, and any other
+  program waits for you to allow it in the doorbell Ardia shows (`docs/automation.md` › Who the program is). Linux and test instances admit every process of the user.
 - **The engine's token connection** carries `ardia browse`. It listens on loopback with a token written to
   `ArdiaControl.json`, which the user's own processes can read. It is a full DevTools client of the browser, the same
   as a `--remote-debugging-port` client (the owner's decision, #2807): every CDP domain and method, every target

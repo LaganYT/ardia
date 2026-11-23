@@ -22,6 +22,7 @@ import { FormField, Group, Row, SectionHeader, SettingToggle } from "../Form";
 import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { PLATFORM_TERMS } from "../../../lib/platformTerms";
 import { useAutomationRuleRows } from "./AutomationRules";
+import { AllowedProgramsRows } from "./AllowedPrograms";
 import { WebEngineSection } from "./WebEngineSection";
 
 const BATTERY_SAVER_DESCRIPTIONS: Record<BatterySaverWhen, string> = {
@@ -200,6 +201,7 @@ function ProgramsRows() {
   return (
     <>
       <ProgramControlRow />
+      {PLATFORM_FEATURES.controlDoorbell ? <AllowedProgramsRows /> : null}
       <Row
         anchor="advanced.programs"
         description={

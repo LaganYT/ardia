@@ -21,7 +21,7 @@ const PANE_ALIASES: Record<string, SettingsPane> = {
   engines: "advanced",
 };
 
-export type AppUrlAction = { kind: "newTab" } | { kind: "settings"; pane: SettingsPane | undefined } | { kind: "boost"; code: string };
+type AppUrlAction = { kind: "newTab" } | { kind: "settings"; pane: SettingsPane | undefined } | { kind: "boost"; code: string };
 
 export function appUrlAction(url: string): AppUrlAction | null {
   const code = boostCodeFromLink(url);

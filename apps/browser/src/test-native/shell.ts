@@ -6,6 +6,7 @@ import type {
   DiagnosticsSample,
   HardwareInfo,
   LaunchConfig,
+  NativeDevtoolsEndpoint,
   OpenSurface,
   OpenWindowOptions,
   ShellNativeModules,
@@ -71,7 +72,7 @@ export const launch: LaunchConfig = {
   test: {},
 };
 
-export type FakeWindow = OpenWindowOptions & { title?: string; trafficLightsCenter?: [number, number] | null; trafficLightsTrailing?: boolean };
+type FakeWindow = OpenWindowOptions & { title?: string; trafficLightsCenter?: [number, number] | null; trafficLightsTrailing?: boolean };
 const shellEvents = nativeEvents();
 export const windows = {
   closeRequests: [] as string[],
@@ -83,8 +84,6 @@ export const windows = {
 };
 export const emitAppEvent = (event: AppEvent) => shellEvents.emit("onAppEvent", event);
 export const emitCommand = (event: CommandEvent) => shellEvents.emit("onCommand", event);
-export const emitOpenURLs = (urls: string[], pointer?: [number, number], source?: { bundleId: string | null; appName: string | null }) =>
-  shellEvents.emit("onOpenURLs", { urls, pointer, source });
 
 const shell: Modules["ArdiaShell"] = {
   addListener: shellEvents.addListener,
@@ -417,7 +416,7 @@ const calendar: Modules["ArdiaCalendar"] = {
   events: () => Promise.resolve([]),
 };
 
-export const keychainReads = { values: new Map<string, string>(), errors: new Map<string, string>() };
+const keychainReads = { values: new Map<string, string>(), errors: new Map<string, string>() };
 
 const keychain: Modules["ArdiaKeychain"] = {
   get: () => Promise.resolve(null),
@@ -450,7 +449,6 @@ const fileDrop: Modules["ArdiaFileDrop"] = {
   devDrag: () => unfaked("ArdiaFileDrop", "devDrag"),
   devLastFileDrag: () => Promise.resolve([]),
 };
-
 
 const cliEvents = nativeEvents();
 const cli: Modules["ArdiaCli"] = {
@@ -504,6 +502,9 @@ export const controlSocket = {
   held: [] as number[],
   replies: [] as { connection: number; line: string }[],
   broadcasts: [] as { connections: number[]; line: string }[],
+  devtoolsEndpoint: ((_connection: number): NativeDevtoolsEndpoint | Promise<NativeDevtoolsEndpoint> => ({ problem: "off" })) as ((connection: number) => NativeDevtoolsEndpoint | Promise<NativeDevtoolsEndpoint>) | null,
+  devtoolsEndpointAsks: [] as number[],
+  calls: [] as string[],
 };
 const controlEvents = nativeEvents();
 export const emitControlRequest = (request: { connection: number; generation: number; line: string }) => controlEvents.emit("onRequest", request);
@@ -521,8 +522,10 @@ const automation: Modules["ArdiaAutomation"] = {
     return { state: "on", generation: controlSocket.generation, path: "/data/ArdiaControl.sock" };
   },
   stop: async () => {
+    controlSocket.calls.push("stop");
     controlSocket.running = false;
   },
+  cutOff: () => (controlSocket.calls.push("cutOff"), true),
   reply: (connection, line, ticket) => {
     controlSocket.replies.push({ connection, line });
     if (ticket > 0) controlSocket.held.push(ticket);
@@ -542,6 +545,15 @@ const automation: Modules["ArdiaAutomation"] = {
   },
   addListener: controlEvents.addListener,
 };
+Object.defineProperty(automation, "devtoolsEndpoint", {
+  enumerable: true,
+  get: () =>
+    controlSocket.devtoolsEndpoint &&
+    (async (connection: number) => {
+      controlSocket.devtoolsEndpointAsks.push(connection);
+      return controlSocket.devtoolsEndpoint!(connection);
+    }),
+});
 
 export const systemSignals = {
   idleThresholds: [] as number[],

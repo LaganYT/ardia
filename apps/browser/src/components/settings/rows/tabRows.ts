@@ -55,6 +55,11 @@ export const tabRows = {
           description: "How tabs whose page isn't loaded look.",
           keywords: ["unloaded", "asleep", "sleeping", "discarded", "dim", "grey", "gray", "inactive", "pinned", "closed", "fade icons of unloaded tabs", "strikethrough", "strike", "line through", "crossed out", "memory saver", "title", "strike through sleeping tabs", "fade", "strike through"],
         },
+        afterClosingTab: {
+          title: "After closing a tab",
+          description: "Which tab comes forward when you close the one you're on.",
+          keywords: ["close tab", "closing", "cmd w", "next tab", "previous tab", "tab above", "tab to the left", "neighbour", "neighbor", "adjacent", "last used", "recent", "previously active", "focus", "select", "activate", "chrome", "firefox", "after close"],
+        },
         keepTopAppsRunning: {
           title: "Keep Top Apps running when closed",
           explained: true,

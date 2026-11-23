@@ -103,5 +103,5 @@ export async function openSidebarMenu(windowId: string) {
     const id = s.newTab(windowId);
     if (id) newGroupWithSelection(windowId, [id]);
   } else if (choice === "addShared") void addSharedFolder(windowId);
-  else if (choice === "closeAll") closeAllTabs(windowId);
+  else if (choice === "closeAll") closeAllTabs(windowId, { consent });
 }

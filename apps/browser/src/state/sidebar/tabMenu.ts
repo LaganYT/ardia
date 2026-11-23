@@ -34,6 +34,7 @@ import { isPluginMenuChoice, pluginMenuItems, runPluginMenuChoice, type PluginMe
 import { urlParts } from "../../lib/urlParts";
 import { ALL_UNREAD_TITLE, canChooseSiteUnread, isUnreadSiteHidden, showUnreadCounts, toggleSiteUnread, unreadSiteTitle } from "../tabs/unreadSites";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
+import { userClose } from "../tabs/closeActivation";
 
 const store = () => useBrowser.getState();
 
@@ -183,10 +184,11 @@ function customizeItem(s: BrowserState, tab: Tab, f: Facts): MenuItem {
   };
 }
 
-function unloadTopApp(tabId: string) {
+function unloadTopApp(tabId: string, consent: ConsentToken | null) {
   const s = store();
   noteTopAppUnloadedFromMenu();
-  s.closeTabs(closeIntent(s, tabId).ids, { keepTopApps: false });
+  const ids = closeIntent(s, tabId).ids;
+  s.closeTabs(ids, userClose(ids, { consent }, { keepTopApps: false }));
 }
 
 function sleepItems(s: BrowserState, tab: Tab, f: Facts): MenuItem[] {
@@ -306,11 +308,11 @@ function runTabChoice(windowId: string, tab: Tab, f: Facts, choice: string | Des
   else if (choice === "copy") copyUrls([tab.id], false);
   else if (choice === "copyMd") copyUrls([tab.id], true);
   else if (choice === "bookmark") bookmarkTab(windowId, tab.id);
-  else if (choice === "close") void closeTab(tab.id);
-  else if (choice === "unloadTopApp") unloadTopApp(tab.id);
+  else if (choice === "close") void closeTab(tab.id, { user: { consent } });
+  else if (choice === "unloadTopApp") unloadTopApp(tab.id, consent);
   else if (choice === "sleep") void sleepTabsFromMenu([tab.id], "tab");
-  else if (choice === "closeSplit" && f.split) closeSplitView(f.split.id);
-  else if (choice === "closeOthers") s.closeTabs(f.others);
-  else if (choice === "closeAbove") s.closeTabs(f.above);
-  else if (choice === "closeBelow") s.closeTabs(f.below);
+  else if (choice === "closeSplit" && f.split) closeSplitView(f.split.id, { consent });
+  else if (choice === "closeOthers") s.closeTabs(f.others, userClose(f.others, { consent }));
+  else if (choice === "closeAbove") s.closeTabs(f.above, userClose(f.above, { consent }));
+  else if (choice === "closeBelow") s.closeTabs(f.below, userClose(f.below, { consent }));
 }

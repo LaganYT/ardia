@@ -34,6 +34,16 @@ const SLEEPING_LOOKS: Option<SleepingLook>[] = [
   { value: "both", title: "Both" },
 ];
 
+const AFTER_CLOSING_DOWN: Option<Settings["afterClosingTab"]>[] = [
+  { value: "previouslyActive", title: "Previously active tab" },
+  { value: "tabAbove", title: "Tab above" },
+];
+
+const AFTER_CLOSING_ACROSS: Option<Settings["afterClosingTab"]>[] = [
+  { value: "previouslyActive", title: "Previously active tab" },
+  { value: "tabAbove", title: "Tab to the left" },
+];
+
 const NEW_TAB_OPENS: Option<Settings["newTabOpens"]>[] = [
   { value: "page", title: "New Tab page" },
   { value: "commandBar", title: "Command bar" },
@@ -161,6 +171,8 @@ function TabsAndTopAppsSection() {
   const topAppBadges = useSettings((s) => s.showTopAppBadges);
   const fade = useSettings((s) => s.fadeUnloadedTabs);
   const strike = useSettings((s) => s.strikeSleepingTabs);
+  const afterClosingTab = useSettings((s) => s.afterClosingTab);
+  const top = useTabLayout() === "top";
   return (
     <>
       <SectionHeader title="Tabs and Top Apps" />
@@ -175,6 +187,9 @@ function TabsAndTopAppsSection() {
             onChange={(look) => updateSettings({ fadeUnloadedTabs: look === "fade" || look === "both", strikeSleepingTabs: look === "strike" || look === "both" })}
             minWidth={150}
           />
+        </Row>
+        <Row anchor="tabs.afterClosingTab">
+          <PopUp value={afterClosingTab} options={top ? AFTER_CLOSING_ACROSS : AFTER_CLOSING_DOWN} onChange={(v) => updateSettings({ afterClosingTab: v })} minWidth={190} />
         </Row>
         <SettingToggle anchor="tabs.keepTopAppsRunning" />
         <SettingToggle anchor="tabs.closedTopAppTiles" />

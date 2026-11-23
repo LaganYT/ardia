@@ -14,6 +14,7 @@ import { openSettings } from "../settings/settingsWindows";
 import { isOrganizeId, shownOrganizeContext, sideBySide, splitCandidates, type OrganizeContext, type OrganizeId } from "./organizeActions";
 import { renameProfile } from "../profiles/profileMenu";
 import { isPluginAction, runPluginAction } from "../plugins/commands";
+import { consentToken } from "../telemetry/client";
 
 const store = () => useBrowser.getState();
 
@@ -58,6 +59,7 @@ const RUN_ORGANIZE: Record<OrganizeId, (c: OrganizeContext) => void | Promise<vo
 };
 
 export function runBarAction(id: string, windowId: string) {
+  const consent = consentToken();
   if (isPluginAction(id)) return void runPluginAction(id, windowId);
   if (isOrganizeId(id)) {
     const c = shownOrganizeContext(id, windowId);
@@ -67,7 +69,7 @@ export function runBarAction(id: string, windowId: string) {
   const i = id.indexOf(":");
   const command = (i < 0 ? id : id.slice(0, i)) as BrowserCommand;
   const arg = i < 0 ? null : id.slice(i + 1);
-  runCommand({ command, arg, windowId });
+  runCommand({ command, arg, windowId }, { user: { consent } });
 }
 
 export function runBarExtension(s: Extract<Suggestion, { kind: "extension" }>, windowId: string) {

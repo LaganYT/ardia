@@ -65,7 +65,8 @@ export function startNativeSync() {
   cancelAbandonedFocusMoves();
   onCommand((e) => {
     if (e.mouseButton) noteMouseShortcutRun(e.mouseButton, nativeConsent(e));
-    settlingCommandFocus(e, runCommand);
+    const user = { consent: nativeConsent(e) };
+    settlingCommandFocus(e, (event) => runCommand(event, { user }));
   });
   startWindowCloseGuard();
   startExtensionsBridge();

@@ -103,7 +103,7 @@ export function tabsOverBudget(
   return plan.sleep;
 }
 
-const COUNTED_VETOES: ReadonlySet<SleepVeto> = new Set(["cliSession", "call", "pictureInPicture", "audible", "recentlyAudible", "frequentlyUsed", "typedInput", "postedDocument", "beforeUnload", "other"]);
+const COUNTED_VETOES: ReadonlySet<SleepVeto> = new Set(["cliSession", "call", "pictureInPicture", "audible", "recentlyAudible", "frequentlyUsed", "typedInput", "postedDocument", "beforeUnload", "download", "other"]);
 const countedVetoes = new Set<string>();
 let countedIn: ConsentToken | null = null;
 

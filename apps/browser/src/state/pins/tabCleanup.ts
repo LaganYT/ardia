@@ -13,6 +13,7 @@ import { syncGroupOrder, withParent } from "../groups/groups";
 import { cleanedTabsFor, closedEntries, closeQuietly, keptCleanedTabs, regroupRestored, restoreSnapshots, restoreTarget } from "./closedTabs";
 import { activated, apply, removeTabs } from "../tabs/tabs";
 import { shownLiveOf } from "../tabs/tabLive";
+import type { CloseOptions } from "../tabs/tabs";
 
 export type ClearedTabs = {
   windowId: string;
@@ -284,7 +285,7 @@ export type CleanUpSlice = {
 
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; allProfiles?: boolean; hiddenProfilesUpTo?: number }): number;
   restoreCleaned(entryIds?: string | string[], windowId?: string): void;
-  clearUnpinnedTabs(windowId: string): ClearedTabs | null;
+  clearUnpinnedTabs(windowId: string, options?: CloseOptions): ClearedTabs | null;
   undoClearTabs(cleared: ClearedTabs): void;
   removeClosedPin(id: string): ClearedTabs | null;
   closeAbandonedNewTabs(): void;
@@ -345,12 +346,12 @@ export const createCleanUpSlice: StateCreator<BrowserState, [], [], CleanUpSlice
     set(next);
   },
 
-  clearUnpinnedTabs(windowId) {
+  clearUnpinnedTabs(windowId, options) {
     const s = get();
     const ids = clearedTabIds(s, windowId);
     if (!ids.length) return null;
     const entries = closedEntries(s, ids);
-    get().closeTabs(ids);
+    get().closeTabs(ids, options);
     return undoable(s, get(), windowId, s.windows[windowId]!.profileId, entries);
   },
 

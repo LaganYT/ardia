@@ -167,3 +167,8 @@ export function settleTileFolders(s: BrowserState, prev: BrowserState): BrowserS
   if (!tabs && !parkedPins) return null;
   return { ...s, ...(tabs ? { tabs } : {}), ...(parkedPins ? { parkedPins } : {}) };
 }
+
+export function shownFolderTab(s: Pick<BrowserState, "tabs" | "windows">, windowId: string, profileId: string, folderId: string): string | null {
+  const id = s.windows[windowId]?.activeTabIds[profileId];
+  return id && s.tabs[id]?.windowId === windowId && tileFolderOf(s.tabs[id])?.id === folderId ? id : null;
+}

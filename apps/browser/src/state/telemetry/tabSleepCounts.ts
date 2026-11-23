@@ -1,3 +1,4 @@
+import { takeBusyTabCounts } from "./busyTabCounts";
 import { takeCleanUpCounts } from "./cleanUpCounts";
 import type { ConsentToken } from "./choice";
 import { consentOrNow, countFor } from "./countFor";
@@ -134,6 +135,7 @@ export function takeTabSleepCounts() {
     ...(taken.menuSleepKeptReason ? { menu_sleep_kept_reason: taken.menuSleepKeptReason } : {}),
     ...takeProfileUnloadCounts(),
     ...takeCleanUpCounts(),
+    ...takeBusyTabCounts(),
     tabs_slept_over_budget: taken.tabsSleptOverBudget,
     tabs_slept_over_budget_reopened: taken.tabsSleptOverBudgetReopened,
     tabs_over_budget_skipped_loading: taken.tabsOverBudgetSkippedLoading,

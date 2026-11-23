@@ -214,19 +214,54 @@ per interaction mostly come out to the digit in every run, and so do the builtin
 raised only by hand, with the reason in the commit. Nothing runs in CI, so the check is a command:
 
 ```sh
-node apps/browser/scripts/perf/ratchet.mjs run            # 90 s: bundle the tree, run the journeys once, count the Node hot paths, check
+node apps/browser/scripts/perf/ratchet.mjs run            # about 2 minutes: bundle the tree; the journeys, the one-tab launch and the Node counts side by side; check
 node apps/browser/scripts/perf/ratchet.mjs run --instr    # the same, plus the instruction counter
 node apps/browser/scripts/perf/ratchet.mjs run --own --app dist/<v>-rc/export/Ardia.app   # a release candidate's own bundle
 node apps/browser/scripts/perf/ratchet.mjs check <report.json>          # a js-bench report you already have (several runs: the median run)
-node apps/browser/scripts/perf/ratchet.mjs lower <report.json>          # lock in the counts a change cut; prints the diff
-node apps/browser/scripts/perf/ratchet.mjs baseline       # rebuild ratchet.json (8 runs of each session, about 13 minutes, a quiet machine)
-node apps/browser/scripts/perf/ratchet.mjs baseline --measure-only   # the runs only; then `init <the two reports> --adopt` merges them without raising a ceiling
+node apps/browser/scripts/perf/ratchet.mjs check <reports> --retry <retry report>   # a run's verdict again, its retry merged per scenario as run does
+node apps/browser/scripts/perf/ratchet.mjs lower <report.json>          # lock in the counts a change cut; prints the diff (takes --retry too)
+node apps/browser/scripts/perf/ratchet.mjs baseline       # rebuild ratchet.json (8 runs of each session in 4 hidden instances at once, about 5 minutes; --lanes <n>)
+node apps/browser/scripts/perf/ratchet.mjs baseline --measure-only   # the runs only; then `init <the reports it prints> --adopt` merges them without raising a ceiling
 ```
 
-`run` takes about 85 s (6 s of it bundling the tree, 15 s the Node counts, the rest one launch and the ten scenarios of
-one hidden instance), and about 170 s when a count is over and the scenarios run a second time. It exits 1 and prints a
-table of the counts over their ceiling. A count over in the first run gets one more run, and only a count over in both fails: a real regression is in both, a pointer moving over the hidden window or the window
-deactivating mid-scenario is in one. A report of several runs is judged by its median run.
+`run` bundles the tree (about 6 s), then runs three things at once: the ten journeys in one hidden instance, the one-tab
+launch in a second (its own test-server port, remote-debugging port, data folder, app copy and report,
+`<label>-small.json`), and the Node counts. Test-server ports start at `--port` (default 47831) and remote-debugging
+ports at `--cdp-port` (default 9700), one per run each instance actually makes; both are checked before anything
+launches. On ⌃C or a SIGTERM the ratchet passes the signal to each js-bench, which quits the instances it opened as it
+does on its own, waits up to 20 s for them, then SIGKILLs whatever is left of each js-bench's process group and exits
+130 or 143. The bundler and the Node and instruction counters are killed at once.
+The instruction counter (`--instr`) runs after them, alone. It exits 1 and prints a table of the counts over their
+ceiling. A count over in the first run gets one more run, and only a count over in both fails: a real regression is in
+both, a pointer moving over the hidden window or the window deactivating mid-scenario is in one. The second run is the
+journeys in order up to the last one with a count over, not that scenario alone: a scenario's counts depend on the
+ones before it (`openClose` straight after `startup` mounts 6 fewer components on close, `ContextMenuArea` included, than
+after `pageLoad`, and `pageLoad` alone runs about 12% more tasks and timers). The one-tab launch runs again only when one
+of its own counts is over, and `nodeChurn` never does: its worst run decides. `run` saves the Node counts
+(`<label>-micro.json`) and ends by printing the `check` line, quoted for a shell, that gives the same verdict from the
+saved reports: the reports, `--retry` for each retry report, `--micro` and, with `--instr`, the measured count. Passing a
+retry report as a plain report instead would drop the scenarios it didn't rerun. A report of several runs is judged by its median run. Against the old serial flow (median of 3, interleaved, `--bundle` given): a run 143 → 126 s, and one with
+a `pageLoad` count over 281 → 223 s; a count over in `launch` reruns only `startup,launch`.
+
+`baseline` spreads the journeys' 8 launches (`--runs`) over 4 hidden instances (`--lanes`, default 4; both positive whole
+numbers; each lane has its own label,
+ports and data folders) and counts the Node hot paths alongside, then runs the 8 one-tab launches one at a time, alone,
+and the instruction counts after. Journeys side by side don't move each other's counts: over 8 serial and 8
+four-at-once runs (#3737), all 50 exact group totals were the same in every run and every gated count's range
+overlapped. The one-tab launch does move: sampled four at once, `small.launch.storeKeys` came out 43 to 49 against 43 in
+every serial run, so it isn't sampled in parallel.
+
+Before a scenario measures, `settleWindow` (`bench-app.js`) saves the session and waits for it to land
+(`ac.persistence.sessionSaved`: every changed document written, held pins landed; a bundle without it flushes
+synchronously; a save that reports failure or throws fails the run rather than measuring on top of it, and a slow one
+is bounded by the scenario's own deadline), then waits for 3 s with no document write and then for a 1 s window with no new one-shot timer (or the
+same ones as the window before). Those waits, and the short sleeps the scenarios take before them, stay as long as they
+were: shorter ones change what is counted. With 500 ms windows, or one 2 s wait, the reader-mode check
+(`state/reader/reader.ts`: 250 ms after a tab shows, again 1.5 s later) for tabs the warm-up switches left unchecked ran
+inside the measured switches in some runs (`switchTabs.timers.setTimeout:anonymous` 27 to 43, `switchTabs.subNotified`
+4004 to 4046, against 27 and 4004 in every run with the 3 s wait). Tracking the app's pending timers, a 4 or 6 s floor
+of short windows, and waiting for every tab to finish loading didn't stop it, and dropping the sleeps before a settle
+moved `idle.timers` (5 to 6) and `open.timers` (−5%).
 
 ### What is steady
 
@@ -237,7 +272,13 @@ prefixed `small.`). `launch.firstCommitMounts` (and `small.launch.firstCommitMou
 commit mounted (`acPerf.firstCommitMounts`): the first frame waits for all of it. `nodeChurn.nativeNodesLeft` is how many
 of React Native's native animated nodes outlive a churn (20 tabs visited, then 60 tabs opened and closed and 120
 switches): the probe counts `createAnimatedNode` against `dropAnimatedNode` (`acPerf.nativeNodes`), and anything above 0
-is a node left behind for every tab or switch, for the life of the app. The census behind `ratchet.json` is 8 launches of 0.2.27's Release app with the tree's
+is a node left behind for every tab or switch, for the life of the app. A tab stays open 60 ms (its 13 nodes are created
+about 12 ms after the open, 27 ms at worst on a loaded Mac); the gaps after a close and between switches are 10 ms (a
+close's drops land within about 13 ms, and the gap doesn't change what is left at the end). It still waits 1.5 s
+before reading the start count and 2.5 s after the last switch: a shorter wait before sampled the start count before 13
+late nodes of a cold launch arrived, and a shorter one after missed a node a deferred job leaks a second or two later. A
+deliberate leak of one node per opened tab, one per switch, or one 1 s after the last switch comes out the same with
+the old churn and this one. The census behind `ratchet.json` is 8 launches of 0.2.27's Release app with the tree's
 bundle.
 
 Group totals per scenario over the 16 baseline runs (two batches of 8): a bare number repeated in every run is gated

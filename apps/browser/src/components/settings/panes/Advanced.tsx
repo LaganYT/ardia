@@ -13,6 +13,7 @@ import { updateSettings } from "../../../state/settings/actions";
 import { openChromeSettings } from "../../../state/pages/urls";
 import type { BatterySaverWhen, Settings } from "../../../state/settings/settings";
 import { keepSiteActive, stopKeepingSiteActive, type MemorySaverMode } from "../../../state/tabs/memorySaver";
+import { keptSitesListed } from "../../../state/tabs/keptSites";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
 import { Button, DialogActions, DialogTitle, lineHeight, PopUp, Sheet, space, Text, TextField, Toggle } from "../../ui";
 import { perLook } from "../../ui/tokens";
@@ -101,6 +102,7 @@ function PerformanceSection() {
   const keys = { memorySaver, memorySaverMode, loadProfilesWhenOpened, unloadProfilesAfter };
   const batterySaverWhen = useSettings((s) => s.batterySaverWhen);
   const keepActiveSites = useSettings((s) => s.keepActiveSites);
+  const sitesListed = useSettings(keptSitesListed);
   const level = memorySaverLevel(keys);
   const options = [...MEMORY_SAVER_PRESETS.map((value) => ({ value: value as MemorySaverLevel, title: MEMORY_SAVER_LEVELS[value].title })), ...(level === "custom" ? [{ value: "custom" as const, title: "Custom" }] : [])];
   return (
@@ -113,7 +115,7 @@ function PerformanceSection() {
         <Row anchor="advanced.keepActiveSites">
           <Button title="Add Site…" icon="plus" onPress={() => showSettingsSheet(<KeepActiveSiteSheet />)} />
         </Row>
-        {memorySaver &&
+        {sitesListed &&
           [...keepActiveSites]
             .sort((a, b) => a.localeCompare(b))
             .map((site) => (
@@ -133,6 +135,7 @@ function PerformanceSection() {
             minWidth={190}
           />
         </Row>
+        <SettingToggle anchor="advanced.busyTabWarnings" />
       </Group>
     </>
   );

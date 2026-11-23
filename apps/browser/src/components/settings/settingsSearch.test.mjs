@@ -310,7 +310,8 @@ test("a row its pane doesn't draw is left out of search, by the same rule the pa
   for (const id of ["tabs.sidebarSide", "appearance.sidebarTextSize", "general.syncFolder", "automations.meetingAlert"]) assert.ok(!sidebar.has(id), id);
   for (const id of ["appearance.interfaceStyle", "appearance.glassTint"]) assert.ok(unshown({}, { top: false }).has(id), id);
   assert.ok(unshown({ interfaceStyle: "classic" }, { top: false, glass: true }).has("appearance.glassTint"));
-  assert.ok(unshown({ memorySaver: false }, { top: false }).has("advanced.keepActiveSites"));
+  assert.ok(unshown({ memorySaver: false, busyTabWarnings: false }, { top: false }).has("advanced.keepActiveSites"));
+  assert.ok(!unshown({ memorySaver: false, busyTabWarnings: true }, { top: false }).has("advanced.keepActiveSites"), "busy-tab warnings read the kept sites too");
   assert.ok(!unshown({ memorySaver: true }, { top: false }).has("advanced.keepActiveSites"));
   assert.ok(unshown({ newTabOpens: "commandBar" }, { top: false }).has("tabs.newTabUrl"));
   assert.ok(unshown({ cleanUpInactiveTabsAfterMinutes: 60 }, { top: false }).has("tabs.suggestCleanUp"));

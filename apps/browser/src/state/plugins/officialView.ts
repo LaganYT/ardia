@@ -1,6 +1,6 @@
 import type { InstallResult } from "./installWaiters";
 import type { OfficialPlugin } from "./official";
-import type { OfficialFetch, ProgramsState } from "./store";
+import type { OfficialAutoUpdate, OfficialFetch, ProgramsState } from "./store";
 
 export const wasCancelled = (result: InstallResult) => !result.ok && result.cancelled === true;
 
@@ -66,7 +66,16 @@ export function officialView(plugin: OfficialPlugin, programs: ProgramsState | u
   return { ...base, action: "install", status: olderProgram ? olderInstallLine(plugin, olderProgram) : null };
 }
 
-export const officialTitle = (plugin: OfficialPlugin) => plugin.title || plugin.name;
+export function autoUpdateNote(updated: OfficialAutoUpdate): { title: string; description: string } {
+  const title = updated.to ? `Updated by itself to ${updated.to}` : "Updated by itself";
+  const said = updated.runtime
+    ? "It added its own code, which runs in Ardia's sandbox, offline, and first starts when you use one of its commands in the command bar. Its permissions didn't change."
+    : "Its permissions didn't change.";
+  const since = updated.from ? `New since ${updated.from}` : "New since the version you approved";
+  return { title, description: updated.added.length ? `${said} ${since}: ${updated.added.join("; ")}.` : said };
+}
+
+export const officialTitle =(plugin: OfficialPlugin) => plugin.title || plugin.name;
 
 export const isOffered = (plugin: OfficialPlugin) => plugin.state === "available" || plugin.state === "comingSoon";
 

@@ -4,16 +4,18 @@ import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { PLATFORM_TERMS } from "../../lib/platformTerms";
 import { experimentOn } from "../../platform/killSwitches";
 import { cancelOfficialPluginFetch, fetchOfficialPlugin, onOfficialFetchProgress, type OfficialFetchResult } from "../../platform/plugins";
-import { notePlugin } from "../telemetry/pluginCounts";
+import { notePlugin, type PluginCount } from "../telemetry/pluginCounts";
+import { updateWithin, type UpdatePromptReason, type UpdateVerdict } from "./officialUpdate";
+import { MAX_UPDATE_LINES } from "./savedState";
 import { consentToken, type ConsentToken } from "../telemetry/consentPeriod";
 import { warnFor } from "../telemetry/consoleConsent";
 import { openSettings } from "../settings/settingsWindows";
 import { waitForInstall, type InstallResult } from "./installWaiters";
 import { releaseOrphanedConsent } from "./consentSurface";
 import { afterPluginScan } from "./scanListeners";
-import { adoptExactApproval, ALREADY_ASKING, consentTarget, promoteCandidate, requestPluginConsent, rescanPlugins } from "./lifecycle";
+import { adoptExactApproval, ALREADY_ASKING, consentTarget, isRemoving, updateRecord, promoteCandidate, requestPluginConsent, rescanPlugins } from "./lifecycle";
 import { relinkPrograms } from "./programs";
-import { activeManifest, approvalMatches, currentPlugins, setOfficialFetch, usePlugins, type PluginListing, type PluginsStore } from "./store";
+import { activeManifest, approvalMatches, currentPlugins, recordOf, setOfficialFetch, usePlugins, type PluginListing, type PluginsStore } from "./store";
 
 export { COMING_SOON, OFFICIAL_CATALOGUE, OFFICIAL_NAMES, PRESELECTED_PLUGINS, officialCatalogue } from "./officialPin";
 
@@ -193,7 +195,12 @@ export function installOfficialPlugin(name: string, options: InstallOptions = {}
   const approvedCandidate = candidateOf(currentPlugins(), name);
   const record = Object.hasOwn(currentPlugins().records, name) ? currentPlugins().records[name] : undefined;
   if (approvedCandidate?.hash && record?.enabled && approvalMatches(approvedCandidate, record.approved)) {
-    return promoteCandidate(name, approvedCandidate, consentToken()).then(() => linked(name));
+    if (currentPlugins().fetches[name]?.state === "promoting") return linked(name);
+    const consent = consentToken();
+    return promoteCandidate(name, approvedCandidate, consent).then((ok) => {
+      if (ok) noteAutoUpdate(name, approvedCandidate, consent);
+      return linked(name);
+    });
   }
   if (!needsFetch(name)) return askToInstall(name, options);
   return fetchOfficialCandidate(name, consentToken()).then((fetched) => {
@@ -222,6 +229,7 @@ const retryAt = new Map<string, { at: number; wait: number }>();
 const FIRST_RETRY_MS = 10 * 60 * 1000;
 const LAST_RETRY_MS = 6 * 60 * 60 * 1000;
 const waitingNoted = new Set<string>();
+const autoNoted = new Set<string>();
 
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -243,7 +251,58 @@ export function resetOfficialUpdatesForTests() {
   retryTimers.clear();
   retryAt.clear();
   waitingNoted.clear();
+  autoNoted.clear();
   inFlight.clear();
+}
+
+const PROMPT_COUNTS: Record<UpdatePromptReason, PluginCount> = {
+  baseline: "official_update_prompts_baseline",
+  permissions: "official_update_prompts_permissions",
+  network: "official_update_prompts_network",
+  runtime: "official_update_prompts_runtime",
+  activation: "official_update_prompts_activation",
+  programs: "official_update_prompts_programs",
+  hooks: "official_update_prompts_hooks",
+  settings: "official_update_prompts_settings",
+  contributions: "official_update_prompts_contributions",
+  unknown: "official_update_prompts_unknown",
+};
+
+export function officialUpdateVerdict(s: Pick<PluginsStore, "listings" | "records" | "pinned">, name: string, candidate: PluginListing): UpdateVerdict {
+  const pinned = pinnedOf(s, name);
+  const record = Object.hasOwn(s.records, name) ? s.records[name] : undefined;
+  const listing = Object.hasOwn(s.listings, name) ? s.listings[name] : undefined;
+  const baseline = listing?.manifest;
+  const next = candidate.manifest;
+  if (!pinned || !record?.enabled || !record.approved || !listing?.official || !baseline?.official || !listing.hash) return { ok: false, reason: "baseline" };
+  if (listing.hash !== record.approved && listing.legacyHash !== record.approved) return { ok: false, reason: "baseline" };
+  if (!candidate.official || !next?.official || !candidate.hash || candidate.problems.length || candidate.folderId !== pinned.folderId) return { ok: false, reason: "baseline" };
+  if (candidate.name !== name || next.name !== name || baseline.name !== name || candidate.hash === listing.hash) return { ok: false, reason: "baseline" };
+  return updateWithin(baseline, next, Object.hasOwn(OFFICIAL_EXAMPLES, name) ? OFFICIAL_EXAMPLES[name]! : null);
+}
+
+function noteAutoUpdate(name: string, candidate: PluginListing, consent: ConsentToken | null) {
+  const record = recordOf(currentPlugins(), name);
+  if (!candidate.hash || autoNoted.has(candidate.hash) || !record.updated || record.approved !== candidate.hash || currentPlugins().listings[name]?.hash !== candidate.hash) return;
+  autoNoted.add(candidate.hash);
+  notePlugin("official_updates_auto", consent);
+}
+
+function approveOfficialUpdate(name: string, candidate: PluginListing, verdict: { added: string[]; runtime: boolean }, consent: ConsentToken | null): boolean {
+  const s = currentPlugins();
+  const before = recordOf(s, name);
+  const approved = before.approved;
+  if (!candidate.hash || !before.enabled || !approved || approved === candidate.hash || isRemoving(name) || s.consent?.name === name) return false;
+  const updated = { from: s.listings[name]?.manifest?.version ?? null, to: candidate.manifest?.version ?? null, added: verdict.added.slice(0, MAX_UPDATE_LINES), ...(verdict.runtime ? { runtime: true as const } : {}) };
+  return updateRecord(name, () => ({ ...before, approved: candidate.hash, previous: approved, updated }), consent);
+}
+
+function promoteWithRetry(name: string, candidate: PluginListing, consent: ConsentToken | null) {
+  void promoteCandidate(name, candidate, consent).then((ok) => {
+    if (ok) return void (retryAt.delete(`promote:${name}`), noteAutoUpdate(name, candidate, consent));
+    retryAt.set(`promote:${name}`, { at: Date.now() + FIRST_RETRY_MS, wait: FIRST_RETRY_MS });
+    retryLater(`promote:${name}`, FIRST_RETRY_MS, consent);
+  });
 }
 
 export function reconcileOfficial(consent: ConsentToken | null, now = Date.now()) {
@@ -266,14 +325,17 @@ export function reconcileOfficial(consent: ConsentToken | null, now = Date.now()
           notePlugin("official_migrations_kept", consent);
           if (!adoptExactApproval(name, candidate, consent)) continue;
         }
-        void promoteCandidate(name, candidate, consent).then((ok) => {
-          if (ok) return void retryAt.delete(`promote:${name}`);
-          retryAt.set(`promote:${name}`, { at: Date.now() + FIRST_RETRY_MS, wait: FIRST_RETRY_MS });
-          retryLater(`promote:${name}`, FIRST_RETRY_MS, consent);
-        });
-      } else if (!waitingNoted.has(candidate.hash)) {
-        waitingNoted.add(candidate.hash);
-        notePlugin("official_updates_waiting", consent);
+        promoteWithRetry(name, candidate, consent);
+      } else if (s.consent?.name !== name) {
+        const verdict = officialUpdateVerdict(s, name, candidate);
+        if (verdict.ok) {
+          if (approveOfficialUpdate(name, candidate, verdict, consent)) promoteWithRetry(name, candidate, consent);
+          else retryLater(`approve:${name}`, FIRST_RETRY_MS, consent);
+        } else if (!waitingNoted.has(candidate.hash)) {
+          waitingNoted.add(candidate.hash);
+          notePlugin("official_updates_waiting", consent);
+          notePlugin(PROMPT_COUNTS[verdict.reason], consent);
+        }
       }
       continue;
     }

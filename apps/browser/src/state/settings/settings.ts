@@ -129,6 +129,7 @@ export const SETTING_SPECS = {
   batterySaverWhen: oneOf(["lowBattery", "unplugged", "never"], "lowBattery"),
   unloadProfilesAfter: oneOf(["never", "5m", "15m", "1h", "2h"], "never"),
   memorySaver: flag(true),
+  busyTabWarnings: flag(true),
   memorySaverMode: oneOf(["moderate", "balanced", "maximum"], "balanced"),
   loadProfilesWhenOpened: flag(true),
   keepActiveSites: shaped<string[]>([], isStringList, STRING_LIST, SYNCED),

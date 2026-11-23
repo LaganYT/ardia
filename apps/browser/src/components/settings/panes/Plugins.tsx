@@ -34,6 +34,7 @@ import { OfficialPluginsSection, usePluginsBelowOfficial } from "./OfficialPlugi
 import { useControlTurnedOff } from "../../../state/app/programControlSetting";
 import { useNeverChosenCount } from "../../../state/site/passwordManager";
 import { PasswordManagerDetails } from "./PasswordManagerPlugin";
+import { autoUpdateNote } from "../../../state/plugins/officialView";
 
 export function PluginsPane({ detail }: SettingsPlace) {
   if (!PLATFORM_FEATURES.plugins) return <UnavailablePage />;
@@ -232,6 +233,7 @@ function PluginPage({ name }: { name: string }) {
   const programs = usePluginPrograms(name);
   const values = usePluginValues(name);
   const movesProfiles = useNeverChosenCount();
+  const record = usePluginRecord(name);
   const m = listing?.manifest ?? null;
   if (!listing) return <PaneSubPage intro="This plugin isn't installed any more.">{null}</PaneSubPage>;
   return (
@@ -243,6 +245,7 @@ function PluginPage({ name }: { name: string }) {
         >
           <Toggle value={active} disabled={!m} asksFirst={!active} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on)} />
         </Row>
+        {listing.official && record.updated && record.approved === listing.hash ? <Row title={autoUpdateNote(record.updated).title} description={autoUpdateNote(record.updated).description} /> : null}
         {active && (m?.process || (m?.main && process)) ? (
           <Row title={m?.process ? "Its program" : "Its code"} description={m?.process ? m.process.run.join(" ") : typeof m?.main === "string" ? m.main : m?.main?.entry}>
             <Button title="Show Log" onPress={() => showPluginLog(name)} />

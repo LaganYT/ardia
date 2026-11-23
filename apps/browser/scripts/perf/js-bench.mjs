@@ -15,7 +15,8 @@
 //         --runs <n>           launches, one per run (default 5)
 //         --scenarios <a,b>    of: startup, persistence, idle, typing, switchTabs, openClose, scroll, pageLoad, hover,
 //                              profileSwipe, storeUpdate, idleLate (default all, in that order; startup must stay first)
-//         --port <n>           the test page server's port (default 47817); instance CDP ports are 9500 + run + …
+//         --port <n>           the test page server's port (default 47817)
+//         --cdp-port <n>       the first run's remote-debugging port; run r gets n + r (default 9500 + run + 10 × label length)
 //         --out <dir>          default $AC_PERF_OUT or /tmp/ac-perf-js
 //         --append 1           add these runs to an existing <label>.json (to interleave two builds' runs: alternate
 //                              `run --runs 1 --append 1` between them)
@@ -364,7 +365,7 @@ async function run() {
       writeSeed(dataDir, origin, version, { tabsOrigin: `http://[::1]:${port}`, activeDelayMs: ACTIVE_PAGE_DELAY_MS });
       if (flags.seed === "small") smallSession(dataDir);
       if (flags.probe) writeFileSync(join(dataDir, "perf-probe"), flags.probe);
-      const { pid, launchedAt } = await launch(clone, dataDir, 9500 + r + (label.length % 50) * 10);
+      const { pid, launchedAt } = await launch(clone, dataDir, flags["cdp-port"] ? Number(flags["cdp-port"]) + r : 9500 + r + (label.length % 50) * 10);
       const result = { run: r, launchedAt };
       try {
         let ready = false;

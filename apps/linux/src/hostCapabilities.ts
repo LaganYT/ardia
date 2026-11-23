@@ -11,6 +11,7 @@ export type LinuxCapabilities = {
   externalLinks: boolean;
   performanceRecording: boolean;
   taskManager: boolean;
+  busyTabWatch: boolean;
   videoUpscaling: boolean;
   commandScrollZoom: boolean;
   littleArdiaNewTabLinks: boolean;
@@ -65,6 +66,7 @@ export function linuxCapabilities(host: ArdiaHost | undefined = ardiaHost): Linu
     externalLinks: has("ArdiaApp.openExternalURL"),
     performanceRecording: has("engine.beginTracing", "engine.endTracing", "engine.isTracing"),
     taskManager: has("engine.openTaskManager"),
+    busyTabWatch: has("engine.childProcessCpu"),
     videoUpscaling: false,
     commandScrollZoom: has("webView.setCommandScrollZoom"),
     littleArdiaNewTabLinks: has("webView.setLittleArdiaOpensNewTabLinks"),

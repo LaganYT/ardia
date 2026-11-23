@@ -472,10 +472,15 @@ git -C "$AC_CHROMIUM_BUILD/helium" fetch --depth 1 origin "$(sed -n 's/^helium_c
 
 source engine/patches/build/env.sh
 scripts/agent/locked chromium -- engine/patches/build/01-sync.sh --apply
-scripts/agent/locked chromium -- python3 engine/patches/build/03-helium.py --platform linux --apply
+scripts/agent/locked chromium -- python3 scripts/engine/run-step3.py --platform linux --apply
+scripts/agent/locked chromium -- python3 scripts/engine/run-capture.py --platform linux
 scripts/linux/build.sh --apply --generate
 ```
 
+- **Step 3 through the wrappers.** `run-step3.py` runs `03-helium.py` and stamps one full run on a fresh tree.
+  `run-capture.py` runs `series.py capture-base` before step 4 and records the base it captured. Only a tree and base
+  made that way can be packed into the series base the Engine series workflow checks against
+  (`docs/engine-build.md`, "The series base archive").
 - **Pins.** The tags must match `engine/patches/build/helium-pins.ini`. helium-linux's `helium-chromium` submodule
   may sit a few commits past the shared Helium tag; `03-helium.py` accepts that only when the two commits agree on
   everything the build reads (the patches, version files, lists and utils), which is why the `fetch` line brings in

@@ -1567,6 +1567,16 @@
    "detected": false
   },
   {
+   "id": "plugin-update:official-auto",
+   "source": "plugin",
+   "guard": "An official update's manifest is approved without a sheet only when the installed copy and the download are the pin's verified copies and every field but cosmetic text is identical to the approved manifest (a first command-bar-only main excepted); anything else, unknown or malformed keeps the prompt",
+   "checks": [
+    "apps/browser/src/state/plugins/officialUpdate.ts#updateWithin",
+    "apps/browser/src/state/plugins/official.ts#officialUpdateVerdict"
+   ],
+   "detected": false
+  },
+  {
    "id": "plugin-install:official",
    "source": "native",
    "guard": "Official copies checked against the signed pin on every lookup; one verified snapshot is unpacked within caps of 512 MB downloaded, 1 GB unpacked, 100 times the download and 200 times an entry's compressed size past 4 MB, 20,000 entries and 32 levels (Swift tests in packages/shell/plugin-tests)",
@@ -1606,9 +1616,12 @@
   {
    "id": "engine-token-connection:ardia-browse",
    "source": "socket",
-   "guard": "Engine token server: loopback only, a 32-byte token compared in constant time (ControlServer::Accepts) from the 0600 ArdiaControl.json, no Origin, RemoteDebuggingAllowed policy; then a full DevTools client by the owner's decision (#2807). TokenClient::FilterCommand keeps only framing: a JSON object with an integer id and string method, params an object, a known sessionId, one command per (session, id), 4096 waiting replies at most",
+   "guard": "Engine token server: loopback only; before the token is read, anything a browser sends (Origin, Sec-Fetch-Site, Sec-Fetch-Dest) or a Host other than 127.0.0.1:<port> or localhost:<port> is refused (ArdiaRequestIsFromProgram), so no page, extension, service worker or DNS-rebound name in a browser that sends Fetch Metadata (Chromium, Firefox 90+, Safari 16.4+) reaches it, and an older Safari top-level GET still needs the token and can't read the answer; a 32-byte token compared in constant time (ControlServer::Accepts) from the 0600 ArdiaControl.json, published through one open descriptor of a folder no other user owns or can write, with no macOS access list naming anyone but you and not on a volume that ignores ownership (UnsafeControlFolder), the file stripped of inherited ACLs and checked 0600 (OnlyOwnerCanRead); RemoteDebuggingAllowed policy; then a full DevTools client by the owner's decision (#2807). TokenClient::FilterCommand keeps only framing: a JSON object with an integer id and string method, params an object, a known sessionId, one command per (session, id), 4096 waiting replies at most",
    "checks": [
     "engine/chromium/src/chrome/browser/ardia/ac_cli_control.cc#Accepts",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_control_file.cc#UnsafeControlFolder",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_control_file.cc#OnlyOwnerCanRead",
+    "engine/patches/chromium-devtools-control-token.patch#ArdiaRequestIsFromProgram",
     "engine/chromium/src/chrome/browser/ardia/ac_cli_token_policy.cc#FilterCommand"
    ],
    "detected": false
@@ -1680,6 +1693,28 @@
    "checks": [
     "apps/browser/src/state/site/pageLinkCopy.ts#copyLinkFromPageMenu",
     "packages/ardiacore/ios/WebKitContextMenu.swift#WebKitCopiedAddresses"
+   ],
+   "detected": false
+  },
+  {
+   "id": "engine-call:childProcessCpu",
+   "source": "native",
+   "guard": "The app's own renderer child processes only (proc_listpids by parent pid, extension renderers left out), read with proc_pid_rusage on a background queue; a pid whose parent or start time changed during the read is dropped. JS takes only rows whose pid, start time and CPU time are finite non-negative numbers (validReadings); readings of a reused pid or more than 25 s apart start over",
+   "checks": [
+    "packages/ardiacore/ios/ChildProcessCpu.swift#sample",
+    "apps/browser/src/state/tabs/busyProcesses.ts#validReadings",
+    "apps/browser/src/state/tabs/busyProcesses.ts#readHeat"
+   ],
+   "detected": false
+  },
+  {
+   "id": "engine-call:tasks:busyTabWatch",
+   "source": "native",
+   "guard": "Chrome's task manager rows: only a numeric pid and string tab ids are read; a tab id must be the store's own key (Object.hasOwn), private tabs are never named, ownership is read again right before a warning and again before Sleep acts, and a page title reaches the toast only through toastName (controls, line breaks and lone surrogates removed, 24 characters)",
+   "checks": [
+    "apps/browser/src/state/tabs/busyTabWatch.ts#freshOwners",
+    "apps/browser/src/state/tabs/busyTabWatch.ts#toastName",
+    "apps/browser/src/state/tabs/busyTabWatch.ts#stillBusyIn"
    ],
    "detected": false
   }

@@ -36,6 +36,12 @@ export type EngineTask = {
   pid?: number;
 };
 
+export type ChildProcessCpu = {
+  pid: number;
+  started: number;
+  cpuMs: number;
+};
+
 export type SystemState = {
   onBattery: boolean;
   batteryLevel: number | null;

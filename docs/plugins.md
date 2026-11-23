@@ -164,8 +164,40 @@ is the only source of which version may be fetched.
     Try Again, in Settings and in onboarding. Leaving onboarding during a download cancels it.
 - **Updates.** A pin that names a new artifact fetches it in the background once you have the plugin, retrying after
   10 minutes, then doubling up to 6 hours.
-  - It switches over only if its exact approval is on record: the same name and hash, or the old receipt below.
-    Otherwise it waits, and the plugin's row offers **Update…**, which shows the consent sheet for the new copy.
+  - It switches over by itself if its exact approval is on record: the same name and hash, or the old receipt below.
+  - It also switches over by itself, with no sheet, when it grants nothing you hadn't already approved
+    (`state/plugins/officialUpdate.ts`, #3868). All of these must hold:
+    - the installed copy is official by native's say (the pin's digest, an earlier pinned digest, or a 0.2.47 bundled
+      digest), it's on, and the record's `approved` is that copy's exact receipt;
+    - the new copy is the verified download of the pin's own digest (`folderId` is the pin's), its manifest has the
+      same `name`, is marked `official` and has no problems;
+    - its manifest asks for nothing the approved one didn't. Every field that runs, reaches pages, changes the
+      browser or grants anything must be identical, order and limits included: permissions (narrowing too, since it
+      changes which other plugins may call its tools; only the order of network hosts doesn't count), programs with
+      their paths and after-update steps, hooks, tools and their timeouts, settings defaults and rows, menus, toolbar,
+      sidebar views, panels, omnibox, themes, site switches, the page bar, the page, `main` and sidecar specs with
+      their memory budgets, every activation event other than `onCommand:`, and every approved command. A program's
+      `example` must stay what Settings offers to copy (the pin's example stands in for a manifest without one).
+      The one addition is a first `main` (the owner's call, for the move off the Python CLI): it passes only when
+      its only way in is the command bar, with the new view or handler commands that reach it (all its activation
+      events `onCommand:`; no page, panels, sidebar views, toolbar, omnibox, menus, tools, hooks or sidecar), and
+      the unchanged permissions give it nothing to use (only `control`, the separate program-control setting). It
+      is still a new runtime, able to show toasts and dialogs and relink its own programs, so the note says so.
+      Python 0.4.0 to Bun 0.6.0 is this case. Title, description, version, `requires`, icon, keywords, the telemetry
+      text and a program's `claim` don't count. Any field the comparison doesn't know, or a malformed one, prompts.
+      The boundary row is `plugin-update:official-auto`.
+    - The record keeps `previous` for a rollback and an `updated` note (`from`, `to`, the consent lines that are
+      new, and `runtime` when it added a first `main`). While that copy is the one installed, the plugin's page shows
+      "Updated by itself to 0.6.0", "It added its own code, which runs in Ardia's sandbox, offline, and first starts
+      when you use one of its commands in the command bar" when it did, "Its permissions didn't change", and those lines.
+      `official_updates_auto` counts the switch once it took.
+      Approving any later update by hand drops the note.
+  - Otherwise it waits, and the plugin's row offers **Update…**, which shows the consent sheet for the new copy. It
+    also waits while the consent sheet is open for that plugin, and when nothing is on record: an `ardia` installed
+    the old way that was never approved isn't adopted, since there's no approval to compare with.
+  - Telemetry: `official_updates_auto` counts updates that installed by themselves; `official_updates_waiting` the
+    ones left for review, with `official_update_prompts_<reason>` saying why (`baseline`, `permissions`, `network`,
+    `runtime`, `activation`, `programs`, `hooks`, `settings`, `contributions`, `unknown`), once per download.
   - Until then the approved copy keeps running, and `previous` in the record keeps it approved while the switch
     happens.
 - **Provenance.** Only native code decides that a plugin is official: the signed pin plus a verified copy in the

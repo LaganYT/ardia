@@ -336,6 +336,7 @@ export function turnOffPlugin(name: string, consent: ConsentToken | null): Promi
 }
 
 const removing = new Set<string>();
+export const isRemoving = (name: string) => removing.has(name);
 
 const secretsLeftReason = (name: string, secrets: SecretsCleared) =>
   `Its files are removed, but ${secrets.remaining.length === 1 ? "1 secret is" : secrets.remaining.length ? `${secrets.remaining.length} secrets are` : "its secrets may be"} still in your Keychain, under ardia.plugin.${name}. Delete them in Keychain Access.`;

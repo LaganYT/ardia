@@ -33,6 +33,7 @@ import { startPrivateSessions } from "./state/windows/privateSessions";
 import { startNewTabBar } from "./state/omnibox/newTabBar";
 import { perfMark, perfProbeEnabled, probeStore } from "./state/app/perfProbe";
 import { startTabLifecycle } from "./state/tabs/tabLifecycle";
+import { startBusyTabWatch } from "./state/tabs/busyTabWatch";
 import { startTabPages } from "./state/tabs/tabPages";
 import { startTabReveal } from "./state/tabs/tabReveal";
 import { startSync } from "./state/sync/engine";
@@ -76,6 +77,7 @@ afterFirstWindow(startUserScripts);
 afterFirstWindow(startAutomation);
 afterFirstWindow(startPlugins);
 afterFirstWindow(startSharedFolders);
+afterFirstWindow(startBusyTabWatch);
 startMemoryTrim();
 if (__DEV__ || perfProbeEnabled) require("./components/dev/devHarness").startDevHarness();
 

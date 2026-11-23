@@ -291,21 +291,27 @@ candidate also needs the full `gate.sh` before publishing, because its rounds me
 
 ### 4b. Perf ratchet (stable only)
 
-Check the candidate's counts against the ceilings before publishing, beside the smoke test (about five minutes; B1's
-speed-up of `ratchet.mjs`, `bench-app.js` and `ratchet-app.js` makes it shorter; no perflab lock needed: they are
-counts, not timings):
+Check the candidate's counts against the ceilings before publishing, beside the smoke test (about two minutes, four
+with a retry; no perflab lock needed: they are counts, not timings):
 
 ```bash
 node apps/browser/scripts/perf/ratchet.mjs run --own --app dist/<version>-rc/export/Ardia.app   # dist/<version>/export without an rc
 ```
 
 `--own` runs the app's own `main.jsbundle`, so it checks what ships. It must print `ratchet: ok`. It runs the launch,
-idle, command bar, tab switch, navigate, scroll, hover and native-node churn scenarios in a hidden instance, and a count over its ceiling
-gets one more run (a stray window event isn't a regression; a count over in both is). A failure is a real regression
+idle, command bar, tab switch, navigate, scroll, hover and native-node churn scenarios in one hidden instance and a
+one-tab launch in a second one beside it (report `ratchet-small.json`). A count over its ceiling gets one more run of
+the journeys up to that scenario, and a one-tab count gets its own one-tab rerun (a stray window event isn't a
+regression; a count over in both is). Native nodes left behind by the churn are never rerun: one run with any left
+fails. To check its verdict again from the saved reports, use the `check` line it prints last (the reports, `--retry`
+for a retry, `--micro` for the Node counts), not the retry report listed as a plain one: that drops the scenarios it
+didn't rerun. A failure is a real regression
 (find the commit that added the commit, render, store update or timer, and fix it) or an intended increase: raise that
 one ceiling by hand in `apps/browser/scripts/perf/ratchet.json` and say why in the commit and the release report. When
-the release made counts go down, run `ratchet.mjs lower <the run's report>` (`$TMPDIR/ac-ratchet/ratchet.json`; under
-`gate.sh`, `TMPDIR` is the gate's scratch folder, `/tmp/ac-gate.XXXXXX`, named in its output), commit
+the release made counts go down, run `ratchet.mjs lower` with the arguments of the `check` line the run printed last: both
+sessions' reports (`ratchet.json` and `ratchet-small.json` in `$TMPDIR/ac-ratchet`), a `--retry` for each retry report it
+produced, and `--micro` (under `gate.sh`, `TMPDIR` is the gate's scratch folder, `/tmp/ac-gate.XXXXXX`, named in its
+output). Then commit
 the lowered ceilings, and say which counts dropped. The wall-clock gate is a separate step: `docs/perf/README.md`.
 
 ### 4c. Perf gate: the RC against the previous stable release (stable only)

@@ -29,6 +29,12 @@ on:
       - "tsconfig.base.json"
       - ".nvmrc"
       - "patches/**"
+      - "docs/dia-feature-parity.md"
+      - "**/*.test.*"
+      - "**/*-test.mjs"
+      - "**/*Tests.swift"
+      - "**/test_*.py"
+      - "**/*Test.kt"
   push:
     branches: [main]
     paths: *inputs
@@ -142,6 +148,12 @@ jobs:
               - ".github/**"
               - "package.json"
               - ".nvmrc"
+              - "docs/dia-feature-parity.md"
+              - "**/*.test.*"
+              - "**/*-test.mjs"
+              - "**/*Tests.swift"
+              - "**/test_*.py"
+              - "**/*Test.kt"
       - id: router
         name: The router, from main
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

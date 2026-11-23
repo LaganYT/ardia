@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, posix, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { citations, DOC } from "./parity-tests.mjs";
+import { LOCK, parseLock } from "./promises.mjs";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 const workflow = (name) => readFileSync(join(REPO, ".github/workflows", name), "utf8").replace(/\r\n/g, "\n");
@@ -41,7 +43,7 @@ function changeFilters(text) {
 const covers = (outer, inner) => outer === inner || (outer.endsWith("/**") && inner.startsWith(outer.slice(0, -2)));
 
 const globPattern = (glob) =>
-  new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\0").replace(/\*/g, "[^/]*").replace(/\0/g, ".*")}$`);
+  new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*\//g, "\u0001").replace(/\*\*/g, "\0").replace(/\*/g, "[^/]*").replace(/\0/g, ".*").replace(/\u0001/g, "(?:.*/)?")}$`);
 
 function matched(globs, path) {
   let included = false;
@@ -177,6 +179,14 @@ test("the repository job starts on every test test:root runs and every repositor
   }
 });
 
+test("the repository job starts on the parity doc, the promises lock and every test either one cites", () => {
+  const repo = changeFilters(workflow("checks.yml")).repo;
+  const locked = parseLock(readFileSync(join(REPO, LOCK), "utf8")).map((promise) => promise.file);
+  const cited = citations(readFileSync(join(REPO, DOC), "utf8")).found.map((citation) => citation.file);
+  assert.ok(locked.length > 50 && cited.length > 50, "the lock and the doc still name their tests");
+  for (const path of [DOC, LOCK, ...locked, ...cited]) assert.ok(matched(repo, path), `a change to ${path} runs the repository job`);
+});
+
 test("Deploy starts on main only for the paths one of its services deploys from", () => {
   const text = workflow("deploy.yml");
   assertTriggersMatchFilters(triggerPaths(text, "push"), changeFilters(text), ".github/workflows/deploy.yml");
@@ -186,5 +196,10 @@ test("the path globs these tests use read like GitHub's", () => {
   assert.ok(matched(["packages/*/src/**", "!packages/phone/**"], "packages/core/src/a.ts"));
   assert.ok(!matched(["packages/*/src/**", "!packages/phone/**"], "packages/phone/src/a.ts"));
   assert.ok(!matched(["packages/*/package.json"], "packages/core/src/package.json"));
+  assert.ok(matched(["**/*.test.*"], "example.test.mjs"));
+  assert.ok(matched(["**/*.test.*"], "apps/browser/src/a/b.test.mjs"));
+  assert.ok(!matched(["**/*.test.*"], "apps/browser/src/a/b.mjs"));
+  const repo = changeFilters(workflow("checks.yml")).repo;
+  for (const path of ["apps/phone/android/app/src/test/java/com/ardia/browser/android/ShareSheetTest.kt", "apps/phone/test/release/a.test.sh", "engine/x/tests/test_a.py", "packages/shell/tests/ATests.swift"]) assert.ok(matched(repo, path), `a change to ${path} runs the repository job`);
   assert.equal(relative(REPO, dirname(fileURLToPath(import.meta.url))), "scripts/ci");
 });

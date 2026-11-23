@@ -177,6 +177,7 @@ export type EngineCalls = BookmarksCalls & FaviconsCalls & HistoryCalls & {
   "contentBlocker.removeList": [{ id: string }, null];
   "contentBlocker.isAllowed": [{ host: string }, boolean];
   "contentBlocker.setAllowed": [{ host: string; allowed: boolean }, null];
+  "contentBlocker.removeAllowed": [{ host: string }, { removed: boolean }];
   "contentBlocker.hiddenElements": [{ profile: string }, string[]];
   "contentBlocker.hideElements": [{ profile: string; filters: string[] }, null];
   "contentBlocker.restoreElements": [{ profile: string; filters: string[] }, null];

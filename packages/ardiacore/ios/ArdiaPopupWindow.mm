@@ -324,7 +324,11 @@ NSImage *_Nullable PermissionIcon(NSDictionary *request) {
 - (void)openAsTab {
   if (_tab.closed) return;
   ArdiaWebView *view = _opener ?: [ArdiaWindowController hostingViewForProfile:_tab.profile];
-  if (view) [view openedTab:_tab adoptId:[ArdiaTabRegistry offerTab:_tab] disposition:@"foreground"];
+  if (!view) return;
+  if (!_opener && ![view.profile isEqualToString:ardia_host::ProfileName(_tab.profile)] &&
+      !ardia_host::IsOffTheRecordOf(_tab.profile, view.profile))
+    return;
+  [view openedTab:_tab adoptId:[ArdiaTabRegistry offerTab:_tab] disposition:@"foreground"];
 }
 
 - (void)updateTitle {

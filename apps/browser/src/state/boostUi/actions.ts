@@ -85,8 +85,10 @@ export async function deleteBoostAfterConfirm(profileId: string, boost: Boost, w
 
 export function copyShareCode(boost: Boost, link = false): boolean {
   const code = encodeBoost(boost);
-  if (code) copyText(link ? shareLink(code) : code);
-  return code !== null;
+  if (code === null) return false;
+  const text = link ? shareLink(code) : code;
+  copyText(text);
+  return true;
 }
 
 export async function showBoostMenu(profileId: string, boost: Boost, windowId: string, tabId: string) {

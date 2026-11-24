@@ -23,7 +23,7 @@ const SHARED_TESTS = [
   "windowDrag.test.mjs", "hostHistoryImports.test.mjs", "popoverEscape.test.mjs", "entryOrder.test.mjs",
   "unclaimedTabs.test.mjs", "appMenu.test.mjs", "inputRegions.test.mjs", "downloadsDismissal.test.mjs",
   "menus.test.mjs", "shellAbove.test.mjs", "pipPlayer.test.mjs", "glassRegions.test.mjs", "telemetryLeader.test.mjs",
-  "linkShare.test.mjs", "hostTelemetryLocal.test.mjs", "hostTelemetryChoice.test.mjs",
+  "linkShare.test.mjs", "hostTelemetryLocal.test.mjs", "hostTelemetryChoice.test.mjs", "shellMigrationLaunch.test.mjs",
   "inWindowPlayerConsent.test.mjs", "settingsViewData.test.mjs", "sessionMigrations.test.mjs",
   "bookmarksHtml.test.mjs", "hostBookmarksExport.test.mjs", "openUrls.test.mjs", "pageSwipe.test.mjs",
   "hostReport.test.mjs", "engineCapabilities.test.mjs", "hostAppearance.test.mjs", "tabSwitchAhead.test.mjs",

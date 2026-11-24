@@ -50,7 +50,7 @@ function fakeBus() {
 
 let ids = 0;
 
-function window({ locks, channel, candidate = true, lead = async () => {}, handle = async (op) => `${op}-done` }) {
+function window({ locks, channel, candidate = true, lead = async () => {}, led, handle = async (op) => `${op}-done` }) {
   const delivered = [];
   const handled = [];
   const changes = [];
@@ -63,6 +63,7 @@ function window({ locks, channel, candidate = true, lead = async () => {}, handl
     deliver: (message) => delivered.push(message),
     handle: (op) => (handled.push(op), handle(op)),
     lead,
+    led,
     changed: () => changes.push("changed"),
     report: (error) => assert.fail(String(error)),
     newId: () => `id-${++ids}`,
@@ -394,4 +395,32 @@ test("a count sent while sharing was on and buffered through a promotion that la
   const count = delivered.length;
   for (let i = 0; i < 3; i++) await turn();
   assert.equal(delivered.length, count, "nothing is resent after the new leader confirmed it");
+});
+
+test("the after-lead hook runs once the relay is gone and what was held is delivered, so a launch report sent there isn't held back", async () => {
+  const locks = fakeLocks();
+  const bus = fakeBus();
+  const seen = [];
+  let me;
+  me = window({
+    locks,
+    channel: bus(),
+    lead: async () => {
+      await Promise.resolve();
+      me.capture("during-lead");
+      seen.push({ at: "lead", relaying: me.relaying() });
+    },
+    led: () => {
+      seen.push({ at: "led", relaying: me.relaying(), delivered: me.delivered.map((m) => m.event) });
+      me.capture("shell_migration");
+    },
+  });
+  await turn();
+  await turn();
+  assert.deepEqual(seen, [
+    { at: "lead", relaying: true },
+    { at: "led", relaying: false, delivered: ["during-lead"] },
+  ]);
+  assert.deepEqual(me.delivered.map((m) => m.event), ["during-lead", "shell_migration"]);
+  assert.equal(me.delivered.at(-1).local, true, "the report is recorded by the leader itself, not relayed");
 });

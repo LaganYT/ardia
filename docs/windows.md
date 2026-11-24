@@ -1761,6 +1761,87 @@ The 75 that compile include the documents service (`document_reducer`, `document
 `window_caption` and the rest. They compile, but most call hooks that Linux-only patches declare, so they won't link
 until those patches are widened.
 
+### Moving a user's data from the RNW shell (#4043)
+
+The cutover is an upgrade, so the WebUI host gets the React Native Windows shell's data by a one-time copy that
+never changes the original. `packages/core-rs/crates/ardia-shell-migration` is the migration;
+its `ardia-webui-migrate --from-rnw` binary runs it on demand. Nothing runs it on its own yet: the default shell is
+still RNW, and the cutover PR decides where the WebUI host calls it (before Chromium starts, beside
+`RelaunchIntoWebUIProfile`).
+
+| RNW keeps | at | WebUI gets | how |
+| --- | --- | --- | --- |
+| documents (`session.json` and the rest of `DocumentStore`), window placement | `%LOCALAPPDATA%\Ardia\<name>` | `%LOCALAPPDATA%\Ardia WebUI\<name>`, where the WebUI host already reads `session.json` | byte copy |
+| config, hooks, themes | `%APPDATA%\Ardia\{config.json,hooks.json,themes\*.json}` (`<data>\config` with `ARDIA_DATA_DIR`) | `Ardia WebUI\config\…` | byte copy |
+| sealed sync keys | `%LOCALAPPDATA%\Ardia\Sync\sync-key-<account>.dpapi`, DPAPI with entropy `ardia-sync-key/v1[/test-instance]/<account>` | `Ardia WebUI\Sync\sync-key-x<lowercase hex of the account>.dpapi`, the name and entropy the WebUI host's DPAPI secret store (`desktop_platform_win.cc`, #4039) reads | byte copy under the new name, only once the key unseals to 32 bytes for its own account |
+| connected accounts | Credential Manager `Ardia Connected Accounts/<account>` (`… [<data dir>]/` with `ARDIA_DATA_DIR`): the first 2,560 bytes on the base item, comment `Ardia g<1|2> <chunks>`, the rest on `<base>#g<generation>#<n>` (`<base>#<n>` before generations), up to 64 chunks | `Ardia WebUI\Secrets\account-x<lowercase hex of the UTF-8 account>.dpapi`, DPAPI with entropy `ardia-connected-account/v1[/test-instance]/<account>`; the WebUI host has no connected-accounts store yet (`ArdiaKeychain` is refused on desktop), so the cutover's store reads this layout | reassembled as `CredentialStore::Get` does. RNW writes continuation chunks (no comment) before the base (comment `Ardia …`), each with the account as its `UserName`, so an item counts as a chunk only when it has no comment and a chunk-shaped name, and a chunk completes a secret only when its `UserName` and the base's are both exactly the account (blank owners never match); a chunk name two bases could both claim (`acct` generation 1 and legacy `acct#g1`) fails both. The namespace (`Ardia Connected Accounts [<dir>]/`) matches without case, as Credential Manager does, while the account keeps its case: one no base claims is an orphan of an interrupted first write and is left out (`credential_chunks_orphaned`), while a chunk-shaped name with its own comment is an account of its own. A missing chunk leaves the account out |
+| Chromium's profile (cookies, saved passwords, extensions) and the install identity | `%LOCALAPPDATA%\Ardia\User Data`, the installer's registry | untouched and not copied | stays where it is |
+
+Scratch files (`dialog.json`, `menu.json`, `activation.log`, `file-chooser.txt`, `Ardia.png`), dot files, staged
+`.partial`/`.tmp` files and the folders beside the documents (`Logs`, `Telemetry`, `Crashpad` and the like) are left.
+
+- **Rollback.** The RNW folders and Credential Manager items are only read (the vault interface has no write), so the
+  RNW build opens exactly what it left. The tests compare every file's bytes and write time and the vault before and
+  after, including after interrupted runs.
+- **Restartable.** Each file is written to a `.<name>.<random>.rnw-migration.partial` beside it, flushed, then renamed;
+  a later run removes its own leftovers (only `.ardia-mig-*.rnw-migration.partial`; other dot files stay). `rnw-migration.json`, the marker, is written last and only when every step finished;
+  with it present (a whole finished report: version, run id, a finished outcome, every count) the migration doesn't
+  run again, so what the WebUI host writes afterwards is never overwritten. A
+  file the run finds already in place with the same content (for secrets, the same plaintext) counts as unchanged; one
+  that differs (pilot data) is copied to `rnw-migration-kept\` before the RNW copy replaces it; a retry that finds a
+  different pilot copy than the one kept keeps it too, as `<name>.<run>.kept`, named by a hash of its content, so an unchanged copy reuses its backup on every retry and a changed one gets its own (a different file already holding that name is never overwritten; the copy takes the next free name), and shortened with a hash of the name when that would pass 255 characters. An exclusive lock
+  on `rnw-migration.lock` makes a second concurrent run answer `busy`. `migration.rs` stops before every rename in
+  turn and resumes each to the same result as an uninterrupted run.
+- **Safety.** Overlapping or relative folders are refused, and so is a root with a link or junction anywhere above it,
+  or a linked marker or lock. Each root is reached by walking from the volume root one folder handle at a time, never by
+  name, refusing any link or reparse point on the way (and creating missing folders on that chain for the WebUI
+  root), and its handle's final path (`GetFinalPathNameByHandleW`, `F_GETPATH`, `/proc/self/fd`) is pinned. Every
+  folder below it is opened relative to the folder handle above it (`openat`/`mkdirat` on Unix, `NtCreateFile` with `RootDirectory` and
+  `FILE_OPEN_REPARSE_POINT` on Windows) and held while it's used, so swapping a folder for a link by name mid-run
+  changes nothing: reads, staged files, listings (`fdopendir`; `GetFileInformationByHandleEx(FileFullDirectoryInfo)`),
+  renames (`renameat`; `NtSetInformationFile` with `FileRenameInformationEx`, falling back to `FileRenameInformation`,
+  on the open staged file with the held folder as `RootDirectory`, which the Win32 `SetFileInformationByHandle`
+  refuses), deletes (`unlinkat`; `FileDispositionInformationEx` on a handle) and the lock all go through those
+  handles, and every file read and the lock file must have exactly one link.
+  Nothing is opened through a symlink, junction or other reparse point (`O_NOFOLLOW`, `FILE_FLAG_OPEN_REPARSE_POINT`)
+  on either side, files with more than one link (`nNumberOfLinks`, `st_nlink`) and files over the
+  limits (64 MiB documents, 4 MiB config, 64 KiB keys) are skipped, names follow the RNW stores' own rules, account
+  file names are lowercase hex, DPAPI runs with `CRYPTPROTECT_UI_FORBIDDEN` and plaintext is read into one buffer of its exact size and zeroed. Staged files have short fixed names
+  (`.ardia-mig-<pid>-<n>-<random>.rnw-migration.partial`), and accounts are at most 120 bytes so
+  `account-x<hex>.dpapi` stays within NTFS's 255-character name. Boundary
+  row `native:rnw-webui-migration`.
+- **Report.** The report is committed before the marker, so a marker never exists without the report of its run; a
+  report that can't be written fails the run (`failed_stage: report`), and a marker that can't be written replaces the
+  success report with a `failed`/`marker` one. Each run writes `rnw-migration-attempt.json` with only an outcome (`migrated`, `migrated_with_skips`,
+  `already_migrated`, `nothing_to_migrate`, `busy`, `refused`, `failed`), the failed stage (`layout`, `lock`,
+  `documents`, `config`, `sync_keys`, `credentials`, `report`, `marker`), the attempt number, the
+  duration and counts. The exit code is 0, 1 (failed, run again), 2 (refused), 3 (busy) or 64 (usage).
+- **Telemetry.** Every event on Windows carries `host_shell` (`rnw` or `webui`, `state/telemetry/hostShell.*.ts`). On
+  the WebUI host the telemetry leader loads the attempt report from disk with its own documents before the launch
+  events read it, and sends `shell_migration` once per run only while sharing is on; the run is marked reported
+  (`rnw-migration-reported.json`) only after the event went out and that mark is saved, so with sharing off it
+  stays pending, and so it does when the event is dropped or throws (`capture` now says whether it queued the
+  event, and a relay that drops it says so), and until the queue holding the event is saved to disk while the consent the launch started with is still the current one. It is reported
+  only by the telemetry leader: on the desktop host, once the window has taken over from the startup relay (the
+  leadership's after-lead hook), with the consent the launch started with, and at most once per run of the app. If the host can't store the mark, the next launch sends the run again: a duplicate, never a lost report. The
+  desktop document and telemetry routes are live on Linux and reach Windows with the cutover's host wiring; the
+  pilot's `webui_shell.cc` serves no documents yet, so on the pilot nothing is read or sent. The event carries the outcome, `failed_stage`, `attempt`, `duration_ms` and the counts: known enums
+  and capped counts only. Watch
+  `shell_migration` by outcome: `failed` and `refused` should stay near zero, and `credentials_incomplete` and
+  `sync_keys_unreadable` against `credentials` and `sync_keys`.
+- **Checks.** `tests/hostile.rs` runs the shared hostile corpus (`scripts/security/hostile-inputs.mjs`, read with node)
+  as document, theme, sync-key and account names and checks the sink: nothing appears outside the WebUI folder, the
+  RNW folder is unchanged, every file that lands matches the layout's own names, and a plain control migrates.
+  `cargo test -p ardia-shell-migration` (Mac, Linux and Windows in `rust.yml`; on Windows also real DPAPI,
+  a chunked account through Credential Manager, junctions on both sides and above a root, hard links and the WebUI
+  sync-key name). In a Windows 11 guest,
+  `scripts/windows/webui-pilot/upgrade.ps1 -Migrator <dir>\ardia-webui-migrate.exe [-RnwApp <RNW build>]` seeds a
+  scratch RNW profile (documents, config, sealed keys, single, chunked, legacy and torn accounts, a fake Chromium
+  profile), stops the migrator before each rename and resumes it (needs `Ardia.test-build` beside the migrator for
+  `ARDIA_TEST_MIGRATION_STOP_AT_COMMIT`), checks every item, a second run, the RNW folder, vault and keys unchanged,
+  the RNW build opening its folder again, the WebUI shell opening the migrated one, and refusals for overlap and a
+  junction. It uses `ARDIA_DATA_DIR`-style scratch folders and removes the Credential Manager items it made.
+
 ### Linux patches the pilot needed widened to Windows
 
 None: the pilot runs in a plain `views::Widget`. It adds one Windows patch of its own,

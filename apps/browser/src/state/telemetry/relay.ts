@@ -19,7 +19,7 @@ export type ChoiceChange =
   | { kind: "installId"; id: string };
 
 type TelemetryRelay = {
-  capture(event: string, props: Record<string, unknown>, consent: ConsentToken | null, options: CaptureOptions): void;
+  capture(event: string, props: Record<string, unknown>, consent: ConsentToken | null, options: CaptureOptions): boolean;
   log(level: "warn" | "error", message: string, attributes: Record<string, string | number | boolean>, consent: ConsentToken | null): void;
   resetId(): Promise<string>;
   change(change: ChoiceChange): Promise<boolean>;

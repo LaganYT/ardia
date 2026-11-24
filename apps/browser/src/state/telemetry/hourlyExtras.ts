@@ -41,7 +41,7 @@ export function usageWithExtras(sendEvent: Send, takeExtras: () => Record<string
   const capture: Send = (event, props, consent, options = {}) => {
     if (event !== USAGE_COUNTS_EVENT || !(draining || stillValid(consent))) return sendEvent(event, props, consent, options);
     sentWithCounts = true;
-    sendEvent(event, { ...takeExtras(), ...props }, consent, options);
+    return sendEvent(event, { ...takeExtras(), ...props }, consent, options);
   };
   const withHourlyExtras = (emitCounts: () => void, consent: Parameters<Send>[2]) => {
     sentWithCounts = false;

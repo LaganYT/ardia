@@ -7,6 +7,7 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 pub fn host_binary() -> PathBuf {
@@ -19,6 +20,38 @@ pub fn crate_dir() -> PathBuf {
 
 pub fn repo_dir() -> PathBuf {
     crate_dir().join("../../../..").canonicalize().unwrap()
+}
+
+pub fn sdk_bench() -> PathBuf {
+    static BUILT: OnceLock<PathBuf> = OnceLock::new();
+    BUILT.get_or_init(build_sdk_bench).clone()
+}
+
+fn build_sdk_bench() -> PathBuf {
+    let source = crate_dir().join("tests/fixtures/sdk-bench");
+    let script = source.join("build.mjs");
+    let folder = std::env::temp_dir().join(format!("ardia-host-test-sdk-bench-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    std::fs::create_dir_all(folder.join("dist")).unwrap();
+    let bundle = folder.join("dist/index.js");
+    let output = Command::new("node")
+        .arg(&script)
+        .arg(&bundle)
+        .current_dir(&source)
+        .output()
+        .unwrap_or_else(|error| panic!("the sdk-bench fixture needs node to build its bundle ({error}); install Node 24 or newer"));
+    assert!(
+        output.status.success(),
+        "node {} {} failed ({})\n{}{}\nthe build imports esbuild: run `pnpm install` at the repo root, or install it beside the crate the way .github/workflows/rust.yml does",
+        script.display(),
+        bundle.display(),
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let size = std::fs::metadata(&bundle).map(|meta| meta.len()).unwrap_or(0);
+    assert!(size > 1000, "the sdk-bench build wrote {size} bytes to {}", bundle.display());
+    folder
 }
 
 pub fn scratch_plugin(name: &str, source: &str) -> PathBuf {

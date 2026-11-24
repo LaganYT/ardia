@@ -105,6 +105,7 @@
 #include "ardia/linux/ac_linux_page_status.h"
 #include "ardia/linux/ac_linux_suggest.h"
 #include "ardia/linux/ac_linux_system.h"
+#include "ardia/linux/ac_linux_tab_bindings.h"
 #include "ardia/linux/ac_linux_telemetry.h"
 #include "ardia/desktop/ac_desktop_telemetry_policy.h"
 #include "ardia/linux/ac_linux_self_update.h"
@@ -1454,6 +1455,8 @@ class ShellHostView : public views::View,
   void OnDevToolsDockChanged(content::WebContents* inspected, content::WebContents* devtools);
   void HideDevToolsViewport(TabBinding* binding);
   void LayoutPane(TabBinding* binding);
+  void ForgetClosedTab(TabBinding* binding);
+  void DropClosedTab(base::WeakPtr<TabBinding> binding);
   void KeepPaneFocus(TabBinding* activating);
   void OnDidChangeFocus(views::View* before, views::View* now) override;
   void QueueTransaction(std::optional<int> command);
@@ -5697,6 +5700,20 @@ void ShellHostView::ReplaceTabContents(content::WebContents* old_contents,
   ardiacore::RedeliverLinuxPermissionPrompts(binding->contents());
 }
 
+void ShellHostView::ForgetClosedTab(TabBinding* binding) {
+  if (!binding || !base::SequencedTaskRunner::HasCurrentDefault()) return;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&ShellHostView::DropClosedTab, GetWeakPtr(), binding->GetWeakPtr()));
+}
+
+void ShellHostView::DropClosedTab(base::WeakPtr<TabBinding> binding) {
+  if (!binding || binding->contents()) return;
+  auto owned = ardiacore::linux_tab_bindings::TakeBinding(bindings_, binding.get(), devtools_had_focus_);
+  if (!owned) return;
+  owned.reset();
+  CheckPlayerSource();
+}
+
 void ShellHostView::OnTabStripModelChanged(
     TabStripModel* changed, const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
@@ -8366,6 +8383,7 @@ void TabBinding::WebContentsDestroyed() {
     devtools_viewport_->SetWebContents(nullptr);
   }
   owner_->LayoutPane(this);
+  owner_->ForgetClosedTab(this);
 }
 
 std::map<int, RequestedWindow>& RequestedWindows() {

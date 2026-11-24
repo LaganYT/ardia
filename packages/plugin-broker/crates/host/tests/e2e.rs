@@ -2,7 +2,7 @@ mod support;
 
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
-use support::{crate_dir, repo_dir, Host};
+use support::{repo_dir, sdk_bench, Host};
 
 const WAIT: Duration = Duration::from_secs(5);
 
@@ -78,8 +78,7 @@ fn the_v2_showcase_runs_hello_activate_command_render_and_stop() {
 
 #[test]
 fn the_sdk_bench_commits_a_cap_sized_tree_updates_a_thousand_rows_and_deactivates_in_time() {
-    let folder = crate_dir().join("tests/fixtures/sdk-bench");
-    let mut host = Host::spawn(&folder, "dist/index.js", &[]);
+    let mut host = Host::spawn(&sdk_bench(), "dist/index.js", &[]);
     let hello = host.request("hello", WAIT);
     let cold_start = host.spawned.elapsed();
     host.reply(&hello, json!({ "app": "Ardia", "version": "test", "protocol": 2, "plugin": "sdk-bench", "values": {} }));
@@ -129,8 +128,7 @@ fn the_sdk_bench_commits_a_cap_sized_tree_updates_a_thousand_rows_and_deactivate
 
 #[test]
 fn sigterm_ends_the_host_normally_even_mid_turn() {
-    let folder = crate_dir().join("tests/fixtures/sdk-bench");
-    let mut host = Host::spawn(&folder, "dist/index.js", &[]);
+    let mut host = Host::spawn(&sdk_bench(), "dist/index.js", &[]);
     handshake_with_activation(&mut host);
     host.send(&json!({ "call": "s1", "kind": "command", "name": "spin", "input": 1500 }));
     std::thread::sleep(Duration::from_millis(150));

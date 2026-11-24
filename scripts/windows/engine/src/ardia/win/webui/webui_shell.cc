@@ -9,12 +9,14 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "ardia/linux/ac_linux_contract.h"
+#include "ardia/desktop/ac_desktop_platform.h"
 #include "ardia/desktop/ac_desktop_policy.h"
 #include "ardia/linux/ac_linux_session.h"
 #include "ardia/desktop/ac_desktop_window_state.h"
@@ -24,6 +26,7 @@
 #include "ardia/win/launch_guard.h"
 #include "ardia/win/main.h"
 #include "ardia/win/profiles.h"
+#include "ardia/win/webui/desktop_platform_win.h"
 #include "ardia/win/webui/webui_caption_script.h"
 #include "base/base_paths.h"
 #include "base/command_line.h"
@@ -688,7 +691,7 @@ class ShellWindow : public views::WidgetDelegate,
     transparency_ = std::make_unique<ShellTransparency>(shell_->GetWebContents());
     shell_->LoadInitialURL(GURL("chrome://ardia/"));
     widget_->Show();
-    RoundCorners();
+    Decorate();
     FocusShell();
   }
 
@@ -886,14 +889,38 @@ class ShellWindow : public views::WidgetDelegate,
                      area.y() + (area.height() - height) / 2, width, height);
   }
 
-  void RoundCorners() {
-    HWND hwnd = views::HWNDForWidget(widget_.get());
-    if (!hwnd) {
-      return;
-    }
-    const DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_ROUND;
-    ::DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners,
-                            sizeof(corners));
+  void Decorate() {
+    decorations_ = ApplyShellDecorations(views::HWNDForWidget(widget_.get()));
+    Note("window decorations: backdrop " +
+         base::NumberToString(static_cast<long>(decorations_.backdrop)) +
+         ", corners " +
+         base::NumberToString(static_cast<long>(decorations_.corners)) +
+         ", dark title " +
+         base::NumberToString(static_cast<long>(decorations_.dark_title)));
+  }
+
+  base::DictValue DecorationReport() const {
+    HWND hwnd = Hwnd();
+    DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_AUTO;
+    const HRESULT read_backdrop =
+        hwnd ? ::DwmGetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE,
+                                       &backdrop, sizeof(backdrop))
+             : E_HANDLE;
+    BOOL dark = FALSE;
+    const HRESULT read_dark =
+        hwnd ? ::DwmGetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                       &dark, sizeof(dark))
+             : E_HANDLE;
+    return base::DictValue()
+        .Set("backdropSet", SUCCEEDED(decorations_.backdrop))
+        .Set("cornersSet", SUCCEEDED(decorations_.corners))
+        .Set("darkTitleSet", SUCCEEDED(decorations_.dark_title))
+        .Set("systemDark", decorations_.dark)
+        .Set("backdrop", SUCCEEDED(read_backdrop)
+                             ? base::Value(static_cast<int>(backdrop))
+                             : base::Value())
+        .Set("darkTitle", SUCCEEDED(read_dark) ? base::Value(dark != FALSE)
+                                               : base::Value());
   }
 
 
@@ -968,24 +995,30 @@ class ShellWindow : public views::WidgetDelegate,
   }
 
   void StartWindowMove(Done done) {
-    HWND hwnd = Hwnd();
-    if (!hwnd || (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
-      return std::move(done).Run(true, base::Value(false));
-    }
-    std::move(done).Run(true, base::Value(true));
-    ::ReleaseCapture();
-    ::PostMessageW(hwnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0);
+    const bool moving =
+        ardia::desktop::Platform().StartWindowMove(widget_.get());
+    std::move(done).Run(true, base::Value(moving));
   }
 
-  void ToggleMaximize() {
-    if (!widget_) {
+  bool ToggleMaximize() {
+    return ardia::desktop::Platform().CaptionDoubleClick(widget_.get());
+  }
+
+  void WatchSystemState() {
+    if (system_state_subscription_) {
       return;
     }
-    if (widget_->IsMaximized()) {
-      widget_->Restore();
-    } else {
-      widget_->Maximize();
-    }
+    system_state_subscription_ = ardia::desktop::Platform().WatchPower(
+        base::BindRepeating(
+            [](base::WeakPtr<ShellWindow> shell, const base::DictValue& state) {
+              if (shell) {
+                shell->Emit("ArdiaEngine", "engine",
+                            base::Value(base::DictValue()
+                                            .Set("name", "engine.systemState")
+                                            .Set("data", state.Clone())));
+              }
+            },
+            weak_factory_.GetWeakPtr()));
   }
 
   void CreatePage(const base::DictValue& args, Done done);
@@ -1032,6 +1065,8 @@ class ShellWindow : public views::WidgetDelegate,
   std::optional<bool> reported_maximized_;
   bool maximize_pressed_ = false;
   bool painted_ = false;
+  ShellDecorations decorations_;
+  base::CallbackListSubscription system_state_subscription_;
   base::WeakPtr<Handler> request_handler_;
   bool torn_down_ = false;
   uint64_t request_generation_ = 0;
@@ -1230,6 +1265,13 @@ std::string ShellWindow::BootstrapJson() const {
         ardia::desktop_window_state::kWindowStateCall}) {
     capabilities.Append(capability);
   }
+  for (const auto& calls : {std::span<const std::string_view>(kDefaultBrowserCalls),
+                            std::span<const std::string_view>(kLoginItemCalls),
+                            std::span<const std::string_view>(kOpenExternalCalls)}) {
+    for (std::string_view call : calls) {
+      capabilities.Append(call);
+    }
+  }
   for (const auto& route : ardiacore::linux_contract::kRoutes) {
     capabilities.Append(route.name);
   }
@@ -1322,8 +1364,7 @@ void ShellWindow::Invoke(const std::string& method,
   }
   if (method == "ArdiaShell.captionDoubleClick" ||
       method == "ArdiaShell.toggleMaximizeWindow") {
-    ToggleMaximize();
-    return std::move(done).Run(true, base::Value(true));
+    return std::move(done).Run(true, base::Value(ToggleMaximize()));
   }
   if (method == "ArdiaShell.minimizeWindow") {
     if (widget_) {
@@ -1391,6 +1432,40 @@ void ShellWindow::Invoke(const std::string& method,
     }
     return std::move(done).Run(true, base::Value());
   }
+  if (method == "ArdiaShell.testSecretRoundTrip" && ardiacore::TestInstance()) {
+    FileRunner()->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&SecretRoundTrip),
+        base::BindOnce(
+            [](Done done, base::DictValue report) {
+              std::move(done).Run(true, base::Value(std::move(report)));
+            },
+            std::move(done)));
+    return;
+  }
+  if (method == "ArdiaShell.testOpenExternalSink" && ardiacore::TestInstance()) {
+    return std::move(done).Run(
+        true, base::Value(base::DictValue()
+                              .Set("calls", ExternalOpenCount())
+                              .Set("defaultBrowserCalls", DefaultAppsOpenCount())));
+  }
+  if (method == "ArdiaShell.testWindowDecorations" && ardiacore::TestInstance()) {
+    return std::move(done).Run(true, base::Value(DecorationReport()));
+  }
+  if (const auto capability =
+          ardia::desktop::Platform().CapabilityFor(method)) {
+    const base::Value* given = args.Find("args");
+    if (given && !given->is_list()) {
+      return std::move(done).Run(
+          false, base::Value(base::DictValue()
+                                 .Set("code", "ERR_SYSTEM_REQUEST")
+                                 .Set("message", "The arguments must be a list")));
+    }
+    static const base::NoDestructor<base::ListValue> kNoArguments;
+    return ardia::desktop::Platform().Invoke(
+        *capability, {method, values ? *values : *kNoArguments,
+                      SessionDirectory()},
+        std::move(done));
+  }
   if (method == "ArdiaShell.testDelayedReply" && ardiacore::TestInstance()) {
     const int delay =
         values && !values->empty() && (*values)[0].is_int()
@@ -1454,6 +1529,15 @@ void ShellWindow::EngineCall(const std::string& name,
                              const std::string& profile,
                              const base::Value* args,
                              Done done) {
+  if (name == "engine.systemState") {
+    WatchSystemState();
+    return ardia::desktop::Platform().CurrentPower(base::BindOnce(
+        [](Done done, base::DictValue state) {
+          std::move(done).Run(
+              true, base::Value(base::WriteJson(state).value_or("{}")));
+        },
+        std::move(done)));
+  }
   const auto* route = ardiacore::linux_contract::FindRoute(name);
   ac_engine_call_t call =
       route ? FindEngineCall(std::string(route->service)) : nullptr;

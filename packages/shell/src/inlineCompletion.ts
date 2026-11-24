@@ -1,11 +1,7 @@
 import { nativeModule } from "./nativeModules";
+import type { InlineCompletionNative } from "./generated/native";
 
-export type InlineCompletionNative = {
-  complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;
-  copyFieldAs(shown: string | null, url: string | null): Promise<void>;
-  keepWhileTyping?(tag: number, on: boolean): Promise<void>;
-  takeKept?(tag: number, start: number, end: number): string[];
-};
+export type { InlineCompletionNative };
 
 const InlineCompletionModule = nativeModule("ArdiaInlineCompletion");
 

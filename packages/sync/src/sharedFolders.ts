@@ -1,4 +1,5 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
+import type { SyncModules } from "./generated/native.ts";
 
 export type SharedListingEntry =
   | { kind: "link"; file: string; text: string }
@@ -24,15 +25,6 @@ export type ResolvedSharedFolder = SharedFolderIdentity & { path: string };
 
 export const SHARED_FOLDER_REFUSED = "ERR_SHARED_FOLDER_REFUSED";
 
-type SharedFoldersNative = {
-  location(): SharedLocation;
-  read(path: string, identity: SharedFolderIdentity | null): Promise<SharedListing>;
-  apply(path: string, ops: string, identity: SharedFolderIdentity | null): Promise<{ conflicts: string[] }>;
-  create(parent: string, parentIdentity: SharedFolderIdentity | null, name: string): Promise<ResolvedSharedFolder>;
-  resolve(path: string): Promise<ResolvedSharedFolder>;
-  discard(path: string, identity: SharedFolderIdentity): Promise<boolean>;
-  watch(paths: string[]): void;
-  addListener(name: "onChange", listener: (event: { paths: string[] }) => void): { remove(): void };
-};
+export type SharedFoldersNative = SyncModules["ArdiaSharedFolders"];
 
-export const SharedFoldersNative = requireOptionalNativeModule<SharedFoldersNative>("ArdiaSharedFolders");
+export const SharedFoldersNative = requireOptionalNativeModule<SyncModules["ArdiaSharedFolders"]>("ArdiaSharedFolders");

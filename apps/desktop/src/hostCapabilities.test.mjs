@@ -271,7 +271,7 @@ test("the native bootstrap advertises every route list, and every shared perform
   const bootstrap = host.slice(host.indexOf("base::DictValue ShellHostView::Bootstrap() const {"), host.indexOf("void ShellHostView::LayoutOverlay()"));
   for (const list of ["linux_contract::kRoutes", "kLinuxZoomDomainRoutes", "kLinuxMemorySaverRoutes"]) assert.ok(bootstrap.includes(`: ardiacore::${list})`), list);
   const advertised = new Set([
-    ...listedRoutes("ac_linux_contract.h", "kRoutes", /\{"([^"]+)",/g),
+    ...[...readFileSync(new URL("../../../engine/ardiacore-desktop/src/ardia/desktop/generated/ac_desktop_routes.h", import.meta.url), "utf8").matchAll(/^\s+\{"([^"]+)",/gm)].map((match) => match[1]),
     ...listedRoutes("ac_linux_history_zoom.h", "kLinuxZoomDomainRoutes"),
     ...listedRoutes("ac_linux_memory_saver.h", "kLinuxMemorySaverRoutes"),
     ...[...host.matchAll(/capabilities\.Append\("(engine\.\w+)"\)/g)].map((match) => match[1]),

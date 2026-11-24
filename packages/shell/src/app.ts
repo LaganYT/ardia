@@ -1,4 +1,8 @@
 import type { CleanedTitle, CleanedUrl } from "@ardia/core";
+import type { AppNative } from "./generated/native";
+
+export type { CleanedTitle, CleanedUrl };
+
 export type AppIcon = { id: string; name: string; preview: string | null };
 
 export type LaunchConfig = {
@@ -110,26 +114,4 @@ export type IntroMusicCues = {
   end: number;
 };
 
-export type AppNative = {
-  interfaceScale(): number;
-  interfaceScaleRange(): [min: number, max: number];
-  setInterfaceScale(scale: number): Promise<number>;
-  setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;
-  share(url: CleanedUrl, title: CleanedTitle | null, windowId: string | null, anchor: ShareAnchor | null): Promise<void>;
-  shareVia(service: string, url: CleanedUrl, title: CleanedTitle | null, windowId: string | null): Promise<void>;
-  shareText(text: string, windowId: string | null, anchor: ShareAnchor | null): Promise<void>;
-  isInDock(): Promise<boolean>;
-  addToDock(): Promise<boolean>;
-  appIcons(size: number): Promise<AppIcon[]>;
-  appIcon(): Promise<string>;
-  setAppIcon(id: string): Promise<void>;
-  systemInfo(): SystemInfo;
-  openExternalURL(url: string): Promise<boolean>;
-  launchConfig(): LaunchConfig;
-  playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;
-  setIntroMusicMuted(muted: boolean): Promise<void>;
-  stopIntroMusic(fade: number): Promise<void>;
-  crashReports(since: number): Promise<CrashReport[]>;
-  hardwareInfo(): Promise<HardwareInfo>;
-  diagnosticsSample(): Promise<DiagnosticsSample>;
-};
+export type { AppNative };

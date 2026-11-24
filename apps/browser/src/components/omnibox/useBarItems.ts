@@ -1,4 +1,4 @@
-import { suggestionKey, type SearchScope } from "@ardia/core";
+import { listsRoutesApart, suggestionKey, type SearchScope } from "@ardia/core";
 import { useEffect, useMemo, type RefObject } from "react";
 import type { TextInput } from "react-native";
 import { fullUrlShown, previewText } from "./barText";
@@ -10,6 +10,8 @@ import { useSuggestions } from "./useSuggestions";
 import { useSteadyRows } from "./steadyRows";
 import { useHover } from "../ui";
 import { barFieldMarks } from "../../state/omnibox/barMarks";
+import { consentToken } from "../../state/telemetry/client";
+import { noteRoutesListed } from "../../state/telemetry/inlineCompletionCounts";
 import type { Selection } from "./inline";
 
 export function useBarItems({
@@ -23,6 +25,7 @@ export function useBarItems({
   dropdown,
   opensTab,
   switchToOpenTab,
+  listShown,
   windowId,
   profileId,
   tabId,
@@ -38,6 +41,7 @@ export function useBarItems({
   dropdown: boolean;
   opensTab: boolean;
   switchToOpenTab: boolean;
+  listShown: boolean;
   windowId: string;
   profileId: string;
   tabId: string;
@@ -62,6 +66,11 @@ export function useBarItems({
   const rows = useSteadyRows(listed, `${scope?.kind ?? ""}:${scope?.name ?? ""}:${typed}`, overRows, suggestionKey);
   const { items, completion } = rows.value;
   useEffect(() => barFieldMarks.rows(overRows, rows.held, items.length), [overRows, rows.held]);
+  const routesApart = listShown && edited && !idle && !scope && listsRoutesApart(items);
+  const seenUnder = useMemo(() => consentToken(), [items]);
+  useEffect(() => {
+    if (routesApart) noteRoutesListed(seenUnder);
+  }, [routesApart, typed]);
   const selectedIndex = Math.min(Math.max(selected, 0), items.length - 1);
   const current = items[selectedIndex];
   const preview = !idle && selectedIndex > 0 ? (previewText(current) ?? typed) : null;

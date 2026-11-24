@@ -5,20 +5,12 @@ import { reachesNativeHostUnchecked, resolveHostModule } from "./hostModules.ts"
 import { linuxShellMethod, sidebarEdgeEvent } from "./shellMethods.ts";
 import { dominantAccent } from "./iconAccent.ts";
 import { hostModuleName, requireNativeModule } from "./shims/expo-modules-core.ts";
+import { advertisedLoops, capabilityArrays, linuxAdvertised, linuxRoutedNatively, nativeHost } from "../scripts/linux-capabilities.mjs";
 import { setTrafficLightsCenter, trafficLightPosition, trafficLightsPlace } from "./shims/web/windowChrome.tsx";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
-const nativeHost = read("../../../engine/ardiacore-linux/src/ardia/linux/ac_linux_host.cc");
-const bootstrap = nativeHost.slice(nativeHost.indexOf("base::DictValue ShellHostView::Bootstrap() const {"), nativeHost.indexOf("void ShellHostView::LayoutOverlay()"));
-const engineDirs = ["ardiacore-linux/src/ardia/linux/", "ardiacore-desktop/src/ardia/desktop/"].map((dir) => new URL(`../../../engine/${dir}`, import.meta.url));
-const engineSources = engineDirs.flatMap((dir) => readdirSync(dir).filter((file) => /\.(cc|h)$/.test(file)).map((file) => readFileSync(new URL(file, dir), "utf8")));
-const capabilityArrays = new Map(engineSources.flatMap((source) => [...source.matchAll(/const char\* (k[A-Za-z]+)\[\] = \{([^}]*)\}/g)].map(([, name, body]) => [name, [...body.matchAll(/"([^"]+)"/g)].map((match) => match[1])])));
-const advertisedLoops = [...bootstrap.matchAll(/for \(const char\* \w+ : (?:\w+::)*(k[A-Za-z]+)\)/g)].map((match) => match[1]);
-const advertised = [
-  ...[...bootstrap.matchAll(/\.Append\("([A-Za-z]+\.[A-Za-z]+)"\)/g)].map((match) => match[1]),
-  ...advertisedLoops.flatMap((name) => capabilityArrays.get(name) ?? []),
-];
-const routedNatively = new Set(engineSources.flatMap((source) => [...source.matchAll(/"(Ardia[A-Za-z]+\.[A-Za-z]+)"/g)].map((match) => match[1])));
+const advertised = linuxAdvertised;
+const routedNatively = linuxRoutedNatively;
 
 const SHELL_SOURCES = new URL("../../../packages/shell/src/", import.meta.url);
 const shellSources = readdirSync(SHELL_SOURCES).filter((file) => /\.tsx?$/.test(file)).map((file) => readFileSync(new URL(file, SHELL_SOURCES), "utf8"));
@@ -55,17 +47,31 @@ function members(body) {
     .filter((member) => member.name !== "addListener");
 }
 
+const generatedNative = readFileSync(new URL("generated/native.ts", SHELL_SOURCES), "utf8");
+const MAC_ONLY_HOOKS = new Set([
+  "ArdiaReport.devRenderCost", "ArdiaReport.devSnapshotPill", "ArdiaReport.devRecordingPages", "ArdiaReport.devPlaceWindow", "ArdiaReport.devWindowServerAlpha",
+  "ArdiaReport.devPages", "ArdiaFieldGlow.show", "ArdiaFieldGlow.progress", "ArdiaFieldGlow.finish", "ArdiaFieldGlow.reset",
+]);
+
 function moduleMap(type) {
-  const body = typeBody(readFileSync(new URL("nativeModules.ts", SHELL_SOURCES), "utf8"), type);
-  assert.ok(body, `packages/shell/src/nativeModules.ts no longer declares ${type}`);
+  const body = typeBody(generatedNative, type);
+  assert.ok(body, `packages/shell/src/generated/native.ts no longer declares ${type}`);
   return [...body.matchAll(/(\w+): (\w+);/g)].map(([, module, typeName]) => {
-    const declared = shellSources.map((source) => typeBody(source, typeName)).find((found) => found !== null);
-    assert.ok(declared !== undefined, `${typeName} for ${module} is not declared in packages/shell/src`);
-    return { module, methods: members(declared).filter((member) => member.method).map((member) => member.name) };
+    const declared = typeBody(generatedNative, typeName);
+    assert.ok(declared !== null, `${typeName} for ${module} is not declared in packages/shell/src/generated/native.ts`);
+    return { module, methods: members(declared).filter((member) => member.method && !MAC_ONLY_HOOKS.has(`${module}.${member.name}`)).map((member) => member.name) };
   });
 }
 
-const REQUIRED = moduleMap("ShellNativeModules");
+const REQUIRED = moduleMap("ShellModules");
+
+test("each Mac-only hook left out of the Linux audit is still a schema function only the Mac serves", () => {
+  const modules = JSON.parse(read("../../../packages/ardiacore/src/engine/generated/manifest.json")).modules.shell.modules;
+  for (const name of MAC_ONLY_HOOKS) {
+    const [module, method] = name.split(".");
+    assert.deepEqual(modules[module]?.functions[method] && ["mac", "desktop", "windows"].map((host) => modules[module].functions[method][host]), ["custom", "absent", "absent"], name);
+  }
+});
 
 const FORMERLY_TRACKED_IN_305 = [
   "ArdiaApp.updaterState", "ArdiaApp.checkForUpdates", "ArdiaApp.setAutomaticUpdateChecks", "ArdiaApp.setAutomaticUpdateDownloads",

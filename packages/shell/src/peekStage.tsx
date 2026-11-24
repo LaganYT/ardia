@@ -1,6 +1,7 @@
 import { requireNativeViewManager } from "expo-modules-core";
 import { forwardRef, useImperativeHandle, useRef } from "react";
 import type { ViewProps } from "react-native";
+import type { PeekStageNative } from "./generated/native";
 
 export type PeekRect = { x: number; y: number; width: number; height: number };
 
@@ -57,10 +58,7 @@ type NativeProps = Omit<PeekStageProps, "onPeekState" | "onPeekDone" | "onPeekPi
 
 const NativePeekStage = requireNativeViewManager<NativeProps>("ArdiaPeekStage");
 
-export type PeekStageNative = {
-  devState(windowId: string): Promise<Record<string, unknown>[]>;
-  devPageFrames(windowId: string): Promise<{ tabId: string; browserId: number; visible: boolean; inPeek: boolean; frame: PeekRect }[]>;
-};
+export type { PeekStageNative };
 
 export const PeekStage = forwardRef<PeekStageHandle, PeekStageProps>(function PeekStage({ onPeekState, onPeekDone, onPeekPinch, ...props }, ref) {
   const native = useRef<PeekStageHandle>(null);

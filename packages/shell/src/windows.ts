@@ -1,4 +1,5 @@
 import type { EventSubscription } from "expo-modules-core";
+import type { AppWindowsNative } from "./generated/native";
 
 export type Rect4 = [number, number, number, number];
 
@@ -45,31 +46,4 @@ export type WindowGeometry = { frame: Rect4; zoomed: boolean; fullScreen: boolea
 
 export type DragPreviewShape = "hidden" | "pill" | "card";
 
-export type WindowsNative = {
-  windowCornerRadius(): number;
-  drawnWindowCornerRadius(): number;
-  addListener(name: "onWindowEvent", listener: (e: WindowEvent) => void): EventSubscription;
-  openWindow(id: string, options: OpenWindowOptions): Promise<void>;
-  closeWindow(id: string): Promise<void>;
-  animateWindowClose(id: string, after: string | null): Promise<void>;
-  focusWindow(id: string): Promise<void>;
-  restoreFullScreen(ids: string[], focus: string | null): Promise<void>;
-  setTrafficLightsCenter(id: string, center: [number, number] | null, trailing: boolean): Promise<void>;
-  watchSidebarEdge(id: string, on: boolean, hold: number, right: boolean, whilePressed: boolean): Promise<void>;
-  dragPreviewBegin(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;
-  dragPreviewPage(base64: string, frame: Rect4): Promise<void>;
-  dragPreviewUpdate(shape: DragPreviewShape, point: [number, number]): Promise<void>;
-  dragPreviewCancel(): Promise<void>;
-  dragPreviewPlaceholder(title: string, favicon: string | null): Promise<void>;
-  dragPreviewEnd(windowId: string | null, frame: Rect4 | null): Promise<void>;
-  raiseView(tag: number, levels: number, raised: boolean): Promise<void>;
-  windowFrame(id: string): Promise<Rect4 | null>;
-  windowGeometry(id: string): Promise<WindowGeometry | null>;
-  setWindowFrame(id: string, frame: Rect4): Promise<WindowGeometry | null>;
-  setWindowZoomed(id: string, on: boolean): Promise<WindowGeometry | null>;
-  setWindowFullScreen(id: string, on: boolean): Promise<WindowGeometry | null>;
-  frameCornerRadius(id: string): Promise<number>;
-  setWindowTitle(id: string, title: string): Promise<void>;
-  windowIds(): Promise<string[]>;
-  replyToTerminate(ok: boolean): Promise<void>;
-};
+export type WindowsNative = AppWindowsNative;

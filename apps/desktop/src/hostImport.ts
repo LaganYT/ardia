@@ -2,6 +2,7 @@ import type * as ImportApi from "../../../packages/import/src/index.ts";
 import type { ArdiaHost } from "./host";
 import { invokeHost, reportHostError } from "./host.ts";
 import { issueImportHandles } from "./importHandles.ts";
+import { UNLOCK_WORDS } from "@platform/importWording";
 
 type Api = typeof ImportApi;
 type ImportErrorClass = new (code: string, message: string) => Error & { code: string };
@@ -287,12 +288,12 @@ export function createHostImport(host: ArdiaHost, ImportError: ImportErrorClass,
     async unlockBrowser(browserId, options: UnlockOptions = {}) {
       const family = families.get(browserId);
       if (family === "chromium" && !keychains.has(browserId)) return;
-      if (family !== "chromium" && family !== "firefox") throw failure("unsupported", "This browser can't be unlocked on Linux");
+      if (family !== "chromium" && family !== "firefox") throw failure("unsupported", "This browser can't be unlocked here");
       const primaryPassword = family === "firefox" && typeof options.primaryPassword === "string" ? options.primaryPassword : null;
       const strings = (list: unknown) => (Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : []);
       const args = family === "firefox" ? [browserId, primaryPassword, strings(options.profiles), strings(options.kinds)] : [browserId, primaryPassword];
       const cardsLocked = await finishByEvent("unlockBrowser", args, "unlock", "unlocked", (event) => event.cardsLocked === true,
-        UNLOCK_DEADLINE_MS, "The system keyring didn't answer");
+        UNLOCK_DEADLINE_MS, UNLOCK_WORDS.noAnswer);
       if (cardsLocked) unlocked.delete(browserId);
       else unlocked.set(browserId, now());
     },

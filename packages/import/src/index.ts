@@ -1,5 +1,6 @@
 import { ArdiaError, ardiaError, type TabGroupColor } from "@ardia/core";
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule } from "expo-modules-core";
+import type { ImportNative } from "./generated/native";
 
 export type ImportKind =
   | "bookmarks"
@@ -208,7 +209,7 @@ export type ImportProgress = {
   total?: number;
 };
 
-type NativeImportOptions = { historyLimit?: number; historySince?: number; spaceIds?: string[]; chunkSize?: number; streamHistory: boolean };
+export type NativeImportOptions = { historyLimit?: number; historySince?: number; spaceIds?: string[]; chunkSize?: number; streamHistory: boolean };
 
 export type ImportOptions = {
   historyLimit?: number;
@@ -236,30 +237,11 @@ export type DiaTabsResult = {
   favicons: ImportedFavicon[];
 };
 
-type ImportEvent =
+export type ImportEvent =
   | ({ jobId: string; type: "progress" } & ImportProgress)
   | { jobId: string; type: "history"; entries: string };
 
-const Native = requireNativeModule<{
-  addListener(name: "onImportEvent", listener: (e: ImportEvent) => void): EventSubscription;
-  listBrowsers(): Promise<string>;
-  importData(jobId: string, browserId: string, profileId: string, kinds: ImportKind[], options: NativeImportOptions): Promise<string>;
-  cancelImport(jobId: string): void;
-  unlockBrowser(browserId: string, primaryPassword: string | null): Promise<null>;
-  isBrowserUnlocked(browserId: string): boolean;
-  forgetUnlockedKeys(): void;
-  writeImported(token: string, profile: string, kinds: ("cookies" | "autofill")[]): Promise<string>;
-  discardImported(token: string): void;
-  listExtensions(browserId: string, profileId: string): Promise<string>;
-  importSafariExport(jobId: string, path: string): Promise<string>;
-  safariHasFullDiskAccess(): boolean;
-  openFullDiskAccessSettings(): Promise<null>;
-  importSafariDirect(jobId: string): Promise<string>;
-  importBookmarksHTML(path: string): Promise<string>;
-  importPasswordsCSV(path: string): Promise<string>;
-  chooseImportFile(kind: "safariExport" | "bookmarksHTML" | "passwordsCSV"): Promise<string | null>;
-  readDiaTabs(): Promise<string>;
-}>("ArdiaImport");
+const Native = requireNativeModule<ImportNative>("ArdiaImport");
 
 let jobSeq = 0;
 

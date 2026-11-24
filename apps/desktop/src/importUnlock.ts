@@ -1,4 +1,5 @@
 import type { BrowserSource, ImportKind } from "../../../packages/import/src/index.ts";
+import { UNLOCK_WORDS } from "@platform/importWording";
 
 type LinuxProfile = BrowserSource["profiles"][number] & { needsPrimaryPassword?: boolean; cardsNeedKeyring?: boolean };
 
@@ -22,20 +23,20 @@ export function unlockCopy(source: BrowserSource, selected: readonly string[], k
   if (source.family === "firefox") {
     const field = asksPrimaryPassword(source, selected);
     const cards = readsCardKey(source, selected, kinds);
-    const keyring = `${source.name} keeps saved card numbers under “${FIREFOX_CARD_KEY}” in your system keyring, which may ask whether ${APP_NAME} can read it.`;
+    const cardKey = UNLOCK_WORDS.firefoxCardKey(source.name, FIREFOX_CARD_KEY, APP_NAME);
     return {
       title,
       subtitle,
       field,
       lead: field
         ? `${source.name}'s saved passwords are protected by a primary password. Enter it to bring them securely into ${APP_NAME}.`
-        : `Some of ${source.name}'s data is encrypted, so your system keyring may ask for your password to bring it securely into ${APP_NAME}.`,
+        : UNLOCK_WORDS.firefoxAsks(source.name, APP_NAME),
       detail: [
         field ? `${APP_NAME} uses it only for this import, never saves it, and forgets it after 10 minutes.` : "",
-        cards ? keyring : "",
+        cards ? cardKey : "",
         "Your data stays on this computer.",
       ].filter(Boolean).join(" "),
-      waiting: field ? "Unlocking..." : "Waiting for the keyring...",
+      waiting: field ? "Unlocking..." : UNLOCK_WORDS.waiting,
     };
   }
   const item = source.keychainService ?? `${source.name} Safe Storage`;
@@ -44,11 +45,9 @@ export function unlockCopy(source: BrowserSource, selected: readonly string[], k
     title,
     subtitle,
     field: false,
-    lead: many
-      ? `Some data is encrypted, so your system keyring may ask for your password once for each selected profile.`
-      : `Some data is encrypted, so your system keyring may ask for your password to bring it securely into ${APP_NAME}.`,
-    detail: `${APP_NAME} asks your system keyring (Secret Service or KWallet) for “${item}”: it's the key ${source.name} encrypts passwords, cookies, cards and open tabs with. Allow it when asked. Your data stays on this computer.`,
-    waiting: "Waiting for the keyring...",
+    lead: many ? UNLOCK_WORDS.asksOnce : UNLOCK_WORDS.asks(APP_NAME),
+    detail: UNLOCK_WORDS.chromiumDetail(APP_NAME, item, source.name),
+    waiting: UNLOCK_WORDS.waiting,
   };
 }
 
@@ -58,18 +57,18 @@ export function unlockFailure(source: BrowserSource, code: string | undefined): 
   switch (code) {
     case "denied":
       return firefox
-        ? `That isn't ${source.name}'s primary password, or the system keyring didn't allow access. ${retry}`
-        : `The system keyring didn't allow access to ${source.keychainService ?? `${source.name} Safe Storage`}. ${retry}`;
+        ? UNLOCK_WORDS.firefoxDenied(source.name, retry)
+        : UNLOCK_WORDS.denied(source.keychainService ?? `${source.name} Safe Storage`, retry);
     case "locked":
-      return `The system keyring is locked. Unlock it, then try again, or skip the encrypted data.`;
+      return UNLOCK_WORDS.locked;
     case "notFound":
       return firefox
-        ? `The system keyring has no “${FIREFOX_CARD_KEY}” key, so ${source.name}'s saved card numbers can't be read. Skip the encrypted data to import the rest.`
-        : `The system keyring has no ${source.keychainService ?? `${source.name} Safe Storage`} key, so ${source.name}'s encrypted data can't be read. Skip the encrypted data to import the rest.`;
+        ? UNLOCK_WORDS.firefoxNotFound(source.name, FIREFOX_CARD_KEY)
+        : UNLOCK_WORDS.notFound(source.keychainService ?? `${source.name} Safe Storage`, source.name);
     case "unavailable":
-      return `No system keyring (Secret Service or KWallet) answered. Start one, then try again, or skip the encrypted data.`;
+      return UNLOCK_WORDS.unavailable;
     case "timeout":
-      return `The system keyring didn't answer in time. ${retry}`;
+      return UNLOCK_WORDS.timeout(retry);
     case "cancelled":
       return `The unlock was cancelled. ${retry}`;
     default:

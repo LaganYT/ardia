@@ -76,6 +76,9 @@ export function Omnibox({
   useEffect(() => () => bangEnter.cancel(), [bangEnter]);
   useEffect(() => bangEnter.cancel(), [bangEnter, typed, selected, scope]);
   const root = useRef<View>(null);
+  const panelOpen = useWindowUiOf(windowId, (ui) => hero && !!ui?.panel.open);
+  const [listAway, setListAway] = useState(false);
+  if (panelOpen && !listAway) setListAway(true);
   const { items, completion, via, inline, shownCompletion, value, selectedIndex, current, tabScope, previewing, rowsHover, rowsHeld, releaseRows, shownUrl } = useBarItems({
     input,
     caret: () => selection.current,
@@ -87,6 +90,7 @@ export function Omnibox({
     dropdown,
     opensTab: !!opensTab,
     switchToOpenTab: !!opensTab || hero,
+    listShown: !listAway,
     windowId,
     profileId,
     tabId,
@@ -102,9 +106,6 @@ export function Omnibox({
   fieldText.current = value;
   const editing = useRef(false);
   const focusEcho = useRef(false);
-  const panelOpen = useWindowUiOf(windowId, (ui) => hero && !!ui?.panel.open);
-  const [listAway, setListAway] = useState(false);
-  if (panelOpen && !listAway) setListAway(true);
   const focusField = () => {
     if (!editing.current && fieldText.current) focusEcho.current = true;
     input.current?.focus();

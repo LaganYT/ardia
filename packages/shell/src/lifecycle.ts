@@ -1,6 +1,7 @@
 import type { CleanedUrl } from "@ardia/core";
 import type { EventSubscription } from "expo-modules-core";
 import type { BangListReply } from "./documents";
+import type { ShellNative } from "./generated/native";
 
 export type AppEvent =
   | { type: "reopen"; pastFloating: boolean }
@@ -51,14 +52,4 @@ type ShellEvents = {
   onOpenURLs: (e: { urls: string[]; pointer?: [number, number]; source?: OpenURLSource; returnTo?: string }) => void;
 };
 
-export type ShellNative = {
-  addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
-  setAppearance(mode: AppearanceMode): Promise<void>;
-  isDarkAppearance(): Promise<boolean>;
-  startDictation(): void;
-  dictationAvailable?(): boolean;
-  fetchBangList(etag: string | null): Promise<BangListReply>;
-  copyText(text: string): void;
-  copyURL?(address: CleanedUrl): void;
-  readText(): Promise<string>;
-};
+export type { ShellNative };

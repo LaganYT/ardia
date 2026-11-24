@@ -33,6 +33,7 @@ on:
       - "packages/shell/ios/ReportFiles.swift"
       - "packages/shell/ios/ReportUploader.swift"
       - "packages/shell/ios/ShellModule.swift"
+      - "packages/shell/ios/ShellNative.swift"
       - "packages/shell/ios/SystemModule.swift"
       - "packages/shell/ios/WindowManager.swift"
       - "packages/sync/ios/Core/Wordlist.swift"

@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import re
@@ -35,12 +36,14 @@ class CastTests(unittest.TestCase):
         shell = (REPO / 'apps/linux/src/hostCast.ts').read_text()
         verbs = re.search(r'const CAST_VERBS = \[([^\]]*)\];', shell).group(1)
         self.assertEqual(sorted(calls), sorted(f'media.{verb}' for verb in re.findall(r'"(\w+)"', verbs)))
-        api = (REPO / 'packages/ardiacore/src/engine/api.ts').read_text()
+        media = json.loads((REPO / 'packages/ardiacore/src/engine/generated/manifest.json').read_text())['domains']['media']
         for call in calls:
-            self.assertIn(f'"{call}":', api)
+            row = media['calls'][call.removeprefix('media.')]
+            self.assertEqual((row['mac'], row['desktop']), ('custom', 'custom'), call)
         for event in ('media.castDialog', 'media.castRoutes'):
             self.assertIn(f'"{event}"', core)
-            self.assertIn(f'"{event}":', api)
+            row = media['events'][event.removeprefix('media.')]
+            self.assertEqual((row['mac'], row['desktop']), ('custom', 'custom'), event)
 
     def test_the_port_keeps_the_macs_dialog_and_route_logic(self):
         linux = (LINUX / 'ac_linux_cast.cc').read_text()

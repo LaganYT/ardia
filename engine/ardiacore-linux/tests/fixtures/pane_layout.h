@@ -438,6 +438,8 @@ class ShellHostView : public views::View {
   ShellHostView();
   ~ShellHostView();
   void LayoutPane(TabBinding* binding);
+  std::vector<TabBinding*> forgotten;
+  void ForgetClosedTab(TabBinding* binding) { forgotten.push_back(binding); }
   void OnDevToolsDockChanged(content::WebContents* inspected, content::WebContents* devtools);
   void HideDevToolsViewport(TabBinding* binding);
   void Restack() { restacks++; }

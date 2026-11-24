@@ -2,6 +2,7 @@ import type { EventSubscription } from "expo-modules-core";
 import type { CommandEvent } from "./commands";
 import { nativeModule } from "./nativeModules";
 import type { MenuShortcut, ShortcutModifier } from "./system";
+import type { MenusNative } from "./generated/native";
 
 export type MenuItem =
   | { separator: true }
@@ -21,7 +22,7 @@ export type MenuItem =
       share?: boolean;
     };
 
-type MenuPickEvent = { command: "menu.pick"; arg: string };
+export type MenuPickEvent = { command: "menu.pick"; arg: string };
 
 export type MenuEntry = { id: string; title: string; current?: boolean };
 export type MenuBookmark = { id: string; title: string; url?: string; children?: MenuBookmark[] };
@@ -50,7 +51,7 @@ export type MenuState = {
   mouseShortcuts?: Record<string, string[]>;
 };
 
-type MenuBookmarkKey = "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks";
+export type MenuBookmarkKey = "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks";
 
 export type SurfaceItem = {
   path: number[];
@@ -85,23 +86,7 @@ export type SurfaceEvent =
   | (OpenSurface & { type: "menuOpened" })
   | { type: "menuDropped"; id: string; kind: OpenSurface["kind"] };
 
-export type MenusNative = {
-  addListener(name: "onCommand", listener: (e: CommandEvent | MenuPickEvent) => void): EventSubscription;
-  addListener(name: "onSurface", listener: (e: SurfaceEvent) => void): EventSubscription;
-  openSurfaces(): Promise<OpenSurface[]>;
-  capturePageMenus(captures: boolean): Promise<void>;
-  dismissSurface(id: string): Promise<void>;
-  menuBar(): Promise<SurfaceItem[]>;
-  performMenuBarItem(ref: string, windowId: string): Promise<string>;
-  showMenu(items: MenuItem[]): Promise<string | null>;
-  updateMenu(items: MenuItem[]): Promise<void>;
-  setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
-  setMenuBookmarks(bookmarks: Pick<MenuState, MenuBookmarkKey>): Promise<void>;
-  menuShortcuts(): Promise<MenuShortcut[]>;
-  recordShortcut(): Promise<{ key: string; modifiers: ShortcutModifier[] } | null>;
-  cancelRecording(): Promise<void>;
-  mouseShortcutMonitor(): Promise<{ installed: boolean; installs: number }>;
-};
+export type { MenusNative };
 
 let menusShown = 0;
 const menuWatchers = new Set<() => void>();

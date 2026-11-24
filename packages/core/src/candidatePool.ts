@@ -25,14 +25,15 @@ export type Candidate = {
 };
 
 type Lookup = { get(key: string): Candidate | undefined; has(key: string): boolean };
-export type Pool = { list: Candidate[]; byKey: Lookup };
+export type Pool = { list: Candidate[]; byKey: Lookup; byDocument: Pick<Lookup, "get"> };
 
-type BookmarkBase = { list: Candidate[]; byKey: Map<string, Candidate>; cursor: number; done: boolean };
+type BookmarkBase = { list: Candidate[]; byKey: Map<string, Candidate>; byDocument: Map<string, Candidate>; cursor: number; done: boolean };
 type Builder = {
   base: BookmarkBase;
   history: readonly HistoryRow[];
   list: Candidate[];
   byKey: Map<string, Candidate>;
+  byDocument: Map<string, Candidate>;
   historyCursor: number;
   bookmarkCursor: number;
   pool: Pool | null;
@@ -46,8 +47,13 @@ const SLICE_CHECK = 64;
 
 function baseFor(bookmarks: readonly BookmarkRow[]): BookmarkBase {
   let base = bases.get(bookmarks);
-  if (!base) bases.set(bookmarks, (base = { list: [], byKey: new Map(), cursor: 0, done: false }));
+  if (!base) bases.set(bookmarks, (base = { list: [], byKey: new Map(), byDocument: new Map(), cursor: 0, done: false }));
   return base;
+}
+
+function addTo(byKey: Map<string, Candidate>, byDocument: Map<string, Candidate>, c: Candidate) {
+  byKey.set(c.text.key, c);
+  if (c.text.document !== undefined && !byDocument.has(c.text.document)) byDocument.set(c.text.document, c);
 }
 
 function advance(b: Builder, bookmarks: readonly BookmarkRow[], deadline: number): boolean {
@@ -61,7 +67,7 @@ function advance(b: Builder, bookmarks: readonly BookmarkRow[], deadline: number
     if (!base.byKey.has(text.key)) {
       const c: Candidate = { url: row.url, title: row.title, favicon: row.favicon, visits: 0, lastVisit: 0, logVisits: 0, bookmarked: true, text };
       base.list.push(c);
-      base.byKey.set(text.key, c);
+      addTo(base.byKey, base.byDocument, c);
     }
     if (late()) return false;
   }
@@ -78,7 +84,7 @@ function advance(b: Builder, bookmarks: readonly BookmarkRow[], deadline: number
         historyCandidates.set(h, c);
       }
       b.list.push(c);
-      b.byKey.set(text.key, c);
+      addTo(b.byKey, b.byDocument, c);
     }
     if (late()) return false;
   }
@@ -88,9 +94,11 @@ function advance(b: Builder, bookmarks: readonly BookmarkRow[], deadline: number
     if (late()) return false;
   }
   const history = b.byKey;
+  const historyDocuments = b.byDocument;
   b.pool = {
     list: b.list,
     byKey: { get: (key) => history.get(key) ?? base.byKey.get(key), has: (key) => history.has(key) || base.byKey.has(key) },
+    byDocument: { get: (document) => historyDocuments.get(document) ?? base.byDocument.get(document) },
   };
   return true;
 }
@@ -99,7 +107,7 @@ function builderFor(history: readonly HistoryRow[], bookmarks: readonly Bookmark
   let byBookmarks = builders.get(history);
   if (!byBookmarks) builders.set(history, (byBookmarks = new WeakMap()));
   let b = byBookmarks.get(bookmarks);
-  if (!b) byBookmarks.set(bookmarks, (b = { base: baseFor(bookmarks), history, list: [], byKey: new Map(), historyCursor: 0, bookmarkCursor: 0, pool: null }));
+  if (!b) byBookmarks.set(bookmarks, (b = { base: baseFor(bookmarks), history, list: [], byKey: new Map(), byDocument: new Map(), historyCursor: 0, bookmarkCursor: 0, pool: null }));
   return b;
 }
 

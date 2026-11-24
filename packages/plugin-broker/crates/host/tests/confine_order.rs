@@ -6,7 +6,7 @@ use std::process::Command;
 use std::time::Duration;
 use std::io::Read;
 use std::time::Instant;
-use support::{crate_dir, scratch_plugin, Host};
+use support::{scratch_plugin, sdk_bench, Host};
 
 const CHILD: &str = "ARDIA_CONFINE_ORDER_CHILD";
 
@@ -82,7 +82,7 @@ fn spawn_sdk_bench(envs: &[(&str, &str)]) -> Host {
     for (key, value) in envs {
         command.env(key, value);
     }
-    Host::spawn_command(&mut command, &crate_dir().join("tests/fixtures/sdk-bench"), "dist/index.js", &[])
+    Host::spawn_command(&mut command, &sdk_bench(), "dist/index.js", &[])
 }
 
 fn hello_reaches_fd_3_only_after_the_sandbox_returns_ok() {

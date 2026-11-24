@@ -2,87 +2,113 @@ import AppKit
 import ExpoModulesCore
 import Foundation
 
-public class PluginsModule: Module {
+public class PluginsModule: Module, PluginsNative {
   static let storageQueue = DispatchQueue(label: "ardia.plugins.storage", qos: .userInitiated)
 
-  public func definition() -> ModuleDefinition {
-    Name("ArdiaPlugins")
+  static var queue: DispatchQueue { storageQueue }
 
-    Events("onLine", "onExit", OfficialPluginFetch.progressEvent)
+  static func stop(_ name: String, _ run: Int, _ graceMs: Int, _ promise: Promise) { PluginHost.shared.stop(name, run: run, graceMs: graceMs) { promise.resolve(nil) } }
+
+  static func reply(_ name: String, _ run: Int, _ line: String) { PluginHost.shared.reply(name, run: run, line) }
+
+  static func event(_ name: String, _ run: Int, _ line: String) { PluginHost.shared.event(name, run: run, line) }
+
+  static func call(_ name: String, _ run: Int, _ line: String) { PluginHost.shared.call(name, run: run, line) }
+
+  static func linkPrograms(_ spec: [String: Any], _ promise: Promise) { PluginProgramLinks.link(spec) { promise.resolve($0) } }
+
+  static func takeAfterUpdateQuitStops(_ promise: Promise) { PluginProgramLinks.takeQuitStops { promise.resolve($0) } }
+
+  static func setAfterUpdateQuitConsent(_ consent: String) { PluginProgramLinks.setQuitStopsConsent(consent) }
+
+  static func legacyProgramsInstalled(_ promise: Promise) { PluginProgramLinks.legacyInstalled { promise.resolve($0) } }
+
+  static func programRegistry(_ promise: Promise) { PluginProgramLinks.registry { promise.resolve($0) } }
+
+  static func sweepPrograms(_ active: [String], _ promise: Promise) { PluginProgramLinks.sweep(keeping: active) { promise.resolve(nil) } }
+
+  static func unlinkPrograms(_ name: String, _ programs: [String], _ remove: Bool, _ promise: Promise) { PluginProgramLinks.unlink(name, programs: programs, remove: remove) { promise.resolve($0) } }
+
+  static func officialPlugins() -> [[String: Any]]? { PluginFolders.officialPin().map { pin in pin.entries.map { ["name": $0.name, "version": $0.version, "folderId": $0.folderId] } } }
+
+  static func fetchOfficial(_ name: String, _ promise: Promise) { OfficialPluginFetch.shared.fetch(name) { promise.resolve($0) } }
+
+  static func cancelOfficialFetch(_ name: String) { OfficialPluginFetch.shared.cancel(name) }
+
+  static func promoteOfficial(_ name: String, _ folderId: String, _ approved: String) -> [String: Any] { OfficialPluginFetch.promote(name, folderId: folderId, approved: approved) }
+
+  static func hostFetch(_ spec: [String: Any], _ promise: Promise) { PluginHostFetch.run(spec) { promise.resolve($0) } }
+
+  static func readPluginFile(_ name: String, _ folderId: String, _ approved: String, _ path: String) -> [String: Any] { Self.readPluginFile(name, folderId: folderId, approved: approved, path: path) }
+
+  static func remove(_ name: String, _ official: Bool, _ folderId: String?, _ promise: Promise) { Self.remove(name, official: official, folderId: folderId, promise) }
+
+  static func revealLog(_ name: String) { DispatchQueue.main.async { Self.showLog(name) } }
+
+  static func revealFolder() { DispatchQueue.main.async { Self.showFolder() } }
+
+  static func devSnapshotPage(_ name: String, _ path: String, _ promise: Promise) { Self.snapshot(name, path, promise) }
+
+  public func definition() -> ModuleDefinition {
+    Name(Self.moduleName)
+
+    Self.eventsDefinition
 
     OnCreate {
       PluginHost.shared.attach(self) { [weak self] name, body in self?.sendEvent(name, body) }
     }
 
-    Function("folder") { () -> String in Self.folder() }
+    Self.folderFunction
 
-    AsyncFunction("list") { () -> [[String: Any]] in Self.list() }
-      .runOnQueue(DispatchQueue.global(qos: .utility))
+    Self.listFunction
 
-    AsyncFunction("start") { (spec: [String: Any], promise: Promise) in Self.start(spec, promise) }
+    Self.startFunction
 
-    AsyncFunction("stop") { (name: String, run: Int, graceMs: Int, promise: Promise) in
-      PluginHost.shared.stop(name, run: run, graceMs: graceMs) { promise.resolve(nil) }
-    }
+    Self.stopFunction
 
-    Function("reply") { (name: String, run: Int, line: String) in PluginHost.shared.reply(name, run: run, line) }
+    Self.replyFunction
 
-    Function("event") { (name: String, run: Int, line: String) in PluginHost.shared.event(name, run: run, line) }
+    Self.eventFunction
 
-    Function("call") { (name: String, run: Int, line: String) in PluginHost.shared.call(name, run: run, line) }
+    Self.callFunction
 
-    AsyncFunction("linkPrograms") { (spec: [String: Any], promise: Promise) in PluginProgramLinks.link(spec) { promise.resolve($0) } }
+    Self.linkProgramsFunction
 
-    AsyncFunction("takeAfterUpdateQuitStops") { (promise: Promise) in PluginProgramLinks.takeQuitStops { promise.resolve($0) } }
+    Self.takeAfterUpdateQuitStopsFunction
 
-    Function("setAfterUpdateQuitConsent") { (consent: String) in PluginProgramLinks.setQuitStopsConsent(consent) }
+    Self.setAfterUpdateQuitConsentFunction
 
-    AsyncFunction("legacyProgramsInstalled") { (promise: Promise) in PluginProgramLinks.legacyInstalled { promise.resolve($0) } }
+    Self.legacyProgramsInstalledFunction
 
-    AsyncFunction("programRegistry") { (promise: Promise) in PluginProgramLinks.registry { promise.resolve($0) } }
+    Self.programRegistryFunction
 
-    AsyncFunction("sweepPrograms") { (active: [String], promise: Promise) in PluginProgramLinks.sweep(keeping: active) { promise.resolve(nil) } }
+    Self.sweepProgramsFunction
 
-    AsyncFunction("unlinkPrograms") { (name: String, programs: [String], remove: Bool, promise: Promise) in
-      PluginProgramLinks.unlink(name, programs: programs, remove: remove) { promise.resolve($0) }
-    }
+    Self.unlinkProgramsFunction
 
-    AsyncFunction("officialPlugins") { () -> [[String: Any]]? in
-      PluginFolders.officialPin().map { pin in pin.entries.map { ["name": $0.name, "version": $0.version, "folderId": $0.folderId] } }
-    }
-    .runOnQueue(DispatchQueue.global(qos: .utility))
+    Self.officialPluginsFunction
 
-    AsyncFunction("fetchOfficial") { (name: String, promise: Promise) in OfficialPluginFetch.shared.fetch(name) { promise.resolve($0) } }
+    Self.fetchOfficialFunction
 
-    Function("cancelOfficialFetch") { (name: String) in OfficialPluginFetch.shared.cancel(name) }
+    Self.cancelOfficialFetchFunction
 
-    AsyncFunction("promoteOfficial") { (name: String, folderId: String, approved: String) -> [String: Any] in
-      OfficialPluginFetch.promote(name, folderId: folderId, approved: approved)
-    }
-    .runOnQueue(DispatchQueue.global(qos: .userInitiated))
+    Self.promoteOfficialFunction
 
-    AsyncFunction("hostFetch") { (spec: [String: Any], promise: Promise) in PluginHostFetch.run(spec) { promise.resolve($0) } }
+    Self.hostFetchFunction
 
-    AsyncFunction("storageRead") { (name: String) -> [String: Any] in Self.storageRead(name) }
-      .runOnQueue(Self.storageQueue)
+    Self.storageReadFunction
 
-    AsyncFunction("storageWrite") { (name: String, text: String) -> [String: Any] in Self.storageWrite(name, text) }
-      .runOnQueue(Self.storageQueue)
+    Self.storageWriteFunction
 
-    AsyncFunction("readPluginFile") { (name: String, folderId: String, approved: String, path: String) -> [String: Any] in
-      Self.readPluginFile(name, folderId: folderId, approved: approved, path: path)
-    }
-    .runOnQueue(DispatchQueue.global(qos: .userInitiated))
+    Self.readPluginFileFunction
 
-    AsyncFunction("remove") { (name: String, official: Bool, folderId: String?, promise: Promise) in Self.remove(name, official: official, folderId: folderId, promise) }
-      .runOnQueue(.main)
+    Self.removeFunction
 
-    Function("revealLog") { (name: String) in DispatchQueue.main.async { Self.revealLog(name) } }
+    Self.revealLogFunction
 
-    Function("revealFolder") { () in DispatchQueue.main.async { Self.revealFolder() } }
+    Self.revealFolderFunction
 
-    AsyncFunction("devSnapshotPage") { (name: String, path: String, promise: Promise) in Self.snapshot(name, path, promise) }
-      .runOnQueue(.main)
+    Self.devSnapshotPageFunction
 
     View(PluginPageView.self) {
       Events("onLoaded", "onTitleChange", "onNavigationChange", "onMessage")
@@ -101,15 +127,15 @@ public class PluginsModule: Module {
     }
   }
 
-  private static func folder() -> String {
+  static func folder() -> String {
     PluginFolders.current()?.pluginsLexical ?? ""
   }
 
-  private static func list() -> [[String: Any]] {
+  static func list() -> [[String: Any]] {
     PluginFolders.current()?.list() ?? []
   }
 
-  private static func start(_ spec: [String: Any], _ promise: Promise) {
+  static func start(_ spec: [String: Any], _ promise: Promise) {
     let name = spec["name"] as? String ?? ""
     let run = spec["run"] as? [String] ?? []
     let memoryMB = spec["memoryMB"] as? Int ?? 0
@@ -128,7 +154,7 @@ public class PluginsModule: Module {
     PluginHost.shared.start(process) { reply in promise.resolve(reply) }
   }
 
-  private static func storageRead(_ name: String) -> [String: Any] {
+  static func storageRead(_ name: String) -> [String: Any] {
     guard let data = PluginFolders.current()?.dataFolder(name) else { return PluginStorageRead.error("its data folder couldn't be opened").reply }
     defer { data.close() }
     let read = PluginStorage.read(in: data.fd)
@@ -136,7 +162,7 @@ public class PluginsModule: Module {
     return read.reply
   }
 
-  private static func storageWrite(_ name: String, _ text: String) -> [String: Any] {
+  static func storageWrite(_ name: String, _ text: String) -> [String: Any] {
     guard let data = PluginFolders.current()?.dataFolder(name) else { return ["ok": false, "reason": "its data folder couldn't be made"] }
     defer { data.close() }
     if let refusal = PluginStorage.write(in: data.fd, text: text) { return ["ok": false, "reason": refusal.reason] }
@@ -165,14 +191,14 @@ public class PluginsModule: Module {
     }
   }
 
-  private static func revealLog(_ name: String) {
+  private static func showLog(_ name: String) {
     guard let data = PluginFolders.current()?.dataFolder(name) else { return }
     defer { data.close() }
     let log = URL(fileURLWithPath: (data.path as NSString).appendingPathComponent("plugin.log"))
     NSWorkspace.shared.activateFileViewerSelecting([log])
   }
 
-  private static func revealFolder() {
+  private static func showFolder() {
     guard let folders = PluginFolders.current() else { return }
     if FileManager.default.fileExists(atPath: folders.pluginsLexical) {
       NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: folders.pluginsLexical)])

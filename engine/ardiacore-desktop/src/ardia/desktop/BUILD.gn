@@ -17,6 +17,7 @@ source_set("policies") {
     "ac_desktop_window_commands.h",
     "ac_desktop_window_corners.h",
     "ac_desktop_window_state.h",
+    "generated/ac_desktop_routes.h",
   ]
 }
 

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { clientPackages, loadDomains, loadModuleDomains, MANIFEST, outputs, ROOT, validate, validateModuleDomain, validateModuleNames, validateTopics } from "./generate.mjs";
+import { BOOTSTRAP, clientPackages, DESKTOP_ROUTES, desktopDeadlines, desktopRoutes, loadDesktopHost, loadDomains, loadModuleDomains, MANIFEST, outputs, realOutputs, ROOT, spliceDeadlines, validate, validateDesktopHost, validateModuleDomain, validateModuleNames, validateTopics } from "./generate.mjs";
 
 const GENERATOR = fileURLToPath(new URL("./generate.mjs", import.meta.url));
 const runAt = (generator, ...args) => spawnSync(process.execPath, [generator, ...args], { encoding: "utf8" });
@@ -19,7 +19,7 @@ const domain = (calls) => ({ kind: "engine", imports: {}, calls, events: {} });
 test("every generated file matches the schema byte for byte", async () => {
   const result = run("--check");
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, `up to date: ${outputs(await loadDomains(), await loadModuleDomains()).size} files\n`);
+  assert.equal(result.stdout, `up to date: ${(await realOutputs()).size} files\n`);
 });
 
 test("the generator takes exactly one mode", () => {
@@ -44,7 +44,7 @@ test("run through a symlinked path, the generator still runs, so a check can't p
 });
 
 test("git checks every generated file out with LF endings, so a CRLF checkout still matches byte for byte", async () => {
-  const paths = [...outputs(await loadDomains(), await loadModuleDomains()).keys()];
+  const paths = [...(await realOutputs()).keys()];
   const result = spawnSync("git", ["check-attr", "eol", "--", ...paths], { cwd: ROOT, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.stdout.trim().split("\n"), paths.map((path) => `${path}: eol: lf`));
@@ -61,8 +61,8 @@ test("engine domains and module domains each keep to their own list and kind", (
 });
 
 test("two runs give the same bytes, so the check never flaps", async () => {
-  const once = outputs(await loadDomains(), await loadModuleDomains());
-  const twice = outputs(await loadDomains(), await loadModuleDomains());
+  const once = (await realOutputs());
+  const twice = (await realOutputs());
   assert.deepEqual([...once], [...twice]);
 });
 
@@ -229,6 +229,87 @@ test("a desktop route may answer with one field of the engine's reply, or null, 
   assert.equal(manifest.calls.tasks.routeField, "tasks");
 });
 
+test("the desktop routes header lists every desktop-routed call with its service and reply field, and finds a route at compile time", () => {
+  const header = outputs({ demo: domain({ watch: call(), tasks: call({ service: "ac_tasks_list", routeField: "tasks" }), local: call({ desktop: "custom" }), gone: call({ desktop: "absent", mac: "custom", windows: "custom", service: undefined }) }) }).get(DESKTOP_ROUTES);
+  assert.ok(header.includes('inline constexpr std::array<Route, 2> kRoutes = {{\n    {"demo.watch", "ac_demo_watch", ""},\n    {"demo.tasks", "ac_tasks_list", "tasks"},\n}};\n'));
+  assert.doesNotMatch(header, /demo\.local|demo\.gone|\/\/|\/\*/);
+  assert.ok(header.endsWith("#endif\n") && !header.includes("\r"));
+  const empty = outputs({ quiet: domain({ local: call({ desktop: "custom" }) }) }).get(DESKTOP_ROUTES);
+  assert.ok(empty.includes("inline constexpr std::array<Route, 0> kRoutes = {};"));
+  const compiler = spawnSync("c++", ["--version"], { encoding: "utf8" });
+  if (compiler.status !== 0) return;
+  const dir = mkdtempSync(join(tmpdir(), "hostapi-routes-"));
+  try {
+    for (const [name, text] of [["full", header], ["empty", empty]]) {
+      mkdirSync(join(dir, name, "ardia/desktop/generated"), { recursive: true });
+      writeFileSync(join(dir, name, "ardia/desktop/generated/ac_desktop_routes.h"), text);
+      const probe = name === "full"
+        ? 'static_assert(ardia::desktop_routes::FindRoute("demo.tasks")->field == "tasks");\nstatic_assert(!ardia::desktop_routes::FindRoute("demo.local"));\nint main() {}\n'
+        : 'static_assert(!ardia::desktop_routes::FindRoute("demo.watch"));\nint main() {}\n';
+      writeFileSync(join(dir, name, "probe.cc"), `#include "ardia/desktop/generated/ac_desktop_routes.h"\n${probe}`);
+      const result = spawnSync("c++", ["-std=c++20", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "-I", join(dir, name), join(dir, name, "probe.cc")], { encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the desktop routes come in routeOrder's domain order, then the other routed domains alphabetically, each domain's calls in schema order", async () => {
+  const domains = { zeta: domain({ z: call({ service: "ac_zeta" }) }), alpha: domain({ a: call({ service: "ac_alpha" }) }), mid: domain({ second: call({ service: "ac_mid_b" }), first: call({ service: "ac_mid_a" }) }) };
+  const header = outputs(domains, {}, { routeOrder: ["mid"], deadlines: {} }).get(DESKTOP_ROUTES);
+  const names = [...header.matchAll(/^ {4}\{"([^"]+)"/gm)].map((match) => match[1]);
+  assert.deepEqual(names, ["mid.second", "mid.first", "alpha.a", "zeta.z"]);
+  assert.deepEqual(desktopRoutes(domains).map(({ name }) => name), ["alpha.a", "mid.second", "mid.first", "zeta.z"]);
+  assert.throws(() => validateDesktopHost({ routeOrder: ["mid", "mid"], deadlines: {} }, {}, domains), /lists mid twice/);
+  assert.throws(() => validateDesktopHost({ routeOrder: ["ghost"], deadlines: {} }, {}, domains), /ghost, which isn't an engine domain with a desktop route/);
+  assert.throws(() => validateDesktopHost({ deadlines: {} }, {}, domains), /routeOrder lists/);
+  const { domains: real, desktopHost } = await loadDesktopHost();
+  const order = [...new Set(desktopRoutes(real, desktopHost.routeOrder).map(({ name }) => name.split(".")[0]))];
+  assert.deepEqual(order.slice(0, desktopHost.routeOrder.length), desktopHost.routeOrder);
+});
+
+test("a deadline lengthens the desktop UI's wait for the native host, and only where the call or function reaches it", () => {
+  assert.doesNotThrow(() => validate("demo", domain({ slow: call({ desktop: "custom", deadline: 90000 }) })));
+  assert.throws(() => validate("demo", domain({ slow: call({ desktop: "absent", mac: "custom", windows: "custom", service: undefined, deadline: 90000 }) })), /desktop binding that reaches it/);
+  for (const deadline of [30000, 900001, 1.5e5 + 0.5, "90000", 0]) assert.throws(() => validate("demo", domain({ slow: call({ deadline }) })), /deadline is an integer/, String(deadline));
+  assert.doesNotThrow(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { hold: fn({ desktop: "host", deadline: 120000 }) }, events: {} } })));
+  assert.doesNotThrow(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { hold: fn({ desktop: "adapted", deadline: 120000 }) }, events: {} } })));
+  assert.throws(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { hold: fn({ desktop: "custom", deadline: 120000 }) }, events: {} } })), /goes only with desktop: host or adapted/);
+  const modules = { demo: moduleDomain({ ArdiaDemo: { functions: { hold: fn({ desktop: "host", deadline: 120000 }) }, events: {} } }) };
+  assert.doesNotThrow(() => validateDesktopHost({ routeOrder: [], deadlines: { "ArdiaVault.unlock": 180000 } }, modules));
+  assert.throws(() => validateDesktopHost({ routeOrder: [], deadlines: { "ArdiaDemo.hold": 180000 } }, modules), /function of module domain demo, so its deadline goes on that function/);
+  assert.throws(() => validateDesktopHost({ routeOrder: [], deadlines: { "vault.unlock": 180000 } }, modules), /Ardia<Module>\.<method>/);
+  assert.throws(() => validateDesktopHost({ routeOrder: [], deadlines: { "ArdiaVault.unlock": 1000 } }, modules), /deadline is an integer/);
+  assert.throws(() => validateDesktopHost({}, modules), /deadlines maps/);
+  const deadlines = desktopDeadlines({ demo: domain({ slow: call({ desktop: "custom", deadline: 90000 }), quick: call() }) }, modules, { deadlines: { "ArdiaVault.unlock": 180000, "ArdiaAlpha.go": 60000 } });
+  assert.deepEqual(deadlines, { host: [["ArdiaAlpha.go", 60000], ["ArdiaDemo.hold", 120000], ["ArdiaVault.unlock", 180000]], engine: [["demo.slow", 90000]] });
+  const manifest = JSON.parse(outputs({ demo: domain({ slow: call({ desktop: "custom", deadline: 90000 }), quick: call() }) }, modules).get(MANIFEST));
+  assert.equal(manifest.domains.demo.calls.slow.deadline, 90000);
+  assert.equal("deadline" in manifest.domains.demo.calls.quick, false);
+  assert.equal(manifest.modules.demo.modules.ArdiaDemo.functions.hold.deadline, 120000);
+});
+
+test("the bootstrap's two deadline maps are rewritten in place, and a bootstrap that doesn't hold each exactly once is refused", () => {
+  const source = "(() => {\n  const hostDeadlines = new Map([\n    [\"Old.x\", 1],\n  ]);\n  const engineDeadlines = new Map([\n  ]);\n  run();\n})();\n";
+  const spliced = spliceDeadlines(source, { host: [["ArdiaA.b", 60000]], engine: [["demo.slow", 90000], ["demo.slower", 120000]] });
+  assert.equal(spliced, "(() => {\n  const hostDeadlines = new Map([\n    [\"ArdiaA.b\", 60000],\n  ]);\n  const engineDeadlines = new Map([\n    [\"demo.slow\", 90000],\n    [\"demo.slower\", 120000],\n  ]);\n  run();\n})();\n");
+  assert.equal(spliceDeadlines(spliced, { host: [["ArdiaA.b", 60000]], engine: [["demo.slow", 90000], ["demo.slower", 120000]] }), spliced);
+  assert.equal(spliceDeadlines(spliced, { host: [], engine: [] }), "(() => {\n  const hostDeadlines = new Map([\n  ]);\n  const engineDeadlines = new Map([\n  ]);\n  run();\n})();\n");
+  assert.throws(() => spliceDeadlines(source.replace("hostDeadlines", "interactive"), { host: [], engine: [] }), /hostDeadlines as a new Map\(\[ \.\.\. \]\) exactly once/);
+  assert.throws(() => spliceDeadlines(`${source}\n  const engineDeadlines = new Map([\n  ]);\n`, { host: [], engine: [] }), /engineDeadlines .* exactly once/);
+});
+
+test("the real bootstrap keeps every deadline it had before the schema owned them", async () => {
+  const bootstrap = (await realOutputs()).get(BOOTSTRAP);
+  const rows = Object.fromEntries([...bootstrap.matchAll(/^ {4}\["([^"]+)", (\d+)\],$/gm)].map((match) => [match[1], Number(match[2])]));
+  assert.deepEqual(
+    { passwordsExport: rows["ArdiaPasswords.export"], cardNumber: rows["ArdiaAutofill.cardNumber"], bangList: rows["ArdiaShell.fetchBangList"], cli: rows["ArdiaCli.install"], calendar: rows["ArdiaCalendar.sources"], removeAllowed: rows["contentBlocker.removeAllowed"], chooseFolder: rows["ArdiaSync.chooseFolder"], live: rows["ArdiaLive.request"] },
+    { passwordsExport: 900000, cardNumber: 180000, bangList: 75000, cli: 330000, calendar: 60000, removeAllowed: 90000, chooseFolder: 900000, live: 180000 },
+  );
+  assert.equal(Object.keys(rows).length, 27);
+});
+
 test("an event says whether the desktop host forwards it, never by default, and the Mac and Windows forward it unless they say otherwise", () => {
   assert.doesNotThrow(() => validate("demo", withEvents({ changed: event() })));
   for (const desktop of ["forward", "custom", "absent"]) assert.doesNotThrow(() => validate("demo", withEvents({ changed: event({ desktop }) })));
@@ -296,6 +377,7 @@ test("a module domain's TypeScript gives each Expo module a *Native type with it
     "  size(): number;",
     "  evaluate(script: string, tones: string[]): Promise<unknown>;",
     "  webOnly(on: boolean): Promise<void>;",
+    '  addListener(name: "tone", listener: (event: DemoNativeEvents["tone"]) => void): { remove(): void };',
     "};",
     "",
     "export type DemoNativeEvents = {",
@@ -400,7 +482,7 @@ test("the real manifest lists every module domain function and event of the sche
       const listed = manifest.modules[name].modules[module];
       assert.deepEqual(Object.keys(listed.functions), Object.keys(row.functions));
       for (const [fn, binding] of Object.entries(row.functions)) {
-        assert.deepEqual(listed.functions[fn], { args: binding.args.map(([param]) => param), async: binding.async, mac: binding.mac, desktop: binding.desktop, windows: binding.windows });
+        assert.deepEqual(listed.functions[fn], { args: binding.args.map(([param]) => param.replace(/\?$/, "")), async: binding.async, mac: binding.mac, desktop: binding.desktop, windows: binding.windows, ...(binding.deadline === undefined ? {} : { deadline: binding.deadline }) });
       }
       assert.deepEqual(Object.keys(listed.events), Object.keys(row.events));
     }
@@ -427,7 +509,7 @@ test("a module function's or event's bindings are never implied, and args, resul
   refused({ async: false, promise: true }, /resolves a Promise itself, so it's async/);
   refused({ promise: true, result: "unknown", swiftResult: "Any" }, /has no swiftResult/);
   refused({ async: false, queue: "main" }, /only when it's async/);
-  refused({ queue: "background" }, /queue is main/);
+  refused({ queue: "background" }, /queue is one of main, module, userInitiated, utility/);
   assert.doesNotThrow(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { hold: fn({ args: [["tone", "Tone", "[String: Any]"]], result: "unknown", promise: true }) }, events: {} } })));
   const event = (overrides) => moduleDomain({ ArdiaDemo: { functions: {}, events: { tone: { payload: "Tone", mac: "custom", desktop: "absent", windows: "absent", ...overrides } } } });
   assert.doesNotThrow(() => validateModuleDomain("demo", event({})));
@@ -454,24 +536,41 @@ test("a module domain names a real package, Expo modules by their Ardia names, t
 });
 
 const SWIFT_EXPO_STUBS = [
+  "import Dispatch",
   "protocol AnyDefinition {}",
-  "enum Queue { case main }",
-  "struct Definition: AnyDefinition { func runOnQueue(_ queue: Queue) -> Definition { self } }",
+  "struct Definition: AnyDefinition { func runOnQueue(_ queue: DispatchQueue) -> Definition { self } }",
   "final class Promise { func resolve(_ value: Any?) {} }",
   "class Module { func sendEvent(_ name: String, _ body: [String: Any?] = [:]) {} }",
   "func Events(_ names: String...) -> Definition { Definition() }",
+  "func Constant<R>(_ name: String, _ body: @escaping () -> R) -> Definition { Definition() }",
   "func AsyncFunction<R>(_ name: String, _ body: @escaping () throws -> R) -> Definition { Definition() }",
   "func AsyncFunction<R, A0, each A>(_ name: String, _ body: @escaping (A0, repeat each A) throws -> R) -> Definition { Definition() }",
+  "func AsyncFunction<R>(_ name: String, _ body: @escaping () async throws -> R) -> Definition { Definition() }",
+  "func AsyncFunction<R, A0, each A>(_ name: String, _ body: @escaping (A0, repeat each A) async throws -> R) -> Definition { Definition() }",
   "func Function<R>(_ name: String, _ body: @escaping () throws -> R) -> Definition { Definition() }",
   "func Function<R, A0, each A>(_ name: String, _ body: @escaping (A0, repeat each A) throws -> R) -> Definition { Definition() }",
   "",
 ].join("\n");
 
+const SWIFT_KNOWN_TYPES = new Set(["Any", "AnyDefinition", "Bool", "Definition", "DispatchQueue", "Double", "Int", "Promise", "Self", "String", "Void"]);
+const swiftTypeStubs = (swift) =>
+  [...new Set([...swift.matchAll(/^ {2}(?:static )?(?:func|var) .*$/gm)].flatMap(([line]) => [...line.replace(/\b(?:func|var) `?\w+`?/, "").matchAll(/\b[A-Z]\w*/g)].map(([name]) => name)))]
+    .filter((name) => !SWIFT_KNOWN_TYPES.has(name))
+    .sort()
+    .map((name) => `struct ${name} {}`)
+    .join("\n");
+
+const conformerLine = (line) => {
+  if (/^ {2}#(?:if|endif)\b/.test(line)) return line;
+  const property = /^( {2}static var .*) \{ get \}$/.exec(line);
+  return property ? `${property[1]} { fatalError() }` : `${line} { fatalError() }`;
+};
+
 const conformers = (swift) =>
-  [...swift.matchAll(/^protocol (\w+) \{\n((?: {2}static func .*\n)*)\}$/gm)]
+  [...swift.matchAll(/^protocol (\w+) \{\n((?: {2}.*\n)*)\}$/gm)]
     .map(([, protocol, requirements]) => [
       `final class ${protocol}Conformer: Module, ${protocol} {`,
-      ...requirements.trimEnd().split("\n").filter(Boolean).map((line) => `${line} { fatalError() }`),
+      ...requirements.trimEnd().split("\n").filter(Boolean).map(conformerLine),
       "  func definitions() -> [AnyDefinition] { [Self.eventsDefinitionIfAny] }",
       "}",
     ].join("\n"))
@@ -480,20 +579,21 @@ const conformers = (swift) =>
 test("the generated module Swift typechecks against Expo's shapes, and a module with the schema's signatures conforms to it", async () => {
   const swiftc = spawnSync("swiftc", ["--version"], { encoding: "utf8" });
   if (swiftc.status !== 0) return;
-  const real = outputs(await loadDomains(), await loadModuleDomains());
+  const real = (await realOutputs());
   const sources = [
     ...[...real].filter(([path]) => path.endsWith("Native.swift")),
     ["packages/shaders/ios/DemoNative.swift", outputs({}, { demo: richModules() }).get("packages/shaders/ios/DemoNative.swift")],
+    ["packages/shaders/ios/FullerNative.swift", outputs({}, { fuller: fullerModules() }).get("packages/shaders/ios/FullerNative.swift")],
   ];
   assert.ok(sources.length >= 2, "the real schema has a module domain with Swift");
   const dir = mkdtempSync(join(tmpdir(), "hostapi-module-swift-"));
   try {
     const files = sources.map(([path, text], index) => {
       const at = join(dir, `${index}-${path.split("/").at(-1)}`);
-      const body = text.replace("import ExpoModulesCore\n", "");
-      const hasEvents = (protocol) => body.includes(`extension ${protocol} where Self: Module`);
+      const body = text.replace("import ExpoModulesCore\n", "import Dispatch\n");
+      const hasEvents = (protocol) => (body.split(`\nextension ${protocol} {\n`)[1] ?? "").split("\n}\n")[0].includes("static var eventsDefinition");
       const shims = [...body.matchAll(/^protocol (\w+)/gm)].map(([, protocol]) => `extension ${protocol} { static var eventsDefinitionIfAny: AnyDefinition { ${hasEvents(protocol) ? "eventsDefinition" : "Definition()"} } }`).join("\n");
-      writeFileSync(at, `${body}\n${shims}\n${conformers(body)}\n`);
+      writeFileSync(at, `${body}\n${shims}\n${conformers(body)}\n${swiftTypeStubs(body)}\n`);
       return at;
     });
     const stubs = join(dir, "Expo.swift");
@@ -501,7 +601,7 @@ test("the generated module Swift typechecks against Expo's shapes, and a module 
     const checked = spawnSync("swiftc", ["-typecheck", stubs, ...files], { encoding: "utf8" });
     assert.equal(checked.status, 0, checked.stderr);
     const drifted = join(dir, "Drifted.swift");
-    writeFileSync(drifted, `${readFileSync(files.at(-1), "utf8").replace("static func hold(_ on: Bool) { fatalError() }", "static func hold(_ on: String) { fatalError() }")}`);
+    writeFileSync(drifted, `${readFileSync(files.at(-2), "utf8").replace("static func hold(_ on: Bool) { fatalError() }", "static func hold(_ on: String) { fatalError() }")}`);
     const refused = spawnSync("swiftc", ["-typecheck", stubs, drifted], { encoding: "utf8" });
     assert.notEqual(refused.status, 0, "a module whose signature drifts from the schema doesn't compile");
     assert.match(refused.stderr, /does not conform to protocol 'DemoNative'/);
@@ -543,7 +643,7 @@ test("--write deletes or overwrites a module domain's file only when it still ho
       mkdirSync(join(dir, path, ".."), { recursive: true });
       cpSync(ROOT + path, join(dir, path), { recursive: true });
     };
-    for (const path of ["packages/hostapi/generate.mjs", "packages/hostapi/define.ts", "packages/hostapi/schema", "packages/ardiacore/package.json", "packages/shaders/package.json"]) copy(path);
+    for (const path of ["packages/hostapi/generate.mjs", "packages/hostapi/define.ts", "packages/hostapi/schema", "packages/ardiacore/package.json", "packages/shaders/package.json", "packages/shell/package.json", "packages/sync/package.json", "packages/import/package.json", BOOTSTRAP]) copy(path);
     const generator = join(dir, "packages/hostapi/generate.mjs");
     const at = (path) => join(dir, path);
     const write = () => runAt(generator, "--write");
@@ -553,7 +653,7 @@ test("--write deletes or overwrites a module domain's file only when it still ho
     assert.equal(runAt(generator, "--check").status, 0);
     const index = at("packages/hostapi/schema/index.ts");
     const withShaders = readFileSync(index, "utf8");
-    const withoutShaders = withShaders.replace("export const moduleDomains = { shaders };", "export const moduleDomains = {};");
+    const withoutShaders = withShaders.replace(/export const moduleDomains = \{ shaders, /, "export const moduleDomains = { ");
     assert.notEqual(withoutShaders, withShaders);
 
     writeFileSync(at(swift), "import ExpoModulesCore\n\nprotocol AreaLightNative {}\n");
@@ -570,7 +670,7 @@ test("--write deletes or overwrites a module domain's file only when it still ho
     assert.equal(retiring.status, 0, retiring.stderr);
     assert.equal(readFileSync(at(swift), "utf8"), "import ExpoModulesCore\n\nprotocol HandWritten {}\n", "the hand-written replacement survives the domain's removal");
     assert.equal(existsSync(at(types)), false, "the untouched generated TypeScript is retired");
-    assert.deepEqual(JSON.parse(readFileSync(at(MANIFEST), "utf8")).modules, {});
+    assert.equal(Object.hasOwn(JSON.parse(readFileSync(at(MANIFEST), "utf8")).modules, "shaders"), false);
 
     rmSync(at(swift));
     writeFileSync(index, withShaders);
@@ -609,4 +709,197 @@ test("a relative import is a plain path, so the generated import line is always 
   for (const path of ["../meadowPage/config", "./types", "../../webkit", "../wire", "../../@scope/thing.d"]) {
     assert.doesNotThrow(() => validateModuleDomain("demo", moduleDomain(undefined, { imports: { [path]: ["Thing"] } })), path);
   }
+});
+
+const fullerModules = () =>
+  moduleDomain({
+    ArdiaFuller: {
+      functions: {
+        record: fn({ args: [["windowId", "string"], ["fps?", "number | null", "Double?"]], result: "boolean", queue: "main" }),
+        claim: fn({ args: [["tag", "number", "Int"]], instance: "weak", queue: "main" }),
+        moved: fn({ args: [], result: "boolean", async: false, instance: "weak", fallback: "true" }),
+        watch: fn({ args: [["names", "string[]"]], result: "void", promise: true, instance: "strong" }),
+        pick: fn({ args: [], result: "string | null", promise: true, instance: "weak", queue: "main" }),
+        seal: fn({ args: [["text", "string"]], result: "string", queue: "module", throws: true }),
+        translate: fn({ args: [["text", "string"]], result: "string", swiftAsync: true, throws: true }),
+        compress: fn({ args: [["path", "string"]], result: "number", queue: "utility" }),
+        crash: fn({ args: [], debug: true }),
+        counts: fn({ args: [], result: "Record<string, number>", swiftResult: "[String: Int]", async: false, optional: true, debug: true }),
+        install: fn({ args: [], result: "Install", mac: "absent", desktop: "adapted", windows: "custom" }),
+      },
+      constants: {
+        apiVersion: { type: "number", swift: "Int", mac: "custom", desktop: "custom", windows: "absent" },
+        core: { type: "Core", swift: "String", optional: true, mac: "custom", desktop: "adapted", windows: "absent" },
+      },
+      events: { onChange: { payload: "{ paths: string[] }", mac: "custom", desktop: "host", windows: "absent" }, onClose: { payload: "void", mac: "absent", desktop: "custom", windows: "absent" } },
+    },
+  }, { types: { Core: '"rust" | "native"', Install: "{ ok: boolean }" } });
+
+test("a module domain's TypeScript marks optional args and members, lists constants before functions, and types addListener by the module's events", () => {
+  assert.equal(outputs({}, { fuller: fullerModules() }).get("packages/shaders/src/generated/native.ts"), [
+    'export type Core = "rust" | "native";',
+    "",
+    "export type Install = { ok: boolean };",
+    "",
+    "export type FullerNative = {",
+    "  apiVersion: number;",
+    "  core?: Core;",
+    "  record(windowId: string, fps?: number | null): Promise<boolean>;",
+    "  claim(tag: number): Promise<void>;",
+    "  moved(): boolean;",
+    "  watch(names: string[]): Promise<void>;",
+    "  pick(): Promise<string | null>;",
+    "  seal(text: string): Promise<string>;",
+    "  translate(text: string): Promise<string>;",
+    "  compress(path: string): Promise<number>;",
+    "  crash(): Promise<void>;",
+    "  counts?(): Record<string, number>;",
+    "  install(): Promise<Install>;",
+    '  addListener(name: "onChange", listener: (event: FullerNativeEvents["onChange"]) => void): { remove(): void };',
+    '  addListener(name: "onClose", listener: () => void): { remove(): void };',
+    "};",
+    "",
+    "export type FullerNativeEvents = {",
+    "  onChange: { paths: string[] };",
+    "  onClose: void;",
+    "};",
+    "",
+    "export type FullerModules = {",
+    "  ArdiaFuller: FullerNative;",
+    "};",
+    "",
+  ].join("\n"));
+});
+
+test("a module domain's Swift requires the module's queue and constants, holds the module strongly or weakly for instance functions, carries async and throws, and keeps debug-only functions under #if DEBUG", () => {
+  assert.equal(outputs({}, { fuller: fullerModules() }).get("packages/shaders/ios/FullerNative.swift"), [
+    "import ExpoModulesCore",
+    "",
+    "protocol FullerNative {",
+    "  static var queue: DispatchQueue { get }",
+    "  static var apiVersion: Int { get }",
+    "  static var core: String { get }",
+    "  static func record(_ windowId: String, _ fps: Double?) -> Bool",
+    "  func claim(_ tag: Int)",
+    "  func moved() -> Bool",
+    "  func watch(_ names: [String], _ promise: Promise)",
+    "  func pick(_ promise: Promise)",
+    "  static func seal(_ text: String) throws -> String",
+    "  static func translate(_ text: String) async throws -> String",
+    "  static func compress(_ path: String) -> Double",
+    "  #if DEBUG",
+    "  static func crash()",
+    "  static func counts() -> [String: Int]",
+    "  #endif",
+    "}",
+    "",
+    "extension FullerNative {",
+    '  static var moduleName: String { "ArdiaFuller" }',
+    "",
+    "  static var eventsDefinition: AnyDefinition {",
+    '    Events("onChange")',
+    "  }",
+    "",
+    "  static var apiVersionConstant: AnyDefinition {",
+    '    Constant("apiVersion") { () -> Int in Self.apiVersion }',
+    "  }",
+    "",
+    "  static var coreConstant: AnyDefinition {",
+    '    Constant("core") { () -> String in Self.core }',
+    "  }",
+    "",
+    "  static var recordFunction: AnyDefinition {",
+    '    AsyncFunction("record") { (windowId: String, fps: Double?) -> Bool in Self.record(windowId, fps) }.runOnQueue(.main)',
+    "  }",
+    "",
+    "  static var sealFunction: AnyDefinition {",
+    '    AsyncFunction("seal") { (text: String) throws -> String in try Self.seal(text) }.runOnQueue(Self.queue)',
+    "  }",
+    "",
+    "  static var translateFunction: AnyDefinition {",
+    '    AsyncFunction("translate") { (text: String) async throws -> String in try await Self.translate(text) }',
+    "  }",
+    "",
+    "  static var compressFunction: AnyDefinition {",
+    '    AsyncFunction("compress") { (path: String) -> Double in Self.compress(path) }.runOnQueue(DispatchQueue.global(qos: .utility))',
+    "  }",
+    "",
+    "  #if DEBUG",
+    "  static var crashFunction: AnyDefinition {",
+    '    AsyncFunction("crash") { () in Self.crash() }',
+    "  }",
+    "",
+    "  static var countsFunction: AnyDefinition {",
+    '    Function("counts") { () -> [String: Int] in Self.counts() }',
+    "  }",
+    "  #endif",
+    "}",
+    "",
+    "extension FullerNative where Self: Module {",
+    '  func sendOnChange(_ payload: [String: Any?]) { sendEvent("onChange", payload) }',
+    "",
+    "  var claimFunction: AnyDefinition {",
+    '    AsyncFunction("claim") { [weak self] (tag: Int) in self?.claim(tag) }.runOnQueue(.main)',
+    "  }",
+    "",
+    "  var movedFunction: AnyDefinition {",
+    '    Function("moved") { [weak self] () -> Bool in guard let self else { return true }; return self.moved() }',
+    "  }",
+    "",
+    "  var watchFunction: AnyDefinition {",
+    '    AsyncFunction("watch") { (names: [String], promise: Promise) in self.watch(names, promise) }',
+    "  }",
+    "",
+    "  var pickFunction: AnyDefinition {",
+    '    AsyncFunction("pick") { [weak self] (promise: Promise) in if let self { self.pick(promise) } else { promise.resolve(nil) } }.runOnQueue(.main)',
+    "  }",
+    "}",
+    "",
+  ].join("\n"));
+  const manifest = JSON.parse(outputs({}, { fuller: fullerModules() }).get(MANIFEST)).modules.fuller.modules.ArdiaFuller;
+  assert.deepEqual(manifest.constants, { apiVersion: { mac: "custom", desktop: "custom", windows: "absent" }, core: { mac: "custom", desktop: "adapted", windows: "absent" } });
+  assert.deepEqual(manifest.functions.record.args, ["windowId", "fps"]);
+  assert.equal(Object.hasOwn(JSON.parse(outputs({}, { demo: richModules() }).get(MANIFEST)).modules.demo.modules.ArdiaDemo, "constants"), false);
+});
+
+test("the richer module forms keep to shapes both languages and every host take", () => {
+  const refused = (overrides, pattern) => assert.throws(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { hold: fn(overrides) }, events: {} } })), pattern, JSON.stringify(overrides));
+  const accepted = (overrides) => assert.doesNotThrow(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { hold: fn(overrides) }, events: {} } })), JSON.stringify(overrides));
+  accepted({ desktop: "adapted" });
+  accepted({ args: [["tone", "Tone"]], result: "Tone", mac: "absent", desktop: "custom" });
+  refused({ args: [["fps?", "number | null", "Double?"], ["scale", "number"]] }, /follows an arg that may be left out/);
+  refused({ args: [["fps?", "number"]] }, /may be left out, so its Swift type is optional/);
+  refused({ optional: false }, /optional is true or left out/);
+  refused({ swiftAsync: true, async: false }, /Swift body is async, so it's async/);
+  refused({ throws: "yes" }, /throws is true or left out/);
+  refused({ debug: false }, /debug is true or left out/);
+  refused({ instance: "shared" }, /instance is strong or weak/);
+  refused({ instance: "weak", args: [], result: "boolean", async: false }, /holds its module weakly and returns boolean, so it says its fallback/);
+  refused({ instance: "strong", args: [], result: "boolean", async: false, fallback: "true" }, /goes only with instance: weak and a result/);
+  refused({ instance: "weak", fallback: "nil" }, /goes only with instance: weak and a result/);
+  for (const key of ["swiftAsync", "throws", "debug"]) refused({ mac: "absent", desktop: "custom", [key]: true }, new RegExp(`${key} says how the Mac's Swift body runs`));
+  refused({ mac: "absent", desktop: "custom", queue: "main" }, /queue says how the Mac's Swift body runs/);
+  const constant = (row) => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: {}, constants: { level: { mac: "custom", desktop: "absent", windows: "absent", ...row } }, events: {} } }));
+  assert.doesNotThrow(() => constant({ type: "number" }));
+  assert.doesNotThrow(() => constant({ type: "Level", mac: "absent", desktop: "custom" }));
+  assert.throws(() => constant({ type: "Level" }), /constant ArdiaDemo\.level says its Swift type/);
+  assert.throws(() => constant({ type: "void" }), /names its type/);
+  assert.throws(() => constant({ type: "number", desktop: undefined }), /never implied/);
+  assert.throws(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { level: fn() }, constants: { level: { type: "number", mac: "custom", desktop: "absent", windows: "absent" } }, events: {} } })), /constant ArdiaDemo\.level generates the Swift member level, which function ArdiaDemo\.level already generates/);
+  assert.throws(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { queue: fn(), seal: fn({ queue: "module" }) }, events: {} } })), /function ArdiaDemo\.queue generates the Swift member queue, which the module's own queue already generates/);
+  assert.throws(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { addListener: fn() }, events: {} } })), /the module's event listener/);
+  refused({ swiftAsync: true, promise: true, result: "unknown" }, /resolves a Promise itself, so its Swift body can't be async/);
+  refused({ swiftAsync: true, queue: "main" }, /runs it concurrently without a queue/);
+  refused({ args: [["label?", "string | null", "String?"]], promise: true, result: "unknown" }, /Expo requires every arg and none may be left out/);
+  const debugQueued = outputs({}, {
+    demo: moduleDomain({
+      ArdiaDemo: {
+        functions: { trace: fn({ queue: "module", debug: true }) },
+        events: {},
+      },
+    }),
+  }).get("packages/shaders/ios/DemoNative.swift");
+  assert.match(debugQueued, /protocol DemoNative \{\n {2}#if DEBUG\n {2}static var queue: DispatchQueue \{ get \}\n {2}#endif\n {2}#if DEBUG\n {2}static func trace/);
+  assert.throws(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { sendOnChange: fn() }, events: { onChange: { payload: "void", mac: "custom", desktop: "absent", windows: "absent" } } } })), /event ArdiaDemo\.onChange generates the Swift member sendOnChange, which function ArdiaDemo\.sendOnChange already generates/);
+  assert.doesNotThrow(() => validateModuleDomain("demo", moduleDomain({ ArdiaDemo: { functions: { sendOnChange: fn() }, events: { onChange: { payload: "void", mac: "absent", desktop: "custom", windows: "absent" } } } })));
 });

@@ -337,7 +337,7 @@ test("the win build shares every desktop adapter, takes Windows terms, and leave
   assert.deepEqual(ids.filter(linuxOnly), [], "no Linux-only module reaches the win bundle");
   assert.deepEqual(ids.filter((id) => /\.windows\.tsx?$/.test(id) && !WINDOWS_WORDING.has(id)), [], "only Windows wording comes from the React Native Windows twins");
   const seams = [
-    ["main.tsx", "platform/buttonLayout.desktop.ts"],
+    ["main.tsx", "platform/buttonLayout.win.ts"],
     ["main.tsx", "platform/launchNotice.desktop.ts"],
     ["main.tsx", "platform/updater.desktop.ts"],
     ["hostModules.ts", "platform/calendar.desktop.ts"],

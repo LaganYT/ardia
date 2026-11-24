@@ -563,7 +563,7 @@ test("the CPU read needs native API 94, so an older build refuses this JavaScrip
   const swift = readFileSync(new URL("../../../../../packages/shell/ios/AppModule.swift", import.meta.url), "utf8");
   const version = Number(/export const NATIVE_API_VERSION = (\d+);/.exec(js)?.[1]);
   assert.ok(version >= 94, `NATIVE_API_VERSION is ${version}`);
-  assert.equal(Number(/Constant\("apiVersion"\) \{ \(\) -> Int in (\d+) \}/.exec(swift)?.[1]), version);
+  assert.equal(Number(/static var apiVersion: Int \{ (\d+) \}/.exec(swift)?.[1]), version);
   assert.match(readFileSync(new URL("../../../../../packages/ardiacore/ios/EngineCalls.swift", import.meta.url), "utf8"), /"childProcessCpu": childProcessCpuHandler,/);
 });
 

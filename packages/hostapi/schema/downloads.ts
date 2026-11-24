@@ -7,6 +7,18 @@ export const downloads = defineDomain({
     "../../downloads": ["Download", "DownloadSettings"],
   },
   calls: {
+    settings: {
+      args: "Profile",
+      result: "DownloadSettings",
+      service: "ac_downloads_settings",
+      desktop: "route",
+    },
+    setSettings: {
+      args: 'Profile & Partial<Pick<DownloadSettings, "folder" | "askWhereToSave">>',
+      result: "DownloadSettings",
+      service: "ac_downloads_set_settings",
+      desktop: "route",
+    },
     cancel: {
       args: "{ id: string }",
       result: "null",
@@ -42,18 +54,6 @@ export const downloads = defineDomain({
       routeField: "null",
       mac: "custom",
       windows: "custom",
-    },
-    settings: {
-      args: "Profile",
-      result: "DownloadSettings",
-      service: "ac_downloads_settings",
-      desktop: "route",
-    },
-    setSettings: {
-      args: 'Profile & Partial<Pick<DownloadSettings, "folder" | "askWhereToSave">>',
-      result: "DownloadSettings",
-      service: "ac_downloads_set_settings",
-      desktop: "route",
     },
   },
   events: {

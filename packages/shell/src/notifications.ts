@@ -1,6 +1,7 @@
 import type { EventSubscription } from "expo-modules-core";
+import type { NotificationsNative } from "./generated/native";
 
-type NotificationPermission = "granted" | "denied" | "notDetermined" | "provisional";
+export type NotificationPermission = "granted" | "denied" | "notDetermined" | "provisional";
 
 export type NotificationOptions = {
   id?: string;
@@ -34,11 +35,4 @@ export type NotificationResponse = {
   data: unknown;
 };
 
-export type NotificationsNative = {
-  addListener(name: "onNotificationResponse", listener: (e: NotificationResponse) => void): EventSubscription;
-  notificationPermission(): Promise<NotificationPermission>;
-  requestNotificationPermission(): Promise<boolean>;
-  postNotification(options: NotificationOptions): Promise<NotificationPostResult | string | null>;
-  removeNotifications(ids: string[]): Promise<void>;
-  openNotificationSettings(): Promise<void>;
-};
+export type { NotificationsNative };

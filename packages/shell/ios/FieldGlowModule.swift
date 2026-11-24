@@ -1,22 +1,22 @@
 import AppKit
 import ExpoModulesCore
 
-public class FieldGlowModule: Module {
-  public func definition() -> ModuleDefinition {
-    Name("ArdiaFieldGlow")
+public class FieldGlowModule: Module, FieldGlowNative {
+  static func show(_ id: String, _ timings: [Double]) { DispatchQueue.main.async { FieldGlow.hub.show(id, timings: FieldGlowTimings(milliseconds: timings)) } }
 
-    Function("show") { (id: String, timings: [Double]) in
-      DispatchQueue.main.async { FieldGlow.hub.show(id, timings: FieldGlowTimings(milliseconds: timings)) }
-    }
-    Function("progress") { (id: String, to: Double, still: Bool) in
-      DispatchQueue.main.async { FieldGlow.hub.progress(id, to: to, still: still) }
-    }
-    Function("finish") { (id: String, still: Bool) in
-      DispatchQueue.main.async { FieldGlow.hub.finish(id, still: still) }
-    }
-    Function("reset") { (id: String) in
-      DispatchQueue.main.async { FieldGlow.hub.reset(id) }
-    }
+  static func progress(_ id: String, _ to: Double, _ still: Bool) { DispatchQueue.main.async { FieldGlow.hub.progress(id, to: to, still: still) } }
+
+  static func finish(_ id: String, _ still: Bool) { DispatchQueue.main.async { FieldGlow.hub.finish(id, still: still) } }
+
+  static func reset(_ id: String) { DispatchQueue.main.async { FieldGlow.hub.reset(id) } }
+
+  public func definition() -> ModuleDefinition {
+    Name(Self.moduleName)
+
+    Self.showFunction
+    Self.progressFunction
+    Self.finishFunction
+    Self.resetFunction
 
     View(FieldGlow.self) {
       Prop("glowId") { (view: FieldGlow, id: String?) in view.glowId = id }

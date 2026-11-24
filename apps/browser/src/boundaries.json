@@ -1819,6 +1819,31 @@
    "detected": false
   },
   {
+   "id": "windows-webui-platform:desktopPlatform",
+   "source": "frame",
+   "guard": "Windows WebUI host (--ardia-shell=webui): only the trusted shell document's ardiaRequest reaches ardia::desktop::Platform(); ArdiaApp.openExternalURL takes exactly one string and allows only http, https and mailto: the raw text may not hold whitespace, control characters, quotes or backslashes or exceed 32 KB, http(s) must be written scheme://host with no credentials, and only then does ShellExecuteExW see the canonical spec; a background instance opens nothing; setLaunchAtLogin takes one boolean and writes only HKCU Run 'Ardia WebUI' as the quoted executable path (refusing a path with quotes or control characters) plus --ardia-shell=webui, never RNW's 'Ardia' value; the default browser calls take no arguments and only open ms-settings:defaultapps, and platform.ps1 sends the shared corpus as one-item lists to setAsDefaultBrowser and checks the default apps launch count never moves until an empty-list control moves it by one; DPAPI secrets accept account names of 1-64 [A-Za-z0-9_-] only, are stored as sync-key-x<hex of the exact account bytes>.dpapi so accounts differing only by case never share a file on NTFS, live under the WebUI data folder's Sync, are bound to the ardia-sync-key/v1 purpose and instance, and are zeroed after use; scripts/windows/webui-pilot/platform.ps1 sends the shared hostile corpus (scripts/security/hostile-inputs.mjs via hostile-corpus.mjs) plus unlisted schemes and bad shapes to openExternalURL in a Windows guest and checks at the sink that the ShellExecuteExW count never moves, then that one https control moves it by one",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#ExternalUrlAllowed",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#InvokeOpenExternal",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#g_external_opens",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#LoginItemCommand",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#SecretAccountAllowed",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#SecretFileName",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#CapabilityFor",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#PlainCodePoints",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#RawUserInfo",
+    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#CapabilityFor",
+    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#Trusted",
+    "scripts/windows/webui-pilot/platform.ps1#set-launch-at-login-refuses-shared-corpus",
+    "scripts/windows/webui-pilot/platform.ps1#set-default-browser-refuses-shared-corpus",
+    "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#g_default_apps_opens",
+    "scripts/windows/webui-pilot/hostile-corpus.mjs#HOSTILE_VALUES",
+    "scripts/windows/webui-pilot/platform.ps1#open-external-refuses-shared-corpus",
+    "scripts/windows/webui-pilot/platform.ps1#dpapi-case-distinct-accounts"
+   ],
+   "detected": false
+  },
+  {
    "id": "native-monitor:pinchFromOtherApp",
    "source": "other-app",
    "guard": "A magnify event seen while another app is in front only resizes a Picture in Picture window: the monitor exists only while Ardia is inactive with a zoomable window, a missing CGEvent falls back to the mouse location, a non-finite or far-off pointer is refused before hit-testing, the window must be the topmost under the pointer, and a non-finite or huge magnification becomes a factor between 0.05 and 4 before the clamped, finite-checked resize",

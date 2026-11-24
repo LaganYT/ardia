@@ -138,28 +138,30 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
   `ardia::OffTheRecord::kAllow`: the engine alone decides which calls serve a private session; (2) `scripts/agent/engine-build`; (3) call it with
   `ArdiaEngineBridge call:` (`callWithSecret:` for secrets); for JS, add the call to its domain's host API schema
   (below), which generates the Mac call table's `EngineCall.passing("ac_<domain>_<verb>")` row and the TS types.
-  **Host API schema:** every engine domain but `media` lives in `packages/hostapi/schema`, and `api.ts` writes rows by
-  hand only for `media` (`engine/ardiacore-linux/tests/test_cast.py`, a Linux key input, reads them there); add
-  the row there instead, with its `service`, its
+  **Host API schema:** every engine domain lives in `packages/hostapi/schema`, and `api.ts` merges only the generated
+  domains; add a new call to its domain's schema file with its `service`, its
   explicit `desktop` binding (`route`, `custom` or `absent`) and any `mac`/`windows` override (`custom` when that host
-  serves it with its own code; a call no host passes straight through may leave out `service`). A Linux route that
-  answers with one field of the engine's reply, or with null, says so in `routeField` (kRoutes' third column). Each
+  serves it with its own code; a call no host passes straight through may leave out `service`). A desktop route that
+  answers with one field of the engine's reply, or with null, says so in `routeField` (`kRoutes`' third column), and a
+  non-default bootstrap timeout says so in `deadline`. Each
   event names its `payload` and its explicit `desktop` binding (`forward`, `custom` or `absent`), with `mac`/`windows`
   overrides (default `forward`) and a `topic` when the engine topic isn't the event's own name (`engine.cliControl`
   comes from `cliControl`). Payload types come from paths relative to the generated folder or from a package
   `packages/ardiacore` depends on (`@ardia/core`). Then run `node packages/hostapi/generate.mjs --write`. It writes the domain's TS types and
-  manifest in `packages/ardiacore/src/engine/generated/`, and its whole Swift module when every call is `passing`;
-  otherwise it writes `<Domain>Calls.swift`, a `<domain>CallTable(...)` function taking one handler per Mac `custom`
-  call, which the hand-written `<Domain>Module.swift` calls for its `calls` (`.dropping(...)` removes calls a launch
-  mode doesn't serve, as Tabs and WebKit do for test-instance calls). Never edit generated files by hand. `pnpm -C packages/hostapi test`
-  checks they're current and that Linux's `kRoutes` and `EventName`, the Mac's `ForwardedTopics` and Windows'
-  `forwarded.json` agree with the schema; those tables stay hand-written until the desktop host generates them.
+  manifest in `packages/ardiacore/src/engine/generated/`, its whole Swift module when every call is `passing` (or
+  `<Domain>Calls.swift`, a `<domain>CallTable(...)` function taking one handler per Mac `custom`
+  call, which the hand-written `<Domain>Module.swift` calls for its `calls`; `.dropping(...)` removes calls a launch
+  mode doesn't serve, as Tabs and WebKit do for test-instance calls), the shared desktop route table in
+  `engine/ardiacore-desktop/src/ardia/desktop/generated/ac_desktop_routes.h`, and the bootstrap deadline map. Never edit generated files by hand. `pnpm -C packages/hostapi test`
+  checks they're current and that Linux's `EventName`, the Mac's `ForwardedTopics` and Windows'
+  `forwarded.json` agree with the schema.
   A domain Windows has no module for (`webKit`) is absent there call by call and never named in `forwarded.json`.
-  **Module domains** (positional Expo functions, piloted with `shaders`) are listed in the schema's `moduleDomains`
+  **Module domains** (positional Expo functions: `shaders`, `shell`, `sync`, `import`) are listed in the schema's `moduleDomains`
   through `defineModuleDomain`: the package, then per Expo module (`ArdiaWindowBackdrop`) its functions, each with
   positional `args` (`[name, type]`, plus a Swift type when the TS one isn't a primitive), `result`, `async`, optional
-  `promise`/`queue`, and explicit `mac` (`custom`/`absent`), `desktop` (`custom`, `host` or `absent`) and `windows`
-  (`custom`/`absent`) bindings, and its module events. The generator writes `<package>/src/generated/native.ts`
+  `promise`/`queue`, `optional`, `swiftAsync`/`throws`, `instance` (`strong`, or `weak` with a `fallback`) and `debug`, and
+  explicit `mac` (`custom`/`absent`), `desktop` (`custom`, `adapted` when the UI answers in front of the host's own
+  dispatch, `host` or `absent`) and `windows` (`custom`/`absent`) bindings, plus its `constants` and module events. The generator writes `<package>/src/generated/native.ts`
   (`<Name>Native` per module, `<Domain>Modules` for all of them; the package calls `requireNativeModule` through
   them), `<package>/ios/<Domain>Native.swift` (a protocol of the Mac module's static functions, plus
   `moduleName`, `<fn>Function` and `eventsDefinition` definitions), and the domain's entry under the manifest's

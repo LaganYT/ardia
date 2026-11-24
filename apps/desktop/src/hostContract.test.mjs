@@ -9,6 +9,7 @@ import { reachesNativeHostUnchecked, resolveHostModule } from "./hostModules.ts"
 import { createNativeEvents } from "./hostEvents.ts";
 import { hostLaunchConfig } from "./hostLaunchConfig.ts";
 import { HostTab } from "./hostTab.ts";
+import { linuxAdvertised } from "../scripts/linux-capabilities.mjs";
 
 function fixture() {
   const listeners = new Set();
@@ -56,25 +57,110 @@ test("every call of a schema-generated domain reaches a host that serves it unde
   }
 });
 
-async function checkModuleFunction(module, fn, row) {
+const LEFT_OUT_BY_THE_UI = new Set(["ArdiaSync.takeFileCounts"]);
+const moduleManifest = JSON.parse(readFileSync(new URL("../../../packages/ardiacore/src/engine/generated/manifest.json", import.meta.url), "utf8")).modules;
+
+function generatedResults() {
+  const results = new Map();
+  for (const entry of Object.values(moduleManifest)) {
+    const source = readFileSync(new URL(`../../../${entry.types}`, import.meta.url), "utf8");
+    for (const [module, row] of Object.entries(entry.modules)) {
+      const body = source.split(`export type ${row.native} = {\n`)[1]?.split("\n};\n")[0] ?? "";
+      for (const line of body.split("\n")) {
+        const signature = /^ {2}(\w+)\??\(.*\): (.+);$/.exec(line);
+        if (signature && row.functions[signature[1]]?.async === false) results.set(`${module}.${signature[1]}`, signature[2]);
+      }
+    }
+  }
+  return results;
+}
+const RESULTS = generatedResults();
+const mayAnswerWithPromise = (name) => /\bPromise</.test(RESULTS.get(name) ?? "");
+
+async function checkModuleFunction(module, fn, row, { advertised = true } = {}) {
   const name = `${module}.${fn}`;
   const args = row.args.map((_, index) => `arg${index}`);
   const { host, requests } = fixture();
+  host.bootstrap.capabilities = advertised ? [...linuxAdvertised] : [];
   const resolved = resolveHostModule(host, module, fn);
+  if (LEFT_OUT_BY_THE_UI.has(name)) {
+    assert.equal(row.desktop, "absent", `${name} is left out on the desktop`);
+    assert.equal(resolved, null, `${name} resolves to nothing, so callers skip it`);
+    return;
+  }
   assert.equal(typeof resolved, "function", `${name} resolves to a function`);
-  assert.equal(reachesNativeHostUnchecked(resolved), row.desktop !== "custom", row.desktop === "custom" ? `${name} is answered by the desktop UI` : `${name} goes to the native host, which serves it only when its binding is host`);
-  const answer = resolved(...args);
-  const promised = row.desktop === "absent" || row.async;
-  assert.equal(answer instanceof Promise, promised, row.desktop === "absent" ? `${name} has no desktop implementation, so the host fallback answers it with a Promise the host settles` : `${name} answers ${row.async ? "with a Promise" : "synchronously"}, as the schema's async says`);
-  await answer;
-  assert.deepEqual(requests, row.desktop === "custom" ? [] : [{ method: name, args: { args } }], row.desktop === "custom" ? `${name} never reaches the host` : `${name} reaches the host with its positional arguments`);
+  const reachesHost = reachesNativeHostUnchecked(resolved);
+  const answeredByTheUi = advertised ? row.desktop === "custom" || row.desktop === "adapted" : !reachesHost;
+  if (advertised) assert.equal(reachesHost, !answeredByTheUi, answeredByTheUi ? `${name} is answered by the desktop UI${row.desktop === "adapted" ? ", in front of the native host's own dispatch" : ""}` : `${name} goes to the native host, which serves it only when its binding is host`);
+  const promised = !answeredByTheUi || row.async;
+  let answer;
+  try {
+    answer = resolved(...args);
+  } catch (error) {
+    assert.ok(answeredByTheUi && !promised, `${name} throws only as a synchronous answer of the desktop UI: ${error}`);
+    return;
+  }
+  const isPromise = answer instanceof Promise;
+  const label = advertised ? "" : " on an engine that advertises nothing";
+  if (promised) assert.ok(isPromise, !answeredByTheUi ? `${name} goes to the native host${label}, so the host fallback answers it with a Promise the host settles` : `${name} answers with a Promise${label}, as the schema's async says`);
+  if (isPromise && !row.async && (answeredByTheUi || (advertised && row.desktop === "host"))) assert.ok(mayAnswerWithPromise(name), `${name} answers synchronously${label}, as the schema's async says, unless its result type allows a Promise`);
+  await Promise.resolve(answer).catch(() => {});
+  if (!advertised) return;
+  if (row.desktop === "custom") assert.equal(requests.some((request) => request.method === name || request.name === name), false, `${name} never reaches the host under its own name`);
+  if (!answeredByTheUi) assert.deepEqual(requests, [{ method: name, args: { args } }], `${name} reaches the host with its positional arguments`);
 }
 
-test("every function of a schema module domain is answered by the desktop UI when its desktop binding is custom, and otherwise reaches the native host with its positional arguments, as a Promise exactly when it is async or left to the host", async () => {
-  const manifest = JSON.parse(readFileSync(new URL("../../../packages/ardiacore/src/engine/generated/manifest.json", import.meta.url), "utf8"));
-  const functions = Object.values(manifest.modules).flatMap((domain) => Object.entries(domain.modules).flatMap(([module, entry]) => Object.entries(entry.functions).map(([fn, row]) => ({ module, fn, row }))));
+const moduleFunctions = () => Object.values(moduleManifest).flatMap((domain) => Object.entries(domain.modules).flatMap(([module, entry]) => Object.entries(entry.functions).map(([fn, row]) => ({ module, fn, row }))));
+
+test("with the capabilities the Linux engine advertises, every module function is answered by the desktop UI exactly when its binding is custom or adapted, and otherwise reaches the native host with its positional arguments, as a Promise when it is async or left to the host", async () => {
+  const functions = moduleFunctions();
+  assert.ok(linuxAdvertised.length > 50, "the engine's bootstrap still advertises its capabilities");
+  for (const capability of ["ArdiaSync.status", "ArdiaCalendar.status", "ArdiaCalendar.requestAccess", "ArdiaLive.request"]) {
+    assert.ok(linuxAdvertised.includes(capability), `bootstrap helper capability ${capability} is parsed into the advertised fixture`);
+  }
   assert.ok(functions.some(({ module, fn }) => module === "ArdiaWindowBackdrop" && fn === "holdKeyLook"), "the scan found the shaders pilot");
+  for (const name of LEFT_OUT_BY_THE_UI) assert.ok(functions.some(({ module, fn }) => `${module}.${fn}` === name), `${name} is still a schema function`);
   for (const { module, fn, row } of functions) await checkModuleFunction(module, fn, row);
+});
+
+test("advertised Calendar capabilities route ArdiaCalendar.requestAccess to the host on Linux instead of falling back locally", async () => {
+  const fallback = fixture();
+  fallback.host.bootstrap.capabilities = [];
+  await resolveHostModule(fallback.host, "ArdiaCalendar", "requestAccess")();
+  assert.deepEqual(fallback.requests, []);
+  const advertised = fixture();
+  advertised.host.bootstrap.capabilities = [...linuxAdvertised];
+  await resolveHostModule(advertised.host, "ArdiaCalendar", "requestAccess")();
+  assert.equal(
+    advertised.requests.some((request) => request.method === "ArdiaCalendar.requestAccess"),
+    process.env.ARDIA_DESKTOP_MODE !== "win",
+  );
+});
+
+test("on an engine that advertises nothing, every module function still resolves, and answers with a Promise when it is async or left to the host, synchronously otherwise unless its result type allows a Promise", async () => {
+  for (const { module, fn, row } of moduleFunctions()) await checkModuleFunction(module, fn, row, { advertised: false });
+});
+
+test("a function the desktop UI stands in for until the engine advertises it reaches the host once it does", () => {
+  const { host } = fixture();
+  host.bootstrap.capabilities = [];
+  assert.equal(reachesNativeHostUnchecked(resolveHostModule(host, "ArdiaAutomation", "start")), false);
+  host.bootstrap.capabilities = [...linuxAdvertised];
+  assert.equal(reachesNativeHostUnchecked(resolveHostModule(host, "ArdiaAutomation", "start")), true);
+  assert.equal(moduleManifest.shell.modules.ArdiaAutomation.functions.start.desktop, "host");
+});
+
+test("a module constant the desktop answers resolves without the native host fallback, with the engine's advertised capabilities", () => {
+  for (const entry of Object.values(moduleManifest)) {
+    for (const [module, row] of Object.entries(entry.modules)) {
+      for (const [constant, binding] of Object.entries(row.constants ?? {})) {
+        const { host } = fixture();
+        host.bootstrap.capabilities = [...linuxAdvertised];
+        const resolved = resolveHostModule(host, module, constant);
+        assert.equal(reachesNativeHostUnchecked(resolved), !["custom", "adapted"].includes(binding.desktop), `constant ${module}.${constant} is ${binding.desktop} on the desktop`);
+      }
+    }
+  }
 });
 
 test("a Mac-only synchronous module function, which the desktop leaves to the host, passes as the host fallback's Promise, and a desktop answer of the wrong shape fails", async () => {
@@ -82,6 +168,8 @@ test("a Mac-only synchronous module function, which the desktop leaves to the ho
   await checkModuleFunction("ArdiaDemoOnMac", "measure", { args: ["dir"], async: true, mac: "custom", desktop: "absent", windows: "absent" });
   await assert.rejects(checkModuleFunction("ArdiaWindowBackdrop", "holdKeyLook", { args: ["on"], async: false, mac: "custom", desktop: "custom", windows: "absent" }), /answers synchronously/);
   await assert.rejects(checkModuleFunction("ArdiaWindowBackdrop", "holdKeyLook", { args: ["on"], async: true, mac: "custom", desktop: "absent", windows: "absent" }), /goes to the native host/);
+  await assert.rejects(checkModuleFunction("ArdiaShell", "copyText", { args: ["text"], async: false, mac: "custom", desktop: "adapted", windows: "custom" }), /is answered by the desktop UI, in front of the native host's own dispatch/);
+  await checkModuleFunction("ArdiaDemoOnMac", "size", { args: [], async: false, mac: "custom", desktop: "absent", windows: "absent" });
 });
 
 test("engine errors and bad replies reject with stable codes, profiles never retry", async () => {

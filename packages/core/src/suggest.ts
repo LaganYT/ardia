@@ -6,7 +6,7 @@ import { BUILT_IN_ENGINES, searchUrl } from "./engines.ts";
 import { matchActions } from "./fuzzy.ts";
 import { fixupUrl, hostOf, sameAddress, searchUrlFor, spacedAddressGuess } from "./omnibox.ts";
 import { leadingRows, matchScore, matchScoreWord, narrowing, parseQuery, remember, TabList, TopList, type Ranked } from "./pageMatch.ts";
-import { hostLowerOfPage, hostOfPage, hostPart, originOfPage, pageKey, type PageText, withRootSlash } from "./pageText.ts";
+import { documentKey, hostLowerOfPage, hostOfPage, hostPart, originOfPage, pageKey, type PageText, routeOf, withRootSlash } from "./pageText.ts";
 import { globalProviderRows, providerUrl, safeProviderRows, type ProviderSection, type ProviderSuggestion } from "./providerRows.ts";
 import { matchQuickCreate } from "./quickCreate.ts";
 import { scopedSearchUrl, type SearchScope } from "./siteSearch.ts";
@@ -16,7 +16,7 @@ import { actionRow, createRow, dedupeSuggestions, Output, pageSuggestion, sugges
 export type { CommandAction, Suggestion, SuggestionResult, SuggestionSource, SuggestionVia, SuggestOptions } from "./suggestion.ts";
 export { displayUrl } from "./pageText.ts";
 export { prepareSuggestions } from "./candidatePool.ts";
-export { dedupeSuggestions, suggestionKey } from "./suggestionRows.ts";
+export { dedupeSuggestions, listsRoutesApart, suggestionKey } from "./suggestionRows.ts";
 
 const DAY = 86_400_000;
 const lowerOrigin = (url: string) => url.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, (origin) => origin.toLowerCase());
@@ -63,7 +63,11 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   };
   const known = (url: string) => {
     const key = pageKey(url);
-    const c = pool.byKey.get(key) ?? extra.find((x) => x.text.key === key);
+    let c = pool.byKey.get(key) ?? extra.find((x) => x.text.key === key);
+    if (!c && !routeOf(url)) {
+      const document = documentKey(url);
+      c = pool.byDocument.get(document) ?? extra.find((x) => x.text.document === document);
+    }
     if (!c) return undefined;
     const shown = { ...c, title: c.pageTitle ?? c.title };
     const opened = withRootSlash(url);
@@ -78,7 +82,12 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
     if (!options.switchToOpenTab) return undefined;
     const opened = withRootSlash(lowerOrigin(url));
     if (!tabIds.has(pageKey(opened))) return undefined;
-    const tab = source.tabs.find((t) => t.url && t.id !== options.currentTabId && withoutFragment(withRootSlash(lowerOrigin(t.url))) === withoutFragment(opened));
+    const route = routeOf(opened);
+    const tab = source.tabs.find((t) => {
+      if (!t.url || t.id === options.currentTabId) return false;
+      const at = withRootSlash(lowerOrigin(t.url));
+      return withoutFragment(at) === withoutFragment(opened) && routeOf(at) === route;
+    });
     if (!tab) return undefined;
     const visit = savedVisit(source.history, opened);
     const bookmark = savedBookmark(source.bookmarks ?? NO_BOOKMARKS, opened);

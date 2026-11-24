@@ -11,13 +11,22 @@ the Swift module of every domain the Mac serves straight from the engine, and th
 whose Mac module serves some calls itself, which that hand-written module builds with its own handlers.
 For each module domain (positional Expo functions) it writes the package's TypeScript *Native types in
 <package>/src/generated/native.ts, the Swift protocols its Mac modules conform to in <package>/ios/<Domain>Native.swift,
-and the domain's entry under the manifest's modules.`;
+and the domain's entry under the manifest's modules.
+For the desktop host Linux and Windows share it writes the engine routes in
+engine/ardiacore-desktop/src/ardia/desktop/generated/ac_desktop_routes.h and the request deadline maps
+of engine/ardiacore-linux/src/ardia/linux/bootstrap.js, from each call's and function's deadline and the
+desktop host's own methods in schema/desktop.ts.`;
 
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 export const GENERATED_TS = "packages/ardiacore/src/engine/generated/";
 export const MANIFEST = `${GENERATED_TS}manifest.json`;
 export const SWIFT = "packages/ardiacore/ios/";
 export const HOSTS = ["mac", "desktop", "windows"];
+export const DESKTOP_ROUTES = "engine/ardiacore-desktop/src/ardia/desktop/generated/ac_desktop_routes.h";
+export const BOOTSTRAP = "engine/ardiacore-linux/src/ardia/linux/bootstrap.js";
+export const DEFAULT_DEADLINE = 30000;
+export const LONGEST_DEADLINE = 900000;
+const HOST_METHOD = /^Ardia[A-Z][A-Za-z]*\.[a-z][a-zA-Z]*$/;
 const BINDINGS = { mac: new Set(["service", "custom", "absent"]), desktop: new Set(["route", "custom", "absent"]), windows: new Set(["service", "custom", "absent"]) };
 const EVENT_BINDINGS = new Set(["forward", "custom", "absent"]);
 const NAME = /^[a-z][a-zA-Z]*$/;
@@ -36,7 +45,9 @@ const isRecord = (value) => value !== null && typeof value === "object" && !Arra
 const MODULE_NAME = /^Ardia[A-Z][A-Za-z]*$/;
 const PACKAGE = /^packages\/[a-z][a-z0-9-]*$/;
 const PARAMETER = /^[a-z][a-zA-Z0-9]*$/;
-const MODULE_BINDINGS = { mac: new Set(["custom", "absent"]), desktop: new Set(["custom", "host", "absent"]), windows: new Set(["custom", "absent"]) };
+const MODULE_BINDINGS = { mac: new Set(["custom", "absent"]), desktop: new Set(["custom", "adapted", "host", "absent"]), windows: new Set(["custom", "absent"]) };
+const MODULE_QUEUES = { main: ".main", module: "Self.queue", userInitiated: "DispatchQueue.global(qos: .userInitiated)", utility: "DispatchQueue.global(qos: .utility)" };
+const INSTANCES = new Set(["strong", "weak"]);
 const SWIFT_TYPES = { string: "String", boolean: "Bool", number: "Double", void: "Void", "string[]": "[String]", "number[]": "[Double]", "boolean[]": "[Bool]" };
 const RESERVED = new Set([
   "as", "associatedtype", "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "defer", "deinit", "delete", "do", "else", "enum", "export", "extends", "extension",
@@ -64,6 +75,37 @@ export async function loadDomains() {
   return domains;
 }
 
+export async function loadDesktopHost() {
+  const { domains, moduleDomains, desktopHost } = await schema();
+  validateDesktopHost(desktopHost, moduleDomains, domains);
+  return { domains, moduleDomains, desktopHost };
+}
+
+const isDeadline = (value) => Number.isInteger(value) && value > DEFAULT_DEADLINE && value <= LONGEST_DEADLINE;
+const DEADLINE_RULE = `an integer of milliseconds above the ordinary ${DEFAULT_DEADLINE} and at most ${LONGEST_DEADLINE}`;
+
+export function validateDesktopHost(host, moduleDomains, domains = {}) {
+  const fail = (message) => {
+    throw new Error(`schema desktopHost: ${message}`);
+  };
+  if (!isRecord(host) || !isRecord(host.deadlines)) fail("deadlines maps the desktop host's own Module.method names to their request deadlines");
+  if (!Array.isArray(host.routeOrder)) fail("routeOrder lists the engine domains whose desktop routes come first, in the order the hosts advertise them");
+  const routed = new Set(desktopRoutes(domains).map(({ name }) => name.split(".")[0]));
+  for (const [index, name] of host.routeOrder.entries()) {
+    if (!routed.has(name)) fail(`routeOrder names ${name}, which isn't an engine domain with a desktop route`);
+    if (host.routeOrder.indexOf(name) !== index) fail(`routeOrder lists ${name} twice`);
+  }
+  const declared = new Map();
+  for (const [domain, entry] of Object.entries(moduleDomains)) {
+    for (const [module, row] of Object.entries(entry.modules)) for (const fn of Object.keys(row.functions)) declared.set(`${module}.${fn}`, domain);
+  }
+  for (const [method, deadline] of Object.entries(host.deadlines)) {
+    if (!HOST_METHOD.test(method)) fail(`deadline ${method} names a host method as Ardia<Module>.<method>`);
+    if (declared.has(method)) fail(`${method} is a function of module domain ${declared.get(method)}, so its deadline goes on that function`);
+    if (!isDeadline(deadline)) fail(`${method}'s deadline is ${DEADLINE_RULE}`);
+  }
+}
+
 export async function loadModuleDomains() {
   const { domains, moduleDomains } = await schema();
   for (const [name, domain] of Object.entries(moduleDomains)) validateModuleDomain(name, domain);
@@ -79,6 +121,9 @@ const packageDependencies = (pkg) => {
   return new Set(Object.keys(JSON.parse(readFileSync(at, "utf8")).dependencies ?? {}));
 };
 export const swiftTypeOf = (type, explicit) => explicit ?? SWIFT_TYPES[type];
+const parameterOf = ([name, type, swift]) => ({ name: name.endsWith("?") ? name.slice(0, -1) : name, written: name, optional: name.endsWith("?"), type, swift });
+const constantsOf = (entry) => entry.constants ?? {};
+const eventSender = (event) => `send${capitalized(event)}`;
 
 export function validateModuleDomain(name, domain) {
   const fail = (message) => {
@@ -115,6 +160,7 @@ export function validateModuleDomain(name, domain) {
     if (!MODULE_NAME.test(module)) fail(`module ${module} is an Expo module name, Ardia followed by UpperCamelCase letters`);
     declare(nativeTypeOf(module), "module");
     if (!isRecord(entry) || !isRecord(entry.functions) || !isRecord(entry.events)) fail(`module ${module} is { functions, events }`);
+    if (entry.constants !== undefined && !isRecord(entry.constants)) fail(`module ${module}'s constants map names to { type, mac, desktop, windows }`);
     if (Object.keys(entry.events).length) declare(`${nativeTypeOf(module)}Events`, "module events");
     for (const [fn, row] of Object.entries(entry.functions)) validateModuleFunction(fail, `${module}.${fn}`, fn, row);
     for (const [event, row] of Object.entries(entry.events)) {
@@ -125,13 +171,16 @@ export function validateModuleDomain(name, domain) {
       validateModuleBindings(fail, `event ${at}`, row);
       if (event === "event") fail(`event ${at} would generate send${capitalized(event)}, which is Expo's own Module.sendEvent`);
     }
-    const members = new Map([["moduleName", "the module's name"], ["eventsDefinition", "the module's events"]]);
-    for (const fn of Object.keys(entry.functions)) {
-      for (const member of [fn, `${fn}Function`]) {
-        if (members.has(member)) fail(`function ${module}.${fn} generates the Swift member ${member}, which ${members.get(member)} already generates`);
-        members.set(member, `function ${module}.${fn}`);
-      }
-    }
+    for (const [constant, row] of Object.entries(constantsOf(entry))) validateModuleConstant(fail, `${module}.${constant}`, constant, row);
+    const members = new Map([["moduleName", "the module's name"], ["eventsDefinition", "the module's events"], ["addListener", "the module's event listener"]]);
+    if (Object.values(entry.functions).some((row) => row.queue === "module")) members.set("queue", "the module's own queue");
+    const generates = (what, member) => {
+      if (members.has(member)) fail(`${what} generates the Swift member ${member}, which ${members.get(member)} already generates`);
+      members.set(member, what);
+    };
+    for (const fn of Object.keys(entry.functions)) for (const member of [fn, `${fn}Function`]) generates(`function ${module}.${fn}`, member);
+    for (const constant of Object.keys(constantsOf(entry))) for (const member of [constant, `${constant}Constant`]) generates(`constant ${module}.${constant}`, member);
+    for (const [event, row] of Object.entries(entry.events)) if (row.mac === "custom") generates(`event ${module}.${event}`, eventSender(event));
   }
 }
 
@@ -142,30 +191,59 @@ function validateModuleBindings(fail, what, row) {
   }
 }
 
+function validateModuleConstant(fail, at, constant, row) {
+  if (!NAME.test(constant)) fail(`constant ${at} is lowerCamelCase letters`);
+  if (!isRecord(row)) fail(`constant ${at} is { type, mac, desktop, windows }`);
+  if (typeof row.type !== "string" || !row.type.trim() || row.type === "void") fail(`constant ${at} names its type`);
+  if (row.swift !== undefined && (typeof row.swift !== "string" || !row.swift.trim())) fail(`constant ${at}.swift is a Swift type`);
+  if (row.optional !== undefined && row.optional !== true) fail(`constant ${at}.optional is true or left out`);
+  if (row.mac === "custom" && swiftTypeOf(row.type, row.swift) === undefined) fail(`constant ${at} says its Swift type: ${row.type} isn't one of ${Object.keys(SWIFT_TYPES).filter((t) => t !== "void").join(", ")}`);
+  validateModuleBindings(fail, `constant ${at}`, row);
+}
+
 function validateModuleFunction(fail, at, fn, row) {
   if (!NAME.test(fn)) fail(`function ${at} is lowerCamelCase letters`);
   if (!isRecord(row)) fail(`function ${at} is { args, result, async, mac, desktop, windows }`);
   if (!Array.isArray(row.args)) fail(`function ${at} lists its positional args as [name, type] or [name, type, swift]`);
+  const onMac = row.mac === "custom";
   const names = new Set();
+  let optionalSeen = false;
   for (const arg of row.args) {
     if (!Array.isArray(arg) || (arg.length !== 2 && arg.length !== 3) || !arg.every((part) => typeof part === "string" && part.trim())) fail(`function ${at}'s args are [name, type] or [name, type, swift]`);
-    const [param, type, swift] = arg;
-    if (!PARAMETER.test(param) || RESERVED.has(param)) fail(`function ${at}'s arg ${param} is a lowerCamelCase name neither TypeScript nor Swift reserves`);
+    const { name: param, optional, type, swift } = parameterOf(arg);
+    if (!PARAMETER.test(param) || RESERVED.has(param)) fail(`function ${at}'s arg ${param} is a lowerCamelCase name neither TypeScript nor Swift reserves, with a trailing ? when it may be left out`);
     if (names.has(param)) fail(`function ${at} names arg ${param} twice`);
     names.add(param);
+    if (optionalSeen && !optional) fail(`function ${at}'s arg ${param} follows an arg that may be left out, so it may be left out too`);
+    optionalSeen ||= optional;
     if (type === "void") fail(`function ${at}'s arg ${param} has a type`);
-    if (swiftTypeOf(type, swift) === undefined) fail(`function ${at}'s arg ${param} says its Swift type: ${type} isn't one of ${Object.keys(SWIFT_TYPES).filter((t) => t !== "void").join(", ")}`);
+    if (onMac && swiftTypeOf(type, swift) === undefined) fail(`function ${at}'s arg ${param} says its Swift type: ${type} isn't one of ${Object.keys(SWIFT_TYPES).filter((t) => t !== "void").join(", ")}`);
+    if (onMac && optional && !swiftTypeOf(type, swift).endsWith("?")) fail(`function ${at}'s arg ${param} may be left out, so its Swift type is optional`);
   }
   if (typeof row.result !== "string" || !row.result.trim()) fail(`function ${at} names its result type`);
   if (typeof row.async !== "boolean") fail(`function ${at} says whether it's async: true for a Promise, false for a synchronous value`);
   if (row.promise !== undefined && row.promise !== true) fail(`function ${at}.promise is true or left out`);
   if (row.promise && !row.async) fail(`function ${at} resolves a Promise itself, so it's async`);
-  if (row.queue !== undefined && row.queue !== "main") fail(`function ${at}.queue is main or left out`);
+  if (onMac && row.promise && optionalSeen) fail(`function ${at} resolves a Promise itself, so Expo requires every arg and none may be left out`);
+  if (row.optional !== undefined && row.optional !== true) fail(`function ${at}.optional is true or left out`);
+  if (row.queue !== undefined && !Object.hasOwn(MODULE_QUEUES, row.queue)) fail(`function ${at}.queue is one of ${Object.keys(MODULE_QUEUES).join(", ")} or left out`);
   if (row.queue !== undefined && !row.async) fail(`function ${at} runs on a queue only when it's async`);
   if (row.swiftResult !== undefined && (typeof row.swiftResult !== "string" || !row.swiftResult.trim())) fail(`function ${at}.swiftResult is a Swift type`);
   if (row.promise && row.swiftResult !== undefined) fail(`function ${at} resolves a Promise itself, so its Swift body returns nothing and has no swiftResult`);
-  if (!row.promise && swiftTypeOf(row.result, row.swiftResult) === undefined) fail(`function ${at} says its swiftResult: ${row.result} isn't one of ${Object.keys(SWIFT_TYPES).join(", ")}`);
+  if (onMac && !row.promise && swiftTypeOf(row.result, row.swiftResult) === undefined) fail(`function ${at} says its swiftResult: ${row.result} isn't one of ${Object.keys(SWIFT_TYPES).join(", ")}`);
+  for (const flag of ["swiftAsync", "throws", "debug"]) if (row[flag] !== undefined && row[flag] !== true) fail(`function ${at}.${flag} is true or left out`);
+  if (row.swiftAsync && !row.async) fail(`function ${at}'s Swift body is async, so it's async`);
+  if (row.swiftAsync && row.promise) fail(`function ${at} resolves a Promise itself, so its Swift body can't be async`);
+  if (row.swiftAsync && row.queue !== undefined) fail(`function ${at}'s Swift body is async, so Expo runs it concurrently without a queue`);
+  if (row.instance !== undefined && !INSTANCES.has(row.instance)) fail(`function ${at}.instance is strong or weak: how its definition holds the module`);
+  for (const key of ["swiftAsync", "throws", "instance", "fallback", "queue", "debug"]) if (row[key] !== undefined && !onMac) fail(`function ${at}.${key} says how the Mac's Swift body runs, so it goes only with mac: custom`);
+  const returns = !row.promise && onMac && swiftTypeOf(row.result, row.swiftResult) !== "Void";
+  if (row.fallback !== undefined && (typeof row.fallback !== "string" || !row.fallback.trim())) fail(`function ${at}.fallback is a Swift expression`);
+  if (row.fallback !== undefined && (row.instance !== "weak" || !returns)) fail(`function ${at}.fallback answers once the module is gone, so it goes only with instance: weak and a result`);
+  if (row.instance === "weak" && returns && row.fallback === undefined) fail(`function ${at} holds its module weakly and returns ${row.result}, so it says its fallback`);
   validateModuleBindings(fail, `function ${at}`, row);
+  if (row.deadline !== undefined && !isDeadline(row.deadline)) fail(`function ${at}.deadline is ${DEADLINE_RULE}`);
+  if (row.deadline !== undefined && row.desktop !== "host" && row.desktop !== "adapted") fail(`function ${at}.deadline is how long the desktop UI waits for the native host, so it goes only with desktop: host or adapted`);
 }
 
 export function validateModuleNames(domains, moduleDomains) {
@@ -219,6 +297,8 @@ export function validate(name, domain) {
     if (call.routeField !== undefined && call.desktop !== "route") fail(`${verb}.routeField picks the field of the engine's reply a desktop route answers with, so it goes only with desktop: route`);
     if (call.routeField !== undefined && (typeof call.routeField !== "string" || !NAME.test(call.routeField))) fail(`${verb}.routeField is a string: a lowerCamelCase field of the engine's reply, or "null" to answer null`);
     if (call.service === undefined && HOSTS.some((host) => passesStraight(call, host))) fail(`${verb}'s service is an ac_* call: a host passes it straight to the engine`);
+    if (call.deadline !== undefined && !isDeadline(call.deadline)) fail(`${verb}.deadline is ${DEADLINE_RULE}`);
+    if (call.deadline !== undefined && call.desktop === "absent") fail(`${verb}.deadline is how long the desktop UI waits for the native host, so it goes only with a desktop binding that reaches it`);
   }
   for (const [event, row] of Object.entries(domain.events ?? {})) {
     if (!NAME.test(event)) fail(`event ${event} is lowerCamelCase letters`);
@@ -307,8 +387,9 @@ function swiftCalls(name, domain) {
 
 const moduleSignature = (fn, row) => {
   const result = row.async ? `Promise<${row.result}>` : row.result;
-  return `${fn}(${row.args.map(([param, type]) => `${param}: ${type}`).join(", ")}): ${result};`;
+  return `${fn}${row.optional ? "?" : ""}(${row.args.map(parameterOf).map(({ written, type }) => `${written}: ${type}`).join(", ")}): ${result};`;
 };
+const listenerSignature = (module, event, row) => `addListener(name: "${event}", listener: (${row.payload.trim() === "void" ? "" : `event: ${nativeTypeOf(module)}Events["${event}"]`}) => void): { remove(): void };`;
 
 function moduleTypescript(name, domain) {
   const lines = [];
@@ -320,8 +401,9 @@ function moduleTypescript(name, domain) {
   for (const [type, body] of Object.entries(domain.types ?? {})) lines.push(`export type ${type} = ${body};`, "");
   const block = (typeName, rows) => (rows.length ? [`export type ${typeName} = {`, ...rows.map((row) => `  ${row}`), "};", ""] : [`export type ${typeName} = {};`, ""]);
   for (const [module, entry] of Object.entries(domain.modules)) {
-    lines.push(...block(nativeTypeOf(module), Object.entries(entry.functions).map(([fn, row]) => moduleSignature(fn, row))));
     const events = Object.entries(entry.events);
+    const constants = Object.entries(constantsOf(entry)).map(([constant, row]) => `${constant}${row.optional ? "?" : ""}: ${row.type};`);
+    lines.push(...block(nativeTypeOf(module), [...constants, ...Object.entries(entry.functions).map(([fn, row]) => moduleSignature(fn, row)), ...events.map(([event, row]) => listenerSignature(module, event, row))]));
     if (events.length) lines.push(...block(`${nativeTypeOf(module)}Events`, events.map(([event, row]) => `${event}: ${row.payload};`)));
   }
   lines.push(...block(`${capitalized(name)}Modules`, Object.keys(domain.modules).map((module) => `${module}: ${nativeTypeOf(module)};`)));
@@ -329,24 +411,51 @@ function moduleTypescript(name, domain) {
 }
 
 const onMac = (row) => row.mac === "custom";
-const macModules = (domain) => Object.entries(domain.modules).filter(([, entry]) => Object.values(entry.functions).some(onMac) || Object.values(entry.events).some(onMac));
+const macModules = (domain) => Object.entries(domain.modules).filter(([, entry]) => [entry.functions, constantsOf(entry), entry.events].some((rows) => Object.values(rows).some(onMac)));
+
+const swiftEffects = (row) => `${row.swiftAsync ? " async" : ""}${row.throws ? " throws" : ""}`;
+const swiftResultOf = (row) => (row.promise ? "Void" : swiftTypeOf(row.result, row.swiftResult));
 
 function swiftRequirement(fn, row) {
-  const params = [...row.args.map(([param, type, swift]) => `_ ${param}: ${swiftTypeOf(type, swift)}`), ...(row.promise ? ["_ promise: Promise"] : [])];
-  const result = row.promise ? "Void" : swiftTypeOf(row.result, row.swiftResult);
-  return `  static func ${swiftName(fn)}(${params.join(", ")})${result === "Void" ? "" : ` -> ${result}`}`;
+  const params = [...row.args.map(parameterOf).map(({ name, type, swift }) => `_ ${name}: ${swiftTypeOf(type, swift)}`), ...(row.promise ? ["_ promise: Promise"] : [])];
+  const result = swiftResultOf(row);
+  return `  ${row.instance ? "" : "static "}func ${swiftName(fn)}(${params.join(", ")})${swiftEffects(row)}${result === "Void" ? "" : ` -> ${result}`}`;
 }
 
 function swiftDefinition(fn, row) {
-  const params = [...row.args.map(([param, type, swift]) => `${param}: ${swiftTypeOf(type, swift)}`), ...(row.promise ? ["promise: Promise"] : [])];
-  const result = row.promise ? "Void" : swiftTypeOf(row.result, row.swiftResult);
-  const forwarded = [...row.args.map(([param]) => param), ...(row.promise ? ["promise"] : [])].join(", ");
-  const closure = `{ (${params.join(", ")})${result === "Void" ? "" : ` -> ${result}`} in Self.${swiftName(fn)}(${forwarded}) }`;
+  const params = [...row.args.map(parameterOf).map(({ name, type, swift }) => `${name}: ${swiftTypeOf(type, swift)}`), ...(row.promise ? ["promise: Promise"] : [])];
+  const result = swiftResultOf(row);
+  const forwarded = [...row.args.map((arg) => parameterOf(arg).name), ...(row.promise ? ["promise"] : [])].join(", ");
+  const owner = row.instance === "weak" ? "self?" : row.instance === "strong" ? "self" : "Self";
+  const effects = `${row.throws ? "try " : ""}${row.swiftAsync ? "await " : ""}`;
+  const call = row.instance === "weak" && row.promise
+    ? `if let self { ${effects}self.${swiftName(fn)}(${forwarded}) } else { promise.resolve(nil) }`
+    : row.fallback !== undefined
+      ? `guard let self else { return ${row.fallback} }; return ${effects}self.${swiftName(fn)}(${forwarded})`
+      : `${effects}${owner}.${swiftName(fn)}(${forwarded})`;
+  const closure = `{ ${row.instance === "weak" ? "[weak self] " : ""}(${params.join(", ")})${swiftEffects(row)}${result === "Void" ? "" : ` -> ${result}`} in ${call} }`;
   return [
-    `  static var ${fn}Function: AnyDefinition {`,
-    `    ${row.async ? "AsyncFunction" : "Function"}("${fn}") ${closure}${row.queue === "main" ? ".runOnQueue(.main)" : ""}`,
+    `  ${row.instance ? "" : "static "}var ${fn}Function: AnyDefinition {`,
+    `    ${row.async ? "AsyncFunction" : "Function"}("${fn}") ${closure}${row.queue === undefined ? "" : `.runOnQueue(${MODULE_QUEUES[row.queue]})`}`,
     "  }",
   ];
+}
+
+function debugGuarded(rows, render, separate) {
+  const lines = [];
+  let open = false;
+  for (const row of rows) {
+    const debug = row[1].debug === true;
+    if (debug !== open) {
+      if (open) lines.push("  #endif");
+      if (separate) lines.push("");
+      if (debug) lines.push("  #if DEBUG");
+      open = debug;
+    } else if (separate) lines.push("");
+    lines.push(...render(row));
+  }
+  if (open) lines.push("  #endif");
+  return lines;
 }
 
 function moduleSwift(domain) {
@@ -354,16 +463,35 @@ function moduleSwift(domain) {
   for (const [module, entry] of macModules(domain)) {
     const protocol = nativeTypeOf(module);
     const functions = Object.entries(entry.functions).filter(([, row]) => onMac(row));
+    const constants = Object.entries(constantsOf(entry)).filter(([, row]) => onMac(row));
     const events = Object.keys(entry.events).filter((event) => onMac(entry.events[event]));
-    lines.push("", functions.length ? `protocol ${protocol} {` : `protocol ${protocol} {}`);
-    if (functions.length) lines.push(...functions.map(([fn, row]) => swiftRequirement(fn, row)), "}");
+    const moduleQueued = functions.filter(([, row]) => row.queue === "module");
+    const queueRequirement = moduleQueued.length === 0
+      ? []
+      : moduleQueued.some(([, row]) => row.debug !== true)
+        ? ["  static var queue: DispatchQueue { get }"]
+        : ["  #if DEBUG", "  static var queue: DispatchQueue { get }", "  #endif"];
+    const requirements = [
+      ...queueRequirement,
+      ...constants.map(([constant, row]) => `  static var ${swiftName(constant)}: ${swiftTypeOf(row.type, row.swift)} { get }`),
+      ...debugGuarded(functions, ([fn, row]) => [swiftRequirement(fn, row)], false),
+    ];
+    lines.push("", requirements.length ? `protocol ${protocol} {` : `protocol ${protocol} {}`);
+    if (requirements.length) lines.push(...requirements, "}");
     lines.push("", `extension ${protocol} {`, `  static var moduleName: String { "${module}" }`);
     if (events.length) lines.push("", "  static var eventsDefinition: AnyDefinition {", `    Events(${events.map((event) => `"${event}"`).join(", ")})`, "  }");
-    for (const [fn, row] of functions) lines.push("", ...swiftDefinition(fn, row));
+    for (const [constant, row] of constants) {
+      const type = swiftTypeOf(row.type, row.swift);
+      lines.push("", `  static var ${constant}Constant: AnyDefinition {`, `    Constant("${constant}") { () -> ${type} in Self.${swiftName(constant)} }`, "  }");
+    }
+    lines.push(...debugGuarded(functions.filter(([, row]) => !row.instance), ([fn, row]) => swiftDefinition(fn, row), true));
     lines.push("}");
-    if (events.length) {
+    const instanceFunctions = functions.filter(([, row]) => row.instance);
+    if (events.length || instanceFunctions.length) {
       lines.push("", `extension ${protocol} where Self: Module {`);
-      lines.push(...events.map((event) => `  func send${capitalized(event)}(_ payload: [String: Any?]) { sendEvent("${event}", payload) }`), "}");
+      lines.push(...events.map((event) => `  func ${eventSender(event)}(_ payload: [String: Any?]) { sendEvent("${event}", payload) }`));
+      lines.push(...debugGuarded(instanceFunctions, ([fn, row]) => swiftDefinition(fn, row), true).slice(events.length ? 0 : 1));
+      lines.push("}");
     }
   }
   return `${lines.join("\n")}\n`;
@@ -378,7 +506,8 @@ function moduleManifest(name, domain) {
   for (const [module, entry] of Object.entries(domain.modules)) {
     modules[module] = {
       native: nativeTypeOf(module),
-      functions: Object.fromEntries(Object.entries(entry.functions).map(([fn, row]) => [fn, { args: row.args.map(([param]) => param), async: row.async, ...moduleBindings(row) }])),
+      functions: Object.fromEntries(Object.entries(entry.functions).map(([fn, row]) => [fn, { args: row.args.map((arg) => parameterOf(arg).name), async: row.async, ...moduleBindings(row), ...(row.deadline === undefined ? {} : { deadline: row.deadline }) }])),
+      ...(Object.keys(constantsOf(entry)).length ? { constants: Object.fromEntries(Object.entries(constantsOf(entry)).map(([constant, row]) => [constant, moduleBindings(row)])) } : {}),
       events: Object.fromEntries(Object.entries(entry.events).map(([event, row]) => [event, moduleBindings(row)])),
     };
   }
@@ -397,6 +526,7 @@ function manifest(domains, moduleDomains) {
         ...(call.service === undefined ? {} : { service: call.service }),
         ...Object.fromEntries(HOSTS.map((host) => [host, bindingOf(call, host)])),
         ...(call.routeField === undefined ? {} : { routeField: call.routeField }),
+        ...(call.deadline === undefined ? {} : { deadline: call.deadline }),
       };
     }
     const events = {};
@@ -415,7 +545,77 @@ function manifest(domains, moduleDomains) {
   return `${JSON.stringify(out, null, 2)}\n`;
 }
 
-export function outputs(domains, moduleDomains = {}) {
+const byName = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+export const routeDomainOrder = (domains, routeOrder = []) => [...routeOrder, ...Object.keys(domains).filter((name) => !routeOrder.includes(name)).sort(byName)];
+
+export const desktopRoutes = (domains, routeOrder = []) =>
+  routeDomainOrder(domains, routeOrder).map((name) => [name, domains[name]]).flatMap(([name, domain]) =>
+    Object.entries(domain.calls ?? {})
+      .filter(([, call]) => bindingOf(call, "desktop") === "route")
+      .map(([verb, call]) => ({ name: `${name}.${verb}`, service: call.service, field: call.routeField ?? "" })),
+  );
+
+function routesHeader(domains, routeOrder) {
+  const routes = desktopRoutes(domains, routeOrder);
+  const lines = [
+    "#ifndef ARDIA_DESKTOP_GENERATED_AC_DESKTOP_ROUTES_H_",
+    "#define ARDIA_DESKTOP_GENERATED_AC_DESKTOP_ROUTES_H_",
+    "",
+    "#include <array>",
+    "#include <string_view>",
+    "",
+    "namespace ardia::desktop_routes {",
+    "",
+    "struct Route {",
+    "  std::string_view name;",
+    "  std::string_view service;",
+    "  std::string_view field;",
+    "};",
+    "",
+    routes.length ? `inline constexpr std::array<Route, ${routes.length}> kRoutes = {{` : "inline constexpr std::array<Route, 0> kRoutes = {};",
+    ...(routes.length ? [...routes.map(({ name, service, field }) => `    {"${name}", "${service}", "${field}"},`), "}};"] : []),
+    "",
+    "inline constexpr const Route* FindRoute(std::string_view name) {",
+    "  for (const auto& route : kRoutes) {",
+    "    if (route.name == name) return &route;",
+    "  }",
+    "  return nullptr;",
+    "}",
+    "",
+    "}",
+    "",
+    "#endif",
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+export function desktopDeadlines(domains, moduleDomains, desktopHost) {
+  const engine = Object.entries(domains).flatMap(([name, domain]) => Object.entries(domain.calls ?? {}).filter(([, call]) => call.deadline !== undefined).map(([verb, call]) => [`${name}.${verb}`, call.deadline]));
+  const functions = Object.values(moduleDomains).flatMap((domain) =>
+    Object.entries(domain.modules).flatMap(([module, entry]) => Object.entries(entry.functions).filter(([, row]) => row.deadline !== undefined).map(([fn, row]) => [`${module}.${fn}`, row.deadline])),
+  );
+  const byKey = (a, b) => byName(a[0], b[0]);
+  return { host: [...functions, ...Object.entries(desktopHost.deadlines)].sort(byKey), engine: engine.sort(byKey) };
+}
+
+const DEADLINE_MAPS = { host: "hostDeadlines", engine: "engineDeadlines" };
+
+export function spliceDeadlines(source, deadlines) {
+  let out = source;
+  for (const [kind, variable] of Object.entries(DEADLINE_MAPS)) {
+    const opening = `\n  const ${variable} = new Map([\n`;
+    const start = out.indexOf(opening);
+    if (start < 0 || out.indexOf(opening, start + 1) >= 0) throw new Error(`${BOOTSTRAP} declares ${variable} as a new Map([ ... ]) exactly once`);
+    const end = out.indexOf("\n  ]);\n", start + opening.length - 1);
+    if (end < 0) throw new Error(`${BOOTSTRAP}'s ${variable} never closes with ]);`);
+    const rows = deadlines[kind].map(([name, deadline]) => `    ["${name}", ${deadline}],\n`).join("");
+    out = `${out.slice(0, start + opening.length)}${rows}${out.slice(end + 1)}`;
+  }
+  return out;
+}
+
+export function outputs(domains, moduleDomains = {}, desktopHost = null) {
   const files = new Map();
   for (const name of Object.keys(domains)) {
     const domain = domains[name];
@@ -428,6 +628,8 @@ export function outputs(domains, moduleDomains = {}) {
     const swift = moduleSwiftPath(name, domain);
     if (swift !== null) files.set(swift, moduleSwift(domain));
   }
+  files.set(DESKTOP_ROUTES, routesHeader(domains, desktopHost?.routeOrder ?? []));
+  if (desktopHost !== null) files.set(BOOTSTRAP, spliceDeadlines(readFileSync(ROOT + BOOTSTRAP, "utf8"), desktopDeadlines(domains, moduleDomains, desktopHost)));
   files.set(MANIFEST, manifest(domains, moduleDomains));
   return files;
 }
@@ -489,10 +691,10 @@ const retired = (files) => [...new Set(previouslyGenerated())].filter((path) => 
 
 const blocked = (files) => {
   const owned = new Set(previouslyGenerated());
-  return [...files].filter(([path, text]) => path !== MANIFEST && existsSync(ROOT + path) && readFileSync(ROOT + path, "utf8") !== text && !owned.has(path)).map(([path]) => path);
+  return [...files].filter(([path, text]) => path !== MANIFEST && path !== BOOTSTRAP && path !== DESKTOP_ROUTES && existsSync(ROOT + path) && readFileSync(ROOT + path, "utf8") !== text && !owned.has(path)).map(([path]) => path);
 };
 
-const generatedFolders = (files) => new Set([GENERATED_TS, ...[...files.keys()].filter((path) => path.endsWith("/src/generated/native.ts")).map((path) => path.slice(0, -"native.ts".length))]);
+const generatedFolders = (files) => new Set([GENERATED_TS, DESKTOP_ROUTES.slice(0, DESKTOP_ROUTES.lastIndexOf("/") + 1), ...[...files.keys()].filter((path) => path.endsWith("/src/generated/native.ts")).map((path) => path.slice(0, -"native.ts".length))]);
 
 const strays = (files) => {
   const owned = new Set(previouslyGenerated());
@@ -515,13 +717,15 @@ export function stale(files) {
   return problems;
 }
 
+export const realOutputs = async () => outputs(await loadDomains(), await loadModuleDomains(), (await loadDesktopHost()).desktopHost);
+
 async function main(argv) {
   const mode = argv[0];
   if (argv.length !== 1 || (mode !== "--check" && mode !== "--write")) {
     console.error(USAGE);
     process.exit(2);
   }
-  const files = outputs(await loadDomains(), await loadModuleDomains());
+  const files = await realOutputs();
   try {
     retired(files);
     const left = strays(files).map((path) => `not written by the generator, remove it by hand: ${path}`);

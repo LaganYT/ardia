@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ts from "typescript";
-import { MANIFEST, ROOT } from "./generate.mjs";
+import { DESKTOP_ROUTES, MANIFEST, ROOT } from "./generate.mjs";
 
 const read = (path) => readFileSync(ROOT + path, "utf8");
 const manifest = JSON.parse(read(MANIFEST));
@@ -74,7 +74,7 @@ export function macForwarding(bridgeSource) {
 
 const linuxContract = stripComments(read("engine/ardiacore-linux/src/ardia/linux/ac_linux_contract.h"));
 export function parseRoutes(header) {
-  const opening = /\bkRoutes\[\]\s*=\s*\{/g;
+  const opening = /\bkRoutes\s*=\s*\{\{/g;
   const open = opening.exec(header);
   if (!open || opening.exec(header)) throw new Error("the header declares kRoutes exactly once");
   const row = /\s*\{\s*"([^"\\]*)"\s*,\s*"([^"\\]*)"\s*,\s*"([^"\\]*)"\s*\}\s*,?/y;
@@ -88,16 +88,16 @@ export function parseRoutes(header) {
     routes.push({ name, service, field });
     at = row.lastIndex;
   }
-  const close = /\s*\}\s*;/y;
+  const close = /\s*\}\}\s*;/y;
   close.lastIndex = at;
   if (!close.test(header)) throw new Error(`kRoutes has a row the scan can't read: ${JSON.stringify(header.slice(at, at + 80))}`);
   return routes;
 }
 
-const linuxRoutes = parseRoutes(linuxContract);
+const linuxRoutes = parseRoutes(stripComments(read(DESKTOP_ROUTES)));
 
 const LINUX = "engine/ardiacore-linux/src/ardia/linux/";
-const CUSTOM_ONLY_DOMAINS = ["autofill", "boosts", "contentBlocker", "passwords", "profiles", "webKit", "webView", "windows"];
+const CUSTOM_ONLY_DOMAINS = ["autofill", "boosts", "contentBlocker", "media", "passwords", "profiles", "webKit", "webView", "windows"];
 
 export function namesIn(source, list) {
   const opening = new RegExp(`\\b${list}\\[\\]\\s*=\\s*\\{`, "g");
@@ -153,7 +153,7 @@ test("the scans find the hosts' tables", () => {
 });
 
 test("the kRoutes scan reads rows however they're wrapped and refuses what it can't read or a name routed twice", () => {
-  const header = (rows) => `inline constexpr Route kRoutes[] = {\n${rows}\n};\n\ninline const Route* FindRoute(std::string_view name) {}\n`;
+  const header = (rows) => `inline constexpr std::array<Route, 2> kRoutes = {{\n${rows}\n}};\n\ninline const Route* FindRoute(std::string_view name) {}\n`;
   assert.deepEqual(parseRoutes(header('    {\n"history.query",\n "ac_history_query", ""},\n    {"downloads.pause", "ac_downloads_command", "null"}')), [
     { name: "history.query", service: "ac_history_query", field: "" },
     { name: "downloads.pause", service: "ac_downloads_command", field: "null" },
@@ -164,7 +164,24 @@ test("the kRoutes scan reads rows however they're wrapped and refuses what it ca
   assert.throws(() => parseRoutes("struct Route {};"), /exactly once/);
 });
 
-test("the Linux WebUI allowlist routes exactly each generated domain's desktop-routed calls, to the same service", () => {
+test("the Linux and Windows hosts route through the generated header and keep no route table of their own", () => {
+  for (const name of ["FindRoute", "kRoutes", "Route"]) assert.ok(linuxContract.includes(`using ardia::desktop_routes::${name};`), name);
+  assert.ok(linuxContract.includes('#include "ardia/desktop/generated/ac_desktop_routes.h"'));
+  assert.doesNotMatch(linuxContract, /\bstruct Route\b|\bkRoutes\s*(\[\])?\s*=/);
+  assert.ok(read("engine/ardiacore-desktop/src/ardia/desktop/BUILD.gn").includes('"generated/ac_desktop_routes.h",'));
+  const windowsShell = stripComments(read("scripts/windows/engine/src/ardia/win/webui/webui_shell.cc"));
+  assert.ok(windowsShell.includes("ardiacore::linux_contract::kRoutes") && windowsShell.includes("ardiacore::linux_contract::FindRoute("));
+  assert.doesNotMatch(windowsShell, /\bkRoutes\s*(\[\])?\s*=/);
+});
+
+test("the hosts advertise the routes in the order they always have: engine, tabs, downloads' settings before its commands, then the rest", () => {
+  assert.deepEqual(linuxRoutes.slice(0, 8).map(({ name }) => name), ["engine.components", "engine.tasks", "engine.batterySaver", "engine.trimMemory", "engine.openTaskManager", "tabs.lastTabPolicy", "downloads.settings", "downloads.setSettings"]);
+  const domainsInOrder = [...new Set(linuxRoutes.map(({ name }) => name.split(".")[0]))];
+  assert.deepEqual(domainsInOrder, ["engine", "tabs", "downloads", "history", "bookmarks", "favicons", "extensions", "search", "permissions"]);
+  assert.deepEqual(linuxRoutes.at(-1).name, "permissions.removeExternalAppAllowance");
+});
+
+test("the generated desktop routes are exactly each generated domain's desktop-routed calls, to the same service", () => {
   for (const [domain, entry] of domains) {
     const routed = linuxRoutes.filter((route) => route.name.startsWith(`${domain}.`)).sort((a, b) => a.name.localeCompare(b.name));
     const schema = Object.entries(entry.calls)
@@ -209,6 +226,15 @@ test("the EventName scan reads every topic however it's spelled and refuses what
   assert.ok(macForwarding(bridgeSource).topics.includes("extensions.action"));
   assert.ok(!macForwarding(commented).topics.includes("extensions.action"));
   assert.ok(!macForwarding(bridgeSource.replace('@"extensions.action", ', '\n// @"extensions.action",\n')).topics.includes("extensions.action"));
+});
+
+test("the desktop UI's request deadlines are the generated maps, looked up by the engine call's or host method's own name", () => {
+  const bootstrap = read("engine/ardiacore-linux/src/ardia/linux/bootstrap.js");
+  assert.ok(bootstrap.includes('request("engine.call", { name, profile, args }, engineDeadlines.get(name))'));
+  assert.ok(bootstrap.includes('request("host.invoke", { method, args }, hostDeadlines.get(method))'));
+  assert.equal(bootstrap.match(/new Map\(\[/g).length, 2, "bootstrap.js keeps no deadline table but the two generated ones");
+  const windowsBuild = read("scripts/windows/engine/src/ardia/win/BUILD.gn");
+  assert.ok(windowsBuild.includes('sources = [ "//ardia/linux/bootstrap.js" ]'), "Windows embeds the same bootstrap");
 });
 
 test("the custom-only domains are exactly the ones no host passes any call of straight to the engine", () => {
@@ -305,7 +331,7 @@ test("the Mac's call table for each domain is the generated one: each service-ba
 
 test("a domain the Mac serves partly or wholly by hand builds its module's table from the generated one", () => {
   const mixed = domains.filter(([, entry]) => entry.swift.endsWith("Calls.swift"));
-  assert.deepEqual(mixed.map(([domain]) => domain).sort(), ["autofill", "bookmarks", "boosts", "contentBlocker", "downloads", "engine", "extensions", "favicons", "passwords", "permissions", "profiles", "search", "sites", "tabs", "webKit", "webView", "windows"]);
+  assert.deepEqual(mixed.map(([domain]) => domain).sort(), ["autofill", "bookmarks", "boosts", "contentBlocker", "downloads", "engine", "extensions", "favicons", "media", "passwords", "permissions", "profiles", "search", "sites", "tabs", "webKit", "webView", "windows"]);
   for (const [domain, entry] of mixed) {
     const module = read(entry.swift.replace(/Calls\.swift$/, "Module.swift"));
     assert.match(module, new RegExp(`static let calls = ${domain}CallTable\\(`), `${domain}'s module`);
@@ -317,6 +343,8 @@ const moduleDomains = Object.entries(manifest.modules);
 const filesUnder = (dir, pattern) => readdirSync(ROOT + dir, { recursive: true }).filter((file) => pattern.test(file)).map((file) => `${dir}${file}`.replaceAll("\\", "/")).sort();
 const moduleFunctions = moduleDomains.flatMap(([domain, entry]) => Object.entries(entry.modules).flatMap(([module, row]) => Object.entries(row.functions).map(([fn, binding]) => ({ domain, module, fn, binding }))));
 const moduleEvents = moduleDomains.flatMap(([domain, entry]) => Object.entries(entry.modules).flatMap(([module, row]) => Object.entries(row.events).map(([event, binding]) => ({ domain, module, event, binding }))));
+const moduleConstants = moduleDomains.flatMap(([domain, entry]) => Object.entries(entry.modules).flatMap(([module, row]) => Object.entries(row.constants ?? {}).map(([constant, binding]) => ({ domain, module, constant, binding }))));
+const reachesLinuxHost = (binding) => binding.desktop === "host" || binding.desktop === "adapted";
 
 function skipQuoted(text, at) {
   const quote = text[at];
@@ -432,29 +460,81 @@ export function cppFunctions(masked) {
   return functions;
 }
 
+const CPP_STRING_CONSTANT = /\b(?:(?:inline|static|constexpr|const)\s+)+(?:char|std::string_view|const\s+char\s*\*|char\s+const\s*\*)\s*(?:const\s+)?(k\w+)\s*(?:\[\s*\])?\s*=\s*"/g;
+
+export function cppStringConstants(sources) {
+  return sources.map((written) => {
+    const code = stripCppComments(written);
+    const masked = maskCppLiterals(code);
+    const spaces = [...masked.matchAll(/\bnamespace\s+([\w:]+)\s*\{/g)].map((match) => {
+      const open = match.index + match[0].length - 1;
+      return { name: match[1], open, close: closing(masked, open, skipCppLiteral) };
+    });
+    const constants = new Map();
+    for (const match of masked.matchAll(CPP_STRING_CONSTANT)) {
+      const quote = match.index + match[0].length - 1;
+      const value = code.slice(quote + 1, skipCppLiteral(code, quote));
+      const prefix = spaces.filter((space) => space.open < match.index && match.index < space.close).sort((a, b) => a.open - b.open).map((space) => space.name);
+      constants.set([...prefix, match[1]].join("::"), value);
+    }
+    return constants;
+  });
+}
+
+export const cppNamespaceAliases = (code) => new Map([...code.matchAll(/\bnamespace\s+(\w+)\s*=\s*((?:::)?[\w:]+)\s*;/g)].map(([, alias, target]) => [alias, target.replace(/^::/, "")]));
+
+export function resolveCppConstant(usage, own, all, aliases = new Map()) {
+  const [head, ...rest] = usage.replace(/^::/, "").split("::");
+  const name = rest.length && aliases.has(head) ? [aliases.get(head), ...rest].join("::") : [head, ...rest].join("::");
+  const values = (tables) => new Set(tables.flatMap((table) => [...table].filter(([full]) => full === name || full.endsWith(`::${name}`)).map(([, value]) => value)));
+  for (const found of [values([own]), values(all)]) if (found.size === 1) return [...found][0];
+  return undefined;
+}
+
+const MODULE_METHOD = /^Ardia[A-Za-z]+\.[a-z][A-Za-z]*$/;
+
 export function linuxModuleDispatch(sources) {
   const methods = new Set();
   const events = new Set();
-  for (const written of sources) {
+  const tables = cppStringConstants(sources);
+  for (const [index, written] of sources.entries()) {
     const code = stripCppComments(written);
     const masked = maskCppLiterals(code);
-    for (const match of masked.matchAll(/\bSendEvent\(\s*"/g)) {
-      const call = /^SendEvent\(\s*"(Ardia[A-Za-z]+)"\s*,\s*"([a-zA-Z]+)"/.exec(code.slice(match.index));
-      if (call) events.add(`${call[1]}.${call[2]}`);
+    const aliases = cppNamespaceAliases(code);
+    const flags = [...code.matchAll(/\bconst\s+bool\s+(\w+)\s*=\s*(?:method|name)\s*==\s*"(Ardia[A-Za-z]+\.[a-z][A-Za-z]*)"\s*;/g)].map((match) => ({ flag: match[1], method: match[2], at: match.index }));
+    const literalOrConstant = (literal, constant) => literal ?? (constant === undefined ? undefined : resolveCppConstant(constant, tables[index], tables, aliases));
+    for (const match of masked.matchAll(/\b(?:Send)?Event\(\s*"/g)) {
+      const call = /^(?:Send)?Event\(\s*"(Ardia[A-Za-z]+)"\s*,\s*(?:"([a-zA-Z]+)"|((?:::)?[A-Za-z_][\w]*(?:::[A-Za-z_]\w*)*))\s*[,)]/.exec(code.slice(match.index));
+      const event = call && literalOrConstant(call[2], call[3]);
+      if (event && /^[a-zA-Z]+$/.test(event)) events.add(`${call[1]}.${event}`);
+    }
+    for (const row of masked.matchAll(/\{\s*"/g)) {
+      const entry = /^\{\s*"(Ardia[A-Za-z]+\.[a-z][A-Za-z]*)"\s*,\s*Route::k\w+\s*\}/.exec(code.slice(row.index));
+      if (entry) methods.add(entry[1]);
     }
     const functions = cppFunctions(masked);
+    const ownerOf = (pos) => functions.filter((fn) => fn.open < pos && pos < fn.close).sort((a, b) => a.close - a.open - (b.close - b.open))[0];
+    const ownedFlags = flags.map((entry) => ({ ...entry, owner: ownerOf(entry.at) }));
     for (const branch of masked.matchAll(/\bif\s*\((?=\s*(?:method|name)\s*==)/g)) {
-      const owner = functions.filter((fn) => fn.open < branch.index && branch.index < fn.close).sort((a, b) => a.close - a.open - (b.close - b.open))[0];
+      const owner = ownerOf(branch.index);
       if (!owner || owner.boolean) continue;
       const open = branch.index + branch[0].length - 1;
       const close = closing(masked, open, skipCppLiteral);
-      const names = code.slice(open + 1, close).split("||").map((part) => /^\s*(?:method|name)\s*==\s*"(Ardia[A-Za-z]+\.[a-z][A-Za-z]*)"\s*$/.exec(part)?.[1]);
-      if (names.some((name) => name === undefined)) continue;
+      const condition = code.slice(open + 1, close);
+      const flagIn = (part) => ownedFlags.find(({ flag, at, owner: flagOwner }) => flag === part.trim() && flagOwner === owner && at < branch.index)?.method;
+      if (maskCppLiterals(condition).includes("&&")) continue;
+      const parts = condition.split("||").map((part) => {
+        const compare = /^\s*(?:method|name)\s*==\s*(?:"([^"]*)"|((?:::)?[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*))\s*$/.exec(part);
+        if (!compare) return flagIn(part) ?? (/\b(?:method|name)\b/.test(maskCppLiterals(part)) ? null : undefined);
+        const name = literalOrConstant(compare[1], compare[2]);
+        return name !== undefined && MODULE_METHOD.test(name) ? name : null;
+      });
+      if (parts.includes(null) || !parts.some(Boolean)) continue;
       let at = close + 1;
       while (/\s/.test(masked[at] ?? "")) at++;
       const statement = masked[at] === "{" ? masked.slice(at + 1, closing(masked, at, skipCppLiteral)) : masked.slice(at, masked.indexOf(";", at) + 1);
       if (/^\s*return\s+(?:true|false)\s*;\s*$/.test(statement)) continue;
-      for (const name of names) methods.add(name);
+      for (const name of parts.filter(Boolean)) methods.add(name);
     }
   }
   return { methods, events };
@@ -528,14 +608,16 @@ export function swiftRegistrations(source, className) {
   const statements = topLevelStatements(body);
   const name = statements.filter((statement) => /^Name\s*\(\s*Self\s*\.\s*moduleName\s*\)$/.test(statement));
   const rest = statements.filter((statement) => !name.includes(statement));
+  const generatedMember = (kind) => rest.map((statement) => new RegExp(`^(?:(?:Self|self)\\s*\\.\\s*)?([a-z]\\w*)${kind}$`).exec(statement)?.[1]).filter(Boolean);
   return {
-    generated: rest.map((statement) => /^Self\s*\.\s*(\w+)Function$/.exec(statement)?.[1]).filter(Boolean),
+    generated: generatedMember("Function"),
+    constants: generatedMember("Constant"),
     events: rest.some((statement) => /^Self\s*\.\s*eventsDefinition$/.test(statement)),
     name: name.length === 1,
     handWritten: [
       ...[...rest.join("\n").matchAll(/\b(Name|Function|AsyncFunction|Events|Property|Constant|Constants)\s*\(/g)].map((match) => match[1]),
       ...name.slice(1).map(() => "Name"),
-      ...rest.filter((statement) => /\bSelf\s*\.\s*(?:\w+Function|eventsDefinition)\b/.test(statement) && !/^Self\s*\.\s*(?:\w+Function|eventsDefinition)$/.test(statement)),
+      ...rest.filter((statement) => /\b(?:Self|self)\s*\.\s*(?:\w+(?:Function|Constant)|eventsDefinition)\b/.test(statement) && !/^(?:(?:Self|self)\s*\.\s*)?(?:\w+(?:Function|Constant))$|^Self\s*\.\s*eventsDefinition$/.test(statement)),
     ],
   };
 }
@@ -751,7 +833,7 @@ export function nativeModuleTypingProblems(source, domain, modules, path = "sour
 }
 
 const exists = (path) => existsSync(ROOT + path);
-const linuxSources = () => filesUnder("engine/ardiacore-linux/src/", /\.(cc|h|mm)$/).map(read);
+const linuxSources = () => ["engine/ardiacore-linux/src/", "engine/ardiacore-desktop/src/"].flatMap((dir) => filesUnder(dir, /\.(cc|h|mm)$/)).map(read);
 
 test("the module-domain scans find the shaders pilot and read the hosts' real tables", () => {
   assert.ok(moduleDomains.some(([domain]) => domain === "shaders"));
@@ -771,14 +853,16 @@ export function macModuleProblems(domain, entry, read, swiftFiles) {
   const problems = [];
   const generated = entry.swift === null ? null : read(entry.swift);
   const sources = swiftFiles.filter((path) => path !== entry.swift).map((path) => [path, stripComments(read(path))]);
-  const listed = JSON.parse(read(`${entry.package}/expo-module.config.json`)).apple?.modules ?? [];
+  let listed;
+  const registeredModules = () => (listed ??= JSON.parse(read(`${entry.package}/expo-module.config.json`)).apple?.modules ?? []);
   for (const [module, row] of Object.entries(entry.modules)) {
     const onMac = (binding) => binding.mac === "custom";
     const functions = Object.keys(row.functions).filter((fn) => onMac(row.functions[fn]));
+    const constants = Object.keys(row.constants ?? {}).filter((constant) => onMac(row.constants[constant]));
     const events = Object.keys(row.events).filter((event) => onMac(row.events[event]));
     const conforming = sources.flatMap(([path, text]) => [...text.matchAll(new RegExp(`\\bclass (\\w+)\\s*:\\s*Module\\s*,\\s*${row.native}\\b`, "g"))].map((match) => ({ path, text, name: match[1] })));
     for (const [path, text] of sources) if (new RegExp(`Name\\s*\\(\\s*"${module}"\\s*\\)`).test(text)) problems.push(`${path} names ${module} itself instead of Name(Self.moduleName)`);
-    if (!functions.length && !events.length) {
+    if (!functions.length && !constants.length && !events.length) {
       if (conforming.length) problems.push(`${module} has nothing on the Mac, yet ${conforming.map(({ name }) => name).join(", ")} conforms to ${row.native}`);
       continue;
     }
@@ -792,10 +876,11 @@ export function macModuleProblems(domain, entry, read, swiftFiles) {
       continue;
     }
     const [{ path, text, name }] = conforming;
-    if (!listed.includes(name)) problems.push(`${entry.package}/expo-module.config.json doesn't register ${name}`);
+    if (!registeredModules().includes(name)) problems.push(`${entry.package}/expo-module.config.json doesn't register ${name}`);
     const registered = swiftRegistrations(text, name);
     if (!registered.name) problems.push(`${path}: ${name} doesn't take its name from ${row.native}`);
     if (registered.generated.sort().join() !== [...functions].sort().join()) problems.push(`${path}: ${name} registers ${registered.generated.join(", ") || "no"} generated functions, not ${functions.join(", ")}`);
+    if (registered.constants.sort().join() !== [...constants].sort().join()) problems.push(`${path}: ${name} registers ${registered.constants.join(", ") || "no"} generated constants, not ${constants.join(", ")}`);
     if (registered.events !== events.length > 0) problems.push(`${path}: ${name} ${events.length ? "doesn't declare" : "declares"} its events from ${row.native}`);
     if (registered.handWritten.length) problems.push(`${path}: ${name} registers ${registered.handWritten.join(", ")} by hand`);
   }
@@ -822,6 +907,15 @@ test("a module domain with nothing on the Mac has no generated Swift, and the Ma
   assert.match(macModuleProblems("quiet", entry, readFile, ["packages/quiet/ios/Quiet.swift"]).join("\n"), /has nothing on the Mac, yet QuietModule conforms to QuietNative/);
   const onMac = { ...entry, modules: { ArdiaQuiet: { ...entry.modules.ArdiaQuiet, functions: { probe: { ...entry.modules.ArdiaQuiet.functions.probe, mac: "custom" } } } } };
   assert.match(macModuleProblems("quiet", onMac, readFile, []).join("\n"), /names no generated Swift/);
+  delete files["packages/quiet/expo-module.config.json"];
+  assert.deepEqual(macModuleProblems("quiet", entry, readFile, ["packages/quiet/ios/Other.swift"]), [], "a Windows-only package with no expo-module.config.json is never read for one");
+  const constantOnly = { ...entry, swift: "packages/quiet/ios/QuietNative.swift", modules: { ArdiaQuiet: { ...entry.modules.ArdiaQuiet, constants: { level: { mac: "custom", desktop: "absent", windows: "absent" } } } } };
+  files["packages/quiet/ios/QuietNative.swift"] = "protocol QuietNative {\n  static var level: Int { get }\n}\n";
+  files["packages/quiet/expo-module.config.json"] = '{"apple":{"modules":["QuietModule"]}}';
+  files["packages/quiet/ios/Quiet.swift"] = "public class QuietModule: Module, QuietNative {\n  static var level: Int { 1 }\n  public func definition() -> ModuleDefinition {\n    Name(Self.moduleName)\n  }\n}\n";
+  assert.match(macModuleProblems("quiet", constantOnly, readFile, ["packages/quiet/ios/Quiet.swift"]).join("\n"), /registers no generated constants, not level/);
+  files["packages/quiet/ios/Quiet.swift"] = files["packages/quiet/ios/Quiet.swift"].replace("Name(Self.moduleName)\n", "Name(Self.moduleName)\n    Self.levelConstant\n");
+  assert.deepEqual(macModuleProblems("quiet", constantOnly, readFile, ["packages/quiet/ios/Quiet.swift"]), []);
 });
 
 test("a module domain's package reaches each of its Expo modules only through the generated types", () => {
@@ -831,7 +925,7 @@ test("a module domain's package reaches each of its Expo modules only through th
     let imported = false;
     for (const [path, text] of sources) {
       walk(parseTs(path, text), (node) => {
-        if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./generated/native") imported = true;
+        if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && /^\.\/generated\/native(?:\.ts)?$/.test(node.moduleSpecifier.text)) imported = true;
       });
       const found = nativeModuleTypingProblems(text, domain, entry.modules, path);
       assert.deepEqual(found.problems, [], path);
@@ -842,16 +936,17 @@ test("a module domain's package reaches each of its Expo modules only through th
   }
 });
 
-test("the Linux host dispatches a module function and sends a module event exactly when its desktop binding is host", () => {
+test("the Linux host dispatches a module function or constant exactly when its desktop binding is host or adapted, and sends a module event under its own name exactly when it is host", () => {
   const linux = linuxModuleDispatch(linuxSources());
-  for (const { module, fn, binding } of moduleFunctions) assert.equal(linux.methods.has(`${module}.${fn}`), binding.desktop === "host", `${module}.${fn} is ${binding.desktop} on the desktop host`);
+  for (const { module, fn, binding } of moduleFunctions) assert.equal(linux.methods.has(`${module}.${fn}`), reachesLinuxHost(binding), `${module}.${fn} is ${binding.desktop} on the desktop host`);
+  for (const { module, constant, binding } of moduleConstants) assert.equal(linux.methods.has(`${module}.${constant}`), reachesLinuxHost(binding), `constant ${module}.${constant} is ${binding.desktop} on the desktop host`);
   for (const { module, event, binding } of moduleEvents) assert.equal(linux.events.has(`${module}.${event}`), binding.desktop === "host", `event ${module}.${event} is ${binding.desktop} on the desktop host`);
 });
 
 test("Windows serves a module function as a native method, a JS member or a default, and sends a module event, exactly when its windows binding is custom", () => {
   const native = windowsNativeModules(filesUnder("apps/browser/windows/Ardia/", /\.h$/).map(read));
   const js = windowsJsModules(read, exists);
-  for (const { module, fn, binding } of moduleFunctions) {
+  for (const { module, fn, binding } of [...moduleFunctions, ...moduleConstants.map(({ module, constant, binding }) => ({ module, fn: constant, binding }))]) {
     const served = native.methods.get(module)?.has(fn) || js.members.get(module)?.().has(fn) || js.defaults.get(module)?.has(fn) || false;
     assert.equal(served, binding.windows === "custom", `${module}.${fn} is ${binding.windows} on Windows`);
   }
@@ -894,6 +989,25 @@ test("the Linux scan counts an if that dispatches inside a function that isn't a
   assert.equal(maskCppLiterals('f("a{b", R"x(})x", 1\'0, \'}\')'), 'f("   ", R"     ", 1\'0, \' \')');
 });
 
+test("the Linux scan counts a row of a method route table as a dispatched module function, never one inside a comment or a literal", () => {
+  const source = 'inline constexpr Method kMethods[] = {\n    {"ArdiaSync.chooseFolder", Route::kChooseFolder},\n    // {"ArdiaSync.ghost", Route::kCore},\n    {"ArdiaSync.core",\n     Route::kCore},\n};\nconst char* kText = "{\\"ArdiaSync.fake\\", Route::kCore}";\n';
+  assert.deepEqual([...linuxModuleDispatch([source]).methods].sort(), ["ArdiaSync.chooseFolder", "ArdiaSync.core"]);
+});
+
+test("the Linux scan resolves a method or event named by a string constant, through namespaces, aliases and a bool flag, and skips one it can't pin to a single value", () => {
+  const header = 'namespace ardia::desktop_report {\ninline constexpr char kEvent[] = "onReport";\n}\nnamespace ardia::linux_hardware {\ninline constexpr char kHardwareInfoCall[] = "ArdiaApp.hardwareInfo";\n}\nnamespace one {\ninline constexpr char kCall[] = "ArdiaApp.first";\n}\nnamespace two {\ninline constexpr char kCall[] = "ArdiaApp.second";\n}\n';
+  const host = 'namespace hardware = ardia::linux_hardware;\nvoid Host::Run(std::string_view method) {\n  host->Event("ArdiaReport", ardia::desktop_report::kEvent, base::Value());\n  if (method == hardware::kHardwareInfoCall) return Reply();\n  auto nested = [](std::string_view method) {\n    const bool changing = method == "ArdiaSystem.nested";\n    return changing;\n  };\n  const bool changing = method == "ArdiaSystem.setAsDefaultBrowser";\n  if (method == "ArdiaSystem.isDefaultBrowser" || changing) return Reply();\n  if (method == kCall) return Reply();\n  if (method == "ArdiaApp.gated" && ready) return Reply();\n  const bool other = method == "ArdiaSystem.otherFlag";\n}\nvoid Other::Run(std::string_view method) {\n  if (method == "ArdiaSystem.elsewhere" || other) return Reply();\n}\n';
+  const found = linuxModuleDispatch([header, host]);
+  assert.deepEqual([...found.events], ["ArdiaReport.onReport"]);
+  assert.deepEqual([...found.methods].sort(), ["ArdiaApp.hardwareInfo", "ArdiaSystem.elsewhere", "ArdiaSystem.isDefaultBrowser", "ArdiaSystem.setAsDefaultBrowser"], "a flag declared in another function never names a method here");
+  assert.equal(resolveCppConstant("two::kCall", new Map(), cppStringConstants([header])), "ArdiaApp.second");
+});
+
+test("the Linux event scan reads a module event sent by name through SendEvent or a host's Event, never one inside a literal", () => {
+  const source = 'void Host::Run() {\n  host->Event("ArdiaImport", "onImportEvent", base::Value());\n  Event("ArdiaShell", "onOpenURLs", base::Value());\n  SendEvent("ArdiaShell", "shell", base::Value());\n  Log("Event(\\"ArdiaFake\\", \\"onGhost\\")");\n  sink_.Run(caller, "onChange", base::Value());\n}\n';
+  assert.deepEqual([...linuxModuleDispatch([source]).events].sort(), ["ArdiaImport.onImportEvent", "ArdiaShell.onOpenURLs", "ArdiaShell.shell"]);
+});
+
 test("the Windows native scan counts only REACT_METHOD entries of the header's own module and EmitEvent calls", () => {
   const native = windowsNativeModules(['REACT_MODULE(Demo, L"ArdiaDemo")\n  REACT_METHOD(hold)\n  REACT_METHOD(remove, L"delete")\n  REACT_SYNC_METHOD(peek)\n  EmitEvent(context, L"ArdiaDemo", L"tone", payload);', 'std::wstring note = L"ArdiaDemo.missing";\n// REACT_MODULE(Gone, L"ArdiaGone")']);
   assert.deepEqual([...native.methods.get("ArdiaDemo")], ["hold", "delete", "peek"]);
@@ -934,12 +1048,12 @@ test("the Windows JS scan reads a module's members from the TypeScript syntax tr
 
 test("the Mac registration scan counts only a generated definition that stands as its own statement, across lines, and sees a hand-written registration however it's spaced", () => {
   const module = (definition) => `public class DemoModule: Module, DemoNative {\n  static func hold(_ on: Bool) {}\n\n  public func definition() -> ModuleDefinition {\n${definition}\n  }\n}\n`;
-  assert.deepEqual(swiftRegistrations(module('    Name(Self.moduleName)\n    Self.holdFunction\n    View(DemoView.self) {\n      Prop("on") { (view: DemoView, on: Bool) in view.on = on }\n      Events("onTone")\n    }'), "DemoModule"), { generated: ["hold"], events: false, name: true, handWritten: [] });
+  assert.deepEqual(swiftRegistrations(module('    Name(Self.moduleName)\n    Self.holdFunction\n    View(DemoView.self) {\n      Prop("on") { (view: DemoView, on: Bool) in view.on = on }\n      Events("onTone")\n    }'), "DemoModule"), { generated: ["hold"], constants: [], events: false, name: true, handWritten: [] });
   assert.deepEqual(swiftRegistrations(module('    Name(Self.moduleName)\n    Self.holdFunction\n    AsyncFunction("extra") { () in }'), "DemoModule").handWritten, ["AsyncFunction"]);
   assert.deepEqual(swiftRegistrations(module('    Name(Self.moduleName)\n    Events("tone")\n    Self.holdFunction'), "DemoModule").handWritten, ["Events"]);
-  assert.deepEqual(swiftRegistrations(module('    Name("ArdiaDemo")\n    Self.holdFunction'), "DemoModule"), { generated: ["hold"], events: false, name: false, handWritten: ["Name"] });
+  assert.deepEqual(swiftRegistrations(module('    Name("ArdiaDemo")\n    Self.holdFunction'), "DemoModule"), { generated: ["hold"], constants: [], events: false, name: false, handWritten: ["Name"] });
   const assigned = swiftRegistrations(module('    Name(Self.moduleName)\n    let _ = Self.holdFunction\n    Function ("extra") { 1 }'), "DemoModule");
-  assert.deepEqual(assigned, { generated: [], events: false, name: true, handWritten: ["Function", "let _ = Self.holdFunction"] });
+  assert.deepEqual(assigned, { generated: [], constants: [], events: false, name: true, handWritten: ["Function", "let _ = Self.holdFunction"] });
   const split = swiftRegistrations(module("    Name(Self.moduleName)\n    let _ =\n      Self.holdFunction"), "DemoModule");
   assert.deepEqual(split.generated, []);
   assert.deepEqual(split.handWritten, ["let _ =\n      Self.holdFunction"]);
@@ -949,8 +1063,12 @@ test("the Mac registration scan counts only a generated definition that stands a
   }
   const chained = swiftRegistrations(module("    Name(Self.moduleName)\n    Self.holdFunction\n      .runOnQueue(.main)\n    Self.peekFunction"), "DemoModule");
   assert.deepEqual(chained.generated, ["peek"]);
-  assert.deepEqual(swiftRegistrations(module("    Name (Self.moduleName)\n    Self.holdFunction; Self.eventsDefinition\n    AsyncFunction\n      (\"late\") { () in }"), "DemoModule"), { generated: ["hold"], events: true, name: true, handWritten: ["AsyncFunction"] });
+  assert.deepEqual(swiftRegistrations(module("    Name (Self.moduleName)\n    Self.holdFunction; Self.eventsDefinition\n    AsyncFunction\n      (\"late\") { () in }"), "DemoModule"), { generated: ["hold"], constants: [], events: true, name: true, handWritten: ["AsyncFunction"] });
   assert.deepEqual(swiftRegistrations(module("    Name(Self.moduleName)\n    Name(Self.moduleName)\n    Self.holdFunction"), "DemoModule").handWritten, ["Name"]);
+  const instance = swiftRegistrations(module("    Name(Self.moduleName)\n    claimFunction\n    self.watchFunction\n    Self.apiVersionConstant\n    let _ = claimFunction\n    _ = self.coreConstant"), "DemoModule");
+  assert.deepEqual(instance.generated, ["claim", "watch"]);
+  assert.deepEqual(instance.constants, ["apiVersion"]);
+  assert.deepEqual(instance.handWritten, ["_ = self.coreConstant"]);
 });
 
 test("the typing scan reads the TypeScript syntax tree: it refuses a wrapper typed any, a hand-typed literal, and any cast past the generated type however it's wrapped or spread", () => {
@@ -1063,7 +1181,7 @@ test("the typing scan follows a block-bodied wrapper, a function declaration or 
 
 test("the Mac registration scan takes Self and its generated member split across lines, and still refuses one that is assigned or discarded", () => {
   const module = (definition) => `public class DemoModule: Module, DemoNative {\n  public func definition() -> ModuleDefinition {\n${definition}\n  }\n}\n`;
-  assert.deepEqual(swiftRegistrations(module("    Name(\n      Self\n        .moduleName\n    )\n    Self\n      .holdFunction\n    Self\n      .eventsDefinition"), "DemoModule"), { generated: ["hold"], events: true, name: true, handWritten: [] });
+  assert.deepEqual(swiftRegistrations(module("    Name(\n      Self\n        .moduleName\n    )\n    Self\n      .holdFunction\n    Self\n      .eventsDefinition"), "DemoModule"), { generated: ["hold"], constants: [], events: true, name: true, handWritten: [] });
   const discarded = swiftRegistrations(module("    Name(Self.moduleName)\n    let _ =\n      Self\n      .holdFunction\n    _ = Self\n      .eventsDefinition"), "DemoModule");
   assert.deepEqual(discarded.generated, []);
   assert.equal(discarded.events, false);

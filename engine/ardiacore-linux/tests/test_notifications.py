@@ -45,7 +45,8 @@ class NotificationTests(unittest.TestCase):
         shared = (REPO / 'packages/shell/src/notifications.ts').read_text()
         for field in ('id: string;', 'action: "click" | "close";', 'tabId: string | null;', 'windowId: string | null;', 'data: unknown;'):
             self.assertIn(field, shared)
-        self.assertIn('addListener(name: "onNotificationResponse"', shared)
+        self.assertIn('export type { NotificationsNative };', shared)
+        self.assertIn('addListener(name: "onNotificationResponse"', (REPO / 'packages/shell/src/generated/native.ts').read_text())
         glue = (LINUX / 'ac_linux_notifications.cc').read_text()
         report = glue[glue.index('void Report('):glue.index('class Handler')]
         for key in ('"id"', '"action"', '"tabId"', '"windowId"', '"data"'):

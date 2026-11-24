@@ -41,23 +41,14 @@ function host() {
   return { api: createHostImport(bridge, ImportError), calls, replies };
 }
 
-test("the Linux unlock step names the system keyring, never the Mac or its keychain", () => {
-  const one = unlockCopy(CHROME, ["Default"], ["passwords"]);
-  const many = unlockCopy(CHROME, ["Default", "Profile 1"], ["passwords"]);
-  for (const copy of [one, many, unlockCopy(FIREFOX, ["locked.default"], ["passwords"]), unlockCopy(FIREFOX, ["cards.default"], ["autofill"])]) {
+test("the unlock step never names the Mac or its keychain", () => {
+  for (const copy of [unlockCopy(CHROME, ["Default"], ["passwords"]), unlockCopy(CHROME, ["Default", "Profile 1"], ["passwords"]), unlockCopy(FIREFOX, ["locked.default"], ["passwords"]), unlockCopy(FIREFOX, ["cards.default"], ["autofill"])]) {
     for (const text of [copy.title, copy.subtitle, copy.lead, copy.detail, copy.waiting]) assert.doesNotMatch(text, MACOS);
   }
-  assert.match(one.detail, /Secret Service or KWallet/);
-  assert.match(one.detail, /“Chrome Safe Storage”/);
-  assert.match(many.lead, /once for each selected profile/);
-  assert.equal(one.field, false);
   for (const code of ["locked", "denied", "notFound", "unavailable", "timeout", "cancelled", "unreadable", undefined]) {
     for (const source of [CHROME, FIREFOX]) assert.doesNotMatch(unlockFailure(source, code), MACOS);
   }
-  assert.match(unlockFailure(CHROME, "locked"), /system keyring is locked/);
-  assert.match(unlockFailure(CHROME, "denied"), /didn't allow access to Chrome Safe Storage/);
-  assert.match(unlockFailure(CHROME, "notFound"), /has no Chrome Safe Storage key/);
-  assert.match(unlockFailure(CHROME, "unavailable"), /Secret Service or KWallet/);
+  assert.equal(unlockCopy(CHROME, ["Default"], ["passwords"]).field, false);
   assert.match(unlockFailure(FIREFOX, "denied"), /isn't Firefox's primary password/);
 });
 
@@ -100,7 +91,7 @@ test("the typed primary password reaches the native unlock once, through the typ
   assert.equal(slot.get(), "");
 
   replies.push({ type: "failed", code: "locked", message: "locked" });
-  assert.match(await unlockSource(api, CHROME, ["Default"], ["passwords"], slot), /system keyring is locked/);
+  assert.equal(await unlockSource(api, CHROME, ["Default"], ["passwords"], slot), unlockFailure(CHROME, "locked"));
   assert.deepEqual(calls.filter((call) => call.method === "ArdiaImport.unlockBrowser").at(-1).args.slice(1), ["chrome", null]);
 });
 

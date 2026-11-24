@@ -25,7 +25,7 @@ import officialPin from "../../official-plugins.json";
 import { hexOf, sha256 } from "../lib/sha256";
 export { beginWindowControlTransition, finishStalledTransition, geometryWorld } from "./windowGeometry";
 
-type Modules = ShellNativeModules;
+type Modules = Omit<ShellNativeModules, "ArdiaFieldGlow">;
 
 type UserScriptsHost = {
   watching: boolean[];

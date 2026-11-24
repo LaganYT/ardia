@@ -39,7 +39,7 @@ issue	hash	file	test
 835	3f4da915e4a92e06	packages/core/src/url.test.ts	fixupUrl reads the host up to the first / ? or #: one trailing dot, a 1-5 digit port, labels never start or end in a hyphen
 848	50e8a107021a5f39	apps/browser/src/state/sidebar/sharedTiles.test.mjs	a page's Top Apps hold still only toward a neighbour that shares the same set
 848	969cb661d0b59b43	apps/browser/src/state/sidebar/sharedTiles.test.mjs	shared Top Apps stay where they are for the whole switch and cross-fade, unshared ones ride their page
-851	f3445e5e0fcd1b04	packages/core/src/suggest.test.ts	a typed address opens as typed: a saved #fragment of the same page never replaces it
+851	525ef67b89f32245	packages/core/src/suggest.test.ts	a typed address opens as typed: a saved #fragment of the same page never replaces it
 857	7de768b9ecdcfa1f	apps/browser/src/state/tabs/navigation.test.mjs	back does not close a pinned tab, even one a link opened
 857	7d41e9126ec160b8	apps/browser/src/state/tabs/navigation.test.mjs	back does nothing on a link-opened tab whose opener closed, even when its opener's opener adopts it
 857	e3c689645a9055b6	apps/browser/src/state/tabs/navigation.test.mjs	back does nothing once the opener is gone

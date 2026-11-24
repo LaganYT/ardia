@@ -110,8 +110,11 @@ class HardwareTests(unittest.TestCase):
         self.assertIn('if (args.size() != 1 || !args[0].is_bool()) {', call)
         self.assertIn('ui::NativeTheme::SetArdiaLinuxThinScrollBars(args[0].GetBool());', call)
         self.assertIn('return std::move(done).Run(true, base::Value());', call)
-        self.assertIn('AsyncFunction("setThinScrollBars") { (thin: Bool) in ThinScrollBars.set(thin) }',
-                      (REPO / 'packages/shell/ios/SystemModule.swift').read_text())
+        mac = (REPO / 'packages/shell/ios/SystemModule.swift').read_text()
+        self.assertIn('static func setThinScrollBars(_ thin: Bool) { ThinScrollBars.set(thin) }', mac)
+        self.assertIn('Self.setThinScrollBarsFunction', mac)
+        self.assertIn('AsyncFunction("setThinScrollBars") { (thin: Bool) in Self.setThinScrollBars(thin) }',
+                      (REPO / 'packages/shell/ios/ShellNative.swift').read_text())
 
     def test_the_scroll_bar_patch_is_linux_only_and_follows_the_open_urls_patch(self):
         steps = [line.split() for line in (PATCHES / 'series').read_text().splitlines() if line.startswith('chromium ')]

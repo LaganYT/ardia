@@ -58,6 +58,9 @@ const ENGINE_ENV_READS = {
 const APP_SRC = "apps/browser/src/";
 const BASELINE_PATH = `${APP_SRC}conventions-baseline.json`;
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+for (const entry of Object.values(JSON.parse(readFileSync(ROOT + "packages/ardiacore/src/engine/generated/manifest.json", "utf8")).modules ?? {})) {
+  for (const path of [entry.types, entry.swift]) if (typeof path === "string") GENERATED.add(path);
+}
 
 const SOURCE_FILE = /\.(?:tsx?|mjs|js|swift|h|m|mm|cc|mojom)$/;
 const SCOPE_FILE = /^(?:apps\/browser\/src\/|packages\/[^/]+\/(?:src|ios)\/|engine\/(?:ardiacore|chromium)\/src\/)/;

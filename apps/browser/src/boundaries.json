@@ -1972,6 +1972,71 @@
     "apps/browser/src/state/telemetry/shellMigration.test.mjs"
    ],
    "detected": false
+  },
+  {
+   "id": "socket-family:devtools-sessions",
+   "source": "socket",
+   "guard": "devtools.attach, send, batch and detach open a full DevTools client of one tab over the control socket for the owner's connection only (plugin sessions are refused by accessProblem; D3: any same-user process the socket let in is the owner, the same trust as control.devtoolsEndpoint's token). Params are checked against the method's schema, the tab through tabOf (private tabs never), the method name against METHOD_NAME, a child sessionId against CHILD_SESSION, params must be an object and a batch holds at most MAX_BATCH commands with only method, params and sessionId. Every engine session is an untrusted DevTools client (IsTrusted false, so Chromium gives it auto-attach only: no Target.getTargets, attachToTarget or createTarget), never attaches to a WebUI or chrome:// page (MayAttachToURL) or to any frame of an off-the-record profile (MayAttachToRenderFrameHost), so it can only reach its own tab and that tab's iframes and workers; at most 4000 events wait in the engine (the rest counted as dropped) and an event over the cap is cut from its prefix before it is parsed. A session belongs to its connection (ownedSession) and the engine checks the owner again (SessionFor); the engine refuses private tabs (CliTabRefusal), needs the RemoteDebuggingAllowed policy at open and at every command (revoking it ends every session at once) and IsInspectionAllowed for the tab, caps sessions (kMaxSessions, kMaxSessionsPerOwner), takes only ValidMethodName names, an inspect session only kInspectionMethods, and passes an event over 900 KiB as cut. Sessions end when their tab closes, the connection closes (closeEngineCliFor, CancelCliOps) or control goes off (CloseAllCliDevToolsSessions)",
+   "checks": [
+    "apps/browser/src/state/automation/socketEngineCli.ts#checkedMethod",
+    "apps/browser/src/state/automation/socketEngineCli.ts#checkedChild",
+    "apps/browser/src/state/automation/socketEngineCli.ts#MAX_BATCH",
+    "apps/browser/src/state/automation/engineCli.ts#ownedSession",
+    "apps/browser/src/state/automation/engineCli.ts#closeEngineCliFor",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_devtools_sessions.cc#SessionFor",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_devtools_sessions.cc#ValidMethodName",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_devtools_sessions.cc#kInspectionMethods",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_ops.cc#CliRemoteDebuggingAllowed",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_ops.cc#ValidCliOwner",
+    "apps/browser/src/state/automation/socketEngineCli.test.mjs#HOSTILE_VALUES",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_cdp.cc#MayAttachToRenderFrameHost",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_cdp.cc#kMaxQueuedEvents",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_ops.cc#CliTabRefusal"
+   ],
+   "detected": false
+  },
+  {
+   "id": "socket-family:engine-tab-ops",
+   "source": "socket",
+   "guard": "tabs.snapshot, waitSettled, hitTest, click and screenshot take the tab through tabOf, a ref only as e<digits>, a point only as finite numbers within 100000 CSS pixels (never with a ref), and limits within the schema's ranges; the engine reads them again (ReadTarget, ReadOwner, ScreenshotOptionsFromArgs), refuses private tabs and tabs DevTools policy keeps from inspection, caps each operation at 15 s (settle at the caller's timeout, at most 60 s), and calls it off when its connection closes (RegisterCliOp, CancelCliOps). A click goes through the same hit test and is held back while something covers the target unless force. Every entry point, screenshot included, refuses private tabs and needs the RemoteDebuggingAllowed policy and IsInspectionAllowed (CliTabRefusal); turning control off or revoking the policy cancels every running operation (CancelAllCliOps). A click is refused unless the hit test reached the target or something inside it, and is checked again after the pointer moves, so a layer that appears meanwhile stops it",
+   "checks": [
+    "apps/browser/src/state/automation/socketEngineCli.ts#target",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_tab_ops_calls.cc#ReadTarget",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_tab_ops.cc#kOpDeadline",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_settle.cc#read_ms",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_screenshot.cc#ScreenshotOptionsFromArgs",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_ops.cc#CancelCliOps",
+    "apps/browser/src/state/automation/socketEngineCli.test.mjs#HOSTILE_VALUES",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_ops.cc#CliTabRefusal",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_ops.cc#CancelAllCliOps"
+   ],
+   "detected": false
+  },
+  {
+   "id": "engine-cli-page-data:snapshot",
+   "source": "page",
+   "guard": "The snapshot reads each frame's accessibility tree and layout from Chromium through the tab's own untrusted DevTools session (Accessibility.getFullAXTree, DOMSnapshot.captureSnapshot), never page script, frame by frame in frame-tree order, at most 24 frames, each refused frame (DevTools policy, private profile, WebUI: CliFrameRefused) left out with everything under it, at most kMaxItems nodes: names and values are cut to 200 bytes at a UTF-8 boundary (ClippedUtf8), at most maxRefs rows and maxTextBytes of text, at most 24 frames; the DevTools answers it uses for hit tests (DOM.getNodeForLocation, DOM.describeNode, Page.getLayoutMetrics) are read field by field with types checked and only map to nodes already in the tree (PageModel::Find), coordinates past a million pixels are dropped; dismiss buttons are chosen by fixed word lists (DismissChoices), nothing the page says is run or stored beyond the tab's ref table (RefStore, at most 4000 refs, cleared of node ids on navigation). A password field and an input whose autocomplete names a card, a one-time code or a password (split on every HTML whitespace) never has its value or the text under it listed (SensitiveAutocomplete; redacted: true). A ref rebinds only inside its own frame and only to the one element there with its role and name; a main-frame navigation forgets every ref",
+   "checks": [
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_model.cc#ClippedUtf8",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_ref_store.cc#kMaxRefEntries",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_model.cc#DismissChoices",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_model.cc#kMaxItems",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_hit_tester.cc#Located",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_model.cc#SensitiveAutocomplete",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_page_reader.cc#CliFrameRefused"
+   ],
+   "detected": false
+  },
+  {
+   "id": "engine-cli-page-data:screenshot",
+   "source": "page",
+   "guard": "A screenshot is pixels copied from the tab's compositor surface (RenderWidgetHostView::CopyFromSurface) and encoded in the browser process on a worker thread; its size is capped at kMaxSide per side and kMaxPixels in all, the clip must be finite and within the page, and Page.captureScreenshot sent on a session is answered this way only for its own tab when it isn't on screen",
+   "checks": [
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_screenshot.cc#kMaxPixels",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_screenshot.cc#ClipFrom",
+    "engine/chromium/src/chrome/browser/ardia/ac_cli_screenshot.cc#ScreenshotOptionsFromCdp"
+   ],
+   "detected": false
   }
  ]
 }

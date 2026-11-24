@@ -1100,6 +1100,26 @@
    ]
   },
   {
+   "id": "plugin-method:state.intent",
+   "source": "plugin",
+   "guard": "parseIntent: an allowlist of tab and group intents, each in permissions.state.intents; own-key fields only, ids of eligible tabs, groups and normal windows only, no profiles, URLs or names; intentProblem refuses a move or group that would change a tab's profile or pin state and an unmute of a site muted in settings, checked before the op and again as it runs; mute and unmute touch the tabs only",
+   "checks": [
+    "apps/browser/src/state/plugins/channelApi.ts#case \"state.intent\"",
+    "apps/browser/src/state/plugins/stateIntents.ts#parseIntent",
+    "apps/browser/src/state/plugins/stateIntentGuards.ts#intentProblem"
+   ]
+  },
+  {
+   "id": "plugin-method:state.subscribe",
+   "source": "plugin",
+   "guard": "Topics in permissions.state.events only, refused whole otherwise; resync only as a boolean; every event is projected through pluginEventRedaction after the commit, coalesced and packed by UTF-8 bytes, with no private window, incognito tab, private download, file, internal or credentialed address and no query whose decoded name looks secret or that doesn't decode",
+   "checks": [
+    "apps/browser/src/state/plugins/channelApi.ts#case \"state.subscribe\"",
+    "apps/browser/src/state/plugins/stateEvents.ts#subscribeState",
+    "apps/browser/src/state/plugins/pluginEventRedaction.ts#pluginStateUrl"
+   ]
+  },
+  {
    "id": "plugin-method:tabs.readActivePage",
    "source": "plugin",
    "guard": "Plugin gesture and permission, re-checked after the read; page text is data",
@@ -1435,6 +1455,26 @@
    ]
   },
   {
+   "id": "socket-family:files",
+   "source": "socket",
+   "guard": "Native listener checks the peer UID and a 0600 socket; params checked against the method's JSON schema (socketSchema.schemaProblem); tabs through tabOf; every path through localPathProblem (absolute, no NUL or line break, at most 1024 bytes, no . or ..), then natively: an upload must be a regular file whose given name isn't a symbolic link, opened O_NOFOLLOW and copied from that descriptor into Ardia's 0700 file-arms folder, and the chooser gets the copy; a download target must not exist and its folder must, a prompted download saves into a fresh 0700 staging folder, and every file lands through PlaceFile (O_NOFOLLOW open, identity check, exclusive rename or exclusive copy) so nothing is replaced or written through a link; a save panel is answered only when it is a download picker (a download of the panel window's profile awaiting its target and no panel message, LooksLikeDownloadPicker), and any panel only for Chromium in a known regular, non-private window showing the armed tab's profile (RankArms); one waiting upload arm per window, one download per once arm and staging-folder ownership are enforced under the registry lock, a registration that started before control went off is refused (generation), and arms end with their tab, their time limit (at most 600 s) or control going off (clearFileArms, right after the socket is cut off) (D3: any same-user process is the owner)",
+   "checks": [
+    "apps/browser/src/state/automation/socketSchema.ts#schemaProblem",
+    "apps/browser/src/state/automation/fileArms.ts#localPathProblem",
+    "apps/browser/src/state/automation/fileArms.ts#clearFileArms",
+    "packages/ardiacore/ios/ArdiaFilePaths.mm#ChosenPath",
+    "packages/ardiacore/ios/ArdiaFilePaths.mm#DownloadTarget",
+    "packages/ardiacore/ios/ArdiaFilePaths.mm#StageUpload",
+    "packages/ardiacore/ios/ArdiaFilePaths.mm#PlaceFile",
+    "packages/ardiacore/ios/ArdiaDownloadPrompts.mm#LooksLikeDownloadPicker",
+    "packages/ardiacore/ios/ArdiaFileArms.mm#RankArms",
+    "packages/ardiacore/ios/ArdiaFileArms+Downloads.mm#claimArmedDownload"
+   ],
+   "findings": [
+    "D3"
+   ]
+  },
+  {
    "id": "raw-settings-write:state/engines/actions.ts",
    "source": "native",
    "guard": "Sets engineMode to one of the engine modes from a user action",
@@ -1734,6 +1774,20 @@
     "packages/core-rs/crates/ardia-update-verify/src/main.rs#fn verify(",
     "packages/core-rs/crates/ardia-update-core/src/manifest.rs#pub fn verify_linux_update",
     "packages/core-rs/tests/linux-update/test_linux_update.py#test_no_hostile_string_passes_the_verifier"
+   ],
+   "detected": false
+  },
+  {
+   "id": "update:windows-manifest",
+   "source": "update",
+   "guard": "UpdateModule fetches windows-update.json (at most 64 KiB) and windows-update.json.sig (64 bytes) only from GitHub releases (or a test instance's updateFeed) and runs ardia-update-verify.exe (ardia-update-core) against the pinned windows-update.pem without following symlinks or reparse points; anything unsigned, tampered, malformed, oversized, non-newer or outside the allowed HTTPS prefix is refused before download, and packages/expo-windows/src/updater/manifest.ts validates the verified reply again; the shared hostile list runs through both the verifier binary and the TypeScript parser",
+   "checks": [
+    "apps/browser/windows/Ardia/UpdateModule.h#VerifyUpdate",
+    "packages/core-rs/crates/ardia-update-verify/src/main.rs#fn verify_windows(",
+    "packages/core-rs/crates/ardia-update-core/src/windows.rs#pub fn verify_windows_update",
+    "packages/expo-windows/src/updater/manifest.ts#parseVerifiedUpdate",
+    "apps/browser/src/hostileInputs.test.mjs#windows update manifest",
+    "packages/core-rs/tests/windows-update/test_windows_update.py#test_no_hostile_string_passes_the_windows_verifier"
    ],
    "detected": false
   },

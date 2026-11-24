@@ -1464,8 +1464,8 @@
       "types": "packages/shell/src/generated/native.ts",
       "swift": "packages/shell/ios/ShellNative.swift",
       "sha256": {
-        "types": "31c46539023fff5c6a5ebc31f0658a48a4986a4187856ad0eaf116bffc1ab6d4",
-        "swift": "f931f68b0f88d5ecedaee1222c97bc7efd94734c461f1cdeb524491a24399661"
+        "types": "25ce93a844a411ce16ac7fcd3c5e63ba6e9a859855d68bcc3bcd4cf187395fe0",
+        "swift": "b11487a0232b8f7ff070b0726b13e18a14dffe7bccf08736e9db4ce35fea6353"
       },
       "modules": {
         "ArdiaShell": {
@@ -3643,6 +3643,65 @@
                 "key"
               ],
               "async": true,
+              "mac": "custom",
+              "desktop": "custom",
+              "windows": "absent"
+            },
+            "armFiles": {
+              "args": [
+                "spec"
+              ],
+              "async": true,
+              "mac": "custom",
+              "desktop": "custom",
+              "windows": "absent"
+            },
+            "disarmFiles": {
+              "args": [
+                "ids",
+                "purge"
+              ],
+              "async": false,
+              "mac": "custom",
+              "desktop": "custom",
+              "windows": "absent"
+            },
+            "fileArms": {
+              "args": [],
+              "async": true,
+              "mac": "custom",
+              "desktop": "custom",
+              "windows": "absent"
+            },
+            "claimArmedDownload": {
+              "args": [
+                "arm",
+                "download",
+                "path"
+              ],
+              "async": false,
+              "mac": "custom",
+              "desktop": "custom",
+              "windows": "absent"
+            },
+            "placeArmedDownload": {
+              "args": [
+                "arm",
+                "download",
+                "path"
+              ],
+              "async": true,
+              "mac": "custom",
+              "desktop": "custom",
+              "windows": "absent"
+            },
+            "releaseArmedDownload": {
+              "args": [
+                "arm",
+                "download",
+                "state"
+              ],
+              "async": false,
               "mac": "custom",
               "desktop": "custom",
               "windows": "absent"

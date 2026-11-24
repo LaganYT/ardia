@@ -207,7 +207,7 @@ export function DeckBottomBar({ shown, barCenterY, deckHeight, width, layout, in
   const plusTop = strip ? (strip.ends ? strip.plus : strip.tabs) : 0;
   const plusPlace = strip ? { bottom: deckHeight - centerY - controlSize.bar / 2 - plusTop, ...besideStrip(strip, width, tabsLayout.menuWidth, deckChromeLayout.menuGap) } : { bottom: deckHeight - centerY + controlSize.bar / 2 + deckChromeLayout.menuGap, right: span.right, width: tabsLayout.menuWidth };
   const switchPlace = strip ? plusPlace : { bottom: deckHeight - centerY + controlSize.bar / 2 + deckChromeLayout.menuGap, left: span.left, width: tabsLayout.menuWidth };
-  const closeIncognito: MenuItem[] = onCloseIncognito ? [{ label: incognitoWords.closeIncognitoTabs, destructive: true, onPress: onCloseIncognito }] : [];
+  const closeIncognito: MenuItem[] = onCloseIncognito ? [{ label: incognitoWords.closeIncognitoTabs, icon: "xmark", destructive: true, onPress: onCloseIncognito }] : [];
   const switchMenuShown = menusShown && privateCount > 0 && closeIncognito.length > 0;
   const incognitoSwitch = (
     <MenuTrigger items={closeIncognito} trigger="longPress" haptic={menuOpenedHaptic} disabled={!switchMenuShown} onOpen={() => onMenu?.(true)} onClose={() => onMenu?.(false)} place={switchPlace} style={{ width: controlSize.bar, height: controlSize.bar }}>

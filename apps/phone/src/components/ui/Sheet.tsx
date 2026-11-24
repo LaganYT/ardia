@@ -77,7 +77,7 @@ export function SheetScrollView({ children, onLayout, onContentSizeChange, scrol
     if (sheet) sheet.atTop.value = event.contentOffset.y <= AT_TOP_SLOP;
   });
   const list = (
-    <Animated.ScrollView
+    <Animated.ScrollView bounces={false} overScrollMode="never"
       {...rest}
       ref={listRef}
       scrollEnabled={locked ? false : scrollEnabled}

@@ -18,6 +18,7 @@ import { windowsLaunchLinks } from "./launchLinks";
 import { noteMissing } from "./missing";
 import { windowsSelfChecks } from "./selfCheck/registered";
 import { stampedSystemInfo, windowsUpdater } from "./updater";
+import { windowsUpdateCounts } from "./updater/counts";
 import { windowsSwipe } from "./pager";
 import { windowsSync } from "./sync";
 import { setWindowDark } from "./windowDark";
@@ -53,7 +54,7 @@ const syncOnWindows = windowsSync();
 
 watchDialogsWith(() => (TurboModuleRegistry.get<TurboModule & Pick<DialogsModule, "openCount">>("ArdiaDialogs")?.openCount() ?? 0) + (TurboModuleRegistry.get<TurboModule & Pick<MenusModule, "openCount">>("ArdiaMenus")?.openCount() ?? 0) > 0);
 
-const writtenInJs: Record<string, Record<string, unknown>> = { ...(syncOnWindows ? { ArdiaSync: syncOnWindows } : {}), ArdiaUpdater: windowsUpdater, ArdiaSwipe: windowsSwipe, ArdiaMotion: windowsMotion, ArdiaLaunchLinks: windowsLaunchLinks, ArdiaExternalAppCounts: windowsExternalAppCounts, ArdiaRendererEfficiency: windowsRendererEfficiency, ArdiaDialogPages: windowsDialogPages, ArdiaImport: windowsImport(), ArdiaInlineCompletion: windowsInlineCompletion(() => TurboModuleRegistry.get<TurboModule & WindowsHostModule>("ArdiaWindowsHost")), ArdiaApp: windowsIntroMusic, ArdiaSelfCheck: windowsSelfChecks, ArdiaShell: windowsShellClipboard(() => TurboModuleRegistry.get<TurboModule & { copyText?(text: string): void }>("ArdiaShell")) };
+const writtenInJs: Record<string, Record<string, unknown>> = { ...(syncOnWindows ? { ArdiaSync: syncOnWindows } : {}), ArdiaUpdater: windowsUpdater, ArdiaWindowsUpdateCounts: windowsUpdateCounts, ArdiaSwipe: windowsSwipe, ArdiaMotion: windowsMotion, ArdiaLaunchLinks: windowsLaunchLinks, ArdiaExternalAppCounts: windowsExternalAppCounts, ArdiaRendererEfficiency: windowsRendererEfficiency, ArdiaDialogPages: windowsDialogPages, ArdiaImport: windowsImport(), ArdiaInlineCompletion: windowsInlineCompletion(() => TurboModuleRegistry.get<TurboModule & WindowsHostModule>("ArdiaWindowsHost")), ArdiaApp: windowsIntroMusic, ArdiaSelfCheck: windowsSelfChecks, ArdiaShell: windowsShellClipboard(() => TurboModuleRegistry.get<TurboModule & { copyText?(text: string): void }>("ArdiaShell")) };
 
 const inert = (module: string, key: string) => () => {
   noteMissing(`${module}.${key}`);

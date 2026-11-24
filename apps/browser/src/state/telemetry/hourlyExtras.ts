@@ -22,6 +22,7 @@ import { takePlatformCounts, watchPlatformCounts } from "./platformCounts";
 import { takeProfileDataCounts } from "./profileDataCounts";
 import { takeQuitWarningCounts } from "./quitWarningCounts";
 import { takeRendererEfficiencyCounts } from "./rendererEfficiencyCounts";
+import { takeWindowsUpdateCounts } from "./windowsUpdateCounts";
 import { takeSwipeHistoryListCounts } from "./swipeHistoryListCounts";
 import { takeStreamingSiteCounts } from "./streamingSiteCounts";
 import { takeSyncFileCounts } from "./syncFileCounts";
@@ -30,7 +31,7 @@ export { watchPlatformCounts };
 
 export const USAGE_COUNTS_EVENT = "usage_counts";
 
-export const takeHourlyExtras = () => ({ ...takePlatformCounts(), ...takeOfficialPluginCounts(), ...takeImportRuns(), ...takeArcImportCounts(), ...takeProfileDataCounts(), ...takeExportCounts(), ...takeInlineCompletionCounts(), ...takeFirstRunCounts(), ...takeMemoryTrimCounts(), ...takeDownloadsPanelCauses(), ...takeExternalAppCounts(), ...takeDialogPageCounts(), ...takeFindCounts(), ...takeSyncFileCounts(), ...takeKeyboardFollowCounts(), ...takePagerCounts(), ...takeSwipeHistoryListCounts(), ...takeEditKeyAckCounts(), ...takeQuitWarningCounts(), ...takeInputSourceKeyCounts(), ...takeDevToolsKeyCounts(), ...takeSessionWrites(), ...takePeekMotionCounts(), ...takeMouseShortcutCounts(), ...takePageFaviconCounts(), ...takeStreamingSiteCounts(), ...takeRendererEfficiencyCounts() });
+export const takeHourlyExtras = () => ({ ...takePlatformCounts(), ...takeOfficialPluginCounts(), ...takeImportRuns(), ...takeArcImportCounts(), ...takeProfileDataCounts(), ...takeExportCounts(), ...takeInlineCompletionCounts(), ...takeFirstRunCounts(), ...takeMemoryTrimCounts(), ...takeDownloadsPanelCauses(), ...takeExternalAppCounts(), ...takeDialogPageCounts(), ...takeFindCounts(), ...takeSyncFileCounts(), ...takeKeyboardFollowCounts(), ...takePagerCounts(), ...takeSwipeHistoryListCounts(), ...takeEditKeyAckCounts(), ...takeQuitWarningCounts(), ...takeInputSourceKeyCounts(), ...takeDevToolsKeyCounts(), ...takeSessionWrites(), ...takePeekMotionCounts(), ...takeMouseShortcutCounts(), ...takePageFaviconCounts(), ...takeStreamingSiteCounts(), ...takeRendererEfficiencyCounts(), ...takeWindowsUpdateCounts() });
 
 type Send = typeof send;
 

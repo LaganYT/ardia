@@ -5,7 +5,7 @@ import { getAnimatedStyle } from "react-native-reanimated";
 import { act, type ReactTestInstance } from "react-test-renderer";
 import { BrowsingScreen } from "../components/browsing/BrowsingScreen";
 import { SearchTray } from "../components/search/SearchTray";
-import { DesignProvider } from "../components/ui";
+import { DesignProvider, floatingPanelLayout } from "../components/ui";
 import { FloatingBar } from "../components/browsing/FloatingBar";
 import { useScreenLayout, type ScreenHinge } from "../state/app/screenLayout";
 import * as browse from "../state/browse/store";
@@ -484,14 +484,14 @@ for (const [name, hinge, right] of [["open Duo", "fullyOpen", 84], ["closed Duo"
   });
 }
 
-onIPhone("with no hinge the search panel runs edge to edge inside the safe area, as Arc's does", () => {
+onIPhone("with no hinge the search panel sits the floating panel's 8 points in from the safe area on each side", () => {
   const root = page();
   open();
   advance(400);
   const card = stageCardOf(root);
   expect(card.paddingHorizontal).toBeUndefined();
   const insets = safeArea.useSafeAreaInsets();
-  expect(card).toMatchObject({ paddingLeft: insets.left, paddingRight: insets.right });
+  expect(card).toMatchObject({ paddingLeft: insets.left + floatingPanelLayout.inset, paddingRight: insets.right + floatingPanelLayout.inset });
 });
 
 const anchorSpan = (root: Root, width: number) => {

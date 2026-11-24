@@ -95,6 +95,7 @@ export const SF_SYMBOL_NAMES: Record<SymbolName, SFSymbolName | null> = {
   stopFill: "stop.fill",
   platterBottomArrowDown: "platter.filled.bottom.and.arrow.down.iphone",
   handDrawFill: "hand.draw.fill",
+  paintbrushFill: "paintbrush.fill",
   sidebarLeft: "sidebar.left",
 };
 
@@ -114,4 +115,13 @@ export const sfPointSizePerSide = (name: SymbolName) => SF_WIDE_POINT_SIZE_PER_S
 export function sfName(symbol: string | null | undefined): SFSymbolName | undefined {
   if (!symbol || !(symbol in SF_SYMBOL_NAMES)) return undefined;
   return SF_SYMBOL_NAMES[symbol as SymbolName] ?? undefined;
+}
+
+export const MENU_ONLY_SF_SYMBOL_NAMES: Partial<Record<SymbolName, SFSymbolName>> = {
+  eyes: "eyes",
+  eyesClosed: "eye.slash",
+};
+
+export function menuSfName(symbol: string | null | undefined): SFSymbolName | undefined {
+  return sfName(symbol) ?? (symbol && symbol in MENU_ONLY_SF_SYMBOL_NAMES ? MENU_ONLY_SF_SYMBOL_NAMES[symbol as SymbolName] : undefined);
 }

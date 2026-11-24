@@ -14,6 +14,8 @@ $notShipped = @(".pdb", ".lib", ".exp", ".ilk", ".iobj", ".ipdb", ".winmd")
 $launcher = "Ardia.exe"
 $engineLauncher = "chrome.exe"
 $library = "ArdiaApp.dll"
+$updateVerifier = "ardia-update-verify.exe"
+$updateKey = "windows-update.pem"
 $engineNotes = "RUN.txt"
 $appIcon = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "apps\browser\windows\Ardia\Ardia.ico"
 
@@ -35,6 +37,9 @@ function Test-SameFile([string]$one, [string]$other) {
 }
 
 $appRoot = Resolve-Folder $App "The app's build output" $library
+if (-not (Test-Path -LiteralPath (Join-Path $appRoot $updateVerifier) -PathType Leaf)) { throw "The app's build output '$App' has no $updateVerifier" }
+$updateKeySource = Join-Path $PSScriptRoot $updateKey
+if (-not (Test-Path -LiteralPath (Join-Path $appRoot $updateKey) -PathType Leaf) -and -not (Test-Path -LiteralPath $updateKeySource -PathType Leaf)) { throw "No $updateKey in '$App' or '$PSScriptRoot'" }
 $engineRoot = Resolve-Folder $Engine "The engine" $engineLauncher
 if (Test-Path -LiteralPath (Join-Path $engineRoot $library)) { throw "The engine '$Engine' already holds a $library" }
 if (Test-Path -LiteralPath $Out) {
@@ -77,6 +82,15 @@ if ($LASTEXITCODE -ne 0) { throw "the launcher did not get Ardia's icon and name
 $launcherImage = Read-PeImage ([System.IO.File]::ReadAllBytes((Join-Path $outRoot $launcher)))
 if (-not $launcherImage -or @("x64", "arm64") -notcontains $launcherImage.Cpu) { throw "$launcher is not an x64 or ARM64 program" }
 Add-VcRuntime $outRoot $launcherImage.Cpu $VcRedist
+
+$updateKeyTarget = Join-Path $outRoot $updateKey
+if (-not (Test-Path -LiteralPath $updateKeyTarget -PathType Leaf)) {
+  if (-not (Test-Path -LiteralPath $updateKeySource -PathType Leaf)) { throw "assemble: missing $updateKeySource" }
+  Copy-Item -LiteralPath $updateKeySource -Destination $updateKeyTarget -Force
+}
+foreach ($required in @($updateVerifier, $updateKey)) {
+  if (-not (Test-Path -LiteralPath (Join-Path $outRoot $required) -PathType Leaf)) { throw "assemble: '$outRoot' is missing $required" }
+}
 
 if ($Build -gt 0) {
   if (-not $Version) { $Version = & (Join-Path $PSScriptRoot "project-version.ps1") }

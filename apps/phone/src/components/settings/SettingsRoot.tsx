@@ -130,7 +130,7 @@ export function SettingsRoot() {
           </>
         )}
         {material ? null : <View style={[styles.divider, { backgroundColor: theme.separator }]} />}
-        {materialYouOffered() ? <ToggleRow buttonRef={materialSwitch} title="Material You" icon="handDrawFill" tint={settingsTint.nightShade} value={material} divider onChange={changeMaterialYou} /> : null}
+        {materialYouOffered() ? <ToggleRow buttonRef={materialSwitch} title="Material You" icon="paintbrushFill" tint={settingsTint.nightShade} value={material} divider onChange={changeMaterialYou} /> : null}
         <NavRow title="Site Settings" icon="globe" tint={settingsTint.neutral} divider onPress={() => pushSettings({ page: "siteSettings" })} />
         {offersDefault ? <NavRow title="Default Browser" icon="safariFill" tint={settingsTint.defaultBrowser} divider onPress={() => pushSettings({ page: "defaultBrowser" })} /> : null}
         <PickerRow title="Open App Links In" icon="arrowUpForwardAppFill" tint={settingsTint.appLinks} options={APP_LINKS} selected={appLinks} onSelect={setAppLinks} />

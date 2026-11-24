@@ -25,6 +25,8 @@ const { filterListAddress } = await import("./state/site/contentBlocking.ts");
 const { CLEAN_UP_KEY, LEGACY_CLEAN_UP_KEY } = await import("./state/settings/cleanUpAfter.ts");
 const { updateWithin } = await import("./state/plugins/officialUpdate.ts");
 const { readManifest } = await import("./lib/pluginManifest.ts");
+const { parseIntent, INTENT_SPECS } = await import("./state/plugins/stateIntents.ts");
+const { pluginStateUrl, redactedTabs } = await import("./state/plugins/pluginEventRedaction.ts");
 const { copyLinkFromPageMenu } = await import("./state/site/pageLinkCopy.ts");
 const { cleanUrl } = await import("@ardia/core");
 
@@ -204,6 +206,64 @@ test("the owner's URL rule never opens script, data or engine-internal addresses
       if (typeof opened !== "string" || opened === "") continue;
       assert.doesNotMatch(opened, /^\s*(?:javascript|vbscript|data|chrome-extension|devtools|blob|filesystem):/i, show(url));
     }
+});
+
+test("a plugin's state event never carries a hostile address, whatever its tab holds", () => {
+  for (const r of [{ full: false, urls: true }, { full: true, urls: true }, { full: true, urls: false }]) {
+    for (const { value } of HOSTILE_VALUES) {
+      for (const url of typeof value === "string" ? [value, `https://a.test/${value}`, `${value}https://a.test/`, `https://a.test/?q=${value}#${value}`] : [value]) {
+        const shown = pluginStateUrl(url, r);
+        if (shown === null) continue;
+        assert.ok(r.urls, show(url));
+        assert.match(shown, /^https?:\/\/[^/?#\s@]+(?:[/?]|$)/i, show(url));
+        assert.doesNotMatch(shown, /[\u0000-\u001f\u007f-\u009f\u2028\u2029#]/u, show(url));
+        if (!r.full) assert.doesNotMatch(shown, /\?/, show(url));
+      }
+    }
+  }
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://a.test/" });
+  for (const s of strings) S().newTab(w, { url: s });
+  for (const t of redactedTabs(S(), { full: true, urls: true })) {
+    if (t.url !== null) assert.match(t.url, /^https?:\/\//i, show(t.url));
+    if (t.title !== null) assert.doesNotMatch(t.title, /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u, show(t.title));
+  }
+});
+
+test("a hostile value in any intent field is refused before it reaches a reducer", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://a.test/" });
+  const tab = activeTabId(S(), w);
+  const other = S().newTab(w, { url: "https://b.test/" });
+  const group = S().createGroup([other], { name: "G" });
+  assert.ok(S().groups[group], "the fixture's group exists");
+  const defaults = (spec) => {
+    const args = { tabs: [tab], tab, group, collapsed: false };
+    for (const key of Object.keys(args)) if (!Object.hasOwn(spec.fields, key)) delete args[key];
+    return args;
+  };
+  for (const [intent, spec] of Object.entries(INTENT_SPECS)) assert.ok("op" in parseIntent(intent, defaults(spec)), `${intent}'s fixture parses, so each field below is what's tested`);
+  for (const [intent, spec] of Object.entries(INTENT_SPECS)) {
+    for (const field of Object.keys(spec.fields)) {
+      for (const { value } of HOSTILE_VALUES) {
+        const args = { ...defaults(spec), [field]: value };
+        const parsed = parseIntent(intent, args);
+        if (!("op" in parsed)) {
+          assert.ok(parsed.code === "bad_request" || parsed.code === "refused", show(value));
+          continue;
+        }
+        for (const [key, out] of Object.entries(parsed.op)) {
+          if (typeof out === "string") assert.doesNotMatch(out, /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e]/u, `${intent}.${key} ${show(value)}`);
+          if (key === "tabs") for (const id of out) assert.equal(id, tab, show(value));
+        }
+        assert.ok(!("profile" in parsed.op) && !("urls" in parsed.op), show(value));
+      }
+    }
+  }
+  for (const key of PROTOTYPE_KEYS) {
+    assert.equal(parseIntent(key, { tabs: [tab] }).code, "bad_request", key);
+    assert.equal(parseIntent("tabs.pin", JSON.parse(`{"tabs":[${JSON.stringify(tab)}],${JSON.stringify(key)}:1}`)).code, "bad_request", key);
+  }
 });
 
 test("an operation named after an Object prototype key is a bad request, not a crash", () => {
@@ -534,6 +594,84 @@ test("every hostile value in a page's matched styles gives a bounded cascade ans
       assertBoundedTree(JSON.parse(JSON.stringify(answer)), id);
       for (const entry of answer) for (const declaration of [entry.winner, ...entry.overridden].filter(Boolean)) assert.equal(typeof declaration.value, "string", id);
       assertBoundedTree(declaredProperties(input), `${id} declared`);
+    }
+  }
+  assert.equal({}.ardiaPolluted, undefined);
+  assert.equal(Object.prototype.polluted, undefined);
+});
+
+const { parseVerifiedUpdate, readManifest: readWindowsManifest } = await import("../../../packages/expo-windows/src/updater/manifest.ts");
+
+test("windows update manifest and verified update parser refuse every hostile input while passing a valid control", () => {
+  const published = "https://github.com/ardia-browser/ardia/releases/download/";
+  const sha = "a".repeat(64);
+  const goodUrl = `${published}windows-alpha/Ardia-Setup-x64-60.exe`;
+  const controlManifest = JSON.stringify({ version: "0.2.48", build: 60, x64: { url: goodUrl, sha256: sha, bytes: 180_000_000 } });
+  const controlParsed = readWindowsManifest(controlManifest, published);
+  assert.equal(controlParsed?.installers.x64?.url, goodUrl, "positive control manifest passes");
+  const controlReply = parseVerifiedUpdate(JSON.stringify({ status: "ok", version: "0.2.48", build: 60, url: goodUrl, sha256: sha, bytes: 180_000_000 }), published, 59);
+  assert.equal(controlReply.status, "ok", "positive control verified reply passes");
+
+  for (const { id, value } of HOSTILE_VALUES) {
+    if (typeof value === "string") {
+      assert.equal(readWindowsManifest(value, published), null, `${id} raw manifest`);
+      assert.equal(readWindowsManifest(controlManifest, value), null, `${id} publishedUnder`);
+      const reply = parseVerifiedUpdate(value, published, 59);
+      assert.equal(reply.status, "failed", `${id} raw verified reply`);
+    }
+    const versionManifest = readWindowsManifest(
+      JSON.stringify({ version: value, build: 60, x64: { url: goodUrl, sha256: sha, bytes: 10 } }),
+      published,
+    );
+    if (versionManifest !== null) {
+      assert.match(versionManifest.version, /^[0-9][0-9A-Za-z.+-]{0,63}$/, `${id} version manifest`);
+    }
+    const forgedManifests = [
+      JSON.stringify({ version: "0.2.48", build: value, x64: { url: goodUrl, sha256: sha, bytes: 10 } }),
+      JSON.stringify({ version: "0.2.48", build: 60, x64: { url: value, sha256: sha, bytes: 10 } }),
+      JSON.stringify({ version: "0.2.48", build: 60, x64: { url: goodUrl, sha256: value, bytes: 10 } }),
+      JSON.stringify({ version: "0.2.48", build: 60, x64: { url: goodUrl, sha256: sha, bytes: value } }),
+    ];
+    for (const candidate of forgedManifests) {
+      assert.equal(readWindowsManifest(candidate, published), null, `${id} manifest ${candidate.slice(0, 80)}`);
+    }
+    const suffixManifest = readWindowsManifest(
+      JSON.stringify({ version: "0.2.48", build: 60, x64: { url: typeof value === "string" ? `${published}windows-alpha/${value}.exe` : value, sha256: sha, bytes: 10 } }),
+      published,
+    );
+    if (suffixManifest !== null) {
+      assert.match(suffixManifest.installers.x64.url, /^https:\/\/github\.com\/ardia-browser\/ardia\/releases\/download\/windows-alpha\/[0-9A-Za-z][0-9A-Za-z._+-]*\.exe$/, `${id} url suffix`);
+    }
+    const versionReply = parseVerifiedUpdate(
+      JSON.stringify({ status: "ok", version: value, build: 60, url: goodUrl, sha256: sha, bytes: 10 }),
+      published,
+      59,
+    );
+    if (versionReply.status === "ok") {
+      assert.match(versionReply.version, /^[0-9][0-9A-Za-z.+-]{0,63}$/, `${id} reply version`);
+    } else {
+      assert.equal(versionReply.status, "failed", `${id} reply version`);
+    }
+    const forgedReplies = [
+      JSON.stringify({ status: "ok", version: "0.2.48", build: value, url: goodUrl, sha256: sha, bytes: 10 }),
+      JSON.stringify({ status: "ok", version: "0.2.48", build: 60, url: value, sha256: sha, bytes: 10 }),
+      JSON.stringify({ status: "ok", version: "0.2.48", build: 60, url: goodUrl, sha256: value, bytes: 10 }),
+      JSON.stringify({ status: "ok", version: "0.2.48", build: 60, url: goodUrl, sha256: sha, bytes: value }),
+      JSON.stringify({ status: value }),
+    ];
+    for (const candidate of forgedReplies) {
+      const parsed = parseVerifiedUpdate(candidate, published, 59);
+      assert.equal(parsed.status, "failed", `${id} reply ${candidate.slice(0, 80)}`);
+    }
+    const suffixReply = parseVerifiedUpdate(
+      JSON.stringify({ status: "ok", version: "0.2.48", build: 60, url: typeof value === "string" ? `${published}windows-alpha/${value}.exe` : value, sha256: sha, bytes: 10 }),
+      published,
+      59,
+    );
+    if (suffixReply.status === "ok") {
+      assert.match(suffixReply.installer.url, /^https:\/\/github\.com\/ardia-browser\/ardia\/releases\/download\/windows-alpha\/[0-9A-Za-z][0-9A-Za-z._+-]*\.exe$/, `${id} reply url suffix`);
+    } else {
+      assert.equal(suffixReply.status, "failed", `${id} reply url suffix`);
     }
   }
   assert.equal({}.ardiaPolluted, undefined);

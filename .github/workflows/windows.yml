@@ -13,6 +13,12 @@ on:
       - "!packages/phone/**"
       - "apps/browser/package.json"
       - "packages/expo-windows/**"
+      - "packages/core-rs/Cargo.toml"
+      - "packages/core-rs/Cargo.lock"
+      - "packages/core-rs/rust-toolchain.toml"
+      - "packages/core-rs/crates/ardia-crypto/**"
+      - "packages/core-rs/crates/ardia-update-core/**"
+      - "packages/core-rs/crates/ardia-update-verify/**"
       - "scripts/windows/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/windows.yml"
@@ -29,6 +35,12 @@ on:
       - "!packages/phone/**"
       - "apps/browser/package.json"
       - "packages/expo-windows/**"
+      - "packages/core-rs/Cargo.toml"
+      - "packages/core-rs/Cargo.lock"
+      - "packages/core-rs/rust-toolchain.toml"
+      - "packages/core-rs/crates/ardia-crypto/**"
+      - "packages/core-rs/crates/ardia-update-core/**"
+      - "packages/core-rs/crates/ardia-update-verify/**"
       - "scripts/windows/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/windows.yml"
@@ -110,7 +122,7 @@ jobs:
           set -euo pipefail
           project=$(sed -n 's/.*MARKETING_VERSION = "\{0,1\}\([^";]*\)"\{0,1\};.*/\1/p' apps/browser/macos/Ardia.xcodeproj/project.pbxproj | head -1)
           version="${RELEASE_VERSION:-$project}"
-          [[ "$version" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$ ]] || { echo "::error::'$version' isn't a version the updater reads"; exit 1; }
+          [[ "$version" =~ ^[0-9][0-9A-Za-z.+-]{0,63}$ ]] || { echo "::error::'$version' isn't a version the updater reads"; exit 1; }
           build=$(git rev-list --count HEAD)
           { echo "version=$version"; echo "build=$build"; } >> "$GITHUB_OUTPUT"
           echo "Ardia $version, Windows build $build (the commits in $(git rev-parse --short HEAD)'s history)" >> "$GITHUB_STEP_SUMMARY"
@@ -216,7 +228,7 @@ jobs:
         id: native
         shell: bash
         env:
-          TREE: ${{ hashFiles('apps/browser/windows/**', 'apps/browser/NuGet.config', 'apps/browser/package.json', 'apps/browser/app.json', 'apps/browser/react-native.config.*', 'packages/*/package.json', 'packages/*/react-native.config.*', 'packages/*/windows/**', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**', 'scripts/windows/rebundle.ps1', '.github/workflows/windows.yml') }}
+          TREE: ${{ hashFiles('apps/browser/windows/**', 'apps/browser/NuGet.config', 'apps/browser/package.json', 'apps/browser/app.json', 'apps/browser/react-native.config.*', 'packages/*/package.json', 'packages/*/react-native.config.*', 'packages/*/windows/**', 'packages/core-rs/Cargo.toml', 'packages/core-rs/Cargo.lock', 'packages/core-rs/rust-toolchain.toml', 'packages/core-rs/crates/ardia-crypto/**', 'packages/core-rs/crates/ardia-update-core/**', 'packages/core-rs/crates/ardia-update-verify/**', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**', 'scripts/windows/rebundle.ps1', 'scripts/windows/update-verify.ps1', 'scripts/windows/windows-update.pem', '.github/workflows/windows.yml') }}
         run: |
           echo "key=windows-app-${{ env.SLUG }}-$TREE" >> "$GITHUB_OUTPUT"
           if grep -l '"codegenConfig"' apps/browser/package.json packages/*/package.json; then
@@ -286,6 +298,28 @@ jobs:
           "Building with $msbuild"
           & $msbuild windows\Ardia.sln /nologo /restore /p:RestorePackagesConfig=true /p:Configuration=Release /p:Platform=ARM64 /p:AppxBundle=Never /p:RunAutolinkCheck=false /p:PreferredToolArchitecture=arm64 "/clp:NoSummary;NoItemAndPropertyList;Verbosity=normal" "/bl:windows\msbuild_arm64_build.binlog" "/flp1:errorsonly;logfile=windows\msbuild_arm64_build.err" "/flp2:warningsonly;logfile=windows\msbuild_arm64_build.wrn"
           exit $LASTEXITCODE
+      - name: Build ardia-update-verify and pin the Windows update public key
+        if: steps.built.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+            if (Test-Path -LiteralPath $cargoBin) { $env:PATH = "$cargoBin;$env:PATH" }
+          }
+          Push-Location packages/core-rs
+          try {
+            & rustup toolchain install
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+          & scripts/windows/update-verify.ps1 -Cpu $env:SLUG -Out $env:APP
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath "scripts/windows/windows-update.pem" -Destination (Join-Path $env:APP "windows-update.pem") -Force
+          foreach ($required in @("ardia-update-verify.exe", "windows-update.pem")) {
+            $path = Join-Path $env:APP $required
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "expected $path after building ardia-update-verify" }
+          }
       - name: Keep the Hermes compiler beside the built app
         if: steps.built.outputs.cache-hit != 'true'
         shell: pwsh
@@ -384,6 +418,10 @@ jobs:
         if: env.SLUG == 'x64' && env.PART == 'launch'
         shell: pwsh
         run: scripts/windows/relaunch-facts.test.ps1
+      - name: Check the Windows update verifier packaging scripts
+        if: env.SLUG == 'x64' && env.PART == 'launch'
+        shell: pwsh
+        run: scripts/windows/update-verify.test.ps1
       - name: Take the app this run compiled
         if: env.COMPILED == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333

@@ -228,6 +228,10 @@ export const checks: Check[] = [
       };
       await refused("a feed from another site", update.fetchText("https://example.com/windows-update.json"));
       await refused("a feed that climbs out of the releases", update.fetchText(`${published}../../../../other/repo/releases/download/x/windows-update.json`));
+      if (typeof update.fetchVerifiedManifest === "function") {
+        await refused("a verified feed from another site", update.fetchVerifiedManifest("https://example.com/windows-update.json", 1));
+        await refused("a verified feed that climbs out of the releases", update.fetchVerifiedManifest(`${published}../../../../other/repo/releases/download/x/windows-update.json`, 1));
+      }
       await refused("an installer from another site", update.download("https://example.com/Ardia-Setup.exe", "a".repeat(64), 10));
       await refused("an installer with no SHA-256", update.download(`${published}windows-alpha/Ardia-Setup-x64.exe`, "", 10));
       await refused("an installer with no size", update.download(`${published}windows-alpha/Ardia-Setup-x64.exe`, "a".repeat(64), 0));

@@ -32,8 +32,63 @@ test("only LaunchConfig.h reads ARDIA_TEST, ARDIA_TRACE, ARDIA_CONFIG_DIR and AR
   const config = source("LaunchConfig.h");
   assert.match(config, /config\.testInstance = refusal\.empty\(\);/);
   assert.match(config, /if \(config\.testInstance\) return config;[\s\S]*config\.trace\.clear\(\);\n  config\.test\.clear\(\);/);
-  assert.match(config, /TestOnlyInstanceKeys\(\) noexcept \{\n  static const std::vector<std::string_view> keys\{"updateFeed", "importSourceDir", "importSafariHome"\};/);
+  assert.match(config, /TestOnlyInstanceKeys\(\) noexcept \{\n  static const std::vector<std::string_view> keys\{"updateFeed", "updateKey", "importSourceDir", "importSafariHome"\};/);
   assert.match(config, /std::wstring chosen = testInstance \? Paths::Environment\(L"ARDIA_CONFIG_DIR"\) : std::wstring\{\};/);
+});
+
+test("LaunchConfig.h parses updateFeed and updateKey in either order, keeps comma paths intact, and gates both to test instances", () => {
+  const config = source("LaunchConfig.h");
+  const update = source("UpdateModule.h");
+  const keysOf = (name) => {
+    const match = config.match(new RegExp(`${name}\\(\\) noexcept \\{\\n  static const std::vector<std::string_view> keys\\{([\\s\\S]*?)\\};`));
+    assert.ok(match, `${name}() not found in LaunchConfig.h`);
+    return [...match[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
+  };
+  const instanceKeys = keysOf("InstanceKeys");
+  const commaKeys = keysOf("KeysWhoseValuesHoldCommas");
+  const testOnlyKeys = keysOf("TestOnlyInstanceKeys");
+  assert.ok(instanceKeys.includes("updateFeed") && instanceKeys.includes("updateKey"));
+  assert.ok(commaKeys.includes("updateFeed") && commaKeys.includes("updateKey"));
+  assert.ok(testOnlyKeys.includes("updateFeed") && testOnlyKeys.includes("updateKey"));
+
+  const parseKeyed = (text, testInstance) => {
+    const pieces = [];
+    let previousKey = "";
+    for (const piece of text.split(",")) {
+      const eq = piece.indexOf("=");
+      const head = (eq < 0 ? piece : piece.slice(0, eq)).trim();
+      if (pieces.length > 0 && !instanceKeys.includes(head) && commaKeys.includes(previousKey)) {
+        pieces[pieces.length - 1] += `,${piece}`;
+        continue;
+      }
+      pieces.push(piece);
+      previousKey = head;
+    }
+    const entries = {};
+    for (const piece of pieces) {
+      const eq = piece.indexOf("=");
+      const key = (eq < 0 ? piece : piece.slice(0, eq)).trim();
+      if (!key || !instanceKeys.includes(key)) continue;
+      entries[key] = eq < 0 ? "1" : piece.slice(eq + 1).trim();
+    }
+    if (!testInstance) for (const key of testOnlyKeys) delete entries[key];
+    return entries;
+  };
+
+  assert.deepEqual(
+    parseKeyed("updateFeed=http://127.0.0.1:18770/feed/windows-update.json,updateKey=C:\\tmp\\pub.pem", true),
+    { updateFeed: "http://127.0.0.1:18770/feed/windows-update.json", updateKey: "C:\\tmp\\pub.pem" },
+  );
+  assert.deepEqual(
+    parseKeyed("updateKey=C:\\tmp\\a,b\\pub.pem,updateFeed=http://127.0.0.1:18770/feed/windows-update.json", true),
+    { updateKey: "C:\\tmp\\a,b\\pub.pem", updateFeed: "http://127.0.0.1:18770/feed/windows-update.json" },
+  );
+  assert.deepEqual(
+    parseKeyed("updateFeed=http://127.0.0.1:18770/feed/windows-update.json,updateKey=C:\\tmp\\pub.pem,allowAudio=1", false),
+    { allowAudio: "1" },
+  );
+  assert.match(update, /FeedOverride\(\) noexcept \{\n  if \(!AppLaunch::Shared\(\)\.testInstance\) return \{\};/);
+  assert.match(update, /KeyOverride\(\) noexcept \{\n  if \(!AppLaunch::Shared\(\)\.testInstance\) return \{\};/);
 });
 
 test("a test instance needs an absolute scratch folder clear of the real profile and a test build", () => {

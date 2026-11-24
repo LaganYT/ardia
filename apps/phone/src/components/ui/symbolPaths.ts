@@ -295,6 +295,10 @@ export const SYMBOLS = {
     },
     { d: line(4.39, 17.1, 7.62, 14.58), stroke: 2.5, rotate: -15, scale: 0.62, shift: 4.5 },
   ],
+  paintbrushFill: [
+    { d: "M14.2 3.4a2 2 0 0 1 2.83 0l3.57 3.57a2 2 0 0 1 0 2.83l-5.3 5.3-6.4-6.4z", fill: true },
+    { d: "M7.6 9.4l7 7-1.3 1.3a1.6 1.6 0 0 1-2.26 0l-.7-.7-2.1 2.1c-1.6 1.6-4.4 1.4-5.5.9.9-.6 1.5-1.6 1.2-2.6l2.3-2.3-.7-.7a1.6 1.6 0 0 1 0-2.26z", fill: true },
+  ],
   sidebarLeft: [{ d: roundRect(2.5, 5.5, 19, 13, 2) + line(9, 5.5, 9, 18.5) + line(5, 9, 7, 9) + line(5, 11.5, 7, 11.5) + line(5, 14, 7, 14), stroke: 1.6 }],
 } satisfies Record<string, SymbolLayer[]>;
 

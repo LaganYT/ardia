@@ -3,9 +3,12 @@
 #include <winhttp.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -28,8 +31,12 @@ namespace AppUpdate {
 
 inline constexpr std::wstring_view kPublishedUnder = L"https://github.com/ardia-browser/ardia/releases/download/";
 inline constexpr uint64_t kLargestManifestBytes = 64 * 1024;
+inline constexpr uint64_t kSignatureBytes = 64;
 inline constexpr uint64_t kLargestInstallerBytes = 1ull << 30;
+inline constexpr uint64_t kLargestBuildNumber = (1ull << 53) - 1;
 inline constexpr size_t kLargestBuildFileBytes = 4096;
+inline constexpr size_t kLargestVerifierOutputBytes = 8192;
+inline constexpr ULONGLONG kVerifierTimeoutMs = 15000;
 
 inline std::string Cpu() noexcept {
 #if defined(_M_ARM64)
@@ -71,10 +78,21 @@ inline std::string BuildFile() noexcept {
 }
 
 inline std::wstring FeedOverride() noexcept {
-  if (!Paths::HasCustomDataDirectory()) return {};
+  if (!AppLaunch::Shared().testInstance) return {};
   try {
     auto const &settings = AppLaunch::Shared().instance;
     auto found = settings.find("updateFeed");
+    return found == settings.end() ? std::wstring{} : Paths::Wide(found->second);
+  } catch (...) {
+    return {};
+  }
+}
+
+inline std::wstring KeyOverride() noexcept {
+  if (!AppLaunch::Shared().testInstance) return {};
+  try {
+    auto const &settings = AppLaunch::Shared().instance;
+    auto found = settings.find("updateKey");
     return found == settings.end() ? std::wstring{} : Paths::Wide(found->second);
   } catch (...) {
     return {};
@@ -85,6 +103,12 @@ inline bool StartsWith(std::wstring_view text, std::wstring_view prefix) noexcep
   return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
 }
 
+inline std::wstring FolderOf(std::wstring_view address) {
+  size_t folderEnd = address.find_last_of(L'/');
+  if (folderEnd == std::wstring_view::npos || folderEnd < 8) return {};
+  return std::wstring(address.substr(0, folderEnd + 1));
+}
+
 inline bool Allowed(std::wstring_view url) noexcept {
   if (url.find(L"..") != std::wstring_view::npos || url.find_first_of(L"%\\?#@ ") != std::wstring_view::npos) return false;
   if (StartsWith(url, kPublishedUnder)) return true;
@@ -92,6 +116,15 @@ inline bool Allowed(std::wstring_view url) noexcept {
   size_t folderEnd = feed.find_last_of(L'/');
   if (folderEnd == std::wstring::npos || folderEnd < 8) return false;
   return StartsWith(url, std::wstring_view(feed).substr(0, folderEnd + 1));
+}
+
+inline std::wstring PublishedPrefix(std::wstring_view url) {
+  std::wstring feed = FeedOverride();
+  if (!feed.empty()) {
+    std::wstring folder = FolderOf(feed);
+    if (!folder.empty() && StartsWith(url, folder)) return folder;
+  }
+  return std::wstring(kPublishedUnder);
 }
 
 struct Connection {
@@ -115,7 +148,14 @@ inline std::string Failed(const char *step) noexcept {
 
 using Received = std::function<bool(const BYTE *, DWORD)>;
 
-inline std::string Fetch(std::wstring const &address, uint64_t largest, Received const &received) noexcept {
+struct FetchOutcome {
+  std::string failure;
+  DWORD status = 0;
+  bool tooLarge = false;
+};
+
+inline FetchOutcome FetchWithStatus(std::wstring const &address, uint64_t largest, Received const &received) noexcept {
+  FetchOutcome outcome;
   try {
     URL_COMPONENTS parts{};
     parts.dwStructSize = sizeof(parts);
@@ -123,7 +163,10 @@ inline std::string Fetch(std::wstring const &address, uint64_t largest, Received
     parts.dwHostNameLength = static_cast<DWORD>(-1);
     parts.dwUrlPathLength = static_cast<DWORD>(-1);
     parts.dwExtraInfoLength = static_cast<DWORD>(-1);
-    if (!WinHttpCrackUrl(address.c_str(), static_cast<DWORD>(address.size()), 0, &parts)) return "the address could not be read";
+    if (!WinHttpCrackUrl(address.c_str(), static_cast<DWORD>(address.size()), 0, &parts)) {
+      outcome.failure = "the address could not be read";
+      return outcome;
+    }
     std::wstring host{parts.lpszHostName, parts.dwHostNameLength};
     std::wstring path{parts.lpszUrlPath, parts.dwUrlPathLength};
     if (parts.lpszExtraInfo) path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
@@ -132,35 +175,71 @@ inline std::string Fetch(std::wstring const &address, uint64_t largest, Received
 
     Connection session{WinHttpOpen(L"Ardia", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
     if (!session) session.handle = WinHttpOpen(L"Ardia", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) return Failed("WinHttpOpen");
+    if (!session) {
+      outcome.failure = Failed("WinHttpOpen");
+      return outcome;
+    }
     WinHttpSetTimeouts(session.handle, 30000, 30000, 30000, 60000);
     Connection server{WinHttpConnect(session.handle, host.c_str(), parts.nPort, 0)};
-    if (!server) return Failed("WinHttpConnect");
+    if (!server) {
+      outcome.failure = Failed("WinHttpConnect");
+      return outcome;
+    }
     Connection request{
         WinHttpOpenRequest(server.handle, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_REFRESH | (secure ? WINHTTP_FLAG_SECURE : 0))};
-    if (!request) return Failed("WinHttpOpenRequest");
+    if (!request) {
+      outcome.failure = Failed("WinHttpOpenRequest");
+      return outcome;
+    }
     DWORD disabled = WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION;
     WinHttpSetOption(request.handle, WINHTTP_OPTION_DISABLE_FEATURE, &disabled, sizeof(disabled));
-    if (!WinHttpSendRequest(request.handle, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) return Failed("WinHttpSendRequest");
-    if (!WinHttpReceiveResponse(request.handle, nullptr)) return Failed("WinHttpReceiveResponse");
+    if (!WinHttpSendRequest(request.handle, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
+      outcome.failure = Failed("WinHttpSendRequest");
+      return outcome;
+    }
+    if (!WinHttpReceiveResponse(request.handle, nullptr)) {
+      outcome.failure = Failed("WinHttpReceiveResponse");
+      return outcome;
+    }
     DWORD status = 0;
     DWORD statusSize = sizeof(status);
-    if (!WinHttpQueryHeaders(request.handle, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize, WINHTTP_NO_HEADER_INDEX))
-      return "the server gave no status";
-    if (status != 200) return "the server answered " + std::to_string(status);
+    if (!WinHttpQueryHeaders(request.handle, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize, WINHTTP_NO_HEADER_INDEX)) {
+      outcome.failure = "the server gave no status";
+      return outcome;
+    }
+    outcome.status = status;
+    if (status != 200) {
+      outcome.failure = "the server answered " + std::to_string(status);
+      return outcome;
+    }
     std::vector<BYTE> buffer(64 * 1024);
     uint64_t total = 0;
     for (;;) {
       DWORD read = 0;
-      if (!WinHttpReadData(request.handle, buffer.data(), static_cast<DWORD>(buffer.size()), &read)) return Failed("WinHttpReadData");
-      if (read == 0) return {};
+      if (!WinHttpReadData(request.handle, buffer.data(), static_cast<DWORD>(buffer.size()), &read)) {
+        outcome.failure = Failed("WinHttpReadData");
+        return outcome;
+      }
+      if (read == 0) return outcome;
       total += read;
-      if (total > largest) return "the download is larger than it should be";
-      if (!received(buffer.data(), read)) return "the download could not be kept";
+      if (total > largest) {
+        outcome.tooLarge = true;
+        outcome.failure = "the download is larger than it should be";
+        return outcome;
+      }
+      if (!received(buffer.data(), read)) {
+        outcome.failure = "the download could not be kept";
+        return outcome;
+      }
     }
   } catch (...) {
-    return "the download failed";
+    outcome.failure = "the download failed";
+    return outcome;
   }
+}
+
+inline std::string Fetch(std::wstring const &address, uint64_t largest, Received const &received) noexcept {
+  return FetchWithStatus(address, largest, received).failure;
 }
 
 class Sha256 {
@@ -242,6 +321,11 @@ inline bool IsLink(std::filesystem::path const &path) noexcept {
   return attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 }
 
+inline bool IsRegularLocalFile(std::filesystem::path const &path) noexcept {
+  DWORD attributes = GetFileAttributesW(path.c_str());
+  return attributes != INVALID_FILE_ATTRIBUTES && !(attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT));
+}
+
 inline std::wstring WhereItReallyIs(HANDLE file) noexcept {
   try {
     std::wstring path(1024, L'\0');
@@ -266,6 +350,254 @@ inline bool AlreadyHere(std::filesystem::path const &path, std::string const &sh
   return same;
 }
 
+inline std::string JsonEscape(std::string_view text) {
+  std::string out;
+  out.reserve(text.size() + 8);
+  for (unsigned char ch : text) {
+    if (ch == '"') out += "\\\"";
+    else if (ch == '\\') out += "\\\\";
+    else if (ch == '\n') out += "\\n";
+    else if (ch == '\r') out += "\\r";
+    else if (ch == '\t') out += "\\t";
+    else if (ch < 0x20) continue;
+    else out.push_back(static_cast<char>(ch));
+  }
+  return out;
+}
+
+inline std::string JsonFailed(std::string_view reason, std::string_view message) {
+  return "{\"status\":\"failed\",\"reason\":\"" + JsonEscape(reason) + "\",\"message\":\"" + JsonEscape(message) + "\"}";
+}
+
+inline std::wstring QuoteArg(std::wstring_view arg) {
+  std::wstring out;
+  out.push_back(L'"');
+  size_t backslashes = 0;
+  for (wchar_t ch : arg) {
+    if (ch == L'\\') {
+      backslashes += 1;
+    } else if (ch == L'"') {
+      out.append(backslashes * 2 + 1, L'\\');
+      out.push_back(L'"');
+      backslashes = 0;
+    } else {
+      out.append(backslashes, L'\\');
+      backslashes = 0;
+      out.push_back(ch);
+    }
+  }
+  out.append(backslashes * 2, L'\\');
+  out.push_back(L'"');
+  return out;
+}
+
+inline bool WriteExactFile(std::filesystem::path const &path, std::string const &bytes) noexcept {
+  HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) return false;
+  DWORD total = 0;
+  bool ok = true;
+  while (total < bytes.size()) {
+    DWORD written = 0;
+    DWORD chunk = static_cast<DWORD>(std::min<size_t>(bytes.size() - total, 64 * 1024));
+    if (!WriteFile(file, bytes.data() + total, chunk, &written, nullptr) || written != chunk) {
+      ok = false;
+      break;
+    }
+    total += written;
+  }
+  if (ok) ok = FlushFileBuffers(file) != FALSE;
+  CloseHandle(file);
+  return ok;
+}
+
+inline std::string LastLine(std::string_view output) {
+  while (!output.empty() && (output.back() == '\n' || output.back() == '\r')) output.remove_suffix(1);
+  size_t newline = output.find_last_of('\n');
+  std::string_view tail = newline == std::string_view::npos ? output : output.substr(newline + 1);
+  if (!tail.empty() && tail.back() == '\r') tail.remove_suffix(1);
+  return std::string(tail);
+}
+
+inline bool ParseUnsigned(std::string_view text, uint64_t &out) noexcept {
+  if (text.empty() || text[0] < '1' || text[0] > '9') return false;
+  uint64_t value = 0;
+  for (char ch : text) {
+    if (ch < '0' || ch > '9') return false;
+    uint64_t digit = static_cast<uint64_t>(ch - '0');
+    if (value > (UINT64_MAX - digit) / 10) return false;
+    value = value * 10 + digit;
+  }
+  out = value;
+  return true;
+}
+
+inline std::string RunVerifier(
+    std::filesystem::path const &verifier,
+    std::filesystem::path const &keyPath,
+    std::filesystem::path const &manifestPath,
+    std::filesystem::path const &signaturePath,
+    std::wstring const &publishedUnder,
+    uint64_t currentBuild) noexcept {
+  try {
+    SECURITY_ATTRIBUTES inherit{};
+    inherit.nLength = sizeof(inherit);
+    inherit.bInheritHandle = TRUE;
+    HANDLE readPipe = nullptr;
+    HANDLE writePipe = nullptr;
+    if (!CreatePipe(&readPipe, &writePipe, &inherit, 0)) return JsonFailed("verifier", "the update verifier could not start");
+    SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+    HANDLE nul = CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+    std::wstring command = QuoteArg(verifier.wstring()) + L" windows-manifest --key " + QuoteArg(keyPath.wstring()) + L" --manifest " + QuoteArg(manifestPath.wstring()) + L" --signature " + QuoteArg(signaturePath.wstring()) + L" --published-under " + QuoteArg(publishedUnder) + L" --cpu " + QuoteArg(Paths::Wide(Cpu())) + L" --current-build " + std::to_wstring(currentBuild);
+
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdInput = nul != INVALID_HANDLE_VALUE ? nul : nullptr;
+    startup.hStdOutput = writePipe;
+    startup.hStdError = nul != INVALID_HANDLE_VALUE ? nul : nullptr;
+    PROCESS_INFORMATION process{};
+    BOOL started = CreateProcessW(verifier.c_str(), command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+    CloseHandle(writePipe);
+    if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
+    if (!started) {
+      CloseHandle(readPipe);
+      return JsonFailed("verifier", "the update verifier could not start");
+    }
+
+    std::string output;
+    bool timedOut = false;
+    ULONGLONG deadline = GetTickCount64() + kVerifierTimeoutMs;
+    auto drain = [&]() {
+      DWORD available = 0;
+      while (PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available, nullptr) && available > 0) {
+        char buffer[1024];
+        DWORD wanted = static_cast<DWORD>(std::min<DWORD>(available, sizeof(buffer)));
+        DWORD read = 0;
+        if (!ReadFile(readPipe, buffer, wanted, &read, nullptr) || read == 0) break;
+        if (output.size() < kLargestVerifierOutputBytes) {
+          size_t keep = std::min<size_t>(read, kLargestVerifierOutputBytes - output.size());
+          output.append(buffer, keep);
+        }
+      }
+    };
+    for (;;) {
+      drain();
+      DWORD wait = WaitForSingleObject(process.hProcess, 50);
+      if (wait == WAIT_OBJECT_0) {
+        drain();
+        break;
+      }
+      if (GetTickCount64() >= deadline) {
+        timedOut = true;
+        TerminateProcess(process.hProcess, 1);
+        WaitForSingleObject(process.hProcess, 2000);
+        break;
+      }
+    }
+    DWORD exitCode = 1;
+    GetExitCodeProcess(process.hProcess, &exitCode);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    CloseHandle(readPipe);
+
+    if (timedOut) return JsonFailed("verifier", "the update verifier timed out");
+    std::string line = LastLine(output);
+    if (exitCode == 0 && line.rfind("ok ", 0) == 0) {
+      std::istringstream tokens(line.substr(3));
+      std::string version, buildStr, url, sha256, bytesStr, extra;
+      uint64_t build = 0;
+      uint64_t bytes = 0;
+      if ((tokens >> version >> buildStr >> url >> sha256 >> bytesStr) && !(tokens >> extra) && ParseUnsigned(buildStr, build) && build > currentBuild && build <= kLargestBuildNumber && ParseUnsigned(bytesStr, bytes) && bytes >= 1 && bytes <= kLargestInstallerBytes && IsSha256(sha256) && Allowed(Paths::Wide(url))) {
+        return "{\"status\":\"ok\",\"version\":\"" + JsonEscape(version) + "\",\"build\":" + std::to_string(build) + ",\"url\":\"" + JsonEscape(url) + "\",\"sha256\":\"" + sha256 + "\",\"bytes\":" + std::to_string(bytes) + "}";
+      }
+      return JsonFailed("verifier", "the update verifier returned an unreadable answer");
+    }
+    if (line.rfind("failed ", 0) == 0) {
+      std::string reason = line.substr(7);
+      if (reason == "notNewer" || reason == "kind") return "{\"status\":\"upToDate\"}";
+      if (reason == "signature") return JsonFailed("signature", "the update signature could not be verified");
+      if (reason == "manifest") return JsonFailed("manifest", "the update feed could not be read");
+      if (reason == "missing") return JsonFailed("missing", "the update verifier could not read the files");
+      return JsonFailed("verifier", "the update verifier refused the feed");
+    }
+    return JsonFailed("verifier", "the update verifier failed");
+  } catch (...) {
+    return JsonFailed("verifier", "the update verifier failed");
+  }
+}
+
+inline std::string VerifyUpdate(std::wstring const &feedUrl, uint64_t currentBuild) noexcept {
+  try {
+    std::wstring sigUrl = feedUrl + L".sig";
+    if (!Allowed(feedUrl) || !Allowed(sigUrl)) return JsonFailed("manifest", "Updates do not come from that address");
+    std::filesystem::path folder = AppFolder();
+    std::filesystem::path verifier = folder / L"ardia-update-verify.exe";
+    std::wstring keyOverride = KeyOverride();
+    std::filesystem::path keyPath = keyOverride.empty() ? (folder / L"windows-update.pem") : std::filesystem::path(keyOverride);
+    if (!IsRegularLocalFile(verifier) || !IsRegularLocalFile(keyPath)) return JsonFailed("missing", "the update verifier or key is missing");
+
+    std::string manifestBytes;
+    FetchOutcome manifestFetch = FetchWithStatus(feedUrl, kLargestManifestBytes, [&manifestBytes](const BYTE *data, DWORD count) {
+      manifestBytes.append(reinterpret_cast<const char *>(data), count);
+      return true;
+    });
+    if (!manifestFetch.failure.empty()) {
+      if (manifestFetch.status == 404) return "{\"status\":\"notPublished\"}";
+      if (manifestFetch.tooLarge) return JsonFailed("tooLarge", "the update feed is too large");
+      return JsonFailed("network", manifestFetch.failure);
+    }
+
+    std::string signatureBytes;
+    FetchOutcome sigFetch = FetchWithStatus(sigUrl, kSignatureBytes, [&signatureBytes](const BYTE *data, DWORD count) {
+      signatureBytes.append(reinterpret_cast<const char *>(data), count);
+      return true;
+    });
+    if (!sigFetch.failure.empty()) {
+      if (sigFetch.status == 404 || sigFetch.tooLarge) return JsonFailed("signature", "the update signature is missing or invalid");
+      return JsonFailed("network", sigFetch.failure);
+    }
+    if (signatureBytes.size() != kSignatureBytes) return JsonFailed("signature", "the update signature is invalid");
+
+    std::filesystem::path updatesDir = UpdatesFolder();
+    std::error_code ignored;
+    std::filesystem::create_directories(updatesDir, ignored);
+    if (IsLink(updatesDir)) return JsonFailed("missing", "the updates folder is a link");
+
+    static std::atomic<uint64_t> nextScratch{1};
+    std::filesystem::path scratch;
+    bool created = false;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+      std::filesystem::path candidate = updatesDir / (L"verify-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(nextScratch.fetch_add(1)));
+      if (CreateDirectoryW(candidate.c_str(), nullptr)) {
+        scratch = std::move(candidate);
+        created = true;
+        break;
+      }
+      if (GetLastError() != ERROR_ALREADY_EXISTS) break;
+    }
+    if (!created) return JsonFailed("missing", "the update check could not stage its files");
+    struct ScratchGuard {
+      std::filesystem::path dir;
+      ~ScratchGuard() noexcept {
+        if (dir.empty()) return;
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+      }
+    } guard{scratch};
+    if (IsLink(scratch)) {
+      guard.dir.clear();
+      return JsonFailed("missing", "the update check could not stage its files");
+    }
+    std::filesystem::path manifestFile = scratch / L"windows-update.json";
+    std::filesystem::path sigFile = scratch / L"windows-update.json.sig";
+    if (!WriteExactFile(manifestFile, manifestBytes) || !WriteExactFile(sigFile, signatureBytes)) return JsonFailed("missing", "the update check could not save its files");
+    return RunVerifier(verifier, keyPath, manifestFile, sigFile, PublishedPrefix(feedUrl), currentBuild);
+  } catch (...) {
+    return JsonFailed("other", "the update check failed");
+  }
+}
+
 struct Downloaded {
   std::string path;
   std::string failure;
@@ -287,6 +619,7 @@ inline Downloaded Download(std::wstring const &address, std::string const &sha25
       return result;
     }
     for (auto const &entry : std::filesystem::directory_iterator(folder, ignored)) {
+      if (entry.is_directory()) continue;
       std::error_code unremoved;
       std::filesystem::remove(entry.path(), unremoved);
     }
@@ -390,6 +723,19 @@ struct UpdateModule {
       if (failure.empty() && !Files::IsValidUtf8(text)) failure = "the answer is not text";
       if (!failure.empty()) return promise.Reject(failure.c_str());
       promise.Resolve(text);
+    });
+  }
+
+  REACT_METHOD(fetchVerifiedManifest)
+  void fetchVerifiedManifest(std::string url, double currentBuild, winrt::Microsoft::ReactNative::ReactPromise<std::string> promise) noexcept {
+    std::wstring address = Paths::Wide(url);
+    if (!AppUpdate::Allowed(address)) return promise.Reject("Updates do not come from that address");
+    if (!std::isfinite(currentBuild) || currentBuild < 0 || currentBuild > static_cast<double>(AppUpdate::kLargestBuildNumber) || std::floor(currentBuild) != currentBuild) {
+      return promise.Reject("The build number is not valid");
+    }
+    uint64_t build = static_cast<uint64_t>(currentBuild);
+    OnAThread(promise, [address, build, promise]() noexcept {
+      promise.Resolve(AppUpdate::VerifyUpdate(address, build));
     });
   }
 

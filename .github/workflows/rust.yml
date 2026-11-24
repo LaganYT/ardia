@@ -33,6 +33,11 @@ on:
       - "apps/browser/src/lib/versions.ts"
       - "packages/import/ios/Core/**"
       - "packages/expo-windows/src/import/**"
+      - "packages/expo-windows/src/updater/**"
+      - "scripts/windows/windows-update.pem"
+      - "scripts/windows/sign-update.mjs"
+      - "scripts/windows/sign-update.test.mjs"
+      - "scripts/windows/publish-alpha.sh"
       - "scripts/security/hostile-inputs.mjs"
       - ".github/workflows/rust.yml"
   push:
@@ -173,6 +178,11 @@ jobs:
         env:
           ARDIA_REQUIRE_LINUX_CROSSCHECK: "1"
         run: python3 -I tests/linux-update/test_linux_update.py -v
+      - name: Windows updater verifier, signing script and TypeScript against the shared update vectors and hostile inputs
+        if: runner.os == 'Linux'
+        env:
+          ARDIA_REQUIRE_WINDOWS_CROSSCHECK: "1"
+        run: python3 -I tests/windows-update/test_windows_update.py -v && node --test ../../scripts/windows/sign-update.test.mjs tests/windows-update/publish-alpha.test.mjs
       - name: Rust through the C ABI, the Linux C++ and the TypeScript Netscape HTML parsers against the shared vectors and hostile inputs
         if: runner.os == 'Linux'
         env:

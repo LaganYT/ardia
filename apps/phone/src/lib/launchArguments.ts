@@ -25,6 +25,7 @@ export type LaunchArguments = {
   opensSettings: boolean;
   settingsPage: string | null;
   restingStart: boolean;
+  collapseBar: boolean;
   color: string | null;
   interfaceStyle: string | null;
   colorScheme: string | null;
@@ -106,6 +107,7 @@ export function parseLaunchArguments(values: Record<string, LaunchValue>): Launc
     opensSettings: flag(values, "ArdiaOpenSettings"),
     settingsPage: text(values, "ArdiaSettingsPage"),
     restingStart: flag(values, "ArdiaRestingStart"),
+    collapseBar: flag(values, "ArdiaCollapseBar"),
     color: text(values, "ArdiaColor"),
     interfaceStyle: text(values, "ArdiaInterfaceStyle"),
     colorScheme: text(values, "ArdiaColorScheme"),

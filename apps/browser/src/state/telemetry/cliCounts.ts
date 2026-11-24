@@ -50,6 +50,11 @@ const NONE = {
   cli_devtools_style_lookups: 0,
   cli_devtools_logpoints_set: 0,
   cli_devtools_logpoints_refused: 0,
+  cli_files_upload_arms: 0,
+  cli_files_download_arms: 0,
+  cli_files_uploads_answered: 0,
+  cli_files_downloads_placed: 0,
+  cli_files_arm_failures: 0,
   ...(Object.fromEntries(SOCKET_FAMILIES.map((family) => [`cli_socket_calls_${family}`, 0])) as Record<`cli_socket_calls_${SocketFamily}`, number>),
   ...(Object.fromEntries(TOKEN_COMMAND_DOMAINS.map((domain) => [`cli_cdp_commands_${domain}`, 0])) as Record<`cli_cdp_commands_${TokenCommandDomain}`, number>),
 };
@@ -85,6 +90,11 @@ export type DevToolsCount = "traces" | "trace_failures" | "trace_analysis_ms" | 
 export function noteDevTools(kind: DevToolsCount, amount = 1, consent?: ConsentToken | null) {
   const add = Math.max(0, Math.round(amount));
   if (add) countFor(consentOrNow(consent), () => void (counts[`cli_devtools_${kind}`] += add));
+}
+export type FileArmCount = "upload_arms" | "download_arms" | "uploads_answered" | "downloads_placed" | "arm_failures";
+export function noteFileArm(kind: FileArmCount, amount = 1, consent?: ConsentToken | null) {
+  const add = Math.max(0, Math.round(amount));
+  if (add) countFor(consentOrNow(consent), () => void (counts[`cli_files_${kind}`] += add));
 }
 export const noteCliAutoEnabled = () => void counts.cli_auto_enables++;
 

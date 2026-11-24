@@ -84,6 +84,7 @@ export type WindowsUpdateConstants = { cpu?: unknown; installed?: unknown; build
 export type WindowsUpdateModule = {
   getConstants(): WindowsUpdateConstants;
   fetchText(url: string): Promise<string>;
+  fetchVerifiedManifest?(url: string, currentBuild: number): Promise<string>;
   download(url: string, sha256: string, bytes: number): Promise<string>;
   install(path: string, sha256: string): Promise<boolean>;
 };

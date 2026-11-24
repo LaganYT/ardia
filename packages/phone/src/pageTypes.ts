@@ -36,7 +36,7 @@ export type PageState = PageNavigationState & {
   document?: number;
 };
 
-export type PageTone = { top: string | null; bottom: string | null };
+export type PageTone = { top: string | null; bottom: string | null; barDark?: boolean };
 
 export type PageToneInsets = { top: number; bottom: number };
 
@@ -215,7 +215,7 @@ export type PageEngineEvent =
 export type PageEventPayload =
   | ({ name: "state" } & Partial<Omit<PageState, "url" | "title" | "progress" | "isLoading" | "canGoBack" | "canGoForward">> &
       Omit<PageNavigationState, "url"> & { url?: string })
-  | { name: "tone"; top?: string; bottom?: string }
+  | { name: "tone"; top?: string; bottom?: string; barDark?: boolean }
   | { name: "drawn"; document?: number }
   | { name: "coverHidden"; reason: "drawn" | "cap"; found: boolean; cover?: string }
   | { name: "swipedPastHistory"; direction: PageSwipeDirection }

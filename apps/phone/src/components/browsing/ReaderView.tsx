@@ -101,7 +101,7 @@ export function ReaderView({ tabId, closing = false }: { tabId: string; closing?
       ) : (
       <View style={styles.top}>
         {load.kind === "loaded" ? (
-          <MenuTrigger items={items} trigger="tap" fixedOrder frost={null} dark={shown === "dark"} place={{ top: insets.top + readerLayout.chromeBand, left: readerLayout.chromeSide }}>
+          <MenuTrigger items={items} trigger="tap" fixedOrder frost={null} dark={shown === "dark"} previewRadius={readerLayout.chromeButton / 2} place={{ top: insets.top + readerLayout.chromeBand, left: readerLayout.chromeSide }}>
             {({ onPress }) => (
               <Pressable accessibilityRole="button" accessibilityLabel="Text Appearance" onPress={onPress} style={appearancePress}>
                 <ChromeSurface shape="circle" cornerRadius={readerLayout.chromeButton / 2} dark={shown === "dark"} style={styles.circle}>

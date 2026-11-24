@@ -176,7 +176,7 @@ function TrayLayer({ session, closing, onClosed }: LayerProps) {
   const panelRadius = searchPanelRadius(fieldHeight);
   const resting = Math.max(keyboard.target, safeBottom);
   const placement = searchPanelPlacement(arcPanel, command !== null);
-  const place = searchPanelPlace(placement, resting, false);
+  const place = searchPanelPlace(placement, resting);
   const corners = place.corners;
   const [rowsHeight, setRowsHeight] = useState(ROWS_FALLBACK * browseLayout.suggestionPitch * window.fontScale);
   const measuredRows = useCallback((height: number) => setRowsHeight((was) => (Math.abs(was - height) < 1 ? was : height)), []);
@@ -496,7 +496,6 @@ function StagedTray() {
   const reduceMotion = useReduceMotion();
   const solid = useSolidChrome();
   const phoneLayout = useScreenLayout((s) => s.layout.name === "phone");
-  const hinged = useScreenLayout((s) => s.hinge !== "none");
   const landsDirectly = useScreenLayout((s) => isOpenDuo(window.width, s.hinge));
   const pills = useStageBar((state) => state.pills);
   const stage = useRef<SearchStageHandle>(null);
@@ -522,7 +521,7 @@ function StagedTray() {
   const arcPanel = mounted !== null && searchPanelShown(phoneLayout, command !== null);
   const panelRadius = searchPanelRadius(fieldHeight);
   const placement = searchPanelPlacement(arcPanel, command !== null);
-  const place = searchPanelPlace(placement, resting, hinged);
+  const place = searchPanelPlace(placement, resting);
   const corners = place.corners;
   const trayHeight = searchTrayHeight({ commandBarMaxHeight: command?.maxHeight ?? null, placement, place, fieldHeight, fontScale: window.fontScale, rowsHeight, windowHeight: window.height, safeTop: insets.top, resting });
   const underKeyboard = place.underKeyboard;

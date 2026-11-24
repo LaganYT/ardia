@@ -198,6 +198,9 @@ const PARAMS = (f) => ({
   "menus.runBar": { path: [1, 0], ref: "cmd:newTab@File\u001fNew Tab", window: f.w2 },
   "devtools.logpoint": { tab: f.one, url: "https://shop.example/app.js", line: 1, expression: "1" },
   "devtools.clearLogpoint": {},
+  "files.armUpload": { tab: f.one, paths: ["/tmp/ardia-sweep-upload.txt"] },
+  "files.armDownload": { tab: f.one, path: "/tmp/ardia-sweep-download.bin" },
+  "files.disarm": {},
 });
 
 const stores = () => [S(), useLive.getState(), useAirTraffic.getState()];

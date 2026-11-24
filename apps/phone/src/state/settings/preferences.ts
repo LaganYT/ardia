@@ -117,7 +117,7 @@ const PARSERS: { [K in keyof Preferences]: (raw: string) => Preferences[K] | und
 
 export const acceptsPreference = (name: keyof Preferences, raw: string) => PARSERS[name](raw) !== undefined;
 
-export const defaultPreferences = (platform?: string): Preferences => ({ ...DEFAULT_PREFERENCES, collapsesBottomBar: platform === "android" });
+export const defaultPreferences = (platform?: string): Preferences => ({ ...DEFAULT_PREFERENCES, collapsesBottomBar: platform === "android" || platform === "ios" });
 
 export function parsePreferences(stored: Record<string, string>, platform?: string): Preferences {
   const out = { ...defaultPreferences(platform) } as Record<keyof Preferences, unknown>;

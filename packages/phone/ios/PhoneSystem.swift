@@ -150,6 +150,23 @@ public final class SystemModule: Module {
       DispatchQueue.main.async { MainActor.assumeIsolated { PhoneSyncHost.shared.widgetColorChoice = choice } }
     }
 
+    Function("usageConsent") { () -> [String: Any] in
+      let state = UsageConsent.state()
+      return ["sharing": state.sharing, "generation": Double(state.generation)]
+    }
+
+    Function("setUsageConsent") { (sharing: Bool) in
+      UsageConsent.set(sharing: sharing)
+    }
+
+    Function("takePendingCounts") { () -> [String: Int] in
+      PendingCounts.take()
+    }
+
+    Function("peekPendingCounts") { () -> [String: Int] in
+      PendingCounts.peek()
+    }
+
     Function("processStartedAt") { () -> Double? in
       ProcessStart.epochMilliseconds()
     }

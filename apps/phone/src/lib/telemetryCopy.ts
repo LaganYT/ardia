@@ -42,7 +42,7 @@ export const PHONE_WHATS_SENT: { title: string; items: SentItem[] }[] = [
         fields: ["color_choice"],
       },
       {
-        text: "With each launch, the best glass this phone can draw, not what each surface drew: the Liquid Glass lens, frosted glass or no blur on Android, the system’s own glass, Classic, or none in Material You",
+        text: "With each launch, the best glass this phone can draw, not what each surface drew: the Liquid Glass lens, frosted glass, clear glass when the lens can’t be drawn, or no blur on Android, the system’s own glass, Classic, or none in Material You",
         fields: ["glass_render"],
       },
       {
@@ -62,7 +62,7 @@ export const PHONE_WHATS_SENT: { title: string; items: SentItem[] }[] = [
         fields: ["perf_launch_tray", "tray_ms"],
       },
       {
-        text: "At most once a day, for the last day you used Ardia before today: how many tabs you opened, searches you made, pages you pinned to your Mac, tabs you sent to another device, pages that stopped working because their page process ended, links from other apps Ardia gave up on because they took too long, and pages that reloaded by themselves when the phone came back online, how often the tab switcher opened before a page’s picture was ready, how often a tap on the tabs button had to copy the page right then because its picture wasn’t up to date, how often you opened a card while the tab switcher was still settling, how often you searched your tabs, how often you picked a space from its menu, how many tabs you moved to another space, how many pages you printed, how many you translated, how often a pinned site took you back to its tab after the page had moved on, how often you showed the tab switcher as a grid, how often you opened the tab switcher by swiping up on the bottom bar instead of tapping its tabs button, how often a back swipe closed a tab or a forward swipe reopened one, how often Archive or History took more than 0.4 seconds to show its list, how often you scrolled far enough in them to show older days, how often you swiped a long address in the search field to read the rest of it, how often you swiped up on the bottom bar and let go early so the page came back, how often you switched tabs by swiping the bottom bar sideways, whether the one-time hint about that swipe was shown on Android, how often the page stalled for more than a twentieth of a second while it shrank into the tab switcher, how often the bottom bar collapsed on Android, and how often you opened a menu or a confirmation, counted apart for the phone’s own menus and the ones Ardia draws, never while browsing privately. Counts only, never which",
+        text: "At most once a day, for the last day you used Ardia before today: how many tabs you opened, searches you made, pages you pinned to your Mac, tabs you sent to another device, pages that stopped working because their page process ended, links from other apps Ardia gave up on because they took too long, and pages that reloaded by themselves when the phone came back online, how often the tab switcher opened before a page’s picture was ready, how often a tap on the tabs button had to copy the page right then because its picture wasn’t up to date, how often you opened a card while the tab switcher was still settling, how often you searched your tabs, how often you picked a space from its menu, how many tabs you moved to another space, how many pages you printed, how many you translated, how often a pinned site took you back to its tab after the page had moved on, how often you showed the tab switcher as a grid, how often you opened the tab switcher by swiping up on the bottom bar instead of tapping its tabs button, how often a back swipe closed a tab or a forward swipe reopened one, how often Archive or History took more than 0.4 seconds to show its list, how often you scrolled far enough in them to show older days, how often you swiped a long address in the search field to read the rest of it, how often you swiped up on the bottom bar and let go early so the page came back, how often you switched tabs by swiping the bottom bar sideways, whether the one-time hint about that swipe was shown on Android, how often the page stalled for more than a twentieth of a second while it shrank into the tab switcher, how often the bottom bar folded away as a page scrolled, and how often you opened a menu or a confirmation, counted apart for the phone’s own menus and the ones Ardia draws, never while browsing privately. Counts only, never which",
         fields: ["usage_counts", "tabs_opened", "searches", "pins_to_mac", "tabs_sent", "page_processes_gone", "links_given_up", "pages_reloaded_online", "find_opened_system", "find_opened_bar", "find_closed_bar", "spaces_swiped", "tray_hidden_rows_opened", "deck_pictures_late", "deck_pictures_at_press", "deck_opens_while_landing", "tray_back_swiped", "search_tabs_opened", "spaces_picked", "tabs_moved_to_space", "pages_printed", "pages_translated", "pinned_tabs_refound", "site_permissions_revoked", "card_opens_waited", "native_menus_opened", "drawn_menus_opened", "library_opened", "deck_grid_shown", "landscape_shown", "duo_layout_shown", "list_sheets_late", "list_pages_added", "search_reveals_late", "address_field_scrolled", "deck_bar_swipes", "tabs_swiped_closed", "tabs_swiped_reopened", "page_menu_tapped_away", "new_tab_search_opened", "deck_incognito_switches", "deck_bar_swipes_returned", "tabs_bar_swiped", "tab_swipe_hints_shown", "deck_pulls_hitched", "bottom_bar_collapses"],
       },
       {
@@ -122,8 +122,16 @@ export const PHONE_WHATS_SENT: { title: string; items: SentItem[] }[] = [
         fields: ["custom_theme_chosen", "theme_edits"],
       },
       {
-        text: "In the same daily counts, on Android: how often the phone refused to draw the Liquid Glass lens or its rim light, so the glass fell back to plain frost. Counts only",
+        text: "In the same daily counts: how often the phone refused to draw the Liquid Glass lens or its rim light, so the glass fell back to plain frost or a flat fill. Counts only",
         fields: ["glass_shaders_failed"],
+      },
+      {
+        text: "In the same daily counts, on iPhone: how often drawing what is under the Liquid Glass took too long, so that glass turned to clear glass for a few seconds. Counts only",
+        fields: ["glass_captures_over_budget"],
+      },
+      {
+        text: "In the same daily counts, on iPhone: how often the Liquid Glass over a page briefly showed clear glass because its picture of the page couldn’t keep up, at most once a second per glass. Counts only",
+        fields: ["glass_lens_bridged"],
       },
       {
         text: "In the same daily counts, on iPhone: how often you opened one of the Settings panes, such as General or Tabs. Counts only, never which pane or what you changed",

@@ -57,7 +57,7 @@ what differs; the Mac's list is `docs/dia-feature-parity.md`. Rows marked "hidde
 | Quit and relaunch with the session restored | Works (tabs, the split and the open windows came back) | |
 | Engine memory trimmed after tabs close, once input is idle | Works (logged after closes) | #1544 |
 | Memory Saver's loaded-tab budget (the tabs hidden longest sleep past it) | Works (engine `windows-engine-20261116-4`, which also has #2052's page-place guard; seen by the `engine sleep:` self-checks in CI, not walked in the VM): the Mac's budget and sweep, sized from this PC's memory and Windows' memory load (85 % a warning, 95 % critical); the page view's `sleepIfHidden` asks Chromium's discard policy with the proactive reason, so a shown page or split pane, a page hidden within the mode's wait, typed form input, audio, capture and the other protections keep a tab awake. A page the app hid is no longer its page window's active tab, which Chromium would otherwise keep from every discard, and Chromium's DevTools-open state means a DevTools window inspects the page, not the engine's own always-attached page client (before -10 no Windows page could be discarded at all, by this budget, Chrome's Memory Saver timer or memory pressure). A discard is in place (`WebContentsDiscard`, as on the Mac), so the tab keeps its page and back/forward list. A slept tab wakes on show at its address and scroll. A pop-up window's page is not a tab, so the budget never asks it. The engine keeps a page for its own reasons too, in every discard but one the user or one of their extensions asks for (Chrome's Memory Saver timer, its memory-pressure and frozen-with-growing-memory discards as well as the budget, `kept_pages.cc` through `chromium-win-discard-asks-the-host.patch`; a kept page is never taken by an urgent discard either, since Windows' urgent discards skip protected pages; a discard the user or one of their extensions asks for, such as `chrome.tabs.discard()` from a tab-suspender extension, does not ask the host): the opener of a live pop-up or of a pending offer (100), so the pop-up's `window.opener` keeps working; a `beforeunload` handler (content's own handler state; the page graph's flag is never set in Chromium 157) on a page the user has used (101); a held Web Lock (102) or blocking IndexedDB lock (103); a WebSocket, WebTransport, WebRTC or direct-socket connection (104: the same signals that keep a page from freezing; in Chromium 157 an open WebSocket registers only the sticky feature, so a page that has used one stays kept until it navigates or reloads); a DevTools window, or a DevTools client other than the engine's own on the page or tab target: an extension's `chrome.debugger` or a remote CDP tool (105). Chromium's own protections hold as on the Mac (audible, capture, form input, notifications). Not seen yet, so such a page can still sleep (#2050): a Web Lock held by a dedicated worker, a WebSocket held by a SharedWorker, a blocking IndexedDB lock in a shared or service worker, an EventSource or long fetch stream, an upload. A hidden Peek card that stays mounted is not a shown page: after the mode's wait it can sleep, and it reloads at its address and scroll when it shows again. A tab that slept once still opens a new tab its link script saw clicked (the script Peek runs in) and an app-link ask. Pinned tabs sleep like any tab, as on the Mac (#1069). A page window keeps #2052's guard through a sleep and holds its place again once it wakes. Self-checks: `engine sleep:` in `selfCheck/engineSleep.ts`, `engineSleepKept.ts` and `engineSleepPlace.ts` | #1969 |
-| Background tabs in efficiency mode | Built, not yet verified in the VM: the first version of the layer, built on `windows-engine-20261119-1`'s source, was walked in the Windows 11 VM (busy, call, picture in picture and audio tabs). This version (launcher hook, page-wide call votes) builds for x64; its VM walk is pending. Ships with the next Windows engine. Chromium already gives a hidden tab's renderer EcoQoS and `IDLE_PRIORITY_CLASS` and keeps audible tabs and getUserMedia captures at full speed. `renderer_efficiency.cc` adds what it lacks: a priority vote keeps every frame of a page using WebRTC (an out-of-process iframe's call included) and of a page in picture in picture at full speed (before, a call without a captured microphone or camera, and a picture in picture video, were slowed like any background tab). `chromium-win-renderer-efficiency.patch` hands each priority the launcher applies, on its own thread, to the layer, so a renderer at best effort, after Chromium's loading and other boosts, also drops to `MEMORY_PRIORITY_VERY_LOW` and ignores timer resolution requests, with its writes serialized against Chromium's EcoQoS writes. Web renderers start at memory priority 2 (low), so LOW alone would change nothing; the earlier value is read before it is lowered and given back when the renderer comes forward, and a restore whose write fails counts as a failure; the next priority change applies it again. Counted hourly on Windows: `background_renderers_throttled`, `background_renderers_restored`, `background_renderer_throttle_failures` and `background_tabs_kept_fast_call`/`_capture`/`_picture_in_picture`/`_audio`; watch failures stay near 0 and restored track throttled | #3840 |
+| Background tabs in efficiency mode | Works (engine `windows-engine-20261124-1`, verified in the Windows 11 VM: busy tab hidden/shown/hidden/shown drops to memory priority 1 and power mask 5/5 and restores to 2 and 0/0 on show; WebRTC cross-origin iframe, audio and picture in picture stay at normal priority). Chromium already gives a hidden tab's renderer EcoQoS and `IDLE_PRIORITY_CLASS` and keeps audible tabs and getUserMedia captures at full speed. `renderer_efficiency.cc` adds what it lacks: a priority vote keeps every frame of a page using WebRTC (an out-of-process iframe's call included) and of a page in picture in picture at full speed (before, a call without a captured microphone or camera, and a picture in picture video, were slowed like any background tab). `chromium-win-renderer-efficiency.patch` hands each priority the launcher applies, on its own thread, to the layer, so a renderer at best effort, after Chromium's loading and other boosts, also drops to `MEMORY_PRIORITY_VERY_LOW` and ignores timer resolution requests, with its writes serialized against Chromium's EcoQoS writes. Web renderers start at memory priority 2 (low), so LOW alone would change nothing; the earlier value is read before it is lowered and given back when the renderer comes forward, and a restore whose write fails counts as a failure; the next priority change applies it again. Counted hourly on Windows: `background_renderers_throttled`, `background_renderers_restored`, `background_renderer_throttle_failures` and `background_tabs_kept_fast_call`/`_capture`/`_picture_in_picture`/`_audio`; watch failures stay near 0 and restored track throttled | #3840 |
 | Unload inactive profiles (Settings › Advanced, with Memory Saver) | Not offered; hidden: the engine has no `profiles.unloadIdle` | #1425 |
 | The `ardia` command (the install 8 s after launch, Settings › Advanced › Command line) | Not offered: Windows has no native `ArdiaCli`. `PLATFORM_FEATURES.ardiaCommand` is false, so Command line is hidden in Settings and nothing is installed at launch. Its stand-in (`defaults.ts`) answers `canInstallUnattended` false and `install` with a failed result, and `installCliInBackground` treats a missing result as a failure. (Before, both answered null: the launch install threw `Cannot read property 'ok' of null`, an unhandled rejection 8 s after launch for nearly every Windows user, and Command line stayed on "Installing…".) Tests: `cliControlWindows.test.mjs`, `hiddenOnWindows.test.mjs` | #2135 |
 | Little Ardia (Ctrl+Alt+N) | Works, app-drawn chrome; its command bar lists recent pages | |
@@ -1239,12 +1239,21 @@ Swift core wrote (`fixtures/windows-interop/mac`), and the self-check opens that
 ## Updates
 
 - The updates live on the GitHub prerelease `windows-alpha`: `Ardia-Setup-x64.exe`, `Ardia-Setup-arm64.exe`, the
-  feed `windows-update.json` (version, build, and per CPU the installer's address, SHA-256 and size) and the
-  engine's source. `scripts/windows/publish-alpha.sh` puts one build there, the feed last. It keeps the installers of
-  the build before, so an update the app already offered still downloads, and removes older ones. It refuses a build
-  at or below the live feed's, since no installed app would take it.
+  feed `windows-update.json` (version, build, and per CPU the installer's address, SHA-256 and size), its raw 64-byte
+  Ed25519 signature `windows-update.json.sig`, and the engine's source. `scripts/windows/publish-alpha.sh` signs the
+  feed with `scripts/windows/sign-update.mjs` (using `--key`, `WINDOWS_UPDATE_KEY_FILE` or
+  `WINDOWS_UPDATE_ED_PRIVATE_KEY`, checked against `scripts/windows/windows-update.pem`) and self-verifies
+  `windows-update.json`, `windows-update.json.sig` and both installers with `ardia-update-verify` before uploading,
+  putting the feed and its `.sig` up after the installers. A live publish without a signing key fails closed;
+  `--dry-run` without a key signs with an ephemeral test key so the verification path still runs. Keeping
+  `windows-update.json`'s JSON shape unchanged and carrying the signature in `windows-update.json.sig` lets older
+  unsigned installs keep updating while new installs enforce the signature. It keeps the installers of the build
+  before, so an update the app already offered still downloads, and removes older ones. It refuses a build at or below
+  the live feed's, since no installed app would take it.
 - Every release refreshes it (Releases, below), so installed Windows apps update to each nightly and stable.
-  `publish-alpha.sh <run id>` still publishes one green Windows workflow run there as an alpha between releases.
+  Between releases, dispatch `.github/workflows/windows-alpha.yml` with a green Windows workflow run id so alpha
+  publishes share the `ardia-windows-alpha-publish` concurrency group with `release.yml` (`scripts/windows/publish-alpha.sh`
+  refuses live local publishes unless `--allow-local-publish` is explicitly passed; `--dry-run` works locally).
 - A build knows what it is from `Ardia.build.json` beside `Ardia.exe` (`assemble.ps1 -Version -Build`). The build
   number is the number of commits in the built commit's history (`git rev-list --count`, the workflow's `identity`
   job), so it grows with `main` and a release outranks every build before it, CI's included; builds before this rule
@@ -1252,16 +1261,23 @@ Swift core wrote (`fixtures/windows-interop/mac`), and the self-check opens that
   `Ardia-Setup-<cpu>` artifact, which is where `publish-alpha.sh` reads a build's version and number. `ArdiaApp.systemInfo` takes its version and build from that file, since the library has no version
   resource, so telemetry, About and problem reports name the build; a folder build without it says 0.0.0, build 0. Only an installed build with that file updates: Settings › General › Updates shows "not set up" for a
   folder build.
-- `packages/expo-windows/src/updater` is the app's `ArdiaUpdater` on Windows. It reads the feed, offers a higher
+- `packages/expo-windows/src/updater` is the app's `ArdiaUpdater` on Windows. It calls
+  `ArdiaWindowsUpdate.fetchVerifiedManifest`, checks the verified answer again in `manifest.ts`, offers a higher
   build for this CPU, downloads it, and asks before installing; with automatic downloads on it downloads first and
-  asks once. It checks 30 s after launch and every 6 hours, never in a hidden instance, and in an instance with its
-  own data folder only when a test instance names a feed with `ARDIA_INSTANCE=updateFeed=<url>` (then installers must
-  sit beside it).
-- The native half (`UpdateModule.h`, `ArdiaWindowsUpdate`) only fetches from the release's address, checks the
-  download's size and SHA-256 against the feed, and runs the installer from the Updates folder in the data folder
-  after hashing it again while holding it open. The installer runs silently, closes what is left of the app and
-  opens it again (`/relaunch=1`). Nothing is signed yet, so what stands behind an update is GitHub's HTTPS and the
-  release's write access.
+  asks once. It never falls back to an unsigned feed. It checks 30 s after launch and every 6 hours, never in a hidden
+  instance, and in an instance with its own data folder only when a test instance names a feed with
+  `ARDIA_INSTANCE=updateFeed=<url>` (then installers must sit beside it, and a test key may be passed with
+  `ARDIA_INSTANCE=updateFeed=<url>,updateKey=<pem>`). Manifest verification outcomes are counted hourly in
+  `usage_counts` (`windows_update_manifest_verified` and `windows_update_manifest_failures_<reason>`, sharing on only,
+  never URLs or versions).
+- The native half (`UpdateModule.h`, `ArdiaWindowsUpdate`) only fetches from the release's address (or a test
+  instance's `updateFeed`), fetches both `windows-update.json` (at most 64 KiB) and `windows-update.json.sig` (64
+  bytes), runs the bundled static `ardia-update-verify.exe` (`ardia-update-core`) against the pinned
+  `windows-update.pem` beside `Ardia.exe` without following symlinks or reparse points, checks the download's size and
+  SHA-256 against the verified manifest, and runs the installer from the Updates folder in the data folder after
+  hashing it again while holding it open. The installer runs silently, closes what is left of the app and opens it
+  again (`/relaunch=1`). The installer `.exe` itself is not Authenticode-signed yet, so SmartScreen still prompts on a
+  fresh manual download, while in-app updates verify the Ed25519 manifest signature and the installer's SHA-256.
 
 ## Releases
 
@@ -1296,7 +1312,7 @@ gh workflow run windows.yml -R ardia-browser/ardia --ref v<version> -f version=<
 gh run download <run id> -R ardia-browser/ardia -p 'windows-release-*' -D dist/<version>/artifacts
 mkdir -p dist/<version>/windows && cp -n dist/<version>/artifacts/windows-release-*/* dist/<version>/windows/
 gh release upload v<version> -R ardia-browser/ardia dist/<version>/windows/Ardia-<version>-windows-*
-scripts/windows/publish-alpha.sh --installers dist/<version>/windows --commit v<version>
+scripts/windows/publish-alpha.sh --allow-local-publish --installers dist/<version>/windows --commit v<version>
 ```
 
 When the cause is in the code (a stale engine pin needs a new engine release and `prebuilt.json`), fix it on `main`;
@@ -1358,7 +1374,7 @@ for that test key. A test key sealed by a build before this rule doesn't unseal 
 the scratch instance makes a new one. Sync's `selfTest`, which seals and removes a probe key, needs a test instance.
 
 Outside a test instance the launch config drops `ARDIA_TEST`, `ARDIA_TRACE`, `ARDIA_CONFIG_DIR` and the test-only
-`ARDIA_INSTANCE` keys (`updateFeed`, `importSourceDir`, `importSafariHome`), and the launch log says once why. The other
+`ARDIA_INSTANCE` keys (`updateFeed`, `updateKey`, `importSourceDir`, `importSafariHome`), and the launch log says once why. The other
 `ARDIA_INSTANCE` keys and `ARDIA_BACKGROUND` stay instance settings, as on the Mac.
 
 The engine applies the same decision to its own switches (`main.cc` `DecideTestGate`, before Chromium starts):

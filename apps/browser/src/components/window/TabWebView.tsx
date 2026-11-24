@@ -51,6 +51,7 @@ import { escapePressed } from "../../state/windows/unclaimedEscape";
 import { withoutFragment } from "../../lib/url";
 import { adoptOf, loadedPage, navigationOf } from "../../state/tabs/pageSession";
 import { noteCommit } from "../../state/automation/automationEvents";
+import { notePluginStateCommit } from "../../state/plugins/stateCommits";
 import { forgetUnreadIfGone, noteAppBadge, noteUnreadFavicon, noteUnreadLoading, noteUnreadPageEnded } from "../../state/tabs/unread";
 import { trackPageProcessGone } from "../../state/telemetry/diagnostics";
 import { releaseTranslation, translateCrashContext } from "../../state/site/translate";
@@ -223,6 +224,7 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine, 
         if (consumedCallbackUrl(tabId, reported, committedUrl)) return;
         const pageArrived = trackPageArrival(tabId);
         noteCommit(tabId, committedUrl, committedAt, httpStatus);
+        notePluginStateCommit(tabId, committedUrl, committedAt);
         verificationCodeDocument(tabId, committedAt);
         notePageDocument(tabId, reported, committedUrl, committedAt, isIncognitoProfile(profileId), documentReporter);
         if (reopening.current && reported && !isBlankAddress(reported)) {

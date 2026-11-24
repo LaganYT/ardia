@@ -2,7 +2,7 @@ import { actionSheet, ContextMenuView, nativeMenusAvailable, settingsUI, type Me
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { findNodeHandle, Platform, View, type GestureResponderEvent, type StyleProp, type ViewInstance, type ViewStyle } from "react-native";
 import type { MenuAlign, Point } from "../../lib/menuPlace";
-import { sfName } from "./sfSymbolNames";
+import { menuSfName } from "./sfSymbolNames";
 import { handFocusOver } from "./coverFocus";
 import { useFocusReturn } from "./focusReturn";
 import type { Confirmation } from "./Dialog";
@@ -25,6 +25,7 @@ type Props = {
   frost?: string | null;
   restoresAfterChoice?: boolean;
   place?: ViewStyle;
+  previewRadius?: number;
   dark?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -57,7 +58,7 @@ function convert(items: MenuItem[], prefix: string, actions: Map<string, () => v
   return filled.map((group, at) => (group.title === null && at === 0 ? group.items : [{ id: `${prefix}g${at}`, title: group.title ?? "", inline: true, children: group.items }])).flat();
 }
 
-const image = (item: MenuAction | MenuSubmenu) => item.systemImage ?? sfName(item.icon);
+const image = (item: MenuAction | MenuSubmenu) => item.systemImage ?? menuSfName(item.icon);
 
 function action(item: MenuAction, id: string, actions: Map<string, () => void>): NativeMenuItem {
   actions.set(id, item.onPress);
@@ -80,7 +81,7 @@ export function MenuTrigger(props: Props) {
   return nativeMenus() ? <NativeTrigger {...props} /> : <DrawnTrigger {...props} />;
 }
 
-function NativeTrigger({ items, trigger = "longPress", fixedOrder, onOpen, onClose, disabled, privately = false, dark, style, testID, children }: Props) {
+function NativeTrigger({ items, trigger = "longPress", fixedOrder, onOpen, onClose, disabled, privately = false, previewRadius, dark, style, testID, children }: Props) {
   const theme = useTheme();
   const menu = nativeMenu(items);
   const actions = useRef(menu.actions);
@@ -91,7 +92,7 @@ function NativeTrigger({ items, trigger = "longPress", fixedOrder, onOpen, onClo
     onOpen?.();
   }, [onOpen, privately]);
   return (
-    <ContextMenuView testID={testID} style={style} collapsable={false} items={disabled ? [] : menu.items} trigger={trigger} fixedOrder={fixedOrder} onSelect={select} onOpen={opened} onClose={onClose} appearance={{ dark: dark ?? theme.dark }}>
+    <ContextMenuView testID={testID} style={style} collapsable={false} items={disabled ? [] : menu.items} trigger={trigger} fixedOrder={fixedOrder} onSelect={select} onOpen={opened} onClose={onClose} previewRadius={previewRadius} appearance={{ dark: dark ?? theme.dark }}>
       {children({})}
     </ContextMenuView>
   );

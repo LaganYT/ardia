@@ -1,3 +1,4 @@
+#import "ArdiaDownloadPrompts.h"
 #import "ArdiaEvents.h"
 #import "ArdiaDownloadMover.h"
 
@@ -31,7 +32,10 @@ NSString *DomainOf(NSString *name) {
 }
 
 + (void)emit:(NSString *)name data:(NSDictionary *)data {
-  if ([name isEqualToString:@"downloads.changed"] && data) data = [ArdiaDownloadMover.shared noteDownloadEvent:data];
+  if ([name isEqualToString:@"downloads.changed"] && data) {
+    ardia_files::NoteDownloadEvent(data, NSDate.date.timeIntervalSince1970);
+    data = [ArdiaDownloadMover.shared noteDownloadEvent:data];
+  }
   if (void (^sender)(NSString *, NSDictionary *) = Senders()[DomainOf(name)]) sender(name, data ?: @{});
 }
 

@@ -35,7 +35,7 @@ export type ClassicChrome = { fill?: string | LookDynamicColor; edgeWidth?: numb
 
 export type GlassProps = FrostProps & { shape?: GlassShape; tint?: string; interactive?: boolean; surface?: GlassSurface; tinted?: boolean; barShadow?: boolean; classicChrome?: ClassicChrome; shown?: boolean; shownMs?: number };
 
-export type NativeGlassRender = "lens" | "frost" | "solid";
+export type NativeGlassRender = "lens" | "frost" | "clear" | "solid";
 
 type LookNative = {
   hasGlass?: () => boolean;
@@ -122,7 +122,7 @@ export const glassIsNative = () => hasNativeGlass;
 
 export function nativeGlassRender(): NativeGlassRender | null {
   const drawn = lookNative?.glassRender?.();
-  return drawn === "lens" || drawn === "frost" || drawn === "solid" ? drawn : null;
+  return drawn === "lens" || drawn === "frost" || drawn === "clear" || drawn === "solid" ? drawn : null;
 }
 
 export const DeckBackdrop = look<DeckBackdropProps>("DeckBackdrop");

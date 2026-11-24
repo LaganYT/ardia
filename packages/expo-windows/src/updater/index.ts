@@ -1,7 +1,8 @@
 import { TurboModuleRegistry, type TurboModule } from "react-native";
 import type { AppNative, ConfirmOptions, DialogsNative, DocumentsNative, UpdateChannel, UpdaterNative, UpdaterState } from "@ardia/shell";
 import type { AppWindowsModule, WindowsUpdateConstants, WindowsUpdateModule } from "../nativeModuleTypes";
-import { failureText, feedNotPublished, folderOf, megabytes, offered, readBuild, readManifest, type BuildIdentity } from "./manifest";
+import { failureText, folderOf, megabytes, parseVerifiedUpdate, readBuild, type BuildIdentity } from "./manifest";
+import { windowsUpdateCounts } from "./counts";
 
 const PUBLISHED_UNDER = "https://github.com/ardia-browser/ardia/releases/download/";
 const FEED = `${PUBLISHED_UNDER}windows-alpha/windows-update.json`;
@@ -80,27 +81,43 @@ async function check(asked: boolean) {
   if (checking || !update || !current || !configured()) return;
   if (!asked && !checksByItself()) return;
   checking = true;
+  const startedEpoch = windowsUpdateCounts.consentEpoch();
   try {
-    let feedText: string;
+    if (typeof update.fetchVerifiedManifest !== "function") {
+      windowsUpdateCounts.note("verifier", startedEpoch);
+      throw new Error("the update verifier is not available");
+    }
+    let rawAnswer: string;
     try {
-      feedText = await update.fetchText(feed());
+      rawAnswer = await update.fetchVerifiedManifest(feed(), current.build);
     } catch (error) {
-      if (!feedNotPublished(error) || feedOverride()) throw error;
-      console.info(`[ardia windows] update check failed: ${reason(error)}`);
+      windowsUpdateCounts.note("network", startedEpoch);
+      throw error;
+    }
+    const verified = parseVerifiedUpdate(rawAnswer, publishedUnder(), current.build);
+    if (verified.status === "notPublished") {
+      if (feedOverride()) {
+        windowsUpdateCounts.note("network", startedEpoch);
+        throw new Error("the server answered 404");
+      }
+      console.info("[ardia windows] update check failed: the server answered 404");
       const keepsChecking = checksByItself() ? " Ardia keeps checking by itself." : "";
       if (asked) await tell("No Windows update published yet", `No Windows build of Ardia has been published for updates yet. You have ${named(current.version, current.build)}.${keepsChecking}`);
       return;
     }
-    const manifest = readManifest(feedText, publishedUnder());
-    if (!manifest) throw new Error("the update feed could not be read");
+    if (verified.status === "failed") {
+      windowsUpdateCounts.note(verified.reason, startedEpoch);
+      throw new Error(verified.message);
+    }
+    windowsUpdateCounts.note("verified", startedEpoch);
     remember({ lastCheck: Date.now() });
-    const installer = offered(manifest, String(constants().cpu), current.build);
-    if (!installer) {
+    if (verified.status === "upToDate") {
       if (asked) await tell("Ardia is up to date", `You have ${named(current.version, current.build)}.`);
       return;
     }
-    if (!asked && declinedBuild === manifest.build) return;
-    const newer = named(manifest.version, manifest.build);
+    const { installer } = verified;
+    if (!asked && declinedBuild === verified.build) return;
+    const newer = named(verified.version, verified.build);
     if (asked || !preferences().automaticDownloads) {
       const download = await ask({
         title: "A newer Ardia is available",
@@ -109,12 +126,12 @@ async function check(asked: boolean) {
         cancelTitle: "Later",
       });
       if (!download) {
-        declinedBuild = manifest.build;
+        declinedBuild = verified.build;
         return;
       }
     }
     const path = await update.download(installer.url, installer.sha256, installer.bytes);
-    console.info(`[ardia windows] update ${manifest.build} downloaded`);
+    console.info(`[ardia windows] update ${verified.build} downloaded`);
     const install = await ask({
       title: "The update is ready to install",
       message: `Ardia closes, installs ${newer} and opens again.`,
@@ -122,11 +139,11 @@ async function check(asked: boolean) {
       cancelTitle: "Later",
     });
     if (!install) {
-      declinedBuild = manifest.build;
+      declinedBuild = verified.build;
       return;
     }
     if (await update.install(path, installer.sha256)) {
-      console.info(`[ardia windows] update ${manifest.build} is installing`);
+      console.info(`[ardia windows] update ${verified.build} is installing`);
       await TurboModuleRegistry.get<TurboModule & Pick<AppWindowsModule, "quit">>("ArdiaAppWindows")?.quit();
     }
   } catch (error) {

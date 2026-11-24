@@ -45,6 +45,7 @@ import { dropAllHistoryHandles, dropHistoryHandles } from "./historyHandles";
 import { dropLateResults, forgetTabCalls } from "./tabCalls";
 import { dropAllLogpoints, dropLogpoints } from "./devToolsLogpoints";
 import { closeAllInspections, closeInspectionsFor } from "./devToolsSession";
+import { clearFileArms } from "./fileArms";
 import { backgroundInstance } from "../app/appSettings";
 import { programControlOn } from "../app/programControlSetting";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
@@ -326,6 +327,7 @@ async function start(consent: ConsentToken | null) {
 }
 
 async function stop() {
+  clearFileArms();
   openConnections.clear();
   generation = null;
   dismissSocketAsks();
@@ -352,6 +354,7 @@ function sync() {
   const consent = consentToken();
   if (!on) {
     cutOffControlSocket();
+    clearFileArms();
     openConnections.clear();
     generation = null;
     dismissSocketAsks();

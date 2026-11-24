@@ -99,6 +99,8 @@ export function SettingsPage({ title, onBack, onClose, leading, trailing, childr
       {scroll ? (
         <ScrollView
           ref={list}
+          bounces={refresh !== undefined}
+          overScrollMode={refresh ? "auto" : "never"}
           style={material ? [materialSettingsListStyles.list, { marginBottom: insets.bottom }] : { marginBottom: insets.bottom }}
           contentContainerStyle={
             material

@@ -1016,7 +1016,7 @@ export const TabDeck = memo(function TabDeck() {
   const cardMenuItems = (index: number): MenuItem[] => {
     const tab = tabs.get(order[index] ?? "");
     const closeCard = () => close(index, 0);
-    if (!tab) return [{ label: "Close Tab", destructive: true, onPress: closeCard }];
+    if (!tab) return [{ label: "Close Tab", icon: "xmark", destructive: true, onPress: closeCard }];
     return deckCardMenu(tab, { devices: sendTargetsFor(tab), pinned: isTabPinned(tab), syncEnabled, spaces: redesigned ? spaceMoveTargets(tab) : [], icons: true }, closeCard);
   };
 

@@ -562,6 +562,10 @@ jobs:
   windows-update:
     needs: [publish, windows]
     if: ${{ !cancelled() && needs.publish.result == 'success' && needs.windows.result == 'success' }}
+    concurrency:
+      group: ${{ (inputs.dry_run == true || inputs.dry_run == 'true') && format('ardia-windows-alpha-dry-run-{0}', github.run_id) || 'ardia-windows-alpha-publish' }}
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -572,6 +576,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            packages/core-rs/target
+          key: win-update-verify-${{ runner.os }}-${{ hashFiles('packages/core-rs/rust-toolchain.toml', 'packages/core-rs/Cargo.lock') }}
+          restore-keys: win-update-verify-${{ runner.os }}-
+      - name: Build ardia-update-verify
+        working-directory: packages/core-rs
+        run: |
+          set -euo pipefail
+          PATH="$HOME/.cargo/bin:$PATH" rustup toolchain install
+          PATH="$HOME/.cargo/bin:$PATH" cargo build --locked --release --quiet -p ardia-update-verify
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: windows-release-*
@@ -580,14 +601,15 @@ jobs:
       - name: Offer it to installed Windows apps
         env:
           BUILD: ${{ needs.windows.outputs.build }}
+          WINDOWS_UPDATE_ED_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_ED_PRIVATE_KEY || secrets.LINUX_UPDATE_ED_PRIVATE_KEY }}
         run: |
-          args=(--installers "$RUNNER_TEMP/windows" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/windows-alpha")
+          args=(--installers "$RUNNER_TEMP/windows" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/windows-alpha" --verify-bin "$GITHUB_WORKSPACE/packages/core-rs/target/release/ardia-update-verify")
           if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
           scripts/windows/publish-alpha.sh "${args[@]}"
           if [ "$DRY_RUN" = true ]; then
-            echo "- Windows: build $BUILD, packed for windows-alpha, not published" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Windows: build $BUILD, signed and packed for windows-alpha, not published" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- Windows: build $BUILD is the update on windows-alpha" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Windows: build $BUILD is the signed update on windows-alpha" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   aur:

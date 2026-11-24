@@ -73,7 +73,7 @@ function useActionColumns(labels: readonly string[]) {
 }
 
 function MenuScroll({ scrollRef, ...props }: ScrollViewProps & { scrollRef?: RefObject<ScrollViewInstance | null> }) {
-  return scrollRef ? <ScrollView ref={scrollRef} {...props} /> : <SheetScrollView {...props} />;
+  return scrollRef ? <ScrollView ref={scrollRef} bounces={false} overScrollMode="never" {...props} /> : <SheetScrollView bounces={false} overScrollMode="never" {...props} />;
 }
 
 type PageMenuWordsProps = { tabId: string; model: MenuModel; onTranslate: () => void; systemSheet?: boolean; scrollRef?: RefObject<ScrollViewInstance | null>; onContentHeight?: (height: number) => void };

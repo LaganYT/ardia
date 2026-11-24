@@ -1297,6 +1297,12 @@ protocol AutomationNative {
   static func answerPeer(_ ask: Int, _ outcome: String, _ promise: Promise)
   static func approvals(_ promise: Promise)
   static func revokeApproval(_ key: String, _ promise: Promise)
+  static func armFiles(_ spec: [String: Any], _ promise: Promise)
+  static func disarmFiles(_ ids: [String]?, _ purge: Bool) -> Double
+  static func fileArms() -> [[String: Any]]
+  static func claimArmedDownload(_ arm: String, _ download: String, _ path: String) -> [String: Any]
+  static func placeArmedDownload(_ arm: String, _ download: String, _ path: String, _ promise: Promise)
+  static func releaseArmedDownload(_ arm: String, _ download: String, _ state: String) -> Bool
 }
 
 extension AutomationNative {
@@ -1340,6 +1346,30 @@ extension AutomationNative {
 
   static var revokeApprovalFunction: AnyDefinition {
     AsyncFunction("revokeApproval") { (key: String, promise: Promise) in Self.revokeApproval(key, promise) }
+  }
+
+  static var armFilesFunction: AnyDefinition {
+    AsyncFunction("armFiles") { (spec: [String: Any], promise: Promise) in Self.armFiles(spec, promise) }
+  }
+
+  static var disarmFilesFunction: AnyDefinition {
+    Function("disarmFiles") { (ids: [String]?, purge: Bool) -> Double in Self.disarmFiles(ids, purge) }
+  }
+
+  static var fileArmsFunction: AnyDefinition {
+    AsyncFunction("fileArms") { () -> [[String: Any]] in Self.fileArms() }.runOnQueue(DispatchQueue.global(qos: .userInitiated))
+  }
+
+  static var claimArmedDownloadFunction: AnyDefinition {
+    Function("claimArmedDownload") { (arm: String, download: String, path: String) -> [String: Any] in Self.claimArmedDownload(arm, download, path) }
+  }
+
+  static var placeArmedDownloadFunction: AnyDefinition {
+    AsyncFunction("placeArmedDownload") { (arm: String, download: String, path: String, promise: Promise) in Self.placeArmedDownload(arm, download, path, promise) }
+  }
+
+  static var releaseArmedDownloadFunction: AnyDefinition {
+    Function("releaseArmedDownload") { (arm: String, download: String, state: String) -> Bool in Self.releaseArmedDownload(arm, download, state) }
   }
 }
 

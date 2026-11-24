@@ -53,7 +53,7 @@ test("a key a WebKit tab handed to the input source is counted, and the count is
     ["public static func takeWebKitTabKeys() -> Int {", "lock.lock()", "defer { lock.unlock() }", "let taken = webKitTabKeys", "webKitTabKeys = 0", "return taken"].join("\n"),
   );
   const focus = read("../../shell/ios/FocusModule.swift");
-  assert.ok(focus.includes('Function("takeInputSourceKeys") { () -> Int in InputSourceKeys.takeWebKitTabKeys() }'));
+  assert.ok(focus.includes("static func takeInputSourceKeys() -> Int { InputSourceKeys.takeWebKitTabKeys() }"));
 });
 
 test("Ardia's own text views use the same helper, so the two engines cannot drift apart", () => {

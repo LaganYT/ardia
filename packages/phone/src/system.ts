@@ -31,6 +31,7 @@ type SystemNative = {
   setWidgetColorChoice?(choice: string | null): void;
   takePendingCounts?(): Record<string, number>;
   peekPendingCounts?(): Record<string, number>;
+  takeExits?(): unknown[];
   syncOffered?(): boolean;
   setSystemBarIcons?(lightStatus: boolean, lightNavigation: boolean): Promise<void>;
   usageConsent?(): { sharing: boolean; generation: number } | null;
@@ -53,6 +54,13 @@ export const system = {
   setWidgetColorChoice: (choice: string | null): void => native?.setWidgetColorChoice?.(choice),
   takePendingCounts: (): Record<string, number> => native?.takePendingCounts?.() ?? {},
   peekPendingCounts: (): Record<string, number> => native?.peekPendingCounts?.() ?? {},
+  takeExits: (): unknown[] => {
+    try {
+      return native?.takeExits?.() ?? [];
+    } catch {
+      return [];
+    }
+  },
   syncOffered: (): boolean | null => native?.syncOffered?.() ?? null,
   setsSystemBarIcons: (): boolean => typeof native?.setSystemBarIcons === "function",
   setSystemBarIcons: (lightStatus: boolean, lightNavigation: boolean): void => void native?.setSystemBarIcons?.(lightStatus, lightNavigation)?.catch(() => undefined),

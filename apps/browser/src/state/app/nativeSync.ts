@@ -31,6 +31,7 @@ import { flushLive, useLive } from "../live/store";
 import { startWindowCloseGuard } from "../windows/windowClose";
 import { openLastWindowOrNew } from "../windows/lastWindow";
 import { noteDockReopen } from "../telemetry/usage";
+import { noteSparkleUpdate } from "../telemetry/updateCounts";
 import { noteWindowReopenedMaximized } from "../telemetry/windowPlacementCounts";
 import { noteLittleArdiaAppHandoff, noteLittleArdiaLinkKeptBehind, noteLittleArdiaReturnsDropped } from "../telemetry/littleArdiaEscapes";
 import { notePageFocusReturnRequestAfterMenu } from "../telemetry/pageFocusReturns";
@@ -101,6 +102,7 @@ export function startNativeSync() {
     if (e.type === "littleArdiaLinkKeptBehind") noteLittleArdiaLinkKeptBehind(e.when);
     if (e.type === "littleArdiaGlobalShortcut") noteLittleArdiaAppHandoff("globalShortcut");
     if (e.type === "littleArdiaGlobalShortcutBehind") noteLittleArdiaAppHandoff("globalShortcutBehind");
+    if (e.type === "updateStep" || e.type === "updateFailed") noteSparkleUpdate(e);
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
     if (e.type === "willQuit") {
       setQuitting(true);

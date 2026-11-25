@@ -1,7 +1,8 @@
 import { consentOrNow, countFor, type ConsentToken } from "./consentPeriod";
+import { nativeConsent } from "./nativeConsent";
 
 export const UPDATE_DOWNLOAD_FAILURES = ["version", "kind", "network", "manifest", "tooLarge", "busy", "disk", "other"] as const;
-export const UPDATE_INSTALL_FAILURES = ["usage", "missing", "manifest", "signature", "notNewer", "kind", "checksum", "install", "busy", "polkit", "timeout", "other"] as const;
+export const UPDATE_INSTALL_FAILURES = ["usage", "missing", "manifest", "signature", "notNewer", "kind", "checksum", "install", "busy", "polkit", "timeout", "extract", "auth", "relaunch", "disk", "other"] as const;
 const UPDATE_INSTALL_KINDS = ["deb", "tarball", "appimage"] as const;
 
 type UpdateDownloadFailure = (typeof UPDATE_DOWNLOAD_FAILURES)[number];
@@ -20,6 +21,7 @@ const SELF_UPDATE_FIELDS = [
   ...UPDATE_INSTALL_KINDS.map(installField),
   ...UPDATE_INSTALL_FAILURES.map(installFailureField),
   "update_restarts",
+  "update_install_starts",
 ];
 
 const noSelfUpdates = () => Object.fromEntries(SELF_UPDATE_FIELDS.map((field) => [field, 0])) as Record<string, number>;
@@ -51,6 +53,16 @@ export const noteUpdateDownloadFailed = (reason: unknown, consent: ConsentToken 
 export const noteUpdateInstalled = (kind: UpdateInstallKind, consent: ConsentToken | null) => countSelfUpdate(installField(kind), consent);
 export const noteUpdateInstallFailed = (reason: unknown, consent: ConsentToken | null) => countSelfUpdate(installFailureField(updateInstallFailure(reason)), consent);
 export const noteUpdateRestart = (consent: ConsentToken | null) => countSelfUpdate("update_restarts", consent);
+
+export type SparkleUpdateEvent = ({ type: "updateStep"; step: "downloadStarted" | "downloadFinished" | "installing" } | { type: "updateFailed"; stage: "download" | "install"; reason: string }) & { epoch?: string };
+
+export function noteSparkleUpdate(event: SparkleUpdateEvent) {
+  const now = nativeConsent(event);
+  if (event.type === "updateFailed") return event.stage === "download" ? noteUpdateDownloadFailed(event.reason, now) : noteUpdateInstallFailed(event.reason, now);
+  if (event.step === "downloadStarted") noteUpdateDownloadStarted(now);
+  else if (event.step === "downloadFinished") noteUpdateDownloadFinished(now);
+  else if (event.step === "installing") countSelfUpdate("update_install_starts", now);
+}
 
 export function noteSwitchRefresh(result: "updated" | "failed" | "already") {
   if (result === "updated") checks.switchRefreshes += 1;

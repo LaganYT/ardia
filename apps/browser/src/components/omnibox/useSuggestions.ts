@@ -11,7 +11,8 @@ import {
   type SuggestionResult,
 } from "@ardia/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { noteLateSuggestionsBelow, noteSiteSuggestionShown } from "../../state/telemetry/inlineCompletionCounts";
+import { noteInlineChance, noteLateSuggestionsBelow, noteSiteSuggestionShown } from "../../state/telemetry/inlineCompletionCounts";
+import { inlineChance } from "../../state/omnibox/inlineMiss";
 import { bookmarksByUrl } from "../../state/bookmarks/bookmarks";
 import { useMenuBarRevision } from "../../state/commands/commandShortcuts";
 import { useSettings } from "../../state/browser/hooks";
@@ -181,5 +182,9 @@ export function useSuggestions({
   useEffect(() => {
     if (siteListed) noteSiteSuggestionShown();
   }, [siteListed, query]);
+  const chance = active && !scope ? inlineChance(query, result.completion, source.history, !!preventInline) : "none";
+  useEffect(() => {
+    if (chance !== "none") noteInlineChance(chance === "missed");
+  }, [chance, query]);
   return result;
 }

@@ -38,6 +38,11 @@ class SystemModule : Module() {
             mapOf("sharing" to sharing, "generation" to generation.toDouble())
         }
 
+        Function("takeExits") {
+            val context = appContext.reactContext ?: return@Function emptyList<Map<String, Any>>()
+            PhoneExits.take(context)
+        }
+
         Function("takePendingCounts") {
             val context = appContext.reactContext ?: return@Function emptyMap<String, Int>()
             PendingCounts.take(context)

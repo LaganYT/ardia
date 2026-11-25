@@ -42,6 +42,7 @@ import { startSharedFolders } from "./state/sharedFolders/engine";
 import { setStoreBatching, useBrowser } from "./state/browser/store";
 import { installErrorReporting, startTelemetry } from "./state/telemetry";
 import { launchCommitted } from "./state/telemetry/journeys";
+import { consentToken } from "./state/telemetry/choice";
 import { markFirstWindow } from "./state/telemetry/track";
 import { noteWindowRoot } from "./state/telemetry/windowRootCounts";
 
@@ -71,6 +72,7 @@ startReader();
 startHiddenElements();
 startSync();
 startTelemetry();
+const launchConsent = consentToken();
 startKillSwitches();
 startProgramControl();
 startOpenWhenDone();
@@ -93,7 +95,7 @@ function Root({ windowId }: { windowId: string }) {
     const timer = setTimeout(() => setHeld(false), delay);
     return () => clearTimeout(timer);
   }, []);
-  useLayoutEffect(() => launchCommitted(renderedAt), []);
+  useLayoutEffect(() => launchCommitted(launchConsent, renderedAt), []);
   useLayoutEffect(() => noteWindowRoot(windowId), [windowId]);
   useEffect(() => {
     perfMark("firstWindow");

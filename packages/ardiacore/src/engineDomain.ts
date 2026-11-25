@@ -103,7 +103,7 @@ export type HoverLostEpisode = {
 
 export type WindowUnpaintedRecord = {
   window: "regular" | "private";
-  trigger: "seen" | "key";
+  trigger: "seen" | "key" | "profileSwitch";
   seen: boolean;
   occlusion: "visible" | "occluded";
   overruled: boolean;

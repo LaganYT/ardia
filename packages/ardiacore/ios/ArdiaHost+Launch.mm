@@ -7,6 +7,7 @@
 #import "ArdiaServices.h"
 #import "ArdiaNavigationDownloads.h"
 #import "ArdiaStartup.h"
+#import "ArdiaNativeMessaging.h"
 #import "ArdiaTabParking.h"
 #import "ArdiaWebViewInternal.h"
 
@@ -358,6 +359,10 @@ void StartEarlyWindow() {
   if (![launch reached:ArdiaLaunchAppKitDidFinish]) return nil;
   if (launch.launchedHidden) return @"login_item";
   return launch.launchedForDocuments ? @"documents" : @"user";
+}
+
++ (NSDictionary<NSString *, NSNumber *> *)nativeMessagingHosts {
+  return gDataDirectory.length ? ardia_native_messaging::ProbeHosts(gDataDirectory) : @{};
 }
 
 + (NSDictionary<NSString *, NSNumber *> *)launchMarks {

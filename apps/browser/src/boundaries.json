@@ -217,6 +217,17 @@
    ]
   },
   {
+   "id": "chromium-page-message:pageMetrics",
+   "source": "page",
+   "guard": "Main frame only; the batch's generation must equal the native generation for the current consent period (the page never sees the consent epoch); counts read as finite numbers, floored, clamped to a million per message, dropped frames capped at frames, media errors at five fixed slots; summed into fixed counter names",
+   "checks": [
+    "packages/ardiacore/ios/ArdiaPageMetricsMath.h",
+    "packages/ardiacore/tests/page-metrics.test.cc",
+    "packages/ardiacore/tests/page-metrics.test.mjs",
+    "apps/browser/src/state/telemetry/telemetryGaps.test.mjs"
+   ]
+  },
+  {
    "id": "chromium-page-message:scroll",
    "source": "page",
    "guard": "Main frame only; enum state for toolbar hiding",

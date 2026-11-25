@@ -11,6 +11,7 @@ import { reopenSession } from "../../browser/src/state/telemetry/sessionControl"
 import { uuidv4 } from "../../browser/src/state/telemetry/ids";
 import { setTelemetryHost } from "../../browser/src/state/telemetry/transport";
 import { emitWindowUsage, sessionEnding, setCountsRelayNow } from "../../browser/src/state/telemetry/usage";
+import { noteMultipleDownloadFollowUp } from "../../browser/src/state/telemetry/downloadWork";
 import { isLinuxUtility } from "./session";
 import { documentSaved } from "../../browser/src/platform/documents";
 import { withDeadline } from "../../browser/src/lib/deadline";
@@ -102,6 +103,13 @@ async function handleTelemetryOp(op: TelemetryOp, arg?: string): Promise<unknown
 }
 
 let leadership: TelemetryLeadership | null = null;
+let led = false;
+const afterLead: (() => void)[] = [];
+
+export function whenTelemetryLeads(run: () => void) {
+  if (led) run();
+  else afterLead.push(run);
+}
 let offeredInstallId: string | null = null;
 
 const shownChoice = () => JSON.stringify(useTelemetry.getState());
@@ -158,8 +166,14 @@ export function startHostTelemetry(options: { host: ArdiaHost; candidate: boolea
         void current.request("choice", RESET_TIMEOUT_MS, JSON.stringify({ kind: "installId", id } satisfies ChoiceChange)).catch(report).then(refreshState);
         return id;
       },
+      downloadFollowUp: (until, consent) => void forward({ kind: "downloadFollowUp", until, consent }),
     }),
-    deliver: (message) => message.kind === "capture" ? capture(message.event, message.props, relayedConsent(message.consent), message.options) : queueLog(message.level, message.message, message.attributes, relayedConsent(message.consent)),
+    deliver: (message) =>
+      message.kind === "capture"
+        ? capture(message.event, message.props, relayedConsent(message.consent), message.options)
+        : message.kind === "log"
+          ? queueLog(message.level, message.message, message.attributes, relayedConsent(message.consent))
+          : noteMultipleDownloadFollowUp(message.until, relayedConsent(message.consent)),
     handle: handleTelemetryOp,
     lead: async () => {
       await Promise.all(TELEMETRY_DOCUMENTS.map((name) => refreshDocument(name).catch(report)));
@@ -167,6 +181,8 @@ export function startHostTelemetry(options: { host: ArdiaHost; candidate: boolea
       reloadChoice();
       sessionEnded = continuing && !savedChoice().sessionOpen;
       startTelemetry({ continuing });
+      led = true;
+      for (const run of afterLead.splice(0)) run();
       await documentSaved(STATE_DOC).catch(report);
       current.announce();
     },

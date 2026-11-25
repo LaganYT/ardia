@@ -135,6 +135,18 @@ export const takeContentDriftCounts = (): Promise<Record<string, number>> =>
     return { content_layer_layouts: drift.layouts, content_layer_refits: drift.fits, content_layer_drift_max_pt: drift.maxPoints };
   });
 
+const PAGE_METRIC_KEY = /^(media_errors_(other|aborted|network|decode|unsupported)|scroll_bursts|(video_frames|video_frames_dropped|scroll_frames|scroll_ms)_(60|120)hz(_low_power)?)$/;
+
+export function pageMetricsFields(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [key, value] of Object.entries(raw)) if (PAGE_METRIC_KEY.test(key) && typeof value === "number" && Number.isFinite(value) && value > 0) out[key] = Math.min(Math.round(value), 100_000_000);
+  return out;
+}
+
+export const takePageMetrics = (): Promise<Record<string, number>> =>
+  inTurn(async () => pageMetricsFields(await call("webView.takePageMetrics", {}).catch(() => null)));
+
 export { takeStopBreathing } from "./stopBreathing";
 
 export const takeColdTabHoldCounts = (): Promise<Record<string, number>> =>
@@ -292,7 +304,7 @@ export function trackHoverLost(e: HoverLostEpisode) {
 }
 
 const UNPAINTED_WINDOWS = new Set(["regular", "private"]);
-const UNPAINTED_TRIGGERS = new Set(["seen", "key"]);
+const UNPAINTED_TRIGGERS = new Set(["seen", "key", "profileSwitch"]);
 const UNPAINTED_OCCLUSIONS = new Set(["visible", "occluded"]);
 
 const cappedCount = (value: unknown) => (Number.isFinite(value) ? Math.min(Math.max(0, Math.round(value as number)), MAX_WINDOW_VIEWS) : null);

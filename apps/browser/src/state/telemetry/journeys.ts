@@ -1,6 +1,6 @@
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId } from "../browser/model";
-import { capture, consentNow, isSharing, onConsentPeriodChange } from "./client";
+import { capture, consentNow, isSharing, onConsentPeriodChange, stillValid, type ConsentToken } from "./client";
 import { appInfo, percentile } from "./transport";
 import { firstCommitMs, jsStartedAt } from "./jsStart";
 import { launchCohortFields } from "./launchCohort";
@@ -80,7 +80,7 @@ function mark(key: string, kind: string, from: number, until = Infinity): number
 type NewTab = { journey: "j2"; key: string; t0: number; heard: number; bar?: number; barSettled?: boolean; keyAt?: number; suggested?: number };
 type Switch = { journey: "j3"; key: string; t0: number; heard: number };
 type Navigate = { journey: "j4"; key: string; t0: number; until?: number };
-type Launch = { journey: "j1"; t0: number; firstWindow?: number; render?: number; commit?: number; usable?: number; keys: string[]; tabs: number; windows: number };
+type Launch = { journey: "j1"; t0: number; firstWindow?: number; render?: number; commit?: number; usable?: number; keys: string[]; tabs: number; windows: number; consent: ConsentToken };
 type Pending = NewTab | Switch | Navigate | Launch;
 
 const MAX_PENDING = 50;
@@ -198,21 +198,21 @@ type PreviousLaunch = { lastLaunchAt: number | null; lastQuitAt: number | null; 
 let previousLaunch: PreviousLaunch = { lastLaunchAt: null, lastQuitAt: null, firstOfVersion: null };
 let firstRootCommitted = false;
 
-export function launchCommitted(renderedAt?: number) {
+export function launchCommitted(consent: ConsentToken | null, renderedAt?: number, committedAt = Date.now(), contentAt?: number, usableAt?: number) {
   if (firstRootCommitted) return;
   firstRootCommitted = true;
-  if (launch || launchSent || !on) return;
+  if (launch || launchSent || !on || !consent || !stillValid(consent)) return;
   const start = appInfo().processStart;
   if (!start) return;
   const s = useBrowser.getState();
   const keys: string[] = [];
-  for (const id of s.windowOrder) {
+  if (fieldTiming.pageMarks !== false) for (const id of s.windowOrder) {
     const tab = activeTabId(s, id);
     if (tab && s.tabs[tab]?.url && !isAsleep(s.tabs[tab])) keys.push(tab);
   }
-  launch = { journey: "j1", t0: start, render: renderedAt, commit: Date.now(), keys, tabs: Object.keys(s.tabs).length, windows: s.windowOrder.length };
-  frame("launch", "content");
-  probeUsable(launch);
+  launch = { journey: "j1", t0: start, render: renderedAt, commit: committedAt, keys, tabs: Object.keys(s.tabs).length, windows: s.windowOrder.length, consent };
+  void (contentAt === undefined ? frame("launch", "content") : marks.set("launch", [...(marks.get("launch") ?? []), ["content", contentAt]]));
+  void (usableAt === undefined ? probeUsable(launch) : (launch.usable = usableAt));
   begin(launch);
 }
 
@@ -288,7 +288,7 @@ function sendLaunch(l: Launch, content: number | null, paints: number[]) {
     launched_hidden: typeof launchedHidden === "boolean" ? launchedHidden : null,
     launch_source: typeof launchSource === "string" && LAUNCH_SOURCES.has(launchSource) ? launchSource : null,
     since_boot: bootTime ? bucket(l.t0 - bootTime, [[2 * MINUTE, "<2m"], [10 * MINUTE, "<10m"], [HOUR, "<1h"], [DAY, "<1d"]], "1d+") : "unknown",
-  }, consentNow());
+  }, l.consent);
 }
 
 function watchStore(s: BrowserState, prev: BrowserState) {
@@ -342,7 +342,7 @@ export function journeySuggestions(tabId: string) {
 }
 
 export function journeyNavigate(tabId: string) {
-  if (!on) return;
+  if (!on || fieldTiming.pageMarks === false) return;
   const now = Date.now();
   const t0 = lastInput(now) ?? now;
   for (const p of pending) if (p.journey === "j4" && p.key === tabId && p.until === undefined) p.until = t0;

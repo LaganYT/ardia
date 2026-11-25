@@ -1,7 +1,7 @@
 import "../../browser/src/state/browser/store";
 import "./base.css";
 import "./styles.css";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { unstable_batchedUpdates } from "react-native";
 import { emitAppEvent, emitCommand, menuShown, setWindowCloseDecider } from "@ardia/shell";
@@ -90,7 +90,13 @@ import { refreshDocument } from "./shims/shellBase";
 import { linuxLiveHooks } from "./liveHooks";
 import { connectCalendar, refreshCalendar, setCalendarHidden, useCalendar } from "../../browser/src/state/live/calendar";
 import { useMeetingAlert } from "../../browser/src/state/live/alerts";
-import { linuxTelemetryHooks, reportRecoverableRender, reportUncaughtRender, startHostTelemetry } from "./hostTelemetry";
+import { linuxTelemetryHooks, reportRecoverableRender, reportUncaughtRender, startHostTelemetry, whenTelemetryLeads } from "./hostTelemetry";
+import { launchCommitted } from "../../browser/src/state/telemetry/journeys";
+import { markFirstWindow } from "../../browser/src/state/telemetry/track";
+import { probeKeyringAfterLaunch } from "./keyringProbe";
+import { deliverLaunch, measureLaunch } from "./launchMeasure";
+import { setDownloadFlowOwner } from "../../browser/src/state/telemetry/downloadWork";
+import { consentToken, stillValid } from "../../browser/src/state/telemetry/choice";
 import type { LeaderLocks } from "./telemetryLeader";
 import { liveOf } from "../../browser/src/state/tabs/tabLive";
 
@@ -98,7 +104,22 @@ Object.assign(globalThis, { ardiaLinux: { store: useBrowser, pages: usePages, em
 setHostPageHooks({ reset: resetHostPage, applyTheme: applyHostPageTheme, depart: (tabId) => ardiaHost && forgetDepartedPage(tabId, ardiaHost.bootstrap.windowId) });
 setWindowCloseDecider(decideLinuxWindowClose);
 
-function FirstWindowCommitted({ typeahead }: { typeahead: boolean }) {
+function FirstWindowCommitted({ typeahead, launch }: { typeahead: boolean; launch: boolean }) {
+  const [renderedAt] = useState(Date.now);
+  useLayoutEffect(() => {
+    if (!launch) return;
+    const committedAt = Date.now();
+    const consent = consentToken();
+    measureLaunch(committedAt, (contentAt, usableAt) =>
+      whenTelemetryLeads(() => {
+        if (ardiaHost) probeKeyringAfterLaunch(ardiaHost);
+        deliverLaunch({ committedAt, contentAt, usableAt, consent }, Date.now(), stillValid, (sample) => {
+          launchCommitted(sample.consent, renderedAt, sample.committedAt, sample.contentAt, sample.usableAt);
+          markFirstWindow(sample.committedAt);
+        });
+      }),
+    );
+  }, []);
   useEffect(() => {
     firstWindowCommitted();
     if (ardiaHost) void announceShellPainted(ardiaHost);
@@ -133,6 +154,7 @@ async function start() {
   followMaximizeButtonState(ardiaHost, windowId);
   startConfigFiles(colorRoles, launch);
   startHostTelemetry({ host: ardiaHost, candidate: !utility, locks: navigator.locks as unknown as LeaderLocks });
+  setDownloadFlowOwner(linuxTelemetryHooks.leading);
   countLoginPasswordChecks(linuxTelemetryHooks.leading);
   watchWindowDecorations(ardiaHost, windowId);
   const capabilities = linuxCapabilities(ardiaHost);
@@ -202,7 +224,7 @@ async function start() {
         <TrafficLights windowId={windowId} />
       </div>
       <MenuHost />
-      <FirstWindowCommitted typeahead={!utility} />
+      <FirstWindowCommitted typeahead={!utility} launch={!utility && launch} />
     </div>,
   );
 }

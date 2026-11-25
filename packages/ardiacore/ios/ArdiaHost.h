@@ -88,6 +88,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (nullable NSDictionary<NSString *, id> *)senderOfOpenedURL:(NSString *)url NS_SWIFT_NAME(senderOfOpenedURL(_:));
 @property(class, readonly) BOOL holdsIncomingLinks;
 @property(class, readonly) NSDictionary<NSString *, NSNumber *> *launchMarks;
+@property(class, readonly) NSDictionary<NSString *, NSNumber *> *nativeMessagingHosts;
 @property(class, readonly, nullable) NSNumber *launchedHidden;
 @property(class, readonly, nullable) NSString *launchSource;
 + (void)markMainStarted;

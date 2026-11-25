@@ -46,6 +46,8 @@ const testGlobals = globalThis as {
   acTestCliTargets?: (tabId: string) => CliTabTarget | undefined;
   acTestCliHeld?: (tabs: { tabId: string; until: number; live?: boolean }[]) => { kept: number; marked?: string[] } | Promise<{ kept: number; marked?: string[] }> | undefined;
   acTestCliOwns?: (tabId: string) => { owned: boolean; shown: boolean };
+  acTestTabDiagnostics?: (args: { tabId: string; since?: number; clearBefore?: number }) => CallResult<"tabs.diagnostics">;
+  acTestTabInput?: (args: CallArgs<"tabs.input">) => CallResult<"tabs.input">;
   acTestCliMoveOffscreen?: (tabId: string) => { ok: boolean; reason?: string };
   acTestCliCloseOffscreen?: () => void;
   acTestCliConsole?: (args: { tabId: string; after?: number; generation?: number; limit?: number }) => CliConsoleDelta;
@@ -500,6 +502,14 @@ const fakeModules = {
       stripCommand: async ({ id, command }) => (await tabStripHost().command(command, id), null),
       strips: () => tabStripHost().snapshot(),
       lastTabPolicy: () => ({ closesWindow: true }),
+      diagnostics: (args) => {
+        if (!testGlobals.acTestTabDiagnostics) throw Object.assign(new Error("tabs.diagnostics has no test fake yet"), { code: "ERR_UNKNOWN_CALL" });
+        return testGlobals.acTestTabDiagnostics(args);
+      },
+      input: (args) => {
+        if (!testGlobals.acTestTabInput) throw Object.assign(new Error("tabs.input has no test fake yet"), { code: "ERR_UNKNOWN_CALL" });
+        return testGlobals.acTestTabInput(args);
+      },
       reportCommits: ({ on }) => {
         commitReports.push(on);
         if (commitReportFailures.next > 0) {

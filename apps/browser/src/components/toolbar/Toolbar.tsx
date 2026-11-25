@@ -1,4 +1,4 @@
-import { colorDistance } from "../../lib/color";
+import { fieldLoadColor } from "./fieldLoadColor";
 import { pageHostLabel, urlTrail, withoutUserInfo } from "../../lib/url";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -41,7 +41,7 @@ import { fieldButtonsShown, sidebarFieldButtons } from "./fieldButtons";
 import { useFieldExtensionsHeld } from "../../state/extensions/store";
 import { noteSiteControls } from "../../state/telemetry/usage";
 import { HistoryButton, ReloadButton } from "./NavButtons";
-import { FIELD_LOAD, TOOLBAR_MOTION } from "./tokens";
+import { TOOLBAR_MOTION } from "./tokens";
 import { useToolbarRow } from "./useToolbarRow";
 import { useStableHandler } from "./useStableHandler";
 import { PAGE_IDENTITY_TAG } from "../../state/tabs/tabReveal";
@@ -201,9 +201,6 @@ function useUrlField(tab: ToolbarTab, windowId: string, onFocus: () => void) {
   return { insecure, popover, hovered, buttonsShown, developerMode, pageBar, hoverProps, openPanel, toggleSiteControls, host: pageHostLabel(tab.url), trail: urlTrail(tab.url, tab.title, { hovered, showFullUrl }) };
 }
 
-const loadFillColor = (palette: ToolbarPalette, accent: string) =>
-  palette.background && colorDistance(accent, palette.background) < FIELD_LOAD.accentApartFromBand ? palette.text : accent;
-
 type UrlFieldProps = { tab: ToolbarTab; palette: ToolbarPalette; windowId: string; onFocus: () => void };
 
 export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, windowId, inSplit, loadFill, onFocus, style, splitHint }: UrlFieldProps & { inSplit: boolean; loadFill: boolean; style: ViewStyle; splitHint: string | undefined }) {
@@ -219,7 +216,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
       {glass ? (
         <GlassFill state={hovered ? "lit" : "rest"} radius={row.fieldRadius} dark={palette.background ? palette.text.startsWith(ink.white) : undefined} />
       ) : null}
-      {loadFill && <FieldLoadFill tabId={tab.id} color={loadFillColor(palette, theme.accent)} height={row.field} radius={row.fieldRadius} />}
+      {loadFill && <FieldLoadFill tabId={tab.id} color={fieldLoadColor(theme)} height={row.field} radius={row.fieldRadius} />}
       {insecure && (
         <Pressable onPress={toggleSiteControls} style={{ paddingLeft: LOCK.left }} tooltip="Connection is not secure">
           {drawnSymbol({
@@ -286,7 +283,7 @@ export const SidebarUrlField = memo(function SidebarUrlField({ tab, palette, win
   return (
     <View {...field.hoverProps} style={{ flexDirection: "row", alignItems: "center", height, paddingRight: SIDEBAR_FIELD_CONTROL.inset, borderRadius: SIDEBAR_FIELD.radius }}>
       <SidebarFieldFill hovered={hovered} />
-      <FieldLoadFill tabId={tab.id} color={loadFillColor(palette, theme.accent)} height={height} radius={SIDEBAR_FIELD.radius} />
+      <FieldLoadFill tabId={tab.id} color={fieldLoadColor(theme)} height={height} radius={SIDEBAR_FIELD.radius} />
       {shown.leading && (
         <FieldSiteButton
           icon={insecure ? "lock.open.trianglebadge.exclamationmark.fill" : "slider.horizontal.3"}

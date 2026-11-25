@@ -23,6 +23,8 @@ const { syncedHome } = await import("./state/sync/pinRecords.ts");
 const { sendableUrl } = await import("./state/sync/sentTabsAdapter.ts");
 const { filterListAddress } = await import("./state/site/contentBlocking.ts");
 const { CLEAN_UP_KEY, LEGACY_CLEAN_UP_KEY } = await import("./state/settings/cleanUpAfter.ts");
+const { checkedInput, isKeyName, MAX_TEXT_LENGTH } = await import("./state/automation/tabInput.ts");
+const { MAX_MESSAGE_LENGTH } = await import("./state/automation/tabDiagnostics.ts");
 const { updateWithin } = await import("./state/plugins/officialUpdate.ts");
 const { readManifest } = await import("./lib/pluginManifest.ts");
 const { parseIntent, INTENT_SPECS } = await import("./state/plugins/stateIntents.ts");
@@ -720,5 +722,111 @@ test("windows webui native update policy keeps every hostile input and call argu
     assert.equal(unit.status, 0, unit.stderr || unit.stdout);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test("socket tabs.input: every hostile value reaches the engine only as a checked action, point, key or text", () => {
+  for (const value of HOSTILE_VALUES.map((h) => h.value)) {
+    for (const params of [{ action: value, x: 1, y: 1 }, { action: "click", x: value, y: 1 }, { action: "key", key: value }, { action: "key", key: "a", code: value }, { action: "text", text: value }, { action: "click", x: 1, y: 1, modifiers: [value] }]) {
+      let out;
+      try {
+        out = checkedInput(params);
+      } catch (error) {
+        assert.equal(error.code, "bad_request", show(params));
+        continue;
+      }
+      if (out.key !== undefined) assert.ok(isKeyName(out.key), show(params));
+      if (out.text !== undefined) assert.ok(typeof out.text === "string" && out.text.length <= MAX_TEXT_LENGTH && !out.text.includes("\0"), show(params));
+      if (out.x !== undefined) assert.ok(Number.isFinite(out.x) && Number.isFinite(out.y), show(params));
+    }
+  }
+});
+
+const { startAutomation } = await import("./state/automation/controlSocket.ts");
+
+test("socket tabs.diagnostics: a hostile page's console text and addresses leave the socket sink redacted and bounded", async () => {
+  S().hydrate({});
+  S().updateSettings({ cliControl: true });
+  startAutomation();
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  for (let i = 0; i < 5 && !stub.controlSocket.running; i++) await tick();
+  await tick();
+  const w = S().createWindow({ url: "https://a.example/" });
+  const tab = activeTabId(S(), w);
+  let nextId = 700;
+  const conn = 88;
+  const socketCall = async (method, params) => {
+    const id = ++nextId;
+    const before = stub.controlSocket.replies.length;
+    stub.emitControlRequest({ connection: conn, generation: stub.controlSocket.generation, line: JSON.stringify({ id, method, params }) });
+    for (let i = 0; i < 50 && !stub.controlSocket.replies.slice(before).some((r) => r.connection === conn); i++) await tick();
+    const replies = stub.controlSocket.replies.slice(before).filter((r) => r.connection === conn);
+    assert.equal(replies.length, 1);
+    return JSON.parse(replies[0].line);
+  };
+  let nextReply = null;
+  globalThis.acTestTabDiagnostics = () => nextReply;
+  try {
+    nextReply = {
+      ok: true,
+      console: [{ seq: 1, time: 10, level: "error", message: 'plain token=supersecret123 {"authToken":"abc"}', source: "https://user:pw@a.example/app.js?k=1#h", line: 4, frame: "main" }],
+      network: [{ seq: 2, time: 11, method: "GET", url: "https://user:pw@a.example/api?q=secret#f", status: 404, type: "fetch", frame: "main", failed: true }],
+      nextSeq: 3,
+      clearedBefore: 1,
+      capacity: { console: 200, network: 250 },
+    };
+    const control = await socketCall("tabs.diagnostics", { tab });
+    assert.equal(control.error, undefined, "positive control reaches the socket sink");
+    assert.equal(control.result.console[0].message, 'plain token=[redacted] {"authToken":"[redacted]"}');
+    assert.equal(control.result.console[0].source, "https://a.example/app.js");
+    assert.equal(control.result.network[0].url, "https://a.example/api");
+
+    for (const value of strings) {
+      const part = value.isWellFormed() ? encodeURIComponent(value) : value;
+      nextReply = {
+        ok: true,
+        console: [{ seq: 1, time: 10, level: "error", message: `token=${value} ${value}`, source: `https://user:pw@a.example/${part}?q=${part}#${part}`, line: 1, frame: "main" }],
+        network: [{ seq: 2, time: 11, method: value, url: `https://user:pw@a.example/${part}?q=${part}#${part}`, status: 200, type: value, error: value, frame: "main", failed: false }],
+        nextSeq: 3,
+        clearedBefore: 1,
+        capacity: { console: 200, network: 250 },
+      };
+      const reply = await socketCall("tabs.diagnostics", { tab });
+      assert.equal(reply.error, undefined, show(value));
+      const row = reply.result.console[0];
+      const net = reply.result.network[0];
+      assert.equal(typeof row.message, "string", show(value));
+      assert.ok(row.message.length <= MAX_MESSAGE_LENGTH, show(value));
+      if (/^[\w.~+/-]+$/.test(value) && value !== "redacted") assert.ok(row.message.startsWith("token=[redacted]"), show(value));
+      for (const addr of [row.source, net.url]) assert.ok(addr.startsWith("https://a.example/") && !addr.includes("?") && !addr.includes("#") && !addr.includes("pw@"), show(value));
+      assert.ok(net.method.length <= 16 && net.type.length <= 32 && net.error.length <= 64, show(value));
+    }
+
+    for (const { id, value } of HOSTILE_VALUES) {
+      nextReply = {
+        ok: true,
+        console: [{ seq: 1, time: value, level: value, message: value, source: value, line: value, frame: value }],
+        network: [{ seq: 2, time: value, method: value, url: value, status: value, type: value, durationMs: value, error: value, frame: value, failed: value }],
+        nextSeq: 3,
+        clearedBefore: 1,
+        capacity: { console: 200, network: 250 },
+      };
+      const reply = await socketCall("tabs.diagnostics", { tab });
+      assert.equal(reply.error, undefined, id);
+      const row = reply.result.console[0];
+      const net = reply.result.network[0];
+      assert.ok(["debug", "info", "warning", "error"].includes(row.level), id);
+      assert.ok(typeof row.message === "string" && row.message.length <= MAX_MESSAGE_LENGTH, id);
+      assert.ok(typeof row.source === "string" && typeof net.url === "string", id);
+      assert.ok(Number.isFinite(row.time) && Number.isFinite(row.line) && Number.isFinite(net.status), id);
+      for (const field of ["since", "kind", "onlyErrors", "limit", "clear"]) {
+        const bad = await socketCall("tabs.diagnostics", { tab, [field]: value });
+        if (bad.error) assert.equal(bad.error.code, "bad_request", `${id} ${field}`);
+      }
+    }
+    assert.equal({}.ardiaPolluted, undefined);
+    assert.equal(Object.prototype.ardiaPolluted, undefined);
+  } finally {
+    delete globalThis.acTestTabDiagnostics;
   }
 });

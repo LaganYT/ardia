@@ -2190,6 +2190,35 @@
     "scripts/windows/engine/tests/webui_window_policy_test.cc#TestHostileSinks"
    ],
    "detected": false
+  },
+  {
+   "id": "socket-native:tabs.input",
+   "source": "socket",
+   "guard": "tabs.input params pass the method's closed schema, then checkedInput (tabInput.ts): one of eight actions with only that action's fields (clickCount on down and up only), finite coordinates within 0-100000, left or middle buttons (a right click or control-click would open Ardia's own menu), known modifiers (no control or meta on the wheel, which zooms), wheel deltas within ±10000, a key that is one printable character or a key name other than ContextMenu (or Shift+F10) and a code that is a key code, and well-formed NUL-free text of at most 4096 units; private and ineligible tabs are refused by tabOf. socketTabTools.test.mjs sends the shared hostile corpus over the socket in every field and checks what reaches the engine call (the sink): only checked shapes, or nothing; tabInput.test.mjs and hostileInputs.test.mjs run it through checkedInput directly. The engine checks again on its own (Build): the same per-action field list (Takes), private and crashed tabs, pages that aren't web pages (TakesInput), points outside the viewport (PointOf), keys it can't map or that open the context menu, NUL in key, code or text (KeyOf, Text), held-button transitions (a second down, an unmatched up, a click on a held button, and a down, up, click or dblclick while another is unanswered, which consumes its prime token and answers busy), present optional fields of the wrong type or value (button, clickCount, deltaX, deltaY, code, prime, token), more than four modifiers, coordinates above 100000, a token on a prime, and a send's prime token, which it spends before any other check so a refused send never holds one of its 16 slots, and a token binding the send to the documents prime saw (Dispatch); keys go with skip_if_unhandled (KeyEvent). packages/ardiacore/scripts/tab-tools-check.mjs exercises live, through the socket and one call at a time: the NUL refusals, out-of-viewport points, right clicks, the sequential held-button transitions (an unmatched up, a second down, a click on a held button), trusted delivery on a hidden background tab and the absence of any activation. No test sends overlapping presses, so the busy answer is unexercised. The engine's own copies of the field, NUL and context-menu checks sit behind the socket guard, so the corpus and the live run reach them only where the guard lets a value through",
+   "checks": [
+    "apps/browser/src/state/automation/tabInput.ts#checkedInput",
+    "apps/browser/src/state/automation/tabInput.ts#isKeyName",
+    "engine/ardiacore/src/ardia/core/ac_tab_input.cc#Dispatch",
+    "engine/ardiacore/src/ardia/core/ac_tab_input_events.cc#KeyEvent",
+    "engine/ardiacore/src/ardia/core/ac_tab_input_events.cc#KeyOf",
+    "engine/ardiacore/src/ardia/core/ac_tab_input_events.cc#PointOf",
+    "engine/ardiacore/src/ardia/core/ac_tab_input_events.cc#Takes",
+    "engine/ardiacore/src/ardia/core/ac_tab_input_events.cc#TakesInput",
+    "engine/ardiacore/src/ardia/core/ac_tab_input_events.cc#Text"
+   ],
+   "detected": false
+  },
+  {
+   "id": "page-diagnostics:tabs.diagnostics",
+   "source": "page",
+   "guard": "The engine records console messages and network requests only from the primary page of tabs that aren't private and that DevTools may inspect (Recordable), into fixed rings of 200 console and 250 network entries per tab freed with the tab, messages clipped to 1000 UTF-16 units and addresses cut to origin and path with no user, password, query or fragment (DiagnosticsUrl); no headers or bodies are kept. Before the socket, redactText and redactUrl replace tokens, keys, passwords, JWTs, private keys and secret-looking path segments with [redacted]",
+   "checks": [
+    "engine/ardiacore/src/ardia/core/ac_tab_diagnostics.cc#Recordable",
+    "engine/ardiacore/src/ardia/core/ac_tab_diagnostics.cc#DiagnosticsUrl",
+    "apps/browser/src/state/automation/tabDiagnostics.ts#redactText",
+    "apps/browser/src/state/automation/tabDiagnostics.ts#redactUrl"
+   ],
+   "detected": false
   }
  ]
 }

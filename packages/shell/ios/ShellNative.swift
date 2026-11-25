@@ -1753,6 +1753,7 @@ extension TelemetryLocalNative {
 protocol FieldGlowNative {
   static func show(_ id: String, _ timings: [Double])
   static func progress(_ id: String, _ progress: Double, _ still: Bool)
+  static func pulse(_ id: String, _ period: Double, _ low: Double)
   static func finish(_ id: String, _ still: Bool)
   static func reset(_ id: String)
 }
@@ -1766,6 +1767,10 @@ extension FieldGlowNative {
 
   static var progressFunction: AnyDefinition {
     Function("progress") { (id: String, progress: Double, still: Bool) in Self.progress(id, progress, still) }
+  }
+
+  static var pulseFunction: AnyDefinition {
+    Function("pulse") { (id: String, period: Double, low: Double) in Self.pulse(id, period, low) }
   }
 
   static var finishFunction: AnyDefinition {

@@ -76,6 +76,8 @@
       "routeLinkTabs",
       "stripCommand",
       "strips",
+      "diagnostics",
+      "input",
       "reportCommits",
       "devBrowserId",
       "devEvents",

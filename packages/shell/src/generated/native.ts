@@ -489,6 +489,7 @@ export type TelemetryLocalNative = {
 export type FieldGlowNative = {
   show(id: string, timings: number[]): void;
   progress(id: string, progress: number, still: boolean): void;
+  pulse(id: string, period: number, low: number): void;
   finish(id: string, still: boolean): void;
   reset(id: string): void;
 };

@@ -521,6 +521,7 @@ export const shell = defineModuleDomain({
       functions: {
         show: { args: [["id", "string"], ["timings", "number[]"]], result: "void", async: false, mac: "custom", desktop: "absent", windows: "absent" },
         progress: { args: [["id", "string"], ["progress", "number"], ["still", "boolean"]], result: "void", async: false, mac: "custom", desktop: "absent", windows: "absent" },
+        pulse: { args: [["id", "string"], ["period", "number"], ["low", "number"]], result: "void", async: false, mac: "custom", desktop: "absent", windows: "absent" },
         finish: { args: [["id", "string"], ["still", "boolean"]], result: "void", async: false, mac: "custom", desktop: "absent", windows: "absent" },
         reset: { args: [["id", "string"]], result: "void", async: false, mac: "custom", desktop: "absent", windows: "absent" },
       },

@@ -19,6 +19,8 @@ import { consentToken } from "../telemetry/consentPeriod";
 import { isRegularWindow } from "../windows/small";
 import { savedPage } from "./savedShapes";
 import { SESSION_VERSION } from "./savedSession";
+import { parseSettingsMeta } from "../settings/settings";
+import { retiredDefaultsAppliedSince } from "../settings/retiredDefaults";
 import { DOWNLOADS_DOCUMENT, DOWNLOADS_VERSION, hydrateAtLaunch, OLDER_BUILD_SESSION_DOCUMENT, wholeBackup, type LaunchOverrides } from "./launchSession";
 
 export { parseSession, SESSION_MIGRATIONS, SESSION_VERSION } from "./savedSession";
@@ -162,6 +164,7 @@ export function startPersistence(overrides: LaunchOverrides = {}) {
   if (launch.downloads.state === "unusable") noteSessionSetAside(false, launch.downloads.reason, null, consent);
   restoredAtLaunch = !!loaded?.windowOrder?.length;
   realignedAtLaunch = loaded?.windowsAgainstAutoHideTabs ?? 0;
+  const retiredDefaultsApplied = launch.session.state === "usable" && !!loaded && retiredDefaultsAppliedSince({ settings: loaded.settings, settingsMeta: parseSettingsMeta(loaded.settingsMeta) }, useBrowser.getState());
   restoreLaunchLook();
 
   const keepDroppedPins = pinGuard(useBrowser.getState(), (delay) => unstaged() && schedule(delay));
@@ -286,7 +289,7 @@ export function startPersistence(overrides: LaunchOverrides = {}) {
     cosmeticOnly = false;
     schedule(SAVE_DELAY_MS);
   }
-  if (realignedAtLaunch) {
+  if (realignedAtLaunch || retiredDefaultsApplied) {
     dirty.add(DOCS.find((d) => d.name === SESSION_DOCUMENT)!);
     cosmeticOnly = false;
     schedule(SAVE_DELAY_MS);

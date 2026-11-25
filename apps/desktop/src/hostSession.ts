@@ -248,9 +248,9 @@ const savedPageKind = (tab: Tab): Tab["page"] => ({ kind: tab.page.kind === "asl
 const publicTabs = (entry: { tabs: { profileId: string }[] }) => entry.tabs.every((tab) => publicProfile(tab.profileId));
 const publicTable = <T,>(table: Record<string, T>) => Object.fromEntries(Object.entries(table).filter(([id]) => publicProfile(id)));
 
-export function hydrateLaunchSession(saved: HydrateData | null | undefined, initial: HydrateData) {
+export function hydrateLaunchSession(saved: HydrateData | null | undefined, initial: HydrateData, { retiredDefaultsWaitForSync = false } = {}) {
   noteSavedTopAppsMerged(saved?.topAppsMerged ?? "");
-  useBrowser.getState().hydrate(initial);
+  useBrowser.getState().hydrate({ ...initial, retiredDefaultsWaitForSync });
 }
 
 export function snapshotHostSession(s: BrowserState): HydrateData {

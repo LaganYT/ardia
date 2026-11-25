@@ -141,12 +141,13 @@ export function syncFiles(current: () => SyncDoc) {
     return found;
   }
 
-  const loadState = () =>
+  const loadState = (owner = current()) =>
     serial(async () => {
       const sealedState = readDocument(STATE);
       const { scopes, covers, clock: savedClock } = readCheckpoint(parseSaved(await openSealed(sealedState), CHECKPOINT_VERSION, CHECKPOINT_MIGRATIONS));
       const parts = await readJournal();
       const doc = current();
+      if (doc !== owner) return false;
       const live = new Set([APP_SCOPE, ...Object.values(doc.profiles).map((link) => profileScope(link.syncId))]);
       const clock = new Clock(doc.deviceId ?? "", doc.clock);
       if (savedClock) clock.observe(savedClock);
@@ -175,6 +176,7 @@ export function syncFiles(current: () => SyncDoc) {
       writtenRest.clear();
       for (const [scope, scoped] of Object.entries(scopes)) writtenRest.set(scope, JSON.stringify(restOf(scoped)));
       Object.assign(state, { json: "", onDisk: !!sealedState, loaded: true, savedAt: Date.now() });
+      return true;
     });
 
   function countedParts() {

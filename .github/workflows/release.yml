@@ -11,6 +11,10 @@ on:
         description: Dry run, a release candidate that publishes nothing
         type: boolean
         default: true
+      windows:
+        description: Build and ship the Windows installers. Off skips the windows job; the Mac and Linux release publish without them and the Windows feed stays on the build before.
+        type: boolean
+        default: true
       iphone:
         description: Also build the pinned iPhone TestFlight version. Enable only when the owner asks for TestFlight. A real run uploads to Internal after the Mac release publishes.
         type: boolean
@@ -472,6 +476,7 @@ jobs:
 
   windows:
     needs: preflight
+    if: ${{ inputs.windows }}
     permissions:
       contents: write
       pull-requests: read

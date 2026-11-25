@@ -525,7 +525,8 @@ refuses the installers without their source. After `publish`, the
 `windows-alpha` prerelease and points `windows-update.json` at them, so installed Windows apps offer the release. A dry
 run checks the files in `publish.sh --dry-run` and packs the feed with `publish-alpha.sh --dry-run`; nothing goes up.
 
-A failed `windows` job never blocks the Mac: `publish` warns, the release ships without Windows and the feed stays on
+`-f windows=false` on the dispatch skips the `windows` job when the owner wants a Mac-focused release: `publish` ships without the
+installers and `windows-update` leaves the feed on the build before, as after a failed job. A failed `windows` job never blocks the Mac: `publish` warns, the release ships without Windows and the feed stays on
 the build before. Say so in the report. Don't re-run the release's failed jobs for it (that re-runs `publish`). If the
 cause is outside the code, dispatch `windows.yml` at `v<version>` with `-f version=<version>`, then upload its
 `windows-release-*` files and run `publish-alpha.sh --installers` (`docs/windows.md` › Releases has the four lines). If it's

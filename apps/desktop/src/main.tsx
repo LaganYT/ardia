@@ -85,6 +85,8 @@ import { announceShellPainted } from "./shellPainted";
 import { watchActiveProfile } from "./hostWindowProfiles";
 import { announceCommandsReady, announceTypeaheadReady, windowExpectsField } from "./typeahead";
 import { linuxSyncHooks, startLinuxSync } from "./syncEngine";
+import { settingsSyncWaitsAtDesktopLaunch } from "./syncLaunch";
+import { refreshDocument } from "./shims/shellBase";
 import { linuxLiveHooks } from "./liveHooks";
 import { connectCalendar, refreshCalendar, setCalendarHidden, useCalendar } from "../../browser/src/state/live/calendar";
 import { useMeetingAlert } from "../../browser/src/state/live/alerts";
@@ -122,7 +124,8 @@ async function start() {
   const restoreSession = launch ? configRestoreSession() : undefined;
   setStoreBatching(unstable_batchedUpdates);
   const { initial, restored } = initialLinuxLaunch(ardiaHost, saved?.settings && restoreSession !== undefined ? { ...saved, settings: { ...saved.settings, restoreSession } } : saved);
-  hydrateLaunchSession(saved, initial);
+  const retiredDefaultsWaitForSync = await settingsSyncWaitsAtDesktopLaunch(refreshDocument);
+  hydrateLaunchSession(saved, initial, { retiredDefaultsWaitForSync });
   noteRestoredWindows(restored);
   followButtonLayout(ardiaHost);
   startWindowButtonStyle();

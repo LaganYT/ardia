@@ -1,5 +1,5 @@
 import { create, type StateCreator, type StoreApi, type UseBoundStore } from "zustand";
-import { withToolbarKeptWhileScrolling } from "../settings/toolbarScrollDefault";
+import { withRetiredDefaults } from "../settings/retiredDefaults";
 import { setHeldReportsTransaction } from "../../platform/nativeEvents";
 import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "../bookmarks/bookmarks";
 import { changedIds } from "./changes";
@@ -68,7 +68,7 @@ export type HydrateData = Partial<
     | "settings"
     | "settingsMeta"
   >
-> & { focusedWindowId?: string | null; lastProfileId?: string | null };
+> & { focusedWindowId?: string | null; lastProfileId?: string | null; retiredDefaultsWaitForSync?: boolean };
 
 let batch = (update: () => void) => update();
 export function setStoreBatching(batchedUpdates: (update: () => void) => void) {
@@ -126,7 +126,7 @@ const createdBrowser = create<BrowserState>()(actionsApart(transactions.middlewa
       ...(data.profileOrder ?? []).filter((id) => profiles[id]),
       ...Object.keys(profiles).filter((id) => !data.profileOrder?.includes(id)),
     ];
-    const kept = withToolbarKeptWhileScrolling(data.settings, parseSettingsMeta(data.settingsMeta));
+    const kept = withRetiredDefaults(data.settings, parseSettingsMeta(data.settingsMeta), { waitForSync: data.retiredDefaultsWaitForSync });
     const settings = parseSettings(kept.settings);
     if (!profiles[settings.defaultProfileId]) settings.defaultProfileId = profileOrder[0]!;
 

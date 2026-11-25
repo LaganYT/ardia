@@ -82,7 +82,7 @@ export const SETTING_SPECS = {
   warnBeforeMovingTabsToProfile: flag(true, SYNCED),
   shareTabsAcrossWindows: flag(false),
   extendWebsiteColor: flag(true, SYNCED),
-  cmdClickCreatesTabGroup: flag(true, SYNCED),
+  cmdClickCreatesTabGroup: flag(false, SYNCED),
   optShiftClickOpensInGroup: flag(true, SYNCED),
   peekModifier: oneOf(["alt", "shift", "off"], "shift", SYNCED),
   peekLinksToOtherSites: flag(true, SYNCED),

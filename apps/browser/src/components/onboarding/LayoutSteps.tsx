@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS, type PeekModifier, type Settings } from "../../state/
 import { ChoiceList, type ChoiceOption, type MockFocus } from "./ChoiceList";
 import { useScreen } from "./Screen";
 import { useSection, useSharedMockFocus } from "./sectionContext";
-import { confirmAnswer, previewLive, PRESET_NAMES, PRESETS, setOnboardingDraft, skipStep, useOnboarding, type Preset, type QuestionId } from "../../state/onboarding/onboarding";
+import { confirmAnswer, previewLive, PRESET_NAMES, PRESETS, setOnboardingDraft, skipStep, touchedOrPresetPatch, useOnboarding, type Preset, type QuestionId } from "../../state/onboarding/onboarding";
 import { keysOf, questionKeys, useQuestions } from "../../state/onboarding/questions";
 import { placementCard, placementFromCard } from "../../state/omnibox/barPlacement";
 import { StepActions, StepLayout } from "./StepLayout";
@@ -267,7 +267,7 @@ export function TabsStep() {
         id={id}
         title="A few more tab habits"
         subtitle="Small things Arc and Dia do differently."
-        patch={Object.fromEntries(TABS_MORE.map((k) => [k, values[k]]))}
+        patch={touchedOrPresetPatch(TABS_MORE, values)}
         picked={[]}
       >
         <View style={{ gap: space.m }}>

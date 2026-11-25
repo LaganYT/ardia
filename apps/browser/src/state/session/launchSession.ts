@@ -26,7 +26,7 @@ export const DOWNLOADS_DOCUMENT = "downloads.json";
 export const DOWNLOADS_VERSION = 3;
 const DOWNLOADS_MIGRATIONS: Migrations = { 0: unchanged, 1: unchanged, 2: downloadsWithStagingPathOnly };
 
-export type LaunchOverrides = { restoreSession?: boolean };
+export type LaunchOverrides = { restoreSession?: boolean; retiredDefaultsWaitForSync?: boolean };
 type LoadedSession = HydrateData & { windowsAgainstAutoHideTabs: number };
 
 type SavedDownloads = { list: Download[]; staged: { id: string; staging: NonNullable<Download["staging"]> }[]; droppedPrivate: boolean; rejected: boolean };
@@ -127,10 +127,10 @@ function* candidates(found: FoundDocument, olderBuild: FoundDocument | null): Ge
   yield* backupsOf(found.state === "usable" ? { state: "unusable", reason: "shape", text: found.text } : found);
 }
 
-function launchData(session: SavedSession, downloads: Download[], { restoreSession }: LaunchOverrides): LoadedSession {
+function launchData(session: SavedSession, downloads: Download[], { restoreSession, retiredDefaultsWaitForSync }: LaunchOverrides): LoadedSession {
   const restore = restoreSession ?? session.settings?.restoreSession !== false;
   const data = restore ? session : closedForLaunch(session);
-  return { ...data, downloads, windowsAgainstAutoHideTabs: restore ? session.windowsAgainstAutoHideTabs : 0 };
+  return { ...data, downloads, retiredDefaultsWaitForSync, windowsAgainstAutoHideTabs: restore ? session.windowsAgainstAutoHideTabs : 0 };
 }
 
 export function loadSession(overrides: LaunchOverrides = {}): LoadedSession | null {

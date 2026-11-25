@@ -110,7 +110,7 @@ if ($Shippable -or $VcRedist) {
 }
 if ($Build -gt 0) {
   if (-not $Version) { $Version = & (Join-Path $PSScriptRoot "project-version.ps1") }
-  $identity = [ordered]@{ version = $Version; build = $Build } | ConvertTo-Json -Compress
+  $identity = [ordered]@{ version = $Version; build = $Build; shell = "webui" } | ConvertTo-Json -Compress
   [System.IO.File]::WriteAllText((Join-Path $outRoot "Ardia.build.json"), $identity, (New-Object System.Text.UTF8Encoding $false))
   Write-Output "assemble-webui: this is Ardia $Version, build $Build"
 }

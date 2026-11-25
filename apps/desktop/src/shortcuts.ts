@@ -2,6 +2,7 @@ import type { BrowserCommand, MenuShortcut, ShortcutModifier } from "@ardia-real
 import { commandSpec, LINUX_STANDARD_ITEMS, shortcutSources } from "./commandCatalog";
 import { resolveShortcuts, type ShortcutOverrides } from "./shortcutFormat";
 import { BROWSER_WINDOW_COMMANDS } from "./browserCommandRoute";
+import { KEY_REPEAT_IGNORED_COMMANDS } from "../../browser/src/state/commands/commandInteraction";
 
 export type Binding = { keyCode: number; modifiers: number; command: BrowserCommand; arg: string | null; notInText: boolean };
 
@@ -102,3 +103,10 @@ export function linuxNativeBindings(bindings: Binding[], profiles: readonly stri
   const bound = new Set(bindings.map((binding) => `${binding.keyCode}:${binding.modifiers}`));
   return [...bindings, ...linuxBindings({}, profiles).filter((binding) => !bound.has(`${binding.keyCode}:${binding.modifiers}`)).map((binding) => ({ ...binding, suppressed: true }))];
 }
+
+export const dispatchesKeyPress = (binding: Pick<Binding, "command">, event: Pick<KeyboardEvent, "repeat">) => !(event.repeat && KEY_REPEAT_IGNORED_COMMANDS.has(binding.command));
+
+const IME_PROCESS_KEY_CODE = 229;
+
+export const composingKey = (event: Pick<KeyboardEvent, "isComposing" | "key" | "keyCode">) =>
+  event.isComposing || event.key === "Process" || event.keyCode === IME_PROCESS_KEY_CODE;

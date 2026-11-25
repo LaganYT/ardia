@@ -9,7 +9,7 @@ import { watchPageFocus } from "../../pageFocus";
 import { menuShown } from "../../menus";
 import { watchOutsidePresses } from "../../outsidePress";
 import { OutsidePressIgnoreContext } from "../../outsidePressScope";
-import { WINDOW_DRAG_ROUTES, watchWindowDrag, type WindowDragHost } from "../../windowDrag";
+import { markWindowDrag, WINDOW_DRAG_ROUTES, watchWindowDrag, type WindowDragHost } from "../../windowDrag";
 import type { MiddleClickEvent } from "./MouseArea";
 import { edgeGain, fallbackRadius, highlightMask, maskStyle, peakGain, SHADE_OUTSET, shadeMask, shapeMask, type RimCurve, type RimProfile, type ShadeProfile } from "./glassRim";
 
@@ -340,6 +340,9 @@ export function WindowDragRegion({
     if (!element) return;
     return watchWindowDrag(element, () => latest.current, windowDragHost(), reportHostError);
   }, []);
+  useEffect(() => {
+    if (node.current) markWindowDrag(node.current, titleBarDoubleClick, clickable);
+  }, [titleBarDoubleClick, clickable]);
   return <View {...props} ref={(view) => void (node.current = view as unknown as HTMLElement | null)} />;
 }
 

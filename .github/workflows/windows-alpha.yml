@@ -12,6 +12,12 @@ on:
         required: false
         type: boolean
         default: false
+      shell:
+        description: Shell the run's installers hold; rnw only to roll back to the React Native shell
+        required: false
+        type: choice
+        options: [webui, rnw]
+        default: webui
 
 permissions:
   contents: write
@@ -53,11 +59,12 @@ jobs:
         env:
           RUN_ID: ${{ inputs.run_id }}
           DRY_RUN: ${{ inputs.dry_run }}
+          SHELL_KIND: ${{ inputs.shell }}
           WINDOWS_UPDATE_ED_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_ED_PRIVATE_KEY || secrets.LINUX_UPDATE_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::run_id must be a numeric GitHub Actions run id"; exit 1; }
-          args=(--out "$RUNNER_TEMP/windows-alpha" --verify-bin "$GITHUB_WORKSPACE/packages/core-rs/target/release/ardia-update-verify")
+          args=(--shell "$SHELL_KIND" --out "$RUNNER_TEMP/windows-alpha" --verify-bin "$GITHUB_WORKSPACE/packages/core-rs/target/release/ardia-update-verify")
           if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
           args+=("$RUN_ID")
           scripts/windows/publish-alpha.sh "${args[@]}"

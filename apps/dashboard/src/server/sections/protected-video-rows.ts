@@ -6,6 +6,8 @@ export const PROTECTED_VIDEO_COUNTS = [
   "drm_refusals_create_keys",
   "drm_refusals_licence",
   "drm_refusals_keystatus",
+  "drm_refusals_listed_sites",
+  "drm_refusals_webkit_sites",
 ] as const;
 
 export type ProtectedVideoCounts = {
@@ -14,6 +16,8 @@ export type ProtectedVideoCounts = {
   createKeys: number;
   licence: number;
   keystatus: number;
+  listedSites: number;
+  webKitSites: number;
 };
 
 export type ProtectedVideoUsage = ProtectedVideoCounts & { version: string; people: number };

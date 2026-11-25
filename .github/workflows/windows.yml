@@ -509,11 +509,11 @@ jobs:
         id: installer
         if: ${{ !cancelled() && env.PART == 'launch' && env.FULL == 'true' && steps.engine.outcome == 'success' }}
         shell: pwsh
-        run: scripts/windows/make-installer.ps1 -Source "${{ runner.temp }}/Ardia" -Out "${{ runner.temp }}/installer" -Cpu $env:SLUG -Version $env:VERSION
+        run: scripts/windows/make-installer.ps1 -Source "${{ runner.temp }}/Ardia" -Out "${{ runner.temp }}/installer" -Cpu $env:SLUG -Version $env:VERSION -Shell rnw
       - name: Install and uninstall it
         if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
         shell: pwsh
-        run: scripts/windows/installer-check.ps1 -Setup "${{ runner.temp }}/installer/Ardia-Setup-$env:SLUG.exe"
+        run: scripts/windows/installer-check.ps1 -Setup "${{ runner.temp }}/installer/Ardia-Setup-$env:SLUG.exe" -Shell rnw
       - name: Close and reopen the installed app
         id: relaunch
         if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
@@ -529,25 +529,16 @@ jobs:
           path: ${{ runner.temp }}/relaunch
           if-no-files-found: ignore
           retention-days: 14
-      - name: Name it for a release
-        id: release-files
+      - name: Stamp the installer with its build
         if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
         shell: pwsh
-        run: scripts/windows/release-files.ps1 -Installer "${{ runner.temp }}/installer" -Identity "${{ runner.temp }}/Ardia/Ardia.build.json" -Cpu $env:SLUG -Out "${{ runner.temp }}/release"
+        run: Copy-Item -LiteralPath "${{ runner.temp }}/Ardia/Ardia.build.json" -Destination "${{ runner.temp }}/installer/Ardia.build.json" -Force
       - if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: Ardia-Setup-${{ env.SLUG }}
+          name: Ardia-Setup-rnw-${{ env.SLUG }}
           path: ${{ runner.temp }}/installer
           if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 14
-      - if: ${{ inputs.version && steps.release-files.outcome == 'success' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: windows-release-${{ env.SLUG }}
-          path: ${{ runner.temp }}/release
-          if-no-files-found: error
           compression-level: 0
           retention-days: 14
       - name: Launch it with the engine
@@ -606,7 +597,7 @@ jobs:
       - if: ${{ !cancelled() && env.PART == 'launch' && env.FULL == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: Ardia-windows-${{ env.SLUG }}
+          name: Ardia-windows-rnw-${{ env.SLUG }}
           path: ${{ runner.temp }}/Ardia
           if-no-files-found: ignore
           retention-days: 14
@@ -760,21 +751,25 @@ jobs:
       contents: write
     env:
       SLUG: x64
+      TOUR: "true"
       FULL: ${{ needs.identity.outputs.full }}
       VERSION: ${{ needs.identity.outputs.version }}
       BUILD: ${{ needs.identity.outputs.build }}
       MIGRATOR: packages/core-rs/target/release/ardia-webui-migrate.exe
-    steps:
+    steps: &webui_steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Check the shell layouts, the WebUI assembly and the installer's refusals
+        if: env.SLUG == 'x64'
         shell: pwsh
         run: scripts/windows/shell-layout.test.ps1
       - name: Check the pilot's waits, log and types on PowerShell 7
+        if: env.SLUG == 'x64'
         shell: pwsh
         run: scripts/windows/webui-pilot/wait.test.ps1
       - name: Check the pilot's waits, log and types on Windows PowerShell
+        if: env.SLUG == 'x64'
         shell: powershell
         run: scripts/windows/webui-pilot/wait.test.ps1
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
@@ -805,8 +800,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             packages/core-rs/target
-          key: webui-migrate-${{ runner.os }}-${{ hashFiles('packages/core-rs/rust-toolchain.toml', 'packages/core-rs/Cargo.lock') }}
-          restore-keys: webui-migrate-${{ runner.os }}-
+          key: webui-migrate-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/core-rs/rust-toolchain.toml', 'packages/core-rs/Cargo.lock') }}
+          restore-keys: webui-migrate-${{ runner.os }}-${{ runner.arch }}-
       - name: Build the migrator
         shell: bash
         working-directory: packages/core-rs
@@ -840,34 +835,46 @@ jobs:
         shell: pwsh
         run: scripts/windows/installer-check.ps1 -Setup "${{ runner.temp }}/installer-webui/Ardia-Setup-$env:SLUG.exe" -Shell webui
       - name: Tour the WebUI build
-        if: ${{ !cancelled() && steps.assemble.outcome == 'success' && env.FULL == 'true' }}
-        continue-on-error: true
+        if: ${{ !cancelled() && steps.assemble.outcome == 'success' && env.FULL == 'true' && env.TOUR == 'true' }}
         timeout-minutes: 15
         shell: pwsh
         run: |
           $tour = "${{ runner.temp }}/ArdiaWebUI-tour"
           Copy-Item -LiteralPath "${{ runner.temp }}/ArdiaWebUI" -Destination $tour -Recurse
           New-Item -ItemType File -Path (Join-Path $tour "Ardia.test-build") | Out-Null
-          scripts/windows/webui-pilot/tour-webui.ps1 -App $tour -Out "${{ runner.temp }}/tour-webui"
+          scripts/windows/webui-pilot/tour-webui.ps1 -App $tour -Out "${{ runner.temp }}/tour-webui" -RequireFlagless
           $code = $LASTEXITCODE
           if (Test-Path "${{ runner.temp }}/tour-webui/tour-webui.md") { Get-Content "${{ runner.temp }}/tour-webui/tour-webui.md" >> $env:GITHUB_STEP_SUMMARY }
           exit $code
+      - name: Name it for a release
+        id: release-files
+        if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
+        shell: pwsh
+        run: scripts/windows/release-files.ps1 -Installer "${{ runner.temp }}/installer-webui" -Identity "${{ runner.temp }}/ArdiaWebUI/Ardia.build.json" -Cpu $env:SLUG -Out "${{ runner.temp }}/release"
       - if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: Ardia-Setup-webui-${{ env.SLUG }}
+          name: Ardia-Setup-${{ env.SLUG }}
           path: ${{ runner.temp }}/installer-webui
           if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14
+      - if: ${{ inputs.version && steps.release-files.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-release-${{ env.SLUG }}
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
           compression-level: 0
           retention-days: 14
       - if: ${{ !cancelled() && steps.assemble.outcome == 'success' && env.FULL == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: Ardia-windows-webui-${{ env.SLUG }}
+          name: Ardia-windows-${{ env.SLUG }}
           path: ${{ runner.temp }}/ArdiaWebUI
           if-no-files-found: ignore
           retention-days: 14
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && env.TOUR == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: tour-webui
@@ -876,3 +883,19 @@ jobs:
             !${{ runner.temp }}/tour-webui/runs
           if-no-files-found: ignore
           retention-days: 14
+
+  webui-arm64:
+    needs: [gate, identity]
+    if: ${{ !cancelled() && needs.identity.result == 'success' && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      SLUG: arm64
+      TOUR: "false"
+      FULL: ${{ needs.identity.outputs.full }}
+      VERSION: ${{ needs.identity.outputs.version }}
+      BUILD: ${{ needs.identity.outputs.build }}
+      MIGRATOR: packages/core-rs/target/release/ardia-webui-migrate.exe
+    steps: *webui_steps

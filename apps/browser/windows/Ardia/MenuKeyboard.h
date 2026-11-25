@@ -263,7 +263,21 @@ struct MenuKeyboard {
     }
   }
 
-  bool Dispatch(KeyPress const &press) noexcept {
+  static bool IgnoresKeyRepeat(std::string const &command) noexcept { return command == "focusCommandBar"; }
+
+  bool SwallowsRepeat(UINT virtualKey, LPARAM flags) noexcept {
+    if ((flags & (1u << 30)) == 0) return false;
+    ActiveWindow window = ActiveArdiaWindow();
+    if (!window.hwnd) return false;
+    KeyPress press = ReadKeyPress(virtualKey, flags);
+    if (press.windowsKey || press.altGraph) return false;
+    MenuStore &store = MenuStore::Shared();
+    CommandEntry const *entry = store.Match(press);
+    if (!entry || entry->Native() || !IgnoresKeyRepeat(entry->command)) return false;
+    return WindowManager::Shared().IsPopupWindow(window.id) || store.EntryEnabled(*entry);
+  }
+
+  bool Dispatch(KeyPress const &press, bool repeat = false) noexcept {
     MenuStore &store = MenuStore::Shared();
     CommandEntry const *entry = store.Match(press);
     if (!entry) return false;
@@ -279,6 +293,7 @@ struct MenuKeyboard {
       return true;
     }
     if (!WindowManager::Shared().IsPopupWindow(window.id) && !store.EntryEnabled(*entry)) return false;
+    if (repeat && IgnoresKeyRepeat(entry->command)) return true;
     Emit(entry->command, entry->arg, window.id);
     if (entry->command == "tabSwitcher") OpenedSwitcher(*entry, press);
     return true;
@@ -564,6 +579,7 @@ struct MenuKeyboard {
       }
       return false;
     }
+    if (!recording && !IsModifierKey(virtualKey) && SwallowsRepeat(virtualKey, flags)) return true;
     if (FocusHold::Shared().Key(virtualKey, flags) == FocusHold::Taken::Held) return true;
     if (IsModifierKey(virtualKey)) return false;
     if (capturedWHeld && virtualKey == 'W') {
@@ -581,7 +597,7 @@ struct MenuKeyboard {
       if (switcherCaptured) handled = CaptureSwitcherKey(press, (flags & (1u << 30)) != 0);
       else if (escapeCaptured && BareEscape(press)) handled = CaptureEscape();
       else if (UndoReopensClosedTab(press, window)) handled = ReopenClosedTab(window);
-      else handled = Dispatch(press);
+      else handled = Dispatch(press, (flags & (1u << 30)) != 0);
     }
     if (handled) {
       swallowedKeyUps.insert(virtualKey);

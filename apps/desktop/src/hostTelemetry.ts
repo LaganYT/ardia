@@ -10,7 +10,8 @@ import { reportShellMigrationAfterLead } from "../../browser/src/state/telemetry
 import { reopenSession } from "../../browser/src/state/telemetry/sessionControl";
 import { uuidv4 } from "../../browser/src/state/telemetry/ids";
 import { setTelemetryHost } from "../../browser/src/state/telemetry/transport";
-import { emitWindowUsage, sessionEnding } from "../../browser/src/state/telemetry/usage";
+import { emitWindowUsage, sessionEnding, setCountsRelayNow } from "../../browser/src/state/telemetry/usage";
+import { isLinuxUtility } from "./session";
 import { documentSaved } from "../../browser/src/platform/documents";
 import { withDeadline } from "../../browser/src/lib/deadline";
 import { PLATFORM_IDS, PLATFORM_TERMS } from "../../browser/src/lib/platformTerms";
@@ -184,6 +185,9 @@ export function startHostTelemetry(options: { host: ArdiaHost; candidate: boolea
   setInterval(() => {
     if (!current.leading()) emitWindowUsage(consentNow());
   }, WINDOW_USAGE_MS);
+  if (isLinuxUtility(options.host.bootstrap.windowId)) setCountsRelayNow((consent) => {
+    if (!current.leading()) emitWindowUsage(consent);
+  });
   return current;
 }
 

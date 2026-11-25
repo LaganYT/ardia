@@ -15,7 +15,7 @@ import { refreshTabViewports, watchTabViewport, type TabViewport } from "../../h
 import { inputRegions } from "../../shellAbove";
 import type { InputRegionsRegistry } from "../../inputRegions";
 import type { CornerRadii } from "../../hostExtensionView";
-import { focusPageIfShellUnfocused, notePageFocusRequest, notingPageFocus } from "../../pageFocus";
+import { canYieldKeyboard, focusPageIfShellUnfocused, notePageFocusRequest, notingPageFocus } from "../../pageFocus";
 import { withPopupDismissal } from "../../popupDismissal";
 import { registerSwitchView } from "../../tabSwitchAhead";
 
@@ -51,11 +51,13 @@ const HostTabWebView = forwardRef<WebViewHandle, WebViewProps>(function HostTabW
     const host = ardiaHost!;
     const current = new HostTab(host, { key: key.current, temporary: !props.tabId, profile: props.profile, url: toEngineUrl(props.url ?? "about:blank"), ...(props.adoptId ? { adoptId: props.adoptId } : {}) }, receive, page);
     tab.current = current;
+    const stopYielding = canYieldKeyboard(current);
     void current.ready.catch((error) => {
       if (!current.disposed) latest.current.onLoadError?.({ url: latest.current.url ?? "", code: -2, text: String(error) });
       reportHostError(error);
     });
     return () => {
+      stopYielding();
       current.dispose();
       if (tab.current === current) tab.current = null;
       const tabId = latest.current.tabId;

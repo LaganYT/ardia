@@ -18,6 +18,10 @@ const none = () => ({
   zoomCarried: 0,
   cookiesToWebKit: 0,
   cookiesToChromium: 0,
+  siteMoves: 0,
+  siteMovesOpenedTabs: 0,
+  siteMovesDropped: 0,
+  siteMovesKeptForOpener: 0,
   webKitAutofillFills: 0,
   webKitAutofillSaveOffers: 0,
   webKitAutofillSaves: 0,
@@ -106,6 +110,17 @@ function addSwap(to: "chromium" | "webkit", swap: EngineSwap) {
   tally.switchMsMax = Math.max(tally.switchMsMax, ms);
 }
 
+export type SiteMoveOutcome = "moved" | "dropped" | "keptForOpener";
+
+export function noteSiteMove(outcome: SiteMoveOutcome, openedByPage: boolean, consent: ConsentToken | null) {
+  counted(consent, () => {
+    if (outcome === "dropped") return void tally.siteMovesDropped++;
+    if (outcome === "keptForOpener") return void tally.siteMovesKeptForOpener++;
+    tally.siteMoves++;
+    if (openedByPage) tally.siteMovesOpenedTabs++;
+  });
+}
+
 export function noteCookiesCarried(to: "chromium" | "webkit", count: number, consent: ConsentToken | null) {
   if (count > 0) counted(consent, () => void (tally[to === "webkit" ? "cookiesToWebKit" : "cookiesToChromium"] += count));
 }
@@ -154,6 +169,10 @@ export function takeEngineSwitchCounts() {
     engine_switch_zoom_carried: taken.zoomCarried,
     engine_switch_cookies_to_webkit: taken.cookiesToWebKit,
     engine_switch_cookies_to_chromium: taken.cookiesToChromium,
+    engine_site_moves: taken.siteMoves,
+    engine_site_moves_opened_tabs: taken.siteMovesOpenedTabs,
+    engine_site_moves_dropped: taken.siteMovesDropped,
+    engine_site_moves_kept_for_opener: taken.siteMovesKeptForOpener,
     webkit_autofill_fills: taken.webKitAutofillFills,
     webkit_autofill_save_offers: taken.webKitAutofillSaveOffers,
     webkit_autofill_saves: taken.webKitAutofillSaves,

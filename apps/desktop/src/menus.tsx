@@ -184,6 +184,15 @@ function MenuList({ items, anchor }: { items: MenuItem[]; anchor: MenuAnchor }) 
   );
 }
 
+export function claimMenuEscape(e: Pick<KeyboardEvent, "key" | "preventDefault" | "stopPropagation" | "stopImmediatePropagation">, closeMenu: () => void): boolean {
+  if (e.key !== "Escape") return false;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  e.stopPropagation();
+  closeMenu();
+  return true;
+}
+
 export function MenuHost() {
   const menu = useSyncExternalStore(
     watchMenus,
@@ -192,17 +201,12 @@ export function MenuHost() {
   useEffect(() => {
     if (!menu) return;
     const outside = () => close(null);
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      close(null);
-    };
+    const key = (e: KeyboardEvent) => claimMenuEscape(e, () => close(null));
     document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", key);
+    window.addEventListener("keydown", key, true);
     return () => {
       document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", key);
+      window.removeEventListener("keydown", key, true);
     };
   }, [menu]);
   return menu ? <MenuList items={menu.items} anchor={{ x: menu.x, y: menu.y }} /> : null;

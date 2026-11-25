@@ -4,7 +4,7 @@ import { useTheme } from "../ui/theme";
 import { useTab, useWindowId } from "../../state/browser/hooks";
 import { claimFocusTag, heroBarFocus } from "../../state/focus/focusClaims";
 import { navigate } from "../../state/tabs/actions";
-import { replaceSplitPane } from "../../state/splits/actions";
+import { closeEmptySplitPaneOnEscape, replaceSplitPane } from "../../state/splits/actions";
 import { useSplitSuggestions } from "../../state/splits/hooks";
 import { tabLabel } from "../../state/browser/model";
 import { noteSplit } from "../../state/telemetry/usage";
@@ -69,9 +69,10 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
               onSubmit={go}
               onArrow={move}
               onEscape={() => {
-                setText("");
-                setSelected(null);
-                setTyping(false);
+                if (text || selectedId) {
+                  setText("");
+                  setSelected(null);
+                } else if (!closeEmptySplitPaneOnEscape(tabId)) setTyping(false);
               }}
             />
           </View>

@@ -694,6 +694,29 @@ for (const where of ["the find field", "the page"]) {
   const after = await ac(`const s = ac.store.getState(), w = s.windows.w1, a = w.activeTabIds[w.profileId]; return { active: a, find: !!s.find[a]?.open };`);
   check("Esc closes only the find bar", after.active === "t3" && !after.find, JSON.stringify(after));
 }
+{
+  await resetToPageField("", [0, 0]);
+  const peekFind = () => ac(`const s = ac.store.getState(), w = s.windows.w1, a = w.activeTabIds[w.profileId], p = s.peeks[a];
+    return { active: a, peek: p?.tabId ?? null, find: p ? !!s.find[p.tabId]?.open : null };`);
+  await ac(`ac.store.getState().openPeek("t3", "${pages}/?peekfind", { x: 240, y: 260 }); return 1;`);
+  await sleep(1800);
+  const opened = await peekFind();
+  await postKeys([keyPress("f", 3), ...[..."hello"].map((c) => keyPress(c, 0, 30, []))]);
+  await sleep(800);
+  const finding = await peekFind();
+  await postKeys([keyPress("\u001b", 53, 0, [])]);
+  await sleep(800);
+  const after = await peekFind();
+  const responder = await ac(`return ac.shell.devKeyEquivalent("w1", { key: "x", keyCode: 7, modifiers: [], dry: true, wait: 0 });`);
+  const peekPage = await app.page("?peekfind");
+  const pageFocused = await peekPage.eval(`document.hasFocus()`).catch(() => null);
+  peekPage.close();
+  check("Esc in a Peek's find bar closes only the find bar: the same Peek stays open and its page has the keyboard",
+    !!opened.peek && finding.find === true && after.peek === opened.peek && after.find === false && after.active === "t3" && responder.firstResponder === "RenderWidgetHostViewCocoa" && pageFocused === true,
+    `opened ${JSON.stringify(opened)}, finding ${JSON.stringify(finding)}, after ${JSON.stringify(after)}, first responder ${responder.firstResponder}, Peek page focused ${pageFocused}`);
+  await ac(`const s = ac.store.getState(); if (s.peeks.t3) s.closePeek("t3"); return 1;`);
+  await sleep(500);
+}
 const FLAGS = { command: 0x100000, shift: 0x20000, control: 0x40000, option: 0x80000, function: 0x800000 };
 const w1Native = await ac(`const f = ac.store.getState().windows.w1.frame;
   return ac.engine.call("windows.list").then((ws) => ws.filter((w) => w.hasRoot).find((w) => {

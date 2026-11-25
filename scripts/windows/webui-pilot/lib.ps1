@@ -140,6 +140,11 @@ public static class Pilot {
     EnumWindows((h, l) => { if (IsShell(h)) n++; return true; }, IntPtr.Zero);
     return n;
   }
+  public static List<IntPtr> Shells() {
+    var found = new List<IntPtr>();
+    EnumWindows((h, l) => { if (IsShell(h)) found.Add(h); return true; }, IntPtr.Zero);
+    return found;
+  }
   public static RECT Frame(IntPtr hwnd) { RECT r; DwmGetWindowAttribute(hwnd, 9, out r, Marshal.SizeOf(typeof(RECT))); return r; }
   public static RECT Outer(IntPtr hwnd) { RECT r; GetWindowRect(hwnd, out r); return r; }
   public static string Hit(int x, int y) {

@@ -65,7 +65,7 @@ if [ -d "$linux" ]; then
   linux_arch="$linux/ardia-bin-$version.src.tar.gz"
   provenance="$linux/provenance.txt"
   [ -f "$provenance" ] || die "$linux has no provenance.txt"
-  grep -q '^engine key [0-9a-f]\{40\} (exact)' "$provenance" && ! grep -q 'uncommitted changes' "$provenance" \
+  grep -q '^engine key [0-9a-f]\{40\} (exact[,)]' "$provenance" && ! grep -q 'uncommitted changes' "$provenance" \
     || die "$linux is a Linux test build (an inexact engine or uncommitted changes, $provenance), not a release"
   linux_files=("$linux_package" "$linux_appimage" "$linux_arch" "$linux_cli")
   if grep -q '^deb dropped' "$provenance"; then

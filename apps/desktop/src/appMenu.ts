@@ -1,4 +1,4 @@
-import type { BrowserCommand, MenuBookmark, MenuItem, MenuState, ShortcutModifier } from "@ardia-real/shell";
+import type { BrowserCommand, CommandEvent, MenuBookmark, MenuItem, MenuState, ShortcutModifier } from "@ardia-real/shell";
 import { commandSpec, LINUX_STANDARD_ITEMS } from "./commandCatalog";
 import { EDIT_ITEMS, editActionOf, type EditAction, type EditMenu } from "./editCommands";
 
@@ -276,3 +276,5 @@ export function appMenuChoice(id: string): AppMenuChoice | null {
   if (!commandSpec(command)) return null;
   return { kind: "command", command: command as BrowserCommand, arg: colon < 0 ? null : id.slice(colon + 1) };
 }
+
+export const appMenuCommandEvent = (choice: Extract<AppMenuChoice, { kind: "command" }>, windowId: string, epoch: string): CommandEvent => ({ command: choice.command, arg: choice.arg, windowId, epoch });

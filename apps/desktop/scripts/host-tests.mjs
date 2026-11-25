@@ -16,7 +16,7 @@ const SHARED_TESTS = [
   "settingsCapabilities.test.mjs", "appServices.test.mjs", "browserCommandRoute.test.mjs", "hostPageEvents.test.mjs",
   "hostPagePrompts.test.mjs", "hostTabPage.test.mjs", "hostCredentials.test.mjs", "hostExtensions.test.mjs",
   "hostSiteControls.test.mjs", "hostImport.test.mjs", "importUnlock.test.mjs", "hostPageStatus.test.mjs",
-  "hostMedia.test.mjs", "windowSweep.test.mjs", "typeahead.test.mjs", "mountLayout.test.mjs", "webShims.test.mjs",
+  "hostMedia.test.mjs", "windowSweep.test.mjs", "typeahead.test.mjs", "mountLayout.test.mjs", "webShims.test.mjs", "fieldKeys.test.mjs",
   "profilePaging.test.mjs", "shellMethods.test.mjs", "hostFolders.test.mjs", "extensionPrompts.test.mjs",
   "hostSync.test.mjs", "syncToggles.test.mjs", "pageOperations.test.mjs", "hostPolicies.test.mjs", "quit.test.mjs", "hostLive.test.mjs",
   "hostExtensionScripts.test.mjs", "installRequestSheet.test.mjs", "utilityExtensions.test.mjs",

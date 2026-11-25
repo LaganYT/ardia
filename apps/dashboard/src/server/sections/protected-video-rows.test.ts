@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { protectedVideoRows } from "./protected-video-rows.ts";
 
-const counts = { refusals: 0, access: 0, createKeys: 0, licence: 0, keystatus: 0 };
+const counts = { refusals: 0, access: 0, createKeys: 0, licence: 0, keystatus: 0, listedSites: 0, webKitSites: 0 };
 
 test("versions with no refusals drop out, refusals without a stage are kept apart, and the CDM share stays empty without data", () => {
   const rows = protectedVideoRows(

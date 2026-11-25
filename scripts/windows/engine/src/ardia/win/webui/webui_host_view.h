@@ -297,7 +297,7 @@ class ShellHostView : public views::View,
   void TabCommand(const base::DictValue& args, Done done);
   void ReleaseTab(const base::DictValue& args, Done done);
   void CloseTab(const base::DictValue& args, Done done);
-  void CloseContents(content::WebContents* contents);
+  void CloseContents(content::WebContents* contents) override;
   void SetInputRegions(const base::DictValue& args, Done done);
   void SetKeyboardShortcuts(const base::ListValue* values, Done done);
   void SetActiveProfile(const base::ListValue* values, Done done);

@@ -15,6 +15,7 @@ const linuxKeys: Record<string, readonly string[]> = {
   downloads: ["⌘J", "⌥⌘L"],
   javaScriptConsole: ["⇧⌘J", "⌥⌘J"],
   zoomIn: ["⌘=", "⇧⌘="],
+  openSplitPane: ["⌘\\"],
   back: ["⌘[", "⌥←"],
   forward: ["⌘]", "⌥→"],
   nextTab: ["⇧⌘]", "⌘⇟", "⌥⌘↓"],

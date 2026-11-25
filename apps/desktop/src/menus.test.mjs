@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { heldModifiers } from "./clickModifiers.ts";
-import { alternateShown, hasSymbolColumn, menuButtonPresses, menuShown, menuSwatch, pickMenuItem, shownMenu, showMenu } from "./menus.tsx";
+import { alternateShown, claimMenuEscape, hasSymbolColumn, menuButtonPresses, menuShown, menuSwatch, pickMenuItem, shownMenu, showMenu } from "./menus.tsx";
 import { notingPageFocus } from "./pageFocus.ts";
 import { linuxShellMethod } from "./shellMethods.ts";
 
@@ -114,6 +114,21 @@ test("Linux lists no captured page menus and has no menu bar catalog, so the con
   for (const [method, args] of [["menuBar", []], ["performMenuBarItem", ["cmd:newTab", "main"]], ["dismissSurface", ["m1"]]]) {
     await assert.rejects(linuxShellMethod(method)(...args), (error) => error.code === "ERR_UNAVAILABLE", method);
   }
+});
+
+test("an open menu takes Escape in the capture phase, so the field under it (an empty split pane's search) never sees it", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./menus.tsx", import.meta.url), "utf8");
+  assert.match(source, /window\.addEventListener\("keydown", key, true\)/, "the menu listens on the window before any target");
+  const press = (key) => {
+    const seen = { prevented: false, stopped: false, closed: 0 };
+    const event = { key, preventDefault: () => (seen.prevented = true), stopPropagation: () => (seen.stopped = true), stopImmediatePropagation: () => (seen.stopped = true) };
+    const claimed = claimMenuEscape(event, () => seen.closed++);
+    const fieldSawIt = !seen.stopped;
+    return { claimed, fieldSawIt, ...seen };
+  };
+  assert.deepEqual(press("Escape"), { claimed: true, fieldSawIt: false, prevented: true, stopped: true, closed: 1 });
+  assert.deepEqual(press("a"), { claimed: false, fieldSawIt: true, prevented: false, stopped: false, closed: 0 });
 });
 
 test("a tab group's Color menu draws each colour's swatch as the Mac does: the dark one in a dark menu, a ring for None, in the icon column", async () => {

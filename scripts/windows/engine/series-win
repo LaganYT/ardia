@@ -49,3 +49,4 @@ chromium chromium-win-devtools-other-clients.patch
 chromium chromium-win-autoplay-policy.patch
 chromium chromium-win-hosted-theme-change.patch
 chromium chromium-win-renderer-efficiency.patch
+chromium chromium-win-app-user-model-id.patch

@@ -612,13 +612,13 @@ jobs:
           BUILD: ${{ needs.windows.outputs.build }}
           WINDOWS_UPDATE_ED_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_ED_PRIVATE_KEY || secrets.LINUX_UPDATE_ED_PRIVATE_KEY }}
         run: |
-          args=(--installers "$RUNNER_TEMP/windows" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/windows-alpha" --verify-bin "$GITHUB_WORKSPACE/packages/core-rs/target/release/ardia-update-verify")
+          args=(--shell webui --installers "$RUNNER_TEMP/windows" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/windows-alpha" --verify-bin "$GITHUB_WORKSPACE/packages/core-rs/target/release/ardia-update-verify")
           if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
           scripts/windows/publish-alpha.sh "${args[@]}"
           if [ "$DRY_RUN" = true ]; then
             echo "- Windows: build $BUILD, signed and packed for windows-alpha, not published" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- Windows: build $BUILD is the signed update on windows-alpha" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Windows: build $BUILD (WebUI shell) is the signed update on windows-alpha" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   aur:

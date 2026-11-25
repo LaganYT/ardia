@@ -93,6 +93,15 @@ function closePane(tabId: string, user: ByUser) {
 
 export const pressClosePane = (tabId: string) => closePane(tabId, { consent: consentToken() });
 
+export function closeEmptySplitPaneOnEscape(tabId: string): boolean {
+  const consent = consentToken();
+  const windowId = store().tabs[tabId]?.windowId;
+  if (!windowId || !store().removeEmptySplitPane(tabId)) return false;
+  noteSplit("splitEmptyPaneEscapeCloses", consent);
+  returnFocusToPage(windowId);
+  return true;
+}
+
 export function closeSplitView(splitId: string, user: ByUser) {
   const split = store().splits[splitId];
   if (!split) return;

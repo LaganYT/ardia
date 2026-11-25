@@ -188,10 +188,11 @@ try {
   Check-Throws "the installer refuses a WebUI build that still holds React Native files" "still holds 3 of the rnw shell's files" { & $installer -Source $leftover -Out (Join-Path $scratch "setup") -Cpu x64 -Version 1.0.0 -Shell webui }
   Check-Throws "the installer refuses a folder that is both shells" "neither the React Native shell nor the WebUI shell" { & $installer -Source $mixed -Out (Join-Path $scratch "setup") -Cpu x64 -Version 1.0.0 }
   Check-Throws "the installer refuses a WebUI build asked for as React Native" "is the webui shell, not the rnw shell" { & $installer -Source $webui -Out (Join-Path $scratch "setup") -Cpu x64 -Version 1.0.0 -Shell rnw }
+  Check-Throws "the installer takes a React Native build only when asked for one" "is the rnw shell, not the webui shell" { & $installer -Source $rnw -Out (Join-Path $scratch "setup") -Cpu x64 -Version 1.0.0 }
   Check-Throws "the installer refuses a WebUI build with a test marker" "Ardia.test-build marker" { & $installer -Source $marked -Out (Join-Path $scratch "setup") -Cpu x64 -Version 1.0.0 }
 
   $script = Get-Content -LiteralPath (Join-Path $PSScriptRoot "installer\Ardia.iss") -Raw
-  Check "the installer script defaults to the React Native shell" $true ($script -match '#ifndef Shell\s+#define Shell "rnw"\s+#endif')
+  Check "the installer script defaults to the WebUI shell" $true ($script -match '#ifndef Shell\s+#define Shell "webui"\s+#endif')
   Check "the React Native shell's launch switch is empty" $true ($script -match '#else\s+#define LaunchSwitch ""\s+#define OpenSuffix ""\s+#define ShellMarker "ArdiaApp.dll"')
   Check "the other shell's files go only after this shell's files are installed" $true ($script -match "else if CurStep = ssPostInstall then\s+RemoveFilesNoLongerShipped;")
   Check "the install step only notes what is there before the copy" $true ($script -match "if CurStep = ssInstall then\s+NoteInstalledShells")

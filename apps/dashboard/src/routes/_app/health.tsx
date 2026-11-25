@@ -295,6 +295,7 @@ function ProtectedVideo({ p }: { p: ProtectedVideoData }) {
         <Stat source="app" label="CDM reported" value={formatPercent(p.cdmShare)} sub={`${formatExact(p.cdmInstalled)} of ${formatExact(p.cdmReported)} installs`} />
         <Stat source="app" label="Refusals" value={formatExact(t?.refusals ?? 0)} sub={`${formatExact((t?.licence ?? 0) + (t?.keystatus ?? 0))} at licence or key status`} />
         <Stat source="app" label="Keys refused" value={formatExact(t?.createKeys ?? 0)} sub="createMediaKeys refused" />
+        <Stat source="app" label="Left in Chromium" value={formatExact(t?.webKitSites ?? 0)} sub={`on sites set to WebKit; ${formatExact(t?.listedSites ?? 0)} on the streaming list`} />
       </div>
       <DataTable
         dense
@@ -310,6 +311,7 @@ function ProtectedVideo({ p }: { p: ProtectedVideoData }) {
           { key: "licence", header: "Licence", align: "right", sort: (r) => r.licence, cell: (r) => quiet(r.licence) },
           { key: "keystatus", header: "Key status", align: "right", sort: (r) => r.keystatus, cell: (r) => quiet(r.keystatus) },
           { key: "unstaged", header: "No stage", align: "right", sort: (r) => r.unstaged, cell: (r) => quiet(r.unstaged) },
+          { key: "webkitSites", header: "WebKit site", align: "right", sort: (r) => r.webKitSites, cell: (r) => quiet(r.webKitSites) },
         ]}
       />
     </div>

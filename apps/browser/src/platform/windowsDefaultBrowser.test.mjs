@@ -33,7 +33,7 @@ const value = (subkey, name, from = entries) => from.find((e) => e.Subkey === su
 test("the installer registers the ProgID the app checks, opening the launcher with one argument", () => {
   const progId = native.match(/ArdiaProgId\[\] = L"([^"]+)"/)?.[1];
   assert.equal(progId, "ArdiaHTM");
-  assert.match(installer, /^#ifndef Shell\n {2}#define Shell "rnw"\n#endif$/m, "the installer is the React Native shell's unless make-installer asks otherwise");
+  assert.match(installer, /^#ifndef Shell\n {2}#define Shell "webui"\n#endif$/m, "the installer is the WebUI shell's unless make-installer asks otherwise");
   assert.equal(value(`Software\\Classes\\${progId}\\shell\\open\\command`, ""), '"{app}\\Ardia.exe" --single-argument %1');
   assert.equal(value("Software\\Clients\\StartMenuInternet\\Ardia\\shell\\open\\command", ""), '"{app}\\Ardia.exe"');
   assert.match(native, /--single-argument %1/);

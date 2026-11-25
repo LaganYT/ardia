@@ -18,7 +18,8 @@ import { mainWindowFor } from "../windows/small";
 import { holderOf, swapPinPage } from "../pins/pinShare";
 import { engineForUrl, tabEngine, typedNavigationEngine } from "../engines/engines";
 import type { ClosedTab, Tab, TabLive } from "../browser/types";
-import { activated, apply, closingTabs, withNewTab, type CloseOptions, type NewTabOptions } from "./tabs";
+import { activated, apply, closingTabs, removeTabs, withNewTab, type CloseOptions, type NewTabOptions } from "./tabs";
+import { splitOf } from "../splits/splits";
 import { hasPage, loadedPage, navigationOf, renavigated, wakeOf, withWake } from "./pageSession";
 import { cancelOpening, gateOpening, isGatedUrl, settleOpening } from "./openingGate";
 import { drainLive, setLive, stageLive } from "./tabLive";
@@ -30,6 +31,7 @@ export type TabsSlice = {
 
   newTab(windowId: string, options?: NewTabOptions): string;
   closeTab(id: string, options?: CloseOptions): void;
+  removeEmptySplitPane(id: string): boolean;
   closeTabs(ids: string[], options?: CloseOptions): void;
   activate(id: string): void;
   handOffPin(id: string): void;
@@ -113,6 +115,14 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
 
   closeTab(id, options) {
     get().closeTabs([id], { lastClosesWindow: true, ...options });
+  },
+
+  removeEmptySplitPane(id) {
+    const s = get();
+    const tab = s.tabs[id];
+    if (!tab || tab.url || hasPage(tab) || !splitOf(s, id)) return false;
+    set(removeTabs(s, [id], false));
+    return true;
   },
 
   closeTabs(ids, options) {

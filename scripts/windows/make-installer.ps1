@@ -3,7 +3,7 @@ param(
   [Parameter(Mandatory = $true)][string]$Out,
   [Parameter(Mandatory = $true)][ValidateSet("x64", "arm64")][string]$Cpu,
   [string]$Version = "",
-  [ValidateSet("auto", "rnw", "webui")][string]$Shell = "auto"
+  [ValidateSet("auto", "rnw", "webui")][string]$Shell = "webui"
 )
 
 $ErrorActionPreference = "Stop"

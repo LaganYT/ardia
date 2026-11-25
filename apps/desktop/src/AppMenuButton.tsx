@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
+import { consentEpoch } from "../../browser/src/state/telemetry/client";
 import { Symbol, closeWindow, emitCommand } from "@ardia/shell";
 import { useBrowser } from "../../browser/src/state/browser/store";
 import { menuState } from "../../browser/src/state/commands/menuState";
 import { useTheme } from "../../browser/src/components/ui/theme";
 import { menuButtonPresses, showMenu } from "./menus";
 import { linuxMenuShortcuts } from "./shortcuts";
-import { appMenuChoice, appMenuItems } from "./appMenu";
+import { appMenuChoice, appMenuCommandEvent, appMenuItems } from "./appMenu";
 import { minimizeAllWindows } from "./windowMenu";
 import { currentEditMenu, currentEditTarget, runEdit } from "./editTargets";
 import { ardiaHost, hostModuleMethod, reportHostError } from "./host";
@@ -52,7 +53,7 @@ export async function openAppMenu(windowId: string, button: HTMLElement) {
     return void (update ?? checkForUpdates()).catch(reportHostError);
   }
   if (choice.kind === "edit") return runEdit(windowId, choice.action, editTarget).catch(reportHostError);
-  if (choice.kind === "command") return emitCommand({ command: choice.command, arg: choice.arg, windowId });
+  if (choice.kind === "command") return emitCommand(appMenuCommandEvent(choice, windowId, consentEpoch()));
   if (choice.action === "close") return void closeWindow(windowId).catch(reportHostError);
   if (choice.action === "minimizeAll") return void minimizeAllWindows(useBrowser.getState().windowOrder);
   void hostModuleMethod("ArdiaShell", choice.action === "minimize" ? "minimizeWindow" : "toggleMaximizeWindow")(windowId).catch(reportHostError);

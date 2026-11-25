@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -606,6 +607,15 @@ inline std::wstring BuildWinCommandLine(const std::wstring& program,
   return command;
 }
 
+inline constexpr uint32_t kMaximizeClickLimitMs = 5000;
+
+constexpr bool MaximizeClickCompletes(bool was_pressed,
+                                      bool released_on_max_button,
+                                      uint32_t held_ms) {
+  return was_pressed && released_on_max_button &&
+         held_ms <= kMaximizeClickLimitMs;
+}
+
 struct MaximizeButtonVisualState {
   bool hovered = false;
   bool pressed = false;
@@ -618,10 +628,11 @@ class MaximizeButtonStateMachine {
  public:
   constexpr MaximizeButtonVisualState state() const { return state_; }
 
-  constexpr bool OnNcMouseMove(bool on_max_button) {
+  constexpr bool OnPointerChecked(bool on_max_button,
+                                  bool primary_button_down) {
     return Apply(MaximizeButtonVisualState{
         .hovered = on_max_button,
-        .pressed = on_max_button ? state_.pressed : false,
+        .pressed = on_max_button && primary_button_down && state_.pressed,
     });
   }
 
@@ -639,6 +650,13 @@ class MaximizeButtonStateMachine {
   constexpr bool OnNcLeftButtonUp(bool on_max_button) {
     return Apply(MaximizeButtonVisualState{
         .hovered = on_max_button,
+        .pressed = false,
+    });
+  }
+
+  constexpr bool OnPressCancelled(bool pointer_on_max_button) {
+    return Apply(MaximizeButtonVisualState{
+        .hovered = pointer_on_max_button,
         .pressed = false,
     });
   }

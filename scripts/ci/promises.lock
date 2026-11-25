@@ -29,7 +29,7 @@ issue	hash	file	test
 775	11a58c57a6421fee	packages/ardiacore/tests/webkit-input-source-keys.test.mjs	InputSourceKeys takes exactly 英数 and かな and runs the system's key bindings for them
 780	e587099aa6320345	apps/browser/src/state/windows/autoHideTabs.test.mjs	tabs moved or dragged out of a window into a new one keep that window's hidden or shown tabs (#780)
 785	49db8e436d0a5ec4	apps/browser/src/state/downloads/openDownload.test.mjs	archives are told apart from other downloads
-785	debfa12c94322d6b	apps/browser/src/state/downloads/openDownload.test.mjs	opening a downloaded zip shows it in Finder once, where Archive Utility unpacks it, and never brings Finder back later (#785)
+785	b444a70f747e2aa0	apps/browser/src/state/downloads/openDownload.test.mjs	opening a downloaded zip shows it in Finder once, where Archive Utility unpacks it, and never brings Finder back later (#785)
 785	920526edeb990c4b	apps/browser/src/state/downloads/openDownload.test.mjs	other files only open, and a missing archive isn't revealed
 810	175c884e70b0c00c	apps/browser/src/state/windows/focusedPane.test.mjs	focus in a shown split's other pane makes that pane the active one
 810	76f0831e4b1b2edb	apps/browser/src/state/windows/focusedPane.test.mjs	focus landing in a hidden split pane leaves the shown tab in front

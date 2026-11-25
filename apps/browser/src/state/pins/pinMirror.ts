@@ -1,17 +1,15 @@
 import type { BrowserState } from "../browser/store";
 import { changedIds } from "../browser/changes";
-import { ancestorIds, depthOf, orderSections, placeBlock, syncGroupOrder, withParent } from "../groups/groups";
-import { isIncognitoProfile, isPinnedRow, makeTab, newId, pinKeyOf, pinSection, TILE_PIN, without } from "../browser/model";
+import { ancestorIds, depthsIn, orderSections, placeBlock, syncGroupOrder, withParent } from "../groups/groups";
+import { isIncognitoProfile, isPinnedRow, makeTab, newId, pinHomeOf, pinKeyOf, pinSection, TILE_PIN, without } from "../browser/model";
 import { ASLEEP, hasPage, holderOfPage } from "../tabs/pageSession";
-import { mapSlotIds, removeFromSplits, splitTabIds, stackAt } from "../splits/splits";
+import { mapSlotIds, normalized, removeFromSplits, splitTabIds, stackAt } from "../splits/splits";
 import { sharedListTab, sharesTabs } from "../tabs/tabShare";
 import { removeTabs } from "../tabs/tabs";
 import type { BrowserWindow, SplitView, Tab, TabGroup } from "../browser/types";
 import { samePage } from "../../lib/url";
 import { isRegularWindow } from "../windows/small";
 import { tileFolderOf } from "./tileFolders";
-
-const homeOf = (t: Pick<Tab, "url" | "pinnedUrl">) => t.pinnedUrl || t.url;
 
 export type Item = { tab: Tab; group: string | null };
 export type Section = { items: Item[]; groups: Map<string, { group: TabGroup; parent: string | null }>; own: TabGroup[]; duplicate?: boolean; splits?: PinnedSplit[] };
@@ -31,7 +29,8 @@ const splitSig = (v: PinnedSplit) => `S${splitTabIds(v).join("\u0003")}\u0001${v
 
 function innermostPinned(s: Pick<BrowserState, "groups">, own: TabGroup[]): Map<string, TabGroup> {
   const inner = new Map<string, TabGroup>();
-  for (const g of own.map((g) => [g, depthOf(s.groups, g.id)] as const).sort((a, z) => a[1] - z[1]).map(([g]) => g)) for (const id of g.tabIds) inner.set(id, g);
+  const depth = depthsIn(s.groups);
+  for (const g of own.map((g) => [g, depth(g.id)] as const).sort((a, z) => a[1] - z[1]).map(([g]) => g)) for (const id of g.tabIds) inner.set(id, g);
   return inner;
 }
 
@@ -76,8 +75,8 @@ export function chainOf(x: Pick<Section, "groups">, key: string | null): string[
 }
 
 export const tileSig = (t: Tab) =>
-  `${pinKeyOf(t)}\u0001${t.pinnedUrl ?? ""}\u0001${t.customTitle ?? ""}\u0001${t.customIcon ?? ""}\u0001${isPinnedRow(t) ? "r" : ""}\u0001${tileFolderOf(t)?.id ?? ""}\u0001${tileFolderOf(t)?.name ?? ""}\u0001${tileFolderOf(t)?.renamedAt ?? ""}`;
-const memberSig = (t: Tab) => `${pinKeyOf(t)}\u0001${t.pinnedUrl ?? ""}\u0001${t.customTitle ?? ""}\u0001${t.customIcon ?? ""}`;
+  `${pinKeyOf(t)}\u0001${t.pinnedUrl ?? ""}\u0001${t.customTitle ?? ""}\u0001${t.customIcon ?? ""}\u0001${t.tileLetters ?? ""}\u0001${isPinnedRow(t) ? "r" : ""}\u0001${tileFolderOf(t)?.id ?? ""}\u0001${tileFolderOf(t)?.name ?? ""}\u0001${tileFolderOf(t)?.renamedAt ?? ""}`;
+const memberSig = (t: Tab) => `${pinKeyOf(t)}\u0001${t.pinnedUrl ?? ""}\u0001${t.customTitle ?? ""}\u0001${t.customIcon ?? ""}\u0001${t.tileLetters ?? ""}`;
 export function signature(x: Section): string {
   const shown = new Set<string>();
   const lines: string[] = [];
@@ -110,7 +109,7 @@ export function hasDuplicates(x: Section): boolean {
   return !!x.duplicate || new Set(tabs).size < tabs.length;
 }
 
-const PIN_FIELDS = ["pin", "pinnedUrl", "customTitle", "customIcon", "profileId", "windowId", "pinKey"] as const;
+const PIN_FIELDS = ["pin", "pinnedUrl", "customTitle", "customIcon", "tileLetters", "profileId", "windowId", "pinKey"] as const;
 function pinnedSplitsChanged(s: BrowserState, prev: BrowserState): boolean {
   if (s.splits === prev.splits) return false;
   const members = new Set(pinnedGroupsOf(s).flatMap((g) => g.tabIds));
@@ -164,7 +163,7 @@ export function union(sections: Section[], samePages = true): Section {
         anchor = spec.items.findIndex((i) => pinKeyOf(i.tab) === key);
         continue;
       }
-      if (samePages && !item.group && !paired.has(key) && earlier.some((o) => samePage(homeOf(o), homeOf(item.tab)))) continue;
+      if (samePages && !item.group && !paired.has(key) && earlier.some((o) => samePage(pinHomeOf(o), pinHomeOf(item.tab)))) continue;
       keys.add(key);
       const host = chainOf(spec, item.group).reverse().find((k) => lastIn(k) >= 0);
       const at = host
@@ -198,7 +197,7 @@ export function treeOrder(x: Pick<Section, "items" | "groups">): Item[] {
 export const keyField = (id: string, key: string) => (id === key ? { pinKey: undefined } : { pinKey: key });
 
 export function copyOf(src: Tab, windowId: string, tile: boolean, profileId = src.profileId): Tab {
-  const url = tile ? homeOf(src) : src.url;
+  const url = tile ? pinHomeOf(src) : src.url;
   const atSource = samePage(src.url, url);
   return {
     ...makeTab(windowId, profileId, url, {
@@ -208,6 +207,7 @@ export function copyOf(src: Tab, windowId: string, tile: boolean, profileId = sr
       pinnedUrl: src.pinnedUrl || (tile ? src.url : null) || null,
       customTitle: src.customTitle,
       customIcon: src.customIcon,
+      ...(src.tileLetters ? { tileLetters: src.tileLetters } : {}),
       muted: src.muted,
       zoom: src.zoom,
     }),
@@ -230,7 +230,7 @@ export function conform(s: BrowserState, windowId: string, profileId: string, sp
     const key = pinKeyOf(src);
     const same = (byKey.get(key) ?? []).filter((m) => !used.has(m.id));
     let t = same.find(hasPage) ?? same[0];
-    if (!t && tile) t = mine.find((m) => m.pin && !used.has(m.id) && !wantedKeys.has(pinKeyOf(m)) && samePage(homeOf(m), homeOf(src)));
+    if (!t && tile) t = mine.find((m) => m.pin && !used.has(m.id) && !wantedKeys.has(pinKeyOf(m)) && samePage(pinHomeOf(m), pinHomeOf(src)));
     if (!t) {
       const copy = copyOf(src, windowId, tile, profileId);
       tabs[copy.id] = copy;
@@ -243,9 +243,10 @@ export function conform(s: BrowserState, windowId: string, profileId: string, sp
       pin: tile ? (src.pin ?? TILE_PIN) : null,
       customTitle: src.customTitle,
       customIcon: src.customIcon,
+      tileLetters: src.tileLetters,
     };
     patch.pinnedUrl = src.pinnedUrl || (tile ? src.url : null) || null;
-    if (tile && !hasPage(t) && !samePage(t.url, homeOf(src))) Object.assign(patch, { url: homeOf(src), title: src.title, favicon: src.favicon });
+    if (tile && !hasPage(t) && !samePage(t.url, pinHomeOf(src))) Object.assign(patch, { url: pinHomeOf(src), title: src.title, favicon: src.favicon });
     tabs[t.id] = { ...t, ...patch };
     return t.id;
   };
@@ -291,14 +292,14 @@ export function conform(s: BrowserState, windowId: string, profileId: string, sp
   if (spec.splits) {
     const paneOf = new Map([...tiles, ...members].filter(([i]) => !isTile(i.tab)).map(([i, id]) => [pinKeyOf(i.tab), id]));
     const panes = new Set(paneOf.values());
-    const wanted = spec.splits.map((v): PinnedSplit => ({ orientation: v.orientation, slots: mapSlotIds(v.slots, (k) => paneOf.get(k) ?? "") })).filter((v) => splitTabIds(v).every(Boolean));
+    const wanted = spec.splits.map((v): PinnedSplit => normalized({ orientation: v.orientation, slots: mapSlotIds(v.slots, (k) => paneOf.get(k) ?? "") })).filter((v) => splitTabIds(v).every(Boolean));
     const same = (v: SplitView, x: PinnedSplit) => splitTabIds(v).join() === splitTabIds(x).join() && v.orientation === x.orientation && stackAt(v) === stackAt(x);
     const stale = Object.values(splits).filter((v) => v.windowId === windowId && splitTabIds(v).every((id) => panes.has(id)) && !wanted.some((x) => same(v, x)));
     if (stale.length) splits = without(splits, stale.map((v) => v.id));
     for (const x of wanted) {
       if (!Object.values(splits).some((v) => same(v, x))) {
         const id = newId("split");
-        splits = { ...removeFromSplits(splits, new Set(splitTabIds(x))), [id]: { id, windowId, orientation: x.orientation, slots: x.slots } };
+        splits = { ...removeFromSplits(splits, new Set(splitTabIds(x))), [id]: normalized({ id, windowId, orientation: x.orientation, slots: x.slots }) };
       }
       ids = placeBlock(ids, ids.filter((id) => splitTabIds(x).includes(id)));
     }

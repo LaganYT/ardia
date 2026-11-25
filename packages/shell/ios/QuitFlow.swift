@@ -13,6 +13,34 @@ final class QuitFlow {
   private var phase = Phase.idle
   private var attempt = 0
   private static let saveWait: TimeInterval = 5
+  static let heldHoverLoss = "hover-lost-at-quit.json"
+  static let committedHoverLossPrefix = "hover-lost-at-quit-committed-"
+  private static let commitsHoverLossOnTerminate = NotificationCenter.default.addObserver(
+    forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+  ) { _ in commitHeldHoverLoss() }
+  private static let cancelsHoverLossOnQuitCancelled = NotificationCenter.default.addObserver(
+    forName: PluginProgramLinks.quitCancelledNotification, object: nil, queue: nil
+  ) { _ in cancelHeldHoverLoss() }
+
+  static func commitHeldHoverLoss() {
+    guard ArdiaHost.hoverLossReportedAtQuitIsOpen(), let held = DocumentStore.read(heldHoverLoss) else { return }
+    let seconds = ArdiaHost.hoverLossReportedAtQuitSeconds()
+    HoverLossQuitCommit.commit(
+      held: held,
+      seconds: seconds,
+      prefix: committedHoverLossPrefix,
+      write: { DocumentStore.writeDurablySync($0, $1, allowWhenClosed: true) },
+      list: { DocumentStore.list($0) },
+      remove: { DocumentStore.removeSync($0, allowWhenClosed: true) },
+      markCommitted: { ArdiaHost.markHoverLossCommittedAtQuit() },
+      removeHeld: { DocumentStore.removeSync(heldHoverLoss, allowWhenClosed: true) }
+    )
+  }
+
+  static func cancelHeldHoverLoss() {
+    ArdiaHost.cancelHoverLossAtQuit()
+    DocumentStore.removeSync(heldHoverLoss, allowWhenClosed: true)
+  }
 
   private var isSaving: Bool {
     if case .saving = phase { return true }
@@ -36,15 +64,22 @@ final class QuitFlow {
   }
 
   func shouldTerminate() -> NSApplication.TerminateReply {
+    PluginProgramLinks.holdAfterUpdates()
     guard ShellEvents.isAttached(.app), ShellEvents.isAttached(.window) else {
-      guard AppUpdater.shared.holdsQuitForStagedUpdate else { return .terminateNow }
+      guard AppUpdater.shared.holdsQuitForStagedUpdate || PluginProgramLinks.afterUpdatesRunning else { return .terminateNow }
       quitAfterUpdaterSettles()
       return .terminateLater
     }
-    guard confirmActiveDownloads() else { return .terminateCancel }
+    guard confirmActiveDownloads() else {
+      PluginProgramLinks.resumeAfterUpdates()
+      return .terminateCancel
+    }
     attempt += 1
     phase = .saving(wait: nil, lateAlert: nil)
     WindowManager.shared.flushFrameReports()
+    _ = Self.commitsHoverLossOnTerminate
+    _ = Self.cancelsHoverLossOnQuitCancelled
+    ArdiaHost.reportHoverLossAtQuit()
     ShellEvents.send(.app, ["type": "willQuit"])
     waitForSave()
     return .terminateLater
@@ -105,6 +140,8 @@ final class QuitFlow {
     guard ok else {
       phase = .idle
       attempt += 1
+      PluginProgramLinks.resumeAfterUpdates()
+      Self.cancelHeldHoverLoss()
       return NSApp.reply(toApplicationShouldTerminate: false)
     }
     guard isSaving else { return }
@@ -116,10 +153,14 @@ final class QuitFlow {
     if case .idle = phase { attempt += 1 }
     phase = .waitingForUpdater
     let attempt = self.attempt
-    AppUpdater.shared.dropOffChannelStagedUpdateBeforeQuit { [weak self] in
-      guard let self, self.attempt == attempt, case .waitingForUpdater = self.phase else { return }
+    var holds = 2
+    let settled = { [weak self] in
+      holds -= 1
+      guard holds == 0, let self, self.attempt == attempt, case .waitingForUpdater = self.phase else { return }
       self.phase = .idle
       NSApp.reply(toApplicationShouldTerminate: true)
     }
+    PluginProgramLinks.stopAfterUpdates(done: settled)
+    AppUpdater.shared.dropOffChannelStagedUpdateBeforeQuit(then: settled)
   }
 }

@@ -6,9 +6,10 @@ import { FAVICON_USER_AGENT, faviconCandidates, firstUsable, monogram, type Favi
 import { linearGradientCss } from "../../lib/gradient";
 import { Symbol } from "./Symbol";
 import { useTheme } from "./theme";
-import { faviconInk } from "./tokens";
+import { faviconInk, faviconLayout, smoothCorners } from "./tokens";
 
 const failedIcons = new Set<string>();
+const settledAnswers = new Map<string, Chosen>();
 const looks = new Map<string, Promise<FaviconLookResult>>();
 const readsLooks = requireOptionalNativeModule("ArdiaPhoneFavicons") !== null;
 
@@ -34,22 +35,26 @@ export const Favicon = memo(function Favicon({ iconUrl, pageUrl, size }: Props) 
   const [answer, setAnswer] = useState<{ asked: string; chosen: Chosen }>({ asked: "", chosen: null });
   useEffect(() => {
     if (!readsLooks) {
-      setAnswer({ asked, chosen: candidates[0] ? { url: candidates[0], backing: null } : "none" });
+      const chosen: Chosen = candidates[0] ? { url: candidates[0], backing: null } : "none";
+      settledAnswers.set(asked, chosen);
+      setAnswer({ asked, chosen });
       return;
     }
     let live = true;
     void firstUsable(candidates, (url) => lookOf(url, dark)).then((found) => {
-      if (live) setAnswer({ asked, chosen: found ?? "none" });
+      const chosen: Chosen = found ?? "none";
+      settledAnswers.set(asked, chosen);
+      if (live) setAnswer({ asked, chosen });
     });
     return () => {
       live = false;
     };
   }, [asked]);
-  const chosen = answer.asked === asked ? answer.chosen : null;
-  const corner = size * 0.26;
+  const chosen = answer.asked === asked ? answer.chosen : (settledAnswers.get(asked) ?? null);
+  const corner = size * faviconLayout.cornerShare;
   if (!chosen || chosen === "none") return <MonogramTile pageUrl={pageUrl} size={size} corner={corner} />;
   const plate = chosen.backing ? (chosen.backing === "light" ? faviconInk.lightPlate : faviconInk.darkPlate) : null;
-  const inset = plate ? size * 0.14 : 0;
+  const inset = plate ? size * faviconLayout.plateInset : 0;
   return (
     <View
       accessibilityElementsHidden
@@ -80,19 +85,19 @@ function MonogramTile({ pageUrl, size, corner }: { pageUrl: string | null; size:
       style={[styles.tile, { width: size, height: size, borderRadius: corner, experimental_backgroundImage: linearGradientCss(tile.colors, false, size, size) }]}
     >
       {tile.letter ? (
-        <Text allowFontScaling={false} style={[styles.letter, { fontSize: size * 0.56, lineHeight: size * 0.56 * 1.15 }]}>
+        <Text allowFontScaling={false} style={[styles.letter, { fontSize: size * faviconLayout.letterShare, lineHeight: size * faviconLayout.letterShare * faviconLayout.letterLine }]}>
           {tile.letter}
         </Text>
       ) : (
-        <Symbol name="globe" size={size * 0.6} color={faviconInk.letter} />
+        <Symbol name="globe" size={size * faviconLayout.globeShare} color={faviconInk.letter} />
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  icon: { overflow: "hidden" },
+  icon: { overflow: "hidden", ...smoothCorners },
   fill: { flex: 1 },
-  tile: { overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  tile: { overflow: "hidden", alignItems: "center", justifyContent: "center", ...smoothCorners },
   letter: { color: faviconInk.letter, fontWeight: "600", textAlign: "center", includeFontPadding: false },
 });

@@ -1,12 +1,15 @@
 import type { BrowserCommand } from "@ardia-real/shell";
 import { emitAppEvent, emitCommand } from "@ardia/shell";
 import { useBrowser } from "../../../../../../apps/browser/src/state/browser/store";
+import { KEY_REPEAT_IGNORED_COMMANDS } from "../../../../../../apps/browser/src/state/commands/commandInteraction";
 import { provideNativeModule } from "../../expo-modules-core";
 
 type Mod = "cmd" | "shift" | "alt" | "ctrl";
 type Shortcut = { code: string; mods: Mod[]; command: BrowserCommand; arg?: string | ((e: KeyboardEvent) => string | null); notInText?: boolean; reserved?: boolean };
 
 const s = (code: string, mods: Mod[], command: BrowserCommand, extra: Partial<Shortcut> = {}): Shortcut => ({ code, mods, command, ...extra });
+
+const IME_PROCESS_KEY_CODE = 229;
 
 const digits = Array.from({ length: 9 }, (_, i) => i + 1);
 
@@ -48,8 +51,13 @@ const SHORTCUTS: Shortcut[] = [
   s("KeyL", ["cmd", "shift"], "toggleSidebar"),
   s("KeyF", ["cmd", "shift"], "toggleSidebar"),
   s("Equal", ["ctrl", "shift"], "openSplitPane"),
+  s("Minus", ["ctrl", "shift"], "openSplitPaneBelow"),
   s("BracketRight", ["ctrl", "shift"], "focusNextPane"),
   s("BracketLeft", ["ctrl", "shift"], "focusPreviousPane"),
+  s("ArrowLeft", ["ctrl", "alt"], "moveSplitPaneLeft"),
+  s("ArrowRight", ["ctrl", "alt"], "moveSplitPaneRight"),
+  s("ArrowUp", ["ctrl", "alt"], "moveSplitPaneUp"),
+  s("ArrowDown", ["ctrl", "alt"], "moveSplitPaneDown"),
   s("KeyB", ["cmd", "shift"], "toggleBookmarksBar"),
   s("Digit0", ["cmd"], "zoomReset"),
   s("Equal", ["cmd"], "zoomIn"),
@@ -119,7 +127,7 @@ const inText = () => !!(document.activeElement instanceof Element && document.ac
 
 const CODE_ALIASES: Record<string, string> = { NumpadEnter: "Enter", NumpadAdd: "Equal", NumpadSubtract: "Minus" };
 
-export function findShortcut(e: KeyboardEvent) {
+function findShortcut(e: KeyboardEvent) {
   const have = modsOf(e);
   const code = CODE_ALIASES[e.code] ?? e.code;
   const matches = (sc: Shortcut) => sc.code === code && sameMods(sc.mods, have);
@@ -131,6 +139,7 @@ const switcher = { capturing: false, holding: null as Mod | null };
 const holdKey = (mod: Mod) => (mod === "ctrl" ? "Control" : mod === "alt" ? "Alt" : mod === "cmd" ? (isMac ? "Meta" : "Control") : "Shift");
 
 function onKeyDown(e: KeyboardEvent) {
+  if (e.isComposing || e.key === "Process" || e.keyCode === IME_PROCESS_KEY_CODE) return;
   if (switcher.capturing && !(e.code === "Tab" && (e.ctrlKey || e.altKey))) {
     const key = e.key === "Escape" ? "escape" : e.key === "ArrowRight" ? "next" : e.key === "ArrowLeft" ? "previous" : null;
     if (key) emitAppEvent({ type: "switcherKey", key });
@@ -145,6 +154,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (shortcut.command === "switchProfile" && !arg) return;
   e.preventDefault();
   e.stopPropagation();
+  if (e.repeat && KEY_REPEAT_IGNORED_COMMANDS.has(shortcut.command)) return;
   if (shortcut.command === "tabSwitcher") switcher.holding = shortcut.mods.find((m) => m !== "shift") ?? null;
   emitCommand({ command: shortcut.command, arg, windowId: useBrowser.getState().ui.focusOrder[0] ?? null });
 }
@@ -175,5 +185,3 @@ if (typeof window !== "undefined") {
   window.addEventListener("pointerup", onPointerUp, true);
   window.addEventListener("blur", onBlur);
 }
-
-export const shortcutTable = () => [...SHORTCUTS, ...fallbacks].map(({ code, mods, command }) => ({ code, mods, command }));

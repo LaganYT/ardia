@@ -1,5 +1,6 @@
+import { SecretEscapeError, withoutSecrets, type SecretFree } from "@ardia/core";
 import { engineInfo, updaterState } from "../../platform/app";
-import { readDocument, saveDocument, writeDocument } from "../../platform/documents";
+import { readDocument, saveDocument, syncDocument, writeDocument } from "../../platform/documents";
 import { MAX_BODY_BYTES } from "./config";
 import { logRecord, outcome, type OtlpLogRecord, type QueuedEvent } from "./otlp";
 import { cleanProperties } from "./sanitize";
@@ -8,11 +9,14 @@ import type { RequestLogEntry } from "./requestLog";
 import { appInfo, mayPost, post } from "./transport";
 import { telemetryRelay, type AskPlacement, type CaptureOptions, type SharingSource } from "./relay";
 import { uuidv4, uuidv7 } from "./ids";
+import { upcomingInstallId } from "./installId";
 import { parseSaved, versionedJson } from "../../lib/savedDocument";
 import { withDeadline } from "../../lib/deadline";
 import { isFields, isString } from "../../lib/decode";
 import { consentEpoch, consentNow, consentToken, counted, dismissAsk, onConsentPeriodChange, isSharing, loadChoice, NO_WATCH, resumeSession, save, savedChoice as saved, savedOff, sessionId, startNewSession, stillValid, useTelemetry, type ConsentToken } from "./choice";
 import { flushLocalNow, LOCAL_KEEP_DAYS, recordLocal } from "./localStore";
+import { COUNT_EVENTS } from "./countEvents";
+import { nextLaunchCohort } from "./launchCohort";
 import { context, environment, eventsBody, logsBody, resource, setEngineVersion } from "./requestContext";
 
 export { environment, resource };
@@ -78,21 +82,23 @@ function persistQueue(now = false) {
   else persistTimer = setTimeout(write, 2000);
 }
 
-export function saveQueueNow(timeoutMs = 1000): Promise<void> {
-  try {
-    flushLocalNow();
-  } catch {}
-  if (!saved().sharing) return Promise.resolve();
+function saveQueueDoc(timeoutMs: number, sync = false): Promise<boolean> {
+  if (!saved().sharing) return Promise.resolve(false);
   clearTimeout(persistTimer);
   persistTimer = undefined;
   try {
     loadQueue();
-    const landed = saveDocument(QUEUE_DOC, queueDoc()).catch(() => {});
-    return withDeadline(landed, timeoutMs, undefined);
-  } catch {
-    return Promise.resolve();
-  }
+    const landed = saveDocument(QUEUE_DOC, queueDoc()).then(() => (sync ? syncDocument(QUEUE_DOC) : undefined));
+    return withDeadline(landed.then(() => true, () => false), timeoutMs, false);
+  } catch { return Promise.resolve(false); }
 }
+
+export function saveQueueNow(timeoutMs = 1000): Promise<void> {
+  try { flushLocalNow(); } catch {}
+  return saveQueueDoc(timeoutMs).then(() => undefined);
+}
+
+export const queueSavedDurably = (timeoutMs = 5000): Promise<boolean> => (telemetryRelay() ? Promise.resolve(false) : saveQueueDoc(timeoutMs, true));
 
 function clearQueue() {
   queue = { events: [], logs: [] };
@@ -123,36 +129,52 @@ let droppedWhileOff = 0;
 
 export type { CaptureOptions };
 
-export function capture(event: string, props: Record<string, unknown>, consent: ConsentToken | null, options: CaptureOptions = {}) {
+export function capture<P extends Record<string, unknown>, R extends Record<string, unknown> = Record<string, never>>(
+  event: string,
+  props: P & SecretFree<P>,
+  consent: ConsentToken | null,
+  options: CaptureOptions & { raw?: R & SecretFree<R> } = {},
+): boolean {
+  const sharing = stillValid(consent);
+  if (!sharing && COUNT_EVENTS.has(event)) {
+    droppedWhileOff++;
+    return false;
+  }
   const relay = telemetryRelay();
-  if (relay) return relay.capture(event, props, consent, options);
+  if (relay) {
+    const relayed = relay.capture(event, withoutSecrets(props, "telemetry"), consent, { ...options, raw: withoutSecrets(options.raw, "telemetry") });
+    return sharing && relayed === true;
+  }
   try {
     const { installId } = saved();
-    const sharing = stillValid(consent);
-    const at = Date.now();
+    const at = options.at ?? Date.now();
     const record: QueuedEvent = {
-      uuid: uuidv7(),
+      uuid: options.uuid ?? uuidv7(),
       event,
       distinct_id: installId ?? "",
       timestamp: new Date(at).toISOString(),
-      properties: { ...context(), ...cleanProperties(props), ...options.raw },
+      properties: { ...context(), ...cleanProperties(props), ...withoutSecrets(options.raw, "telemetry") },
     };
-    recordLocal("event", sharing, { event, uuid: record.uuid, distinct_id: sharing ? installId : null, properties: record.properties }, at);
-    if (!sharing) {
-      droppedWhileOff++;
-      return;
+    if (sharing) {
+      loadQueue();
+      if (options.uuid && queue.events.some((queued) => queued.uuid === options.uuid)) return (persistQueue(options.persist), true);
     }
-    loadQueue();
+    recordLocal("event", sharing, { event, uuid: record.uuid, distinct_id: sharing ? installId : null, properties: record.properties }, at);
+    if (!sharing) return (droppedWhileOff++, false);
     queue.events.push(record);
     if (queue.events.length > MAX_EVENTS) queue.events.splice(0, queue.events.length - MAX_EVENTS);
     persistQueue(options.persist);
     scheduleFlush(options.urgent ? URGENT_FLUSH_DELAY_MS : FLUSH_DELAY_MS);
-  } catch {}
+    return true;
+  } catch (error) {
+    if (error instanceof SecretEscapeError) throw error;
+    return false;
+  }
 }
 
 export function queueLog(level: "warn" | "error", message: string, attributes: Record<string, string | number | boolean>, consent: ConsentToken | null) {
   const relay = telemetryRelay();
-  if (relay) return relay.log(level, message, attributes, consent);
+  if (relay) return relay.log(level, message, withoutSecrets(attributes, "log"), consent);
   try {
     const sharing = stillValid(consent);
     const at = Date.now();
@@ -221,6 +243,7 @@ async function drain<T>(
 }
 
 export async function flush() {
+  clearTimeout(flushTimer);
   flushTimer = undefined;
   if (!saved().sharing || flushing) return;
   flushing = true;
@@ -244,7 +267,7 @@ export async function flush() {
   }
 }
 
-export type { AskPlacement, SharingSource };
+export type { AskPlacement };
 
 export function setSharing(on: boolean, source: SharingSource, placement?: AskPlacement): Promise<boolean> {
   const relay = telemetryRelay();
@@ -268,7 +291,7 @@ export function setSharing(on: boolean, source: SharingSource, placement?: AskPl
   }
   save({
     sharing: true,
-    installId: current.installId ?? uuidv4(),
+    installId: current.installId ?? upcomingInstallId(),
     crashCursor: now,
     lastVersion: appInfo().appVersion,
     lastBuild: appInfo().appBuild,
@@ -303,6 +326,8 @@ type ClientSession = {
   lastLaunchAt: number | null;
   lastQuitAt: number | null;
   firstOfVersion: boolean;
+  coldNth: number | null;
+  versionSince: number | null;
   context: SavedContext | null;
 };
 
@@ -323,7 +348,7 @@ export function startClient(continuing = false): ClientSession {
     if (current.sharing) loadQueue();
     if (current.sessionOpen) save({ sessionOpen: true, sessionId: sessionId() });
     scheduleFlush(2_000);
-    return { previous: "clean", updatedFrom: null, lastLaunchAt: current.lastLaunchAt, lastQuitAt: current.lastQuitAt, firstOfVersion: false, context: current.context };
+    return { previous: "clean", updatedFrom: null, lastLaunchAt: current.lastLaunchAt, lastQuitAt: current.lastQuitAt, firstOfVersion: false, coldNth: null, versionSince: current.versionSince, context: current.context };
   }
   if (current.sharing) loadQueue();
   else {
@@ -335,14 +360,18 @@ export function startClient(continuing = false): ClientSession {
   const updatedFrom = current.lastVersion && current.lastVersion !== version ? current.lastVersion : null;
   const build = appInfo().appBuild;
   const firstOfVersion = current.lastVersion !== version || (current.lastBuild != null && current.lastBuild !== build);
-  const last = { lastLaunchAt: current.lastLaunchAt, lastQuitAt: current.lastQuitAt, firstOfVersion, context: current.context };
+  const startedAt = appInfo().processStart ?? Date.now();
+  const cohort = nextLaunchCohort(current, firstOfVersion, startedAt, appInfo().bootTime);
+  const last = { lastLaunchAt: current.lastLaunchAt, lastQuitAt: current.lastQuitAt, firstOfVersion, coldNth: cohort.coldNth, versionSince: cohort.versionSince, context: current.context };
   const crashFloor = Date.now() - LOCAL_KEEP_DAYS * 86_400_000;
   save({
     sessionOpen: true,
     sessionId: sessionId(),
     lastVersion: version,
     lastBuild: build,
-    lastLaunchAt: appInfo().processStart ?? Date.now(),
+    lastLaunchAt: startedAt,
+    versionSince: cohort.versionSince,
+    versionColdLaunches: cohort.versionColdLaunches,
     ...(!current.sharing && current.crashCursor < crashFloor ? { crashCursor: crashFloor } : {}),
   });
   scheduleFlush(previous === "unclean" ? 2_000 : 10_000);

@@ -7,6 +7,8 @@ import {
   mobileSetSources,
   mobileSuggest,
   mobileSuggestRequest,
+  sameAddress,
+  spacedAddressGuess,
 } from "@ardia/core/src/mobile.ts";
 import { dedupeByLanding, displayHost, landingKey } from "../../lib/url.ts";
 import type { PasteOffer } from "./pasteRow.ts";
@@ -15,12 +17,17 @@ export type TrayRow =
   | { key: string; kind: "query"; title: string; url: string; query: string; detail?: string | null }
   | { key: string; kind: "page"; title: string; detail: string; url: string; favicon: string | null; tabId: string | null; switchesTab: boolean; fromMac?: string | null }
   | { key: string; kind: "calc"; title: string; detail: string; url: string; value: string }
-  | { key: string; kind: "paste"; title: string; detail: string; url: string; offer: PasteOffer };
+  | { key: string; kind: "paste"; title: string; detail: string; url: string; offer: PasteOffer }
+  | { key: string; kind: "browseForMe"; title: string; detail: string; url: string; query: string };
 
 export type { PasteOffer };
 
 
 export const SWITCH_TO_TAB = "Switch to Tab";
+
+export const BROWSE_FOR_ME = "Browse for Me";
+
+const BROWSE_FOR_ME_SHORTEST = 3;
 
 export const IDLE_ROW_LIMIT = 5;
 
@@ -32,10 +39,11 @@ export type SuggestContext = { currentUrl: string | null; currentTabId: string |
 
 export type OmniboxSources = Parameters<typeof mobileSetSources>[0];
 
-export function suggest(text: string, remote: readonly string[], context: SuggestContext, macTabs: ReadonlyMap<string, string> = new Map()): Suggested {
+export function suggest(text: string, remote: readonly string[], context: SuggestContext, macTabs: ReadonlyMap<string, string> = new Map(), browsesForMe = false): Suggested {
   if (!text.trim()) return { rows: [], completion: "" };
   const result = mobileSuggest(text, { remote: [...remote], preference: "website", limit: ROW_LIMIT, now: Date.now(), ...context });
   const rows: TrayRow[] = [];
+  const guess = spacedAddressGuess(text);
   for (const item of result.items) {
     const typedAddress = item.kind === "search" ? mobileResolve(item.query) : null;
     if (item.kind === "search" && typedAddress?.kind === "url") rows.push(addressRow(typedAddress.url));
@@ -48,7 +56,7 @@ export function suggest(text: string, remote: readonly string[], context: Sugges
         key: `p:${item.tabId ?? ""}:${item.url}`,
         kind: "page",
         title: item.title || host,
-        detail: item.tabId ? SWITCH_TO_TAB : host,
+        detail: item.tabId ? SWITCH_TO_TAB : !item.title && guess && sameAddress(item.url, guess) ? shown.display : host,
         url: item.url,
         favicon: item.favicon ?? null,
         tabId: item.tabId ?? null,
@@ -57,8 +65,27 @@ export function suggest(text: string, remote: readonly string[], context: Sugges
       });
     } else if (item.kind === "calc") rows.push({ key: `c:${item.expression}`, kind: "calc", title: `= ${item.value}`, detail: item.expression, url: item.url, value: item.value });
   }
-  const unique = dedupeByLanding(rows.map((row) => ({ row, url: row.kind === "page" ? row.url : row.key, opensTab: row.kind === "page" && row.switchesTab })));
-  return { rows: withTypedQuery(unique.map((item) => item.row), text), completion: result.completion };
+  const landing = (row: TrayRow) => (row.kind !== "page" ? row.key : guess && sameAddress(row.url, guess) ? `guess:${guess}` : row.url);
+  const unique = dedupeByLanding(rows.map((row) => ({ row, url: landing(row), opensTab: row.kind === "page" && row.switchesTab })));
+  const typed = withTypedQuery(unique.map((item) => item.row), text);
+  return { rows: browsesForMe ? withBrowseForMe(typed, text) : typed, completion: result.completion };
+}
+
+export function offersBrowseForMe(text: string): boolean {
+  const typed = text.trim();
+  if (typed.length < BROWSE_FOR_ME_SHORTEST || typed.startsWith("!") || typed.includes(" !")) return false;
+  return mobileResolve(typed)?.kind === "search";
+}
+
+export function withBrowseForMe(rows: TrayRow[], text: string): TrayRow[] {
+  const typed = text.trim();
+  if (!offersBrowseForMe(typed)) return rows;
+  const lower = typed.toLowerCase();
+  const at = rows.findIndex((row) => row.kind === "query" && row.title.toLowerCase() === lower);
+  const search = mobileResolve(typed);
+  if (at < 0 || !search) return rows;
+  const row: TrayRow = { key: `b:${lower}`, kind: "browseForMe", title: BROWSE_FOR_ME, detail: typed, url: search.url, query: typed };
+  return [...rows.slice(0, at + 1), row, ...rows.slice(at + 1)].slice(0, ROW_LIMIT);
 }
 
 export function withTypedQuery(rows: TrayRow[], text: string): TrayRow[] {
@@ -80,7 +107,7 @@ function addressRow(url: string): TrayRow {
 export type RowTarget = { url: string; origin: "search" | "typed" | "sync" };
 
 export function rowTarget(row: TrayRow): RowTarget | null {
-  if (row.kind === "calc" || row.kind === "paste") return null;
+  if (row.kind === "calc" || row.kind === "paste" || row.kind === "browseForMe") return null;
   if (row.kind === "page") return { url: row.url, origin: row.fromMac ? "sync" : "typed" };
   const typed = mobileResolve(row.query);
   return typed?.kind === "url" ? { url: typed.url, origin: "typed" } : { url: row.url, origin: "search" };
@@ -104,6 +131,14 @@ export function idleRows(queries: readonly string[], macTabs: readonly { url: st
   return rows.slice(0, IDLE_ROW_LIMIT);
 }
 
+export function withCurrentEngine(rows: readonly TrayRow[]): TrayRow[] {
+  return rows.flatMap((row): TrayRow[] => {
+    if (row.kind !== "query") return [row];
+    const url = mobileResolve(`?${row.query}`)?.url;
+    return url ? [{ ...row, url }] : [];
+  });
+}
+
 export const searchEngines = () => mobileEngines().map((engine) => ({ id: engine.id, name: engine.name, custom: engine.custom }));
 
 export const resolve = (text: string) => mobileResolve(text);
@@ -112,10 +147,25 @@ export const display = (url: string) => mobileDisplay(url);
 
 export const setSources = (sources: OmniboxSources) => mobileSetSources(sources);
 
-export const setSearchEngine = (engineId: string) => mobileSetSearch({ engineId });
+let engineIdentity = "";
+let engineRevision = 0;
+
+export const searchEngineRevision = () => engineRevision;
+
+function chooseSearch(search: Parameters<typeof mobileSetSearch>[0]) {
+  const identity = JSON.stringify(search);
+  const chosen = mobileSetSearch(search);
+  if (identity !== engineIdentity) {
+    engineIdentity = identity;
+    engineRevision += 1;
+  }
+  return chosen;
+}
+
+export const setSearchEngine = (engineId: string) => chooseSearch({ engineId });
 
 export const setSyncedSearch = (search: { engineId: string; customURL: string | null; customEngines: { id: string; name: string; keyword: string; url: string }[] }) =>
-  mobileSetSearch({ engineId: search.engineId, customUrl: search.customURL ?? undefined, customEngines: search.customEngines });
+  chooseSearch({ engineId: search.engineId, customUrl: search.customURL ?? undefined, customEngines: search.customEngines });
 
 const REMOTE_TIMEOUT_MS = 4000;
 

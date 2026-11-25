@@ -146,7 +146,10 @@ Requested RequestedSmallFrame(const std::vector<double>& size,
   const bool given = size.size() == 2 && std::isfinite(size[0]) && std::isfinite(size[1]);
   const auto fit = [](double wanted, int minimum, int room) {
     const double floor = std::max(wanted, static_cast<double>(minimum));
-    return room > 0 ? std::min(floor, static_cast<double>(room)) : std::min(floor, kMaxExtent);
+    if (room <= 0) return std::min(floor, kMaxExtent);
+    const double largest = std::min(std::max(std::round(room * kSmallWindowLargestShare), static_cast<double>(minimum)),
+                                    static_cast<double>(room));
+    return std::min(floor, largest);
   };
   const double width = fit(given ? size[0] : kSmallWindowWidth, kSmallWindowMinWidth, work_area.width);
   const double height = fit(given ? size[1] : kSmallWindowHeight, kSmallWindowMinHeight, work_area.height);
@@ -181,6 +184,21 @@ Requested RequestedUtilityFrame(int width,
   requested.bounds.x = x;
   requested.bounds.y = y;
   return requested;
+}
+
+const char* WindowClass(std::string_view kind, bool small) {
+  if (kind == "settings") return kSettingsWindowClass;
+  if (kind == "import") return kImportWindowClass;
+  if (kind.empty() && small) return kLittleWindowClass;
+  return nullptr;
+}
+
+bool OpensPinned(std::string_view kind, bool small, bool maximized) {
+  return !maximized && WindowClass(kind, small) != nullptr;
+}
+
+int64_t PinnedSizeReleaseDelayMs(int64_t pinned_for_ms) {
+  return std::clamp<int64_t>(kPinnedSizeLimitMs - pinned_for_ms, 0, kPinnedSizeHoldMs);
 }
 
 std::optional<std::array<int, 4>> GeometryLedger::Frame(const Rect& bounds,

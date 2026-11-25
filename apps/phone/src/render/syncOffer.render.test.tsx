@@ -48,12 +48,15 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-onAndroid("where sync isn't offered, Android's Settings has no Sync card and no Spaces shortcut, the Spaces sheet and the sync pages never open, and Appearance offers no Match My Mac", () => {
+onAndroid("where sync isn't offered, Android's Settings has no Sync card in either design, the Spaces sheet and the sync pages never open, and Appearance offers no Match My Mac", () => {
   act(() => openSettings());
-  const root = inDesign("original", <SettingsView />);
-  const texts = root.root.findAll((node) => typeof node.type === "string" && typeof node.props.children === "string").map((node) => node.props.children as string);
-  expect(texts).toContain("Archive");
-  expect(texts).not.toContain("Spaces");
+  const panes = (rendered: Root) => rendered.root.findAll((node) => typeof node.type === "string" && typeof node.props.children === "string").map((node) => node.props.children as string).filter((text) => !["Settings", "Done"].includes(text));
+  const iPhone = inDesign("redesigned", <SettingsView />);
+  expect(panes(iPhone)).toEqual(["General", "Tabs", "Appearance", "Search", "Site settings"]);
+  expect(textOf(iPhone)).not.toContain("Sync With");
+  unmount(iPhone);
+  const root = inDesign("material", <SettingsView />);
+  expect(panes(root)).toEqual(["General", "Tabs", "Appearance", "Search", "Site settings"]);
   expect(textOf(root)).not.toContain("Sync With");
   act(() => openSpaces());
   expect(useBrowse.getState().sheet).toBeNull();
@@ -61,15 +64,16 @@ onAndroid("where sync isn't offered, Android's Settings has no Sync card and no 
   expect(useSettingsNav.getState().stack.map((route) => route.page)).toEqual(["root"]);
   act(() => openSettings({ page: "appearance" }));
   expect(textOf(root)).not.toContain("Match My Mac");
-  expect(labelled(root, "Glass")[0]!.props.accessibilityState).toEqual({ selected: true });
-  expect(labelled(root, "System")[0]!.props.accessibilityState).toEqual({ selected: true });
+  expect(labelled(root, "Glass")[0]!.props.accessibilityState).toMatchObject({ selected: true });
+  expect(labelled(root, "System")[0]!.props.accessibilityState).toMatchObject({ selected: true });
   unmount(root);
 });
 
-test("where sync isn't offered, the start page has no Sync With Your Mac invitation and the page menu has no Pin to Mac", async () => {
+test("where sync isn't offered, the start page has no Sync With Your Mac invitation and shows the Ardia mark, and the page menu has no Pin to Mac", async () => {
   act(() => useBrowse.setState({ surface: "start" }));
   const start = inDesign("redesigned", <StartScreen />);
   expect(hosts(start, "startSyncInvitation")).toHaveLength(0);
+  expect(hosts(start, "startLogo")).toHaveLength(1);
   unmount(start);
   act(() => useBrowse.setState({ surface: "browsing" }));
   const menu = inDesign("redesigned", <LiveMenu />);
@@ -83,11 +87,12 @@ test("where sync isn't offered, the start page has no Sync With Your Mac invitat
   unmount(menu);
 });
 
-test("where sync is offered, as on iPhone, the start page invites and the page menu offers Pin to Mac", async () => {
+test("where sync is offered, the start page still shows only the Ardia mark and keeps Sync in Settings, and the page menu offers Pin to Mac", async () => {
   mockOffered = true;
   act(() => useBrowse.setState({ surface: "start" }));
   const start = inDesign("redesigned", <StartScreen />);
-  expect(hosts(start, "startSyncInvitation")).toHaveLength(1);
+  expect(hosts(start, "startSyncInvitation")).toHaveLength(0);
+  expect(hosts(start, "startLogo")).toHaveLength(1);
   unmount(start);
   act(() => useBrowse.setState({ surface: "browsing" }));
   const menu = inDesign("redesigned", <LiveMenu />);

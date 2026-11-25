@@ -6,6 +6,7 @@
 #import "ArdiaStartup.h"
 #import "ArdiaTabParking.h"
 #import "ArdiaWebViewInternal.h"
+#import "ArdiaPictureInPicture.h"
 
 #import <Security/Security.h>
 #import <objc/runtime.h>
@@ -39,6 +40,7 @@ static void EndFailedPageDragsAtMouseUp() {
   WatchReservedShortcuts();
   ardia_host::InstallActivationGuardsLate();
   EndFailedPageDragsAtMouseUp();
+  ardia_pip::ForgetSavedSize();
   if (gScratchDataDir && ardia_host::Background())
     ardia_host::InstallTestCrashGuard([gDataDirectory stringByDeletingLastPathComponent]);
   ArdiaCoreEngine *engine = ArdiaCoreEngine.sharedEngine;
@@ -52,6 +54,9 @@ static void EndFailedPageDragsAtMouseUp() {
   NSBundle *bundle = [NSBundle bundleForClass:ArdiaHostEngineDelegate.class];
   NSString *path = [bundle pathForResource:@"page_script" ofType:@"js"];
   NSString *script = path ? [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] : nil;
+  NSString *metricsPath = [bundle pathForResource:@"page_metrics" ofType:@"js"];
+  NSString *metrics = metricsPath ? [NSString stringWithContentsOfFile:metricsPath encoding:NSUTF8StringEncoding error:nil] : nil;
+  if (script && metrics) script = ardia_host::WithPageMetrics(script, metrics);
   if (script) engine.pageScript = script;
   [ArdiaLaunchSequence.shared reach:ArdiaLaunchEngineStarted];
 
@@ -114,6 +119,7 @@ static void EndFailedPageDragsAtMouseUp() {
 
 - (void)engineQuitCancelled {
   NSLog(@"[ardiacore] quit cancelled");
+  [NSNotificationCenter.defaultCenter postNotificationName:@"ArdiaHostQuitCancelled" object:nil];
   if (ArdiaHost.quitCancelledHandler) ArdiaHost.quitCancelledHandler();
 }
 

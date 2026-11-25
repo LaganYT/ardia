@@ -26,11 +26,12 @@ NSString *DevCover(NSWindow *window, NSString *how, NSString *at) {
   if ([how isEqualToString:@"off"]) return @"uncovered";
   NSView *page = PageAt(window, TopLeftPoint(window, at));
   if (!page) return @"no page there";
-  NSView *host = [how isEqualToString:@"rn"] ? [ArdiaWindowController forNSWindow:window].root : page.superview;
+  const bool reactNative = [how isEqualToString:@"rn"] || [how isEqualToString:@"rnShown"];
+  NSView *host = reactNative ? [ArdiaWindowController forNSWindow:window].root : page.superview;
   if (!host) return @"no host";
-  NSView *cover = [[([how isEqualToString:@"rn"] ? NSClassFromString(@"RCTView") : NSView.class) alloc]
+  NSView *cover = [[(reactNative ? NSClassFromString(@"RCTView") : NSView.class) alloc]
       initWithFrame:[host convertRect:[page convertRect:page.bounds toView:nil] fromView:nil]];
-  if ([how isEqualToString:@"rn"]) cover.alphaValue = 0;
+  if ([how isEqualToString:@"rn"] || [how isEqualToString:@"clear"]) cover.alphaValue = 0;
   [host addSubview:cover];
   [gDevCovers addObject:cover];
   return NSStringFromClass(HitAt(window, TopLeftPoint(window, at)).class);
@@ -43,6 +44,10 @@ NSString *DevHoverState() {
     @"episodeReason" : gEpisode.open ? ReasonName(gEpisode.first.reason) : @"",
     @"healed" : @(gEpisode.healed),
     @"healWorked" : @(gEpisode.healWorked),
+    @"healRefused" : HealRefusalName(gEpisode.firstRefusal),
+    @"healRefusedLast" : HealRefusalName(gEpisode.lastRefusal),
+    @"healRefusedWindow" : MenuWindowName(gEpisode.refusedWindow),
+    @"otherWindowClicks" : @(gEpisode.otherWindowClicks),
     @"pending" : ReasonName(gPendingReason),
     @"watching" : @(gHoverMonitor != nil),
     @"emitted" : gDevHoverEvents ?: @[],

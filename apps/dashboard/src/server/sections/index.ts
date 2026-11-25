@@ -5,10 +5,11 @@ import { errorsExceptions, errorsLogs } from "./errors";
 import { funnelsInstalls, funnelsRetention, funnelsSite } from "./funnels";
 import { healthVersions } from "./health";
 import { healthCli } from "./health-cli";
+import { healthProtectedVideo } from "./protected-video";
 import { performanceAll } from "./performance";
 import { freezesBySignature } from "./freezes";
 import { settingsOverview, settingsTint } from "./settings";
-import { siteBreakdowns, siteClicks, siteExperiment, siteFriction, siteTraffic, siteVitals } from "./site";
+import { siteBreakdowns, siteClicks, siteDonateExperiment, siteExperiment, siteFriction, siteTraffic, siteVitals } from "./site";
 import { usersActive, usersOptedIn, usersUsage, usersVersions } from "./users";
 
 export const sections = {
@@ -22,6 +23,7 @@ export const sections = {
   "funnels.retention": funnelsRetention,
   health: healthVersions,
   "health.cli": healthCli,
+  "health.protectedVideo": healthProtectedVideo,
   performance: performanceAll,
   "performance.freezes": (_range: RangeKey, signal?: AbortSignal) => freezesBySignature(signal),
   settings: settingsOverview,
@@ -31,6 +33,7 @@ export const sections = {
   "site.clicks": siteClicks,
   "site.friction": siteFriction,
   "site.experiment": siteExperiment,
+  "site.donateExperiment": siteDonateExperiment,
   "site.vitals": siteVitals,
   "errors.exceptions": errorsExceptions,
   "errors.logs": errorsLogs,

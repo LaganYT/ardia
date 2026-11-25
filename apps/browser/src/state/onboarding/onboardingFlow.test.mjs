@@ -21,6 +21,9 @@ import {
 } from "./onboarding.ts";
 import { adoptSetupChoices } from "./setupCodeChoices.ts";
 import { readSaved } from "./onboardingDocument.ts";
+import { usePlugins } from "../plugins/store.ts";
+
+usePlugins.setState({ scanned: true });
 
 const S = () => useBrowser.getState();
 const O = () => useOnboarding.getState();
@@ -43,6 +46,20 @@ test("every browser walks the full set of steps, and a browser's preset skips on
     for (const q of ["color", "frame", "crash", "pins", "default", "outro"]) assert.ok(list.includes(q), `${source} asks ${q}`);
     assert.ok(list.every((q) => everything.includes(q)), source);
   }
+  settle();
+});
+
+test("onboarding no longer asks about the profile switcher, and the Look step keeps the rest of its questions", () => {
+  const id = S().createWindow();
+  for (const source of ["fresh", "arc", "dia", "chrome", null]) {
+    startOnboarding(id, "source");
+    chooseSource(source);
+    assert.equal(asked().includes("switcher"), false, String(source));
+    assert.equal(activeSteps().includes("look"), true, String(source));
+  }
+  assert.deepEqual(QUESTIONS.look.map((q) => q.id), ["appearance", "frame", "siteColor", "lookMore"]);
+  assert.deepEqual(QUESTIONS.layout.map((q) => q.id).slice(0, 3), ["tabs", "color", "style"]);
+  assert.equal(QUESTIONS.look.some((q) => q.keys.includes("profileSwitcherIcons")), false);
   settle();
 });
 
@@ -85,12 +102,12 @@ test("after a setup code, every step asks its questions from the settings the co
   settle();
 });
 
-test("redo starts from the current settings, keeps them unless a new browser is picked, and cancel undoes previews", () => {
+test("redo plays the intro, starts from the current settings, keeps them unless a new browser is picked, and cancel undoes previews", () => {
   const id = S().createWindow();
   S().updateSettings({ appearance: "dark", searchEngine: "kagi", newTabOpens: "page", addressBar: "toolbar" });
   const completed = onboardingCompletedAt();
   assert.equal(redoOnboarding(id), id);
-  assert.equal(O().step, "source");
+  assert.equal(O().step, "intro");
   assert.equal(O().redo, true);
   const now = resolveDraft(["appearance", "searchEngine", "addressBar"], O().draft, draftPreset(O()), S().settings, []);
   assert.deepEqual(now, { appearance: "dark", searchEngine: "kagi", addressBar: "toolbar" });

@@ -1,18 +1,22 @@
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { capsule, font, space, Symbol, tabsInk, tabsLayout, useTheme } from "../ui";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { controlRadius, controlSize, EmptyState, font, IncognitoSpecs, NoResultsState, smoothCorners, space, Tappable, tabsInk, tabsLayout } from "../ui";
 
-export function DeckEmpty({ centerY, showsArchive, onArchive, searching = false }: { centerY: number; showsArchive: boolean; onArchive: () => void; searching?: boolean }) {
-  const theme = useTheme();
-  const { width } = useWindowDimensions();
+export function deckEmptyWords(incognito: boolean): { title: string; detail: string } {
+  if (incognito) return { title: "No Incognito Tabs", detail: "Incognito tabs aren’t saved to your history or the Archive." };
+  return { title: "No Open Tabs", detail: "Tabs you open appear here. Inactive tabs move to the Archive." };
+}
+
+export const DECK_OPEN_ARCHIVE = "Open Archive";
+
+export function DeckEmpty({ centerY, showsArchive, onArchive, query = "", incognito = false }: { centerY: number; showsArchive: boolean; onArchive: () => void; query?: string; incognito?: boolean }) {
+  const words = deckEmptyWords(incognito);
   return (
-    <View style={[styles.empty, { top: centerY - space.huge * 2, left: (width - tabsLayout.emptyWidth) / 2, width: tabsLayout.emptyWidth }]}>
-      <Text style={[font.title3, styles.emptyTitle, { color: theme.headerText }]}>{searching ? "No Matching Tabs" : "No Open Tabs"}</Text>
-      {searching ? null : <Text style={[font.subheadline, styles.centered, { color: theme.secondaryLabel }]}>Tabs you open appear here. Inactive tabs move to the Archive.</Text>}
-      {showsArchive && !searching ? (
-        <Pressable accessibilityRole="button" onPress={onArchive} style={styles.archive}>
-          <Text style={[font.subheadline, styles.bold, { color: theme.formAccent }]}>Open Archive</Text>
-        </Pressable>
-      ) : null}
+    <View testID="deckEmpty" pointerEvents="box-none" style={[styles.empty, { top: centerY - space.huge * 2 }]}>
+      {query ? (
+        <NoResultsState testID="deckNoResults" query={query} />
+      ) : (
+        <EmptyState title={words.title} message={words.detail} action={showsArchive && !incognito ? { title: DECK_OPEN_ARCHIVE, onPress: onArchive } : undefined} />
+      )}
     </View>
   );
 }
@@ -21,28 +25,26 @@ export function IncognitoChip({ count, top, onPress }: { count: number; top: num
   const { width } = useWindowDimensions();
   return (
     <View style={[styles.chipRow, { top, width }]} pointerEvents="box-none">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Incognito, ${count} ${count === 1 ? "tab" : "tabs"}`}
-        accessibilityHint="Shows the option to close incognito tabs."
+      <Tappable
+        kind="filled"
+        testID="deckIncognitoChip"
+        label={`Incognito, ${count} ${count === 1 ? "tab" : "tabs"}`}
+        hint="Shows the option to close incognito tabs."
         onPress={onPress}
-        style={[styles.chip, { backgroundColor: tabsInk.incognitoCard, borderRadius: capsule(tabsLayout.chipHeight) }]}
+        style={[styles.chip, { backgroundColor: tabsInk.incognitoOnLight }]}
       >
-        <Symbol name="eyes" size={16} color={tabsInk.onDark} />
+        <IncognitoSpecs size={tabsLayout.specsChip} color={tabsInk.onDark} />
         <Text style={[font.subheadline, styles.bold, styles.chipText]}>Incognito</Text>
         <Text style={[font.subheadline, styles.bold, { color: tabsInk.onDarkChip }]}>{count}</Text>
-      </Pressable>
+      </Tappable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  empty: { position: "absolute", alignItems: "center", gap: space.xs + 2 },
-  emptyTitle: { fontWeight: "600", textAlign: "center" },
-  centered: { textAlign: "center" },
+  empty: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   bold: { fontWeight: "600" },
-  archive: { minHeight: 44, justifyContent: "center", paddingHorizontal: space.m, marginTop: space.xs + 2 },
-  chipRow: { position: "absolute", left: 0, height: 44, alignItems: "center", justifyContent: "center" },
-  chip: { flexDirection: "row", alignItems: "center", gap: space.xs + 2, minHeight: tabsLayout.chipHeight, paddingHorizontal: space.m },
+  chipRow: { position: "absolute", left: 0, height: controlSize.hitTarget, alignItems: "center", justifyContent: "center" },
+  chip: { flexDirection: "row", alignItems: "center", gap: space.xs + 2, minHeight: tabsLayout.chipHeight, paddingHorizontal: space.m, borderRadius: controlRadius(tabsLayout.chipHeight), ...smoothCorners },
   chipText: { color: tabsInk.onDark },
 });

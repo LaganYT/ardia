@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import materialSymbols from "../assets/material-symbols.json" with { type: "json" };
 
 export const APP_DIR = join(import.meta.dirname, "..");
 const REPO_DIR = join(APP_DIR, "..", "..");
@@ -18,6 +19,7 @@ const NATIVE_LIBRARIES: { group: string; name: string; license: string; url: str
   { group: "org.jetbrains.kotlinx", name: "Kotlin coroutines and serialization", license: "Apache-2.0", url: "https://github.com/Kotlin" },
   { group: "com.google.re2j", name: "RE2/J", license: "BSD-3-Clause", url: "https://github.com/google/re2j" },
   { group: "com.google.zxing", name: "ZXing", license: "Apache-2.0", url: "https://github.com/zxing/zxing" },
+  { group: "com.google.mlkit", name: "Google ML Kit GenAI Prompt API", license: "ML Kit Terms of Service", url: "https://developers.google.com/ml-kit/terms" },
 ];
 
 const BUNDLED_WITH_NPM = ["com.facebook.react"];
@@ -30,13 +32,18 @@ export function importerBlock(lockfile: string, importer: string): string {
   return end < 0 ? rest : rest.slice(0, end + 1);
 }
 
+export function projectDocument(lockfile: string): string {
+  const start = lockfile.lastIndexOf("\n---\n");
+  return start < 0 ? lockfile : lockfile.slice(start + 5);
+}
+
 export function gradleArtifacts(gradle: string): string[] {
   return [...gradle.matchAll(/^\s*(?:implementation|api)\s+["']([^"':]+:[^"':]+)(?::[^"']*)?["']/gm)].map((match) => match[1]!);
 }
 
 export function creditInputs(): string {
   const lockfile = readFileSync(LOCKFILE, "utf8");
-  const inputs = [importerBlock(lockfile, "."), gradleArtifacts(readFileSync(MODULE_GRADLE, "utf8")).join("\n")];
+  const inputs = [importerBlock(projectDocument(lockfile), "."), gradleArtifacts(readFileSync(MODULE_GRADLE, "utf8")).join("\n")];
   return createHash("sha256").update(inputs.join("\n---\n")).digest("hex");
 }
 
@@ -79,6 +86,12 @@ export function bundledPackages(sources: readonly string[]): PackageCredit[] {
     if (root) roots.add(root);
   }
   const credits = new Map<string, PackageCredit>();
+  credits.set("google-material-symbols", {
+    name: "Google Material Symbols",
+    version: materialSymbols.revision,
+    license: "Apache-2.0",
+    url: "https://github.com/google/material-design-icons",
+  });
   for (const root of roots) {
     const manifestPath = [join(root, "package.json"), join(APP_DIR, root, "package.json"), join(REPO_DIR, root, "package.json")].find((path) => existsSync(path));
     if (!manifestPath) continue;

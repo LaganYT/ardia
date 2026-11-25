@@ -3,12 +3,13 @@ import { PlatformColor, View } from "react-native";
 import { Button, Form, HStack, RNHostView, Section, Spacer, Text, TextField, Toolbar, ToolbarItem, useNativeState } from "@expo/ui/swift-ui";
 import { autocorrectionDisabled, contentTransition, disabled, font, foregroundStyle, keyboardType, lineLimit, listRowBackground, monospacedDigit, navigationBarTitleDisplayMode, navigationTitle, onSubmit, privacySensitive, scrollDismissesKeyboard, submitLabel, textInputAutocapitalization, tint } from "@expo/ui/swift-ui/modifiers";
 import { haptics } from "../../state/app/haptics";
+import { syncWords } from "../../lib/sharedWords";
 import { popSettings } from "../../state/settings/nav";
 import { checkPhrase } from "../../state/sync/actions";
 import { setConnectPhrase, useConnectDraft } from "../../state/sync/connectDraft";
 import { phraseFooter } from "../../state/sync/syncRules";
 import { PasteAction, SYSTEM_PASTE_SIZE } from "../sync/SyncPage";
-import { legibleInk, modifierList, settingsChrome } from "../ui";
+import { legibleInk, modifierList, neverBounces, settingsChrome } from "../ui";
 
 const SECONDARY = { type: "hierarchical", style: "secondary" } as const;
 
@@ -33,7 +34,7 @@ export function ExpoPhrasePage() {
   const footerInk = footer.tone === "problem" ? legibleInk("red") : footer.tone === "good" ? legibleInk("green") : null;
   return (
     <Toolbar>
-      <Form modifiers={modifierList(navigationTitle("Enter Words"), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), scrollDismissesKeyboard("interactively"))}>
+      <Form modifiers={modifierList(navigationTitle(syncWords.enterRecoveryPhrase), navigationBarTitleDisplayMode("inline"), tint(PlatformColor("systemBlue")), settingsChrome(), neverBounces(), scrollDismissesKeyboard("interactively"))}>
         <Section
           header={
             <HStack>

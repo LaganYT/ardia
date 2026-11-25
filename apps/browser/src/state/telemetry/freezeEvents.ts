@@ -1,7 +1,7 @@
 import { freezeWatch, onFreeze, type FreezeFrame, type FreezeRecord } from "../../platform/freezeWatch";
 import { systemState } from "../../platform/performance";
 import { withDeadline } from "../../lib/deadline";
-import { activityDuring } from "../app/jobActivity";
+import { activityDuring, holdsMainThread } from "../app/jobActivity";
 import { useBrowser } from "../browser/store";
 import { useSync } from "../sync/engine";
 import { capture, stillValid, type ConsentToken } from "./client";
@@ -33,6 +33,7 @@ const UPTIMES = [
 ] as const;
 const TAB_FLOORS = [0, 10, 25, 50, 100, 250, 500, 1000];
 const THERMAL = ["nominal", "fair", "serious", "critical"] as const;
+const CACHE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const startedAt = Date.now();
 
 let sentThisSession = 0;
@@ -45,6 +46,11 @@ export function scrubFrames(frames: readonly FreezeFrame[]): FreezeFrame[] {
     image: typeof f.image === "string" && KNOWN_IMAGE.test(f.image) ? f.image : "other",
     offset: KNOWN_IMAGE.test(f.image) && f.image !== "other" && Number.isSafeInteger(f.offset) && f.offset >= 0 ? f.offset : 0,
   }));
+}
+
+export function systemCacheId(images: FreezeRecord["images"] | undefined): string | null {
+  const id = Array.isArray(images) ? images.find((i) => i?.name === "system")?.uuid : undefined;
+  return typeof id === "string" && CACHE_ID.test(id.toLowerCase()) ? id.toLowerCase() : null;
 }
 
 function fnv1a(text: string): string {
@@ -62,7 +68,7 @@ export function freezeSignature(thread: string, frames: readonly FreezeFrame[], 
   return own.length ? `sig_${fnv1a(`${thread}|${own.map((f) => `${f.image}@${build(f.image)}+${f.offset.toString(16)}`).join("|")}`)}` : `none_${thread}`;
 }
 
-export function allowedThisSession(signature: string) {
+function allowedThisSession(signature: string) {
   return sentThisSession < MAX_FREEZES_PER_SESSION && !signaturesThisSession.has(signature);
 }
 
@@ -77,7 +83,9 @@ function heapFloor(): number | null {
 
 export async function reportFreeze(record: FreezeRecord, consent: ConsentToken | null) {
   const end = record.startedAt + record.durationMs;
-  const activity = activityDuring(record.startedAt, end);
+  const main = record.thread !== "js";
+  const activity = activityDuring(record.startedAt, end, Date.now(), main ? holdsMainThread : undefined);
+  const alongside = main ? activityDuring(record.startedAt, end, Date.now(), (a) => !holdsMainThread(a)) : null;
   if (activity !== "none") freezeWatch()?.annotate(record.id, activity);
   const epoch = freezeEpoch();
   if (!epoch || record.watchEpoch !== epoch || !stillValid(consent)) return;
@@ -102,6 +110,7 @@ export async function reportFreeze(record: FreezeRecord, consent: ConsentToken |
       gc_count: typeof record.gcCount === "number" && record.gcCount >= 0 ? record.gcCount : null,
       heap_mb_floor: heapFloor(),
       activity,
+      js_activity: alongside,
       tabs_floor: TAB_FLOORS.reduce((floor, step) => (tabs >= step ? step : floor), 0),
       windows: s.windowOrder.length,
       sync_on: useSync.getState().enabled,
@@ -115,7 +124,7 @@ export async function reportFreeze(record: FreezeRecord, consent: ConsentToken |
       samples: record.samples.length,
     },
     consent,
-    { raw: { freeze_frames: nativeFrames(frames), freeze_images: images } },
+    { raw: { freeze_frames: nativeFrames(frames), freeze_images: images, freeze_system_cache: frames.some((f) => f.image === "system") ? systemCacheId(record.images) : null } },
   );
 }
 

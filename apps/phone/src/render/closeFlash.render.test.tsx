@@ -20,6 +20,8 @@ const motion = (): DeckMotion => ({
   scroll: makeMutable(1),
   scaleProgress: makeMutable(1),
   positionProgress: makeMutable(1),
+  riseProgress: makeMutable(1),
+  revealProgress: makeMutable(1),
   dragIndex: makeMutable(-1),
   dragLift: makeMutable(0),
   leaving: makeMutable<DeckLeaving>({}),

@@ -4,6 +4,8 @@ export type CaptureOptions = {
   raw?: Record<string, unknown>;
   urgent?: boolean;
   persist?: boolean;
+  uuid?: string;
+  at?: number;
 };
 
 export type SharingSource = "settings" | "onboarding" | "ask" | "watch" | "watch_ended";
@@ -18,12 +20,13 @@ export type ChoiceChange =
   | { kind: "watchNoticeShown" }
   | { kind: "installId"; id: string };
 
-export type TelemetryRelay = {
-  capture(event: string, props: Record<string, unknown>, consent: ConsentToken | null, options: CaptureOptions): void;
+type TelemetryRelay = {
+  capture(event: string, props: Record<string, unknown>, consent: ConsentToken | null, options: CaptureOptions): boolean;
   log(level: "warn" | "error", message: string, attributes: Record<string, string | number | boolean>, consent: ConsentToken | null): void;
   resetId(): Promise<string>;
   change(change: ChoiceChange): Promise<boolean>;
   installId(): string;
+  downloadFollowUp?(until: number, consent: ConsentToken | null): void;
 };
 
 let relay: TelemetryRelay | null = null;

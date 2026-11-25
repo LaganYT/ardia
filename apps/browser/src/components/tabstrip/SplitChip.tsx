@@ -1,6 +1,7 @@
 import { useContext } from "react";
 import { Animated, View } from "react-native";
 import { useIsActiveTab, usePageProfileId, useTab, useWindowId } from "../../state/browser/hooks";
+import { useSplitOrientation } from "../../state/splits/hooks";
 import { useShownTabIdFor } from "../../state/tabs/topStrip";
 import { TabIcon } from "../sidebar/TabIcon";
 import { Divider, FadeLabel, Symbol } from "../ui";
@@ -14,6 +15,7 @@ import { dragGeometry, type DragGeometry } from "./stripGroups";
 import { ItemRow, useWebsiteBand } from "./TabChip";
 import { CHIP_LABEL_GAP, CHIP_PAD, GAP, TOP_STRIP_HEIGHT } from "./tokens";
 import { useStripDrag } from "./useStripDrag";
+import { useStripPick } from "./stripPick";
 import { StripScrollContext } from "./stripScroll";
 import { useStripCardHover } from "./StripHoverCard";
 import { useChipHover, useChipHovered } from "./reachableHover";
@@ -21,6 +23,7 @@ import { TabPressArea } from "../sidebar/TabPressArea";
 import { tabTitle } from "../../state/browser/model";
 import { useStruckTitle } from "../../state/sidebar/rowState";
 import { SLEEPING_TITLE_OPACITY } from "../sidebar/tokens";
+import { useStripSlide } from "./stripMotion";
 
 export function SplitChip({ tabIds, width, paneWidths, geometry: givenGeometry, from: givenFrom, group }: { tabIds: string[]; width: number; paneWidths?: number[]; geometry?: DragGeometry; from?: number; group: string | null }) {
   const strip = useContext(DockContext);
@@ -57,17 +60,18 @@ export function SplitChip({ tabIds, width, paneWidths, geometry: givenGeometry, 
     scroll,
     axis: "x",
   });
+  const [slid, slidRef] = useStripSlide(!givenGeometry && !group ? tabIds[0]! : null);
   return (
     <ThemeOverride theme={theme}>
-      <Animated.View ref={drag.ref} {...drag.panHandlers} mouseDownCanMoveWindow={false} style={{ ...drag.style, zIndex: drag.dragging ? 10 : active ? 1 : 0 }}>
-        <Animated.View {...hover.hoverProps} style={{ width, height: TOP_STRIP_HEIGHT }}>
+      <Animated.View ref={drag.ref} {...drag.panHandlers} pointerEvents="box-none" mouseDownCanMoveWindow={false} style={{ ...drag.style, zIndex: drag.dragging ? 10 : active ? 1 : 0 }}>
+        <View {...hover.hoverProps} {...slid} ref={slidRef} style={[{ width, height: TOP_STRIP_HEIGHT }, slid.style as object]}>
           {active && <SelectedTab width={width} band={band} opaque={drag.dragging} />}
           <ItemRow hovered={hovered && !active} pressed={false} padded={false}>
             {tabIds.map((id, i) => (
               <SplitPart key={id} tabId={id} first={i === 0} last={i === tabIds.length - 1} ink={ink} width={paneWidth(id)} />
             ))}
           </ItemRow>
-        </Animated.View>
+        </View>
       </Animated.View>
     </ThemeOverride>
   );
@@ -81,22 +85,25 @@ function SplitPart({ tabId, first, last, ink, width }: { tabId: string; first: b
   const theme = useTheme();
   const windowId = useWindowId();
   const tab = useTab(tabId);
+  const splitOrientation = useSplitOrientation(first ? tabId : undefined);
   const focused = useIsActiveTab(tabId);
   const drag = useStripDrag({ tabId, ids: () => [tabId], pinned: false, groupId: null, geometry: NO_SLOTS, from: -1, width: 0, gap: 0, axis: "y" });
   const hover = useChipHover();
   const card = useStripCardHover(windowId, tabId, drag.ref, hover);
   const struck = useStruckTitle(tabId);
+  const pick = useStripPick();
   if (!tab) return null;
   return (
     <Animated.View ref={drag.ref} {...drag.panHandlers} {...card} {...hover.hoverProps} style={{ ...(width === undefined ? { flex: 1 } : { width }), alignSelf: "stretch", opacity: drag.style.opacity }}>
       <TabPressArea
         windowId={windowId}
         tab={tab}
+        onSwitch={pick}
         style={PART_FILL}
         pressStyle={{ flex: 1, flexDirection: "row", alignItems: "center", paddingLeft: first ? CHIP_PAD.left : 0, paddingRight: last ? CHIP_PAD.right : 0 }}
       >
         {first ? (
-          <Symbol name="rectangle.split.2x1" size={11} color={ink?.secondary ?? theme.textSecondary} style={SPLIT_GLYPH} />
+          <Symbol name={splitOrientation === "vertical" ? "rectangle.split.1x2" : "rectangle.split.2x1"} size={11} color={ink?.secondary ?? theme.textSecondary} style={SPLIT_GLYPH} />
         ) : (
           <Divider vertical length={SPLIT_DIVIDER_LENGTH} color={ink?.divider ?? theme.textTertiary} style={SPLIT_DIVIDER_GAP} />
         )}

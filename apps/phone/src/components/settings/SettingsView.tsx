@@ -1,12 +1,11 @@
-import { useEffect, useRef } from "react";
-import { Platform, StyleSheet } from "react-native";
-import Animated, { SlideInLeft, SlideInRight, SlideOutRight } from "react-native-reanimated";
+import { useEffect, useState } from "react";
+import { Platform, StyleSheet, View } from "react-native";
 import { refreshSettings } from "../../state/settings/actions";
 import { useSettingsNav, type SettingsRoute } from "../../state/settings/hooks";
-import { tabsMotion } from "../ui";
 import { FilterListDetailPage, FilterListsPage, MyFiltersPage, TrustedSitesPage } from "./BlockingPages";
 import { AboutPage, ClearDataPage, LicensesPage } from "./DataPages";
 import { AppearancePage } from "./AppearancePage";
+import { ThemePage } from "./ThemePage";
 import { SettingsRoot } from "./SettingsRoot";
 import { SearchEnginePage, SiteSettingsPage } from "./SitePages";
 import { SyncConnect } from "../sync/SyncConnect";
@@ -16,19 +15,27 @@ import { setConnectPhrase } from "../../state/sync/connectDraft";
 import { SyncPage } from "../sync/SyncPage";
 import { DefaultBrowserPage } from "./DefaultBrowserPage";
 import { WhatsSentPage } from "./WhatsSentPage";
-import { popSettings, pushSettings } from "../../state/settings/nav";
+import { popSettings, pushSettings, settingsRouteKey } from "../../state/settings/nav";
 import { ExpoSettingsStack } from "./ExpoSettingsStack";
-
-const push = SlideInRight.springify().stiffness(tabsMotion.sheetIn.stiffness).damping(tabsMotion.sheetIn.damping);
-const reveal = SlideInLeft.springify().stiffness(tabsMotion.sheetIn.stiffness).damping(tabsMotion.sheetIn.damping);
-const leave = SlideOutRight.springify().stiffness(tabsMotion.sheetOut.stiffness).damping(tabsMotion.sheetOut.damping);
+import { BrowseForMePage } from "./BrowseForMePage";
+import { PageSummaryPage } from "./PageSummaryPage";
+import { ExperimentalPane, GeneralPane, SearchPane, TabsPane } from "./SettingsPanes";
+import { DesignProvider, rolesFor, useDesign, useTheme } from "../ui";
+import { SettingsFormColorsContext } from "./SettingsKit";
 
 export function SettingsPageFor({ route }: { route: SettingsRoute }) {
   switch (route.page) {
     case "root":
       return <SettingsRoot />;
+    case "general":
+    case "tabs":
+    case "search":
+    case "experimental":
+      return <PaneFor page={route.page} />;
     case "appearance":
       return <AppearancePage />;
+    case "theme":
+      return <ThemePage />;
     case "searchEngine":
       return <SearchEnginePage />;
     case "siteSettings":
@@ -72,33 +79,58 @@ export function SettingsPageFor({ route }: { route: SettingsRoute }) {
       return <LicensesPage />;
     case "whatsSent":
       return <WhatsSentPage />;
+    case "browseForMe":
+      return <BrowseForMePage />;
+    case "pageSummary":
+      return <PageSummaryPage />;
   }
 }
 
-export function SettingsView() {
-  if (Platform.OS === "ios") return <ExpoSettingsStack />;
-  return <HandBuiltSettings />;
+function PaneFor({ page }: { page: "general" | "tabs" | "search" | "experimental" }) {
+  if (page === "general") return <GeneralPane />;
+  if (page === "tabs") return <TabsPane />;
+  if (page === "search") return <SearchPane />;
+  return <ExperimentalPane />;
 }
 
-function HandBuiltSettings() {
+export function SettingsView() {
+  const material = useDesign() === "material";
+  if (Platform.OS === "ios") return <ExpoSettingsStack />;
+  return (
+    <DesignProvider design={material ? "material" : "redesigned"}>
+      <HandBuiltSettings material={material} />
+    </DesignProvider>
+  );
+}
+
+type ShownPage = { key: string; route: SettingsRoute };
+
+const shownPageOf = (open: boolean, stack: readonly SettingsRoute[]): ShownPage | null => {
+  const route = open ? stack[stack.length - 1] : undefined;
+  return route ? { key: `${stack.length}:${settingsRouteKey(route)}`, route } : null;
+};
+
+function HandBuiltSettings({ material }: { material: boolean }) {
+  const dark = useTheme().dark;
+  const form = material ? null : rolesFor(dark);
   const open = useSettingsNav((s) => s.open);
+  const generation = useSettingsNav((s) => s.generation);
   const stack = useSettingsNav((s) => s.stack);
-  const popping = useSettingsNav((s) => s.popping);
   useEffect(() => {
     if (open) void refreshSettings();
   }, [open]);
-  const shown = useRef<{ depth: number; route: SettingsRoute } | null>(null);
-  if (open && stack.length) shown.current = { depth: stack.length, route: stack[stack.length - 1]! };
-  const last = shown.current;
-  if (!last) return null;
+  const latest = shownPageOf(open, stack);
+  const [lastShown, setLastShown] = useState<ShownPage | null>(latest);
+  if (latest && latest.key !== lastShown?.key) setLastShown(latest);
+  const shown = latest ?? lastShown;
+  if (!shown) return null;
   return (
-    <Animated.View
-      key={`${last.depth}:${last.route.page}`}
-      entering={last.depth === 1 || !open ? undefined : popping ? reveal : push}
-      exiting={popping && open ? leave : undefined}
-      style={StyleSheet.absoluteFill}
-    >
-      <SettingsPageFor route={last.route} />
-    </Animated.View>
+    <View testID="settingsStack" style={StyleSheet.absoluteFill}>
+      <View key={`${generation}:${shown.key}`} testID="settingsPage" style={StyleSheet.absoluteFill}>
+        <SettingsFormColorsContext.Provider value={form}>
+          <SettingsPageFor route={shown.route} />
+        </SettingsFormColorsContext.Provider>
+      </View>
+    </View>
   );
 }

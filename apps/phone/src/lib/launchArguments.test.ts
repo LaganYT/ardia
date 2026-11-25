@@ -23,6 +23,14 @@ test("text is trimmed and empty text is none, but a query and an overlay keep th
   assert.equal(parsed.browseOverlay, " ot");
 });
 
+test("-BrowseResearch opens Browse for Me on its trimmed query and -ArdiaVoiceHeard shows voice search having heard its words, outside demo mode too, and nothing when empty", () => {
+  assert.equal(parseLaunchArguments({ BrowseResearch: "  mount everest height  " }).browseResearch, "mount everest height");
+  assert.equal(parseLaunchArguments({ BrowseResearch: "   " }).browseResearch, null);
+  assert.equal(NO_LAUNCH_ARGUMENTS.browseResearch, null);
+  assert.equal(parseLaunchArguments({ ArdiaVoiceHeard: " otter facts " }).voiceHeard, "otter facts");
+  assert.equal(NO_LAUNCH_ARGUMENTS.voiceHeard, null);
+});
+
 test("numbers, whole numbers and steps parse as Compose's do", () => {
   const parsed = parseLaunchArguments({ BrowseDelay: "2.5", BrowseTab: "3.9", BrowseDeckOpen: 2, BrowseSteps: "1, -1,x,2", BrowseStepGap: "0.75" });
   assert.equal(parsed.browseDelayMs, 2500);
@@ -58,6 +66,13 @@ test("the lab's one-container deck scroll is off unless ArdiaOneContainerScroll 
   assert.equal(parseLaunchArguments({ ArdiaOneContainerScroll: "1" }).oneContainerScroll, true);
   assert.equal(parseLaunchArguments({ ArdiaOneContainerScroll: "NO" }).oneContainerScroll, false);
   assert.equal(parseLaunchArguments({ ArdiaOpeningCard: "1" }).oneContainerScroll, false);
+});
+
+test("the lab's collapsed pill holds its sample through a scroll only when ArdiaPillHold asks for it", () => {
+  assert.equal(NO_LAUNCH_ARGUMENTS.pillHold, false);
+  assert.equal(parseLaunchArguments({ ArdiaPillHold: true }).pillHold, true);
+  assert.equal(parseLaunchArguments({ ArdiaPillHold: "false" }).pillHold, false);
+  assert.equal(parseLaunchArguments({ PillHold: true }).pillHold, false);
 });
 
 test("the lab's redesigned Android is off unless ArdiaRedesign asks for it", () => {

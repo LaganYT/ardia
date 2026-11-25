@@ -1,5 +1,5 @@
 {
-  "inputs": "84eff2d2918d2f1f866c07fa2841565caa54c9beaa4c59bcffca9a252cdf542b",
+  "inputs": "9af1dc12277e10f40664f662002ade8f1a4c8502169e9e585acdcb1303fc85a8",
   "packages": [
     {
       "name": "@babel/runtime",
@@ -120,6 +120,12 @@
       "version": "0.0.6",
       "license": "MIT",
       "url": "https://github.com/facebook/flow"
+    },
+    {
+      "name": "Google Material Symbols",
+      "version": "10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7",
+      "license": "Apache-2.0",
+      "url": "https://github.com/google/material-design-icons"
     },
     {
       "name": "invariant",
@@ -245,6 +251,7 @@
         "androidx.core:core",
         "androidx.webkit:webkit",
         "androidx.work:work-runtime-ktx",
+        "androidx.browser:browser",
         "androidx.camera:camera-core",
         "androidx.camera:camera-camera2",
         "androidx.camera:camera-lifecycle",
@@ -256,6 +263,14 @@
       ],
       "license": "Apache-2.0",
       "url": "https://developer.android.com/jetpack/androidx"
+    },
+    {
+      "name": "Google ML Kit GenAI Prompt API",
+      "artifacts": [
+        "com.google.mlkit:genai-prompt"
+      ],
+      "license": "ML Kit Terms of Service",
+      "url": "https://developers.google.com/ml-kit/terms"
     },
     {
       "name": "Kotlin coroutines and serialization",

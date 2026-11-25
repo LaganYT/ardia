@@ -91,41 +91,31 @@ function frostUnder(glass: ReactTestInstance) {
   return glass.findAll((node) => node.type === lookModule.Frost)[0];
 }
 
-onAndroid("the original Settings keeps Compose's colour row and has no Appearance row", () => {
-  openSettings();
-  const root = settings("original");
-  expect(pressable(root, "Appearance")).toBeUndefined();
-  expect(textOf(root)).toContain("Color");
-  expect(root.root.findAll((node) => node.props.testID === "swatchRing" && typeof node.type === "string").length).toBe(9);
-  unmount(root);
-});
-
-onAndroid("the hand-built redesigned Settings, which Android keeps until its turn, has main's Appearance row, summarised as Match My Mac until something is chosen, in place of the colour row", () => {
+onAndroid("the hand-built redesigned Settings lists Appearance as one of iPhone's panes, with no value beside it as on iPhone and no colour row on the root", () => {
   openSettings();
   const root = settings("redesigned");
   const row = pressable(root, "Appearance")!;
-  expect(row.props.accessibilityValue).toEqual({ text: "Match My Mac" });
+  expect(row.props.accessibilityValue).toBeUndefined();
   expect(root.root.findAll((node) => node.props.testID === "swatchRing" && typeof node.type === "string").length).toBe(0);
-  act(() => usePreferences.setState({ colorChoice: "blue", interfaceStyle: "classic", schemeChoice: "dark" }));
-  expect(pressable(root, "Appearance")!.props.accessibilityValue).toEqual({ text: "Blue, Classic, Dark" });
   press(root, "Appearance");
   act(() => jest.runOnlyPendingTimers());
-  expect(textOf(root)).toContain("Interface Style");
+  expect(textOf(root)).toContain("Interface style");
   unmount(root);
 });
 
-onAndroid("on the hand-built Appearance Android keeps, the page has main's choices: Color, Interface Style (Match My Mac, Glass, Classic) and Light or Dark (Match My Mac, System, Light, Dark), with main's footers", () => {
+onAndroid("on the hand-built Appearance Android keeps, the page has iPhone's choices: Color, Interface style (Match My Mac, Glass, Classic) and Light or dark (Match My Mac, System, Light, Dark), with iPhone's footers, and Tab view lives in the Tabs pane", () => {
   openSettings({ page: "appearance" });
   const root = settings("redesigned");
   const text = textOf(root);
   if (Platform.OS === "android") expect(text).toContain("Appearance");
-  for (const line of ["Color", "Interface Style", "Light or Dark", "Glass", "Classic", "System", "Light", "Dark"]) expect(text).toContain(line);
-  expect(text).toContain("Match My Mac follows your Mac. Reduce Transparency in iOS Settings always uses Classic.");
+  for (const line of ["Color", "Interface style", "Light or dark", "Glass", "Classic", "System", "Light", "Dark"]) expect(text).toContain(line);
+  expect(text).toContain("Match My Mac follows your Mac.");
+  expect(text).not.toContain("Reduce Transparency");
   expect(text).toContain("Match My Mac follows your Mac. System follows this device.");
-  const choices = root.root.findAll((node) => node.props.accessibilityRole === "button" && node.props.accessibilityState && typeof node.props.onPress === "function").map((node) => node.props.accessibilityLabel);
+  const choices = root.root.findAll((node) => node.props.accessibilityRole === "button" && node.props.accessibilityState?.selected !== undefined && typeof node.props.onPress === "function").map((node) => node.props.accessibilityLabel);
   expect(choices).toEqual(["Match My Mac", "Glass", "Classic", "Match My Mac", "System", "Light", "Dark"]);
   expect(text).not.toContain("How your open tabs are laid out.");
-  expect(root.root.findAll((node) => node.props.testID === "swatchRing" && typeof node.type === "string").length).toBe(9);
+  expect(root.root.findAll((node) => node.props.testID === "swatchRing" && typeof node.type === "string").length).toBe(10);
   expect(root.root.findAll((node) => node.props.accessibilityRole === "switch" && node.props.accessibilityLabel === "Match My Mac").length).toBe(0);
   unmount(root);
   withSync(null);
@@ -137,7 +127,7 @@ onAndroid("on the hand-built Appearance Android keeps, the page has main's choic
 onAndroid("on the hand-built Appearance Android keeps, choosing on the page checks the row and keeps the choice in the settings store", () => {
   openSettings({ page: "appearance" });
   const root = settings("redesigned");
-  const styleRows = () => root.root.findAll((node) => node.props.accessibilityRole === "button" && node.props.accessibilityState && typeof node.props.onPress === "function").slice(0, 3);
+  const styleRows = () => root.root.findAll((node) => node.props.accessibilityRole === "button" && node.props.accessibilityState?.selected !== undefined && typeof node.props.onPress === "function").slice(0, 3);
   expect(styleRows().map((node) => node.props.accessibilityState.selected)).toEqual([true, false, false]);
   press(root, "Classic");
   expect(usePreferences.getState().interfaceStyle).toBe("classic");

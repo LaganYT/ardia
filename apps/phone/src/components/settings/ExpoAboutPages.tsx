@@ -4,7 +4,7 @@ import { accessibilityAddTraits, accessibilityHidden, accessibilityHint, font, f
 import { copy } from "../../lib/platformCopy";
 import { appVersion, openFromSettings } from "../../state/settings/actions";
 import { settingsRouteKey } from "../../state/settings/nav";
-import { AppIconPreview, modifierList, settingsChrome, settingsUIAvailable, useTheme } from "../ui";
+import { AppIconPreview, modifierList, neverBounces, settingsChrome, settingsUIAvailable, useTheme } from "../ui";
 import { dataCredits, LIBRARY_CREDITS } from "./DataPages";
 
 const FILL = Number.MAX_SAFE_INTEGER;
@@ -13,10 +13,10 @@ const BLUE = PlatformColor("systemBlue");
 const LINKS = [
   { title: "ardia.dev", url: "https://ardia.dev" },
   { title: "Release Notes", url: "https://ardia.dev/release-notes" },
-  { title: "Source Code", url: "https://github.com/mantrakp04/ardia" },
+  { title: "Source Code", url: "https://github.com/ardia-browser/ardia" },
 ] as const;
 
-const page = (title: string) => modifierList(navigationTitle(title), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome());
+const page = (title: string) => modifierList(navigationTitle(title), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome(), neverBounces());
 
 export function ExpoAboutPage() {
   const theme = useTheme();

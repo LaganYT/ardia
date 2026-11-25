@@ -216,13 +216,17 @@ const lightRoles: ColorRoles = {
 
 export const colorRoles = { dark: darkRoles, light: lightRoles } as const;
 
+export const fieldInk = { caret: { dark: "#FFFFFF", light: "#787D86" }, quietGlyphLight: "#0000007A" } as const;
+
+export const popoverMenuMaterial = { light: "rgba(246,246,246,0.72)", dark: "rgba(40,40,42,0.72)" } as const;
+
 export type ColorRole = { [K in keyof ColorRoles]: ColorRoles[K] extends string ? K : never }[keyof ColorRoles];
 
 export const closeOnArt = { rest: "rgba(255,255,255,0.1)", hover: "rgba(255,255,255,0.2)", pressed: "rgba(255,255,255,0.3)", glyph: "#FFFFFF8C" } as const;
 
 export const arcSelectedFill = { dark: "rgba(255,255,255,0.24)", light: "rgba(255,255,255,0.8)" } as const;
 
-export type SiteToolbarRoles = {
+type SiteToolbarRoles = {
   text: string;
   secondary: string;
   icon: string;
@@ -306,6 +310,9 @@ export type Radius = keyof typeof radius;
 
 export const concentric = (outer: number, inset: number) => Math.max(0, outer - inset);
 
+export const continuousCorners = (borderRadius: number) => ({ borderRadius, borderCurve: "continuous" as const });
+export const clippedContinuousCorners = (borderRadius: number) => ({ ...continuousCorners(borderRadius), overflow: "hidden" as const });
+
 export const capsule = (height: number) => height / 2;
 
 export type TypeSize = keyof typeof font;
@@ -371,6 +378,6 @@ export const sheetWidth = { xs: 320, s: 420, m: 440, l: 480, xl: 560 } as const;
 
 export type SheetSize = keyof typeof sheetWidth;
 
-export const toastLayout = { bottom: space.xxxl, maxWidth: 420, rise: 10 } as const;
+export const toastLayout = { bottom: space.xxxl, edge: space.l, maxWidth: 420, twoActionMaxWidth: 600 } as const;
 
 export const POPOVER_WIDTH = { s: 300, m: 340, l: 360 } as const;

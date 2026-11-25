@@ -161,7 +161,12 @@ android {
       test.systemProperty("ardia.syncFixtures", syncFixtures.absolutePath)
       test.inputs.dir(syncFixtures).withPropertyName("syncFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
       test.systemProperty("ardia.phoneSchema", phoneSchema.absolutePath)
-      findProperty('ardiaBlockingLists')?.with { test.systemProperty("ardia.blockingLists", it) }
+      test.inputs.file(phoneSchema).withPropertyName("phoneSchema").withPathSensitivity(PathSensitivity.RELATIVE)
+      test.inputs.dir(file("../ios/ArdiaKit/Sources/ArdiaBrowser/Web")).withPropertyName("iphonePageScripts").withPathSensitivity(PathSensitivity.RELATIVE)
+      findProperty('ardiaBlockingLists')?.with { lists ->
+        test.systemProperty("ardia.blockingLists", lists)
+        test.inputs.files(lists).withPropertyName("blockingLists").withPathSensitivity(PathSensitivity.RELATIVE)
+      }
       System.getenv('ARDIA_SYNC_VECTORS_WRITE')?.with { target ->
         test.environment('ARDIA_SYNC_VECTORS_WRITE', target)
         test.outputs.upToDateWhen { false }
@@ -181,6 +186,8 @@ dependencies {
   implementation "androidx.webkit:webkit:1.18.0"
   implementation "androidx.work:work-runtime-ktx:2.10.5"
   implementation "com.squareup.okhttp3:okhttp:4.12.0"
+  implementation "androidx.browser:browser:1.10.0"
+  implementation "com.google.mlkit:genai-prompt:1.0.0-beta4"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
   implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
   implementation "com.google.re2j:re2j:1.8"
@@ -191,6 +198,7 @@ dependencies {
   implementation "com.google.zxing:core:3.5.4"
   implementation project(":ardia-design")
   implementation(findProject(":expo-ui") ?: "expo.modules.ui:expo.modules.ui:+")
+  implementation(findProject(":expo-sqlite") ?: "host.exp.exponent:expo.modules.sqlite:+")
   implementation "androidx.compose.foundation:foundation-android:1.12.1"
   implementation "androidx.compose.ui:ui-android:1.12.1"
   implementation "androidx.compose.material3:material3:1.5.0-beta01"

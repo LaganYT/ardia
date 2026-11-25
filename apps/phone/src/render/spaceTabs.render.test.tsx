@@ -109,7 +109,7 @@ const pressable = (root: Root, label: string) => root.root.findAll((node) => nod
 function holdCard(root: Root, design: Design, id: string) {
   const order = cards(root);
   const index = order.indexOf(id);
-  const g = deckGeometry(393, 873, 40, 24, 0, Platform.OS, design, deckHeaderBottom());
+  const g = deckGeometry(393, 873, 40, 24, 0, Platform.OS, design, deckHeaderBottom(), 55, "arc");
   const y = g.cardCenterY;
   let x = 0;
   while (x < 393 && deckCardAt(g, order.length, initialDeckScroll(order.length), x, y) !== index) x += 2;
@@ -126,7 +126,7 @@ function holdCard(root: Root, design: Design, id: string) {
 
 function SelectedPage() {
   const tab = useSelectedTab();
-  return tab ? <BrowsingScreen tab={tab} /> : null;
+  return tab ? <BrowsingScreen tabId={tab.id} /> : null;
 }
 
 const page = (design: Design) =>
@@ -175,6 +175,9 @@ test("picking another space in the deck's switcher shows that space's tabs and c
   act(() => useTabs.setState({ incognito: true }));
   act(() => pressable(root, "Space, Personal").props.onPress());
   pickMenu(root, "Work");
+  act(() => jest.advanceTimersByTime(400));
+  expect(cards(root)).toHaveLength(0);
+  act(() => useTabs.setState({ incognito: false }));
   act(() => jest.advanceTimersByTime(400));
   expect(sorted(cards(root))).toEqual(WORK);
   expect(counted).not.toHaveBeenCalledWith("spaces_picked");

@@ -4,7 +4,9 @@ import { SettingsView } from "../components/settings/SettingsView";
 import { settingsTint } from "../components/ui";
 import { openSettings, popSettings, pushSettings } from "../state/settings/nav";
 import { useSync } from "../state/sync/store";
-import { renderSurface, unmount, withTabs } from "../../test/render/harness";
+import { renderSurface, textOf, unmount, withTabs } from "../../test/render/harness";
+import { useDefaultBrowser } from "../state/settings/defaultBrowser";
+import { PHONE_SHARING_COPY } from "../lib/telemetryCopy";
 
 const NORMAL = { width: 393, height: 873, scale: 3, fontScale: 1 };
 
@@ -20,11 +22,6 @@ function syncTileSide(root: ReturnType<typeof renderSurface>) {
   return styleOf(tile).width;
 }
 
-function shortcutsDirection(root: ReturnType<typeof renderSurface>) {
-  const shortcuts = root.root.findAll((node) => typeof node.type === "string" && node.props.testID === "settingsShortcuts")[0]!;
-  return styleOf(shortcuts).flexDirection;
-}
-
 const onAndroid = Platform.OS === "android" ? test : test.skip;
 
 beforeEach(() => {
@@ -38,18 +35,17 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-onAndroid("on the hand-built Settings Android keeps, at ordinary text sizes the sync card has a 56-point tile beside its text and the shortcuts sit side by side", () => {
+onAndroid("on the hand-built Settings Android keeps, at ordinary text sizes the sync card has a 56-point tile beside its text, and as on iPhone there are no Archive or Spaces shortcuts", () => {
   const root = renderSurface(<SettingsView />);
   expect(syncTileSide(root)).toBe(56);
-  expect(shortcutsDirection(root)).toBe("row");
+  expect(root.root.findAll((node) => node.props.testID === "settingsShortcuts")).toHaveLength(0);
   unmount(root);
 });
 
-onAndroid("on the hand-built Settings Android keeps, at accessibility text sizes the sync card stacks a 44-point tile above its text and the shortcuts stack", () => {
+onAndroid("on the hand-built Settings Android keeps, at accessibility text sizes the sync card stacks a 44-point tile above its text", () => {
   setFontScale(2);
   const root = renderSurface(<SettingsView />);
   expect(syncTileSide(root)).toBe(44);
-  expect(shortcutsDirection(root)).toBe("column");
   const card = root.root.findAll((node) => typeof node.type === "string" && node.props.testID === "syncCardContent")[0]!;
   expect(styleOf(card).flexDirection).toBe("column");
   unmount(root);
@@ -67,7 +63,7 @@ onAndroid("on the hand-built Settings Android keeps, the sync card's status line
     useSync.setState((state) => ({ ...state, status: { ...state.status, attention: "phrase" } as never }));
   });
   const second = line()!;
-  expect(second.props.children).toBe("Enter Your Recovery Phrase");
+  expect(second.props.children).toBe("Enter Recovery Phrase");
   unmount(root);
 });
 
@@ -82,4 +78,29 @@ onAndroid("Back from About returns to where Settings was scrolled, whatever scro
   act(() => jest.advanceTimersByTime(600));
   expect(list().props.contentOffset).toEqual({ x: 0, y: 640 });
   unmount(root);
+});
+
+const inOrder = (text: string, titles: string[]) => {
+  const at = titles.map((title) => text.indexOf(title));
+  expect(at.every((index) => index >= 0)).toBe(true);
+  expect([...at].sort((a, b) => a - b)).toEqual(at);
+};
+
+onAndroid("Android's Settings lists iPhone's panes in iPhone's order, Sync first, and each pane holds iPhone's sections and rows in iPhone's words", () => {
+  useDefaultBrowser.setState({ status: { isDefault: false, canAsk: true } });
+  const root = renderSurface(<SettingsView />);
+  const text = textOf(root);
+  inOrder(text, ["Sync", "General", "Tabs", "Appearance", "Search", "Site settings"]);
+  expect(text).not.toContain("Clear browsing data");
+  unmount(root);
+  const pane = (page: "general" | "tabs" | "search") => {
+    act(() => openSettings({ page }));
+    const shown = renderSurface(<SettingsView />);
+    const words = textOf(shown);
+    unmount(shown);
+    return words;
+  };
+  inOrder(pane("general"), ["Default browser", "Make Ardia your default browser.", "Links", "Open app links in", "Links to apps you have, like YouTube or Maps.", "Privacy", "Clear browsing data", "History, cookies and cached files.", PHONE_SHARING_COPY.toggle, PHONE_SHARING_COPY.whatsSent, "About", "Set up Ardia again", "Shows the welcome screens again.", "About Ardia"]);
+  inOrder(pane("tabs"), ["Tab view", "Stack", "Grid", "Clean up", "Archive inactive tabs", "Moves tabs you haven't used in this long to the Archive.", "Export", "Export open tabs", "Share a list of every open tab."]);
+  inOrder(pane("search"), ["Search engine", "Search suggestions", "Suggestions from your search engine as you type.", "New tabs", "Auto-open keyboard", "Start typing as soon as Ardia opens."]);
 });

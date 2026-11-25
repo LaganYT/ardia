@@ -129,6 +129,7 @@ const shortcuts = [
   ["⌥⇧⌘C", cmd("C", 8, "shift", "option"), { command: "copyUrlAsMarkdown" }, "⌥⇧⌘C"],
   ["⌘V", cmd("v", 9), { title: "Paste" }, "⌘V", "clipboard"],
   ["⇧⌘V", cmd("V", 9, "shift"), { title: "Paste and Match Style" }, "⇧⌘V", "clipboard"],
+  ["⌥⇧⌘V", cmd("V", 9, "shift", "option"), { title: "Paste and Match Style" }, "(macOS's)", "clipboard"],
   ["⌘A", cmd("a", 0), { title: "Select All" }, "⌘A"],
   ["⌘F", cmd("f", 3), { command: "findInPage" }, "⌘F"],
   ["⌥⌘F", cmd("f", 3, "option"), { command: "findAndReplace" }, "⌥⌘F"],
@@ -150,6 +151,11 @@ const shortcuts = [
   ["⌃⇧=", K("+", 24, "control", "shift"), { command: "openSplitPane" }, "⌃⇧="],
   ["⌃⇧]", K("}", 30, "control", "shift"), { command: "focusNextPane" }, "⌃⇧]"],
   ["⌃⇧[", K("{", 33, "control", "shift"), { command: "focusPreviousPane" }, "⌃⇧["],
+  ["⌃⇧-", K("_", 27, "control", "shift"), { command: "openSplitPaneBelow" }, "ours"],
+  ["⌃⌥←", K(F(0xf702), 123, "control", "option", "function"), { command: "moveSplitPaneLeft" }, "ours"],
+  ["⌃⌥→", K(F(0xf703), 124, "control", "option", "function"), { command: "moveSplitPaneRight" }, "ours"],
+  ["⌃⌥↑", K(F(0xf700), 126, "control", "option", "function"), { command: "moveSplitPaneUp" }, "ours"],
+  ["⌃⌥↓", K(F(0xf701), 125, "control", "option", "function"), { command: "moveSplitPaneDown" }, "ours"],
   ["⇧⌘B", cmd("B", 11, "shift"), { command: "toggleBookmarksBar" }, "⇧⌘B"],
   ["⌘0", cmd("0", 29), { command: "zoomReset" }, "⌘0"],
   ["⌘+", cmd("+", 24, "shift"), { command: "zoomIn" }, "⌘+"],
@@ -655,6 +661,14 @@ await post("v", 9);
 await sleep(600);
 const afterEscape = await pageField("f.value");
 check("Escape out of the command bar gives the page its focus back", responder.startsWith("RenderWidgetHostViewCocoa") && afterEscape === "after-escape", `first responder ${responder}, page field "${afterEscape}"`);
+for (const [name, modifiers] of [["⇧⌘V", ["command", "shift"]], ["⌥⇧⌘V", ["command", "shift", "option"]]]) {
+  await resetToPageField("", [0, 0]);
+  await clipboard.set(`plain-${modifiers.length}`);
+  await post("V", 9, modifiers);
+  await sleep(600);
+  const pastedPlain = await pageField("f.value");
+  check(`${name} pastes and matches style into a page field`, pastedPlain === `plain-${modifiers.length}`, `page field "${pastedPlain}"`);
+}
 await resetToPageField("", [0, 0]);
 
 for (const where of ["the find field", "the page"]) {
@@ -685,6 +699,29 @@ for (const where of ["the find field", "the page"]) {
   await sleep(800);
   const after = await ac(`const s = ac.store.getState(), w = s.windows.w1, a = w.activeTabIds[w.profileId]; return { active: a, find: !!s.find[a]?.open };`);
   check("Esc closes only the find bar", after.active === "t3" && !after.find, JSON.stringify(after));
+}
+{
+  await resetToPageField("", [0, 0]);
+  const peekFind = () => ac(`const s = ac.store.getState(), w = s.windows.w1, a = w.activeTabIds[w.profileId], p = s.peeks[a];
+    return { active: a, peek: p?.tabId ?? null, find: p ? !!s.find[p.tabId]?.open : null };`);
+  await ac(`ac.store.getState().openPeek("t3", "${pages}/?peekfind", { x: 240, y: 260 }); return 1;`);
+  await sleep(1800);
+  const opened = await peekFind();
+  await postKeys([keyPress("f", 3), ...[..."hello"].map((c) => keyPress(c, 0, 30, []))]);
+  await sleep(800);
+  const finding = await peekFind();
+  await postKeys([keyPress("\u001b", 53, 0, [])]);
+  await sleep(800);
+  const after = await peekFind();
+  const responder = await ac(`return ac.shell.devKeyEquivalent("w1", { key: "x", keyCode: 7, modifiers: [], dry: true, wait: 0 });`);
+  const peekPage = await app.page("?peekfind");
+  const pageFocused = await peekPage.eval(`document.hasFocus()`).catch(() => null);
+  peekPage.close();
+  check("Esc in a Peek's find bar closes only the find bar: the same Peek stays open and its page has the keyboard",
+    !!opened.peek && finding.find === true && after.peek === opened.peek && after.find === false && after.active === "t3" && responder.firstResponder === "RenderWidgetHostViewCocoa" && pageFocused === true,
+    `opened ${JSON.stringify(opened)}, finding ${JSON.stringify(finding)}, after ${JSON.stringify(after)}, first responder ${responder.firstResponder}, Peek page focused ${pageFocused}`);
+  await ac(`const s = ac.store.getState(); if (s.peeks.t3) s.closePeek("t3"); return 1;`);
+  await sleep(500);
 }
 const FLAGS = { command: 0x100000, shift: 0x20000, control: 0x40000, option: 0x80000, function: 0x800000 };
 const w1Native = await ac(`const f = ac.store.getState().windows.w1.frame;

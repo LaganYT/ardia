@@ -9,8 +9,37 @@ namespace ardia_host::hover_probe {
 enum class HoverReason { fine, halfActive, staleMenu, notKeyOrMain, coveredByView, responderLost, coveredByWindow };
 enum class FocusWindowKind { none, hidden, blockerPage, internal, ardiaPanel, popup, browser, other };
 enum class PageCover { none, reactNative, chromium, other };
+enum class CoverView { none, rnView, rnText, rnImage, rnTextInput, rnScroll, rnOther, expo, pageHost, ardia, appKit, chromium, other };
+enum class CoverSize { none, small, large, full };
 enum class HoverTrigger { move, click, recheck };
 enum class FocusHolder { none, window, otherWindow, page, control };
+
+enum class HealRefusal {
+  none,
+  notVisible,
+  notOnActiveSpace,
+  notInFront,
+  modalWindow,
+  attachedSheet,
+  savePanel,
+  menuActive,
+  menuShown,
+  fullScreenMoving,
+  notClick,
+  keyPopup,
+  notEligible
+};
+
+enum class MenuWindowKind { window, panel, menu, sharing, tooltip, popover, fullScreen, ardia, other };
+enum class MenuWindowLevel { normal, floating, raised, popUp };
+enum class MenuWindowParent { none, browser, other };
+
+struct MenuWindowInfo {
+  bool present = false;
+  MenuWindowKind kind = MenuWindowKind::other;
+  MenuWindowLevel level = MenuWindowLevel::normal;
+  MenuWindowParent parent = MenuWindowParent::none;
+};
 
 struct Activation {
   bool appActive = false;
@@ -28,6 +57,9 @@ struct HoverCheck {
   PageCover cover = PageCover::none;
   FocusWindowKind coverWindow = FocusWindowKind::none;
   FocusHolder holder = FocusHolder::none;
+  CoverView coverView = CoverView::none;
+  CoverView coverClearView = CoverView::none;
+  CoverSize coverSize = CoverSize::none;
   bool coverClear = false;
   bool preventKey = false;
   bool canKey = false;
@@ -46,6 +78,10 @@ struct HoverEpisode {
   double startedAt = 0;
   bool healed = false;
   int healWorked = -1;
+  HealRefusal firstRefusal = HealRefusal::none;
+  HealRefusal lastRefusal = HealRefusal::none;
+  MenuWindowInfo refusedWindow;
+  NSUInteger otherWindowClicks = 0;
   ArdiaConsentStamp *stamp = nil;
 };
 
@@ -57,20 +93,39 @@ extern NSString *gLastHoverVerdict;
 extern id gHoverMonitor;
 extern bool gHoverWatchInBackground;
 extern NSMutableArray<NSDictionary *> *gDevHoverEvents;
+extern NSUInteger gEpisodeCount;
 
 NSString *ReasonName(HoverReason reason);
 NSString *HolderName(FocusHolder holder);
+NSString *HealRefusalName(HealRefusal refusal);
+NSString *MenuWindowName(const MenuWindowInfo &info);
 bool WindowFlag(NSWindow *window, NSString *name);
 bool MenuActive(NSWindow *window);
-bool MenuShown(NSWindow *browser);
+bool MenuShown(NSWindow *browser, MenuWindowInfo *matched = nullptr);
 NSView *PageAt(NSWindow *window, NSPoint point);
 NSView *EnclosingPage(NSView *view);
 NSView *HitAt(NSWindow *window, NSPoint point);
+PageCover CoverOf(NSView *hit);
+NSView *SeeThroughView(NSView *hit);
 bool SeeThrough(NSView *hit);
+CoverView CoverViewOf(NSView *view);
+CoverSize CoverSizeOver(NSView *view, NSView *page);
+NSString *CoverViewName(CoverView view);
+NSString *CoverSizeName(CoverSize size);
 FocusHolder HolderOf(NSWindow *window);
 bool ResponderLost(FocusHolder holder, bool clickedPage);
 void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, ArdiaConsentStamp *stamp);
 void StartHoverWatch();
 void StopHoverWatch();
+NSString *KindName(FocusWindowKind kind);
+NSString *CoverName(PageCover cover);
+NSString *TriggerName(HoverTrigger trigger);
+double Uptime();
+void CloseEpisode(NSString *endedBy);
+void ClearQuitReport();
+bool DeferWindowCloseForQuit();
+bool QuitWindowClosedPending();
+NSDictionary *EpisodePayload(NSString *endedBy);
+void EmitEpisode(NSDictionary *payload, ArdiaConsentStamp *stamp);
 
 }

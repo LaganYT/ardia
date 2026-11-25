@@ -93,6 +93,7 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
   [self markTemporary];
   [self pushPeekModifier];
   [self pushSelectionPopover];
+  [self pushFieldProvider];
   [self bindRestoreKey];
   [self takePageReports];
   [tab deliverHeldPageMessages];
@@ -142,10 +143,11 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
   [ArdiaWebView noteShown:_tab];
   [self stashPageReports];
   AcceptDrops(_tab.view, YES);
-  if (_tab.view.superview == self) [_tab.view removeFromSuperview];
+  if (_tab.view.superview == self && !_life.keepsPageOnDetach) [_tab.view removeFromSuperview];
+  _life.keepsPageOnDetach = NO;
   [self dropDevTools];
   [self resetBlocked:NO];
-  [self endReveal];
+  [self dropReveal];
   [self dropFront];
   [self finishFrameHold];
   [self finishStandIn];
@@ -154,11 +156,13 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
   _tab = nil;
   _life.detached();
   _focus.onActivate = NO;
+  _focus.askedAheadOfSwitch = {};
   _focus.page = ArdiaPageFocus::Unknown;
   _focus.devTools = nil;
   _life.handingOff = NO;
   _leave.active = NO;
   _leave.generation++;
+  [self leaveScreenAhead];
 }
 
 - (void)stashPageReports {
@@ -191,6 +195,10 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
 
 + (void)setLittleArdiaOpensNewTabLinks:(BOOL)enabled {
   gLittleArdiaOpensNewTabLinks = enabled;
+}
+
++ (BOOL)littleArdiaOpensNewTabLinksInPlace {
+  return gLittleArdiaOpensNewTabLinks;
 }
 
 + (void)setPopupsOpenAsTabs:(BOOL)enabled {
@@ -347,7 +355,11 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
 - (void)tabActivatedByChrome:(BOOL)chromes {
   if (TraceVisibility()) NSLog(@"[ardiacore-vis] %@ chrome-activated tab=%d byChrome=%d", _transferKey, _tab ? (int)_tab.tabId : -1, chromes);
   if (_standalone) return;
-  [self requestFocusRestore];
+  if (chromes && _visible && !_selected) {
+    if (TraceVisibility()) NSLog(@"[ardiacore-vis] %@ activated by Chrome in a pane that isn't selected: focus stays", _transferKey);
+  } else {
+    [self requestFocusRestore];
+  }
   if (_sent.navigationQueued) [self emitNavigation];
 }
 
@@ -362,7 +374,7 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
     NSView *page = _tab.view;
     if (page.superview == self) [self addSubview:devToolsView positioned:NSWindowBelow relativeTo:page];
     else [self addSubview:devToolsView];
-    AcceptDrops(devToolsView, _visible);
+    [self acceptDropsIfShown];
   }
   [self layoutPage];
 }
@@ -382,6 +394,7 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
 
 - (void)tab:(ArdiaCoreTab *)tab rendererGone:(NSString *)status code:(int)code {
   _reports.crashed = YES;
+  [self dropReveal];
   [self resetPageMedia];
   [self emit:@"crashed" payload:@{@"status" : @(code), @"reason" : status ?: @"unknown", @"code" : @(code)}];
 }
@@ -428,6 +441,7 @@ const CFTimeInterval kHiddenNewTabLinkSeconds = 1;
 }
 
 - (void)tabDidChangeDiscarded:(ArdiaCoreTab *)tab {
+  if (tab.discarded) [self dropReveal];
   if (tab.discarded) [self emit:@"discarded" payload:@{@"url" : tab.url ?: @"", @"reason" : tab.discardReason ?: @""}];
   else [self emit:@"ready" payload:@{}];
 }

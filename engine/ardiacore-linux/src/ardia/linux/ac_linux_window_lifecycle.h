@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ardia::linux_window {
@@ -96,6 +97,7 @@ inline constexpr int kSmallWindowMinWidth = 420;
 inline constexpr int kSmallWindowMinHeight = 300;
 inline constexpr int kSmallWindowWidth = 900;
 inline constexpr int kSmallWindowHeight = 640;
+inline constexpr double kSmallWindowLargestShare = 0.8;
 
 Requested RequestedSmallFrame(const std::vector<double>& size,
                               const Rect& work_area,
@@ -106,6 +108,16 @@ Requested RequestedUtilityFrame(int width,
                                 const Rect& opener,
                                 const Rect& work_area,
                                 bool global_coordinates);
+
+inline constexpr char kLittleWindowClass[] = "ardia-little";
+inline constexpr char kSettingsWindowClass[] = "ardia-settings";
+inline constexpr char kImportWindowClass[] = "ardia-import";
+inline constexpr int64_t kPinnedSizeHoldMs = 400;
+inline constexpr int64_t kPinnedSizeLimitMs = 3000;
+
+const char* WindowClass(std::string_view kind, bool small);
+bool OpensPinned(std::string_view kind, bool small, bool maximized);
+int64_t PinnedSizeReleaseDelayMs(int64_t pinned_for_ms);
 
 class GeometryLedger {
  public:

@@ -202,6 +202,18 @@ static NSString *LinkKeyAction(NSString *key) {
     if (view->_transferKey.length && [changed containsObject:view->_transferKey]) [view pushPeekModifier];
 }
 
++ (NSString *)peekModifierInUse {
+  return gPeekModifier;
+}
+
++ (NSString *)splitLinkModifierInUse {
+  return SplitLinkModifier();
+}
+
++ (BOOL)peeksLinksToOtherSitesInTab:(NSString *)transferKey {
+  return transferKey.length && [gPeekOtherSiteTabs containsObject:transferKey];
+}
+
 - (BOOL)peeksLinksToOtherSites {
   return _transferKey.length && [gPeekOtherSiteTabs containsObject:_transferKey];
 }
@@ -305,6 +317,20 @@ static NSString *LinkKeyAction(NSString *key) {
   const NSPoint inRoot = RootPointFromWindow(window, [self convertPoint:point toView:nil]);
   [self emit:@"openWindow"
       payload:@{@"url" : url, @"disposition" : @"peek", @"userGesture" : @YES, @"site" : @(otherSite), @"point" : @{@"x" : @(inRoot.x), @"y" : @(inRoot.y)}}];
+}
+
+@end
+
+@implementation ArdiaWebView (PaintedFrame)
+
+- (BOOL)showsPaintedFrame {
+  NSView *page = _tab.view;
+  if (!page || page.superview != self || page.hidden) return NO;
+  NSView *widget = RenderWidgetIn(page);
+  if (!widget || widget.hidden) return NO;
+  for (CALayer *tree in widget.layer.sublayers)
+    if (tree.sublayers.count) return YES;
+  return NO;
 }
 
 @end

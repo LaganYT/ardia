@@ -68,6 +68,13 @@ test("without a live page the page rows are hidden", () => {
   assert.equal(menuModel(input({ hasPage: false })).print, false);
 });
 
+test("Summarize Page requires a loaded web page", () => {
+  assert.equal(menuModel(input()).summarize, true);
+  assert.equal(menuModel(input({ isLoading: true })).summarize, false);
+  assert.equal(menuModel(input({ url: "about:blank" })).summarize, false);
+  assert.equal(menuModel(input({ hasPage: false })).summarize, false);
+});
+
 test("Print needs a live web page, as main's menu enables it", () => {
   assert.equal(menuModel(input()).print, true);
   assert.equal(menuModel(input({ url: "about:blank" })).print, false);
@@ -255,4 +262,11 @@ test("Open in Default Browser is offered only when the system lets Ardia ask and
   assert.equal(menuModel(input({ isDefaultBrowser: false, canOfferDefaultBrowser: true })).offersDefaultBrowser, true);
   assert.equal(menuModel(input({ isDefaultBrowser: true, canOfferDefaultBrowser: true })).offersDefaultBrowser, false);
   assert.equal(menuModel(input({ isDefaultBrowser: false, canOfferDefaultBrowser: false })).offersDefaultBrowser, false);
+});
+
+test("the page menu's switches that close the menu and reload the page say so in their hint, and the one that changes in place has none", async () => {
+  const { menuSwitchHint, MENU_SWITCH_RELOAD_HINT } = await import("./pageMenu.ts");
+  assert.equal(menuSwitchHint("blockers"), MENU_SWITCH_RELOAD_HINT);
+  assert.equal(menuSwitchHint("desktopSite"), MENU_SWITCH_RELOAD_HINT);
+  assert.equal(menuSwitchHint("nightShade"), undefined);
 });

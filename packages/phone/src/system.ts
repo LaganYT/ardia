@@ -17,11 +17,15 @@ type NativeLink = Omit<SystemLink, "query"> & { query?: string };
 
 type SystemNative = {
   labLog?: (line: string) => void;
+  labFrameMark?: (label: string) => void;
+  labSlice?: (label: string) => void;
+  hardwareKeyboardShown?: () => boolean;
   addListener(eventName: "onSystemLink", listener: (link: NativeLink) => void): Subscription;
   initialLink(): Promise<NativeLink | null>;
   setHidesFromRecents?(hidden: boolean): Promise<boolean>;
   processStartedAt?(): number;
   launchBackdropShownAt?(): number | null;
+  launchInterfaceDrawn?(): void;
   restoredValue?(key: string): string | null;
   setRestorableValue?(key: string, value: string | null): void;
   labMemory?(): string | null;
@@ -30,6 +34,7 @@ type SystemNative = {
   setWidgetColorChoice?(choice: string | null): void;
   takePendingCounts?(): Record<string, number>;
   peekPendingCounts?(): Record<string, number>;
+  takeExits?(): unknown[];
   syncOffered?(): boolean;
   setSystemBarIcons?(lightStatus: boolean, lightNavigation: boolean): Promise<void>;
   usageConsent?(): { sharing: boolean; generation: number } | null;
@@ -47,10 +52,18 @@ export const system = {
   },
   processStartedAt: (): number | null => (native?.processStartedAt ? native.processStartedAt() : null),
   launchBackdropShownAt: (): number | null => native?.launchBackdropShownAt?.() ?? null,
+  launchInterfaceDrawn: (): void => native?.launchInterfaceDrawn?.(),
   displayCornerRadius: (): number | null => native?.displayCornerRadius?.() ?? null,
   setWidgetColorChoice: (choice: string | null): void => native?.setWidgetColorChoice?.(choice),
   takePendingCounts: (): Record<string, number> => native?.takePendingCounts?.() ?? {},
   peekPendingCounts: (): Record<string, number> => native?.peekPendingCounts?.() ?? {},
+  takeExits: (): unknown[] => {
+    try {
+      return native?.takeExits?.() ?? [];
+    } catch {
+      return [];
+    }
+  },
   syncOffered: (): boolean | null => native?.syncOffered?.() ?? null,
   setsSystemBarIcons: (): boolean => typeof native?.setSystemBarIcons === "function",
   setSystemBarIcons: (lightStatus: boolean, lightNavigation: boolean): void => void native?.setSystemBarIcons?.(lightStatus, lightNavigation)?.catch(() => undefined),
@@ -71,6 +84,16 @@ export const restorableState = {
     native?.setRestorableValue?.(key, value);
   },
 };
+
+export function labSlice(label: string) {
+  native?.labSlice?.(label);
+}
+
+export const hardwareKeyboardShown = () => native?.hardwareKeyboardShown?.() ?? false;
+
+export function labFrameMark(label: string) {
+  native?.labFrameMark?.(label);
+}
 
 export function labLog(line: string) {
   if (native?.labLog) native.labLog(line);

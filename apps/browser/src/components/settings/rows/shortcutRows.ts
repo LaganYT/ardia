@@ -10,7 +10,7 @@ export const shortcutRows = {
       rows: {
         menuCommands: {
           title: "Keyboard shortcuts",
-          keywords: ["shortcuts", "keyboard shortcuts", "hotkeys", "keybindings", "remap", "menu shortcuts", "customize keyboard shortcuts"],
+          keywords: ["shortcuts", "keyboard shortcuts", "hotkeys", "keybindings", "remap", "menu shortcuts", "customize keyboard shortcuts", "mouse button", "middle click", "mouse shortcut", "side button"],
         },
         extensionShortcuts: {
           title: "Extension commands",
@@ -42,7 +42,8 @@ export const shortcutRows = {
         cmdClickCreatesTabGroup: {
           title: `${keyText("⌘")}-clicking links creates tab groups`,
           explained: true,
-          keywords: ["command click", "cmd click"],
+          description: "Puts the link's background tab in a tab group with the page you clicked it on.",
+          keywords: ["command click", "cmd click", "control click", "ctrl click", "tab group", "auto group", "automatic grouping", "group tabs", "nested tabs", "background tab"],
         },
         optShiftClickOpensInGroup: {
           title: `${keyText("⌥⇧")}-click opens tab in group`,

@@ -1,18 +1,18 @@
 import { useEffect } from "react";
 import { AppState, PlatformColor } from "react-native";
-import { Button, Divider, Form, HStack, Image, ScrollView, Section, Text, VStack } from "@expo/ui/swift-ui";
-import { accessibilityAddTraits, accessibilityElement, background, buttonBorderShape, buttonStyle, clipShape, fixedSize, font, foregroundStyle, frame, multilineTextAlignment, navigationBarTitleDisplayMode, navigationTitle, padding, tint } from "@expo/ui/swift-ui/modifiers";
+import { Divider, Form, HStack, Image, ScrollView, Section, Text, VStack } from "@expo/ui/swift-ui";
+import { accessibilityAddTraits, accessibilityElement, background, clipShape, fixedSize, font, foregroundStyle, frame, multilineTextAlignment, navigationBarTitleDisplayMode, navigationTitle, padding, tint } from "@expo/ui/swift-ui/modifiers";
 import { PHONE_SHARING_COPY, PHONE_WHATS_SENT } from "../../lib/telemetryCopy";
 import { askForDefaultBrowser, refreshDefaultBrowser, useDefaultBrowser } from "../../state/settings/defaultBrowser";
 import { defaultBrowserCopy } from "../../state/settings/settingsRules";
-import { AppIconPreview, modifierList, settingsChrome, SettingsIconTile, settingsUIAvailable, useTheme } from "../ui";
+import { AppIconPreview, modifierList, neverBounces, settingsChrome, SettingsIconTile, settingsUIAvailable } from "../ui";
+import { ExpoSettingsAction } from "./ExpoSettingsParts";
 
 const FILL = Number.MAX_SAFE_INTEGER;
 const SECONDARY = { type: "hierarchical", style: "secondary" } as const;
 const BLUE = PlatformColor("systemBlue");
 
 export function ExpoDefaultBrowserPage() {
-  const theme = useTheme();
   const status = useDefaultBrowser((s) => s.status);
   useEffect(() => {
     void refreshDefaultBrowser();
@@ -23,7 +23,7 @@ export function ExpoDefaultBrowserPage() {
   }, []);
   const copy = status ? defaultBrowserCopy(status) : null;
   return (
-    <ScrollView modifiers={modifierList(navigationTitle("Default Browser"), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome())}>
+    <ScrollView modifiers={modifierList(navigationTitle("Default Browser"), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome(), neverBounces())}>
       {copy ? (
         <VStack spacing={24} modifiers={[padding({ horizontal: 20, top: 24, bottom: 32 })]}>
           <VStack spacing={12}>
@@ -44,12 +44,7 @@ export function ExpoDefaultBrowserPage() {
             </VStack>
           ) : null}
           {copy.action ? (
-            <Button
-              onPress={() => void askForDefaultBrowser(copy.does)}
-              modifiers={[buttonStyle("borderedProminent"), buttonBorderShape("roundedRectangle", 14), tint(theme.primaryAction), foregroundStyle(theme.onPrimaryAction)]}
-            >
-              <Text modifiers={[font({ textStyle: "body", weight: "semibold" }), frame({ maxWidth: FILL, minHeight: 50 })]}>{copy.action}</Text>
-            </Button>
+            <ExpoSettingsAction title={copy.action} size="full" onPress={() => void askForDefaultBrowser(copy.does)} />
           ) : null}
         </VStack>
       ) : null}
@@ -65,7 +60,7 @@ function StepIcon({ index, count, inSettings }: { index: number; count: number; 
 
 export function ExpoWhatsSentPage() {
   return (
-    <Form modifiers={modifierList(navigationTitle(PHONE_SHARING_COPY.whatsSent), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome())}>
+    <Form modifiers={modifierList(navigationTitle(PHONE_SHARING_COPY.whatsSent), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome(), neverBounces())}>
       {PHONE_WHATS_SENT.map((section, index) => (
         <Section key={section.title} title={section.title} footer={index === PHONE_WHATS_SENT.length - 1 ? <Text>{PHONE_SHARING_COPY.footnote}</Text> : undefined}>
           {section.items.map((item) => (

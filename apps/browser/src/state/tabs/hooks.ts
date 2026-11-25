@@ -9,3 +9,4 @@ export const useMuteState = (tabId: string | undefined): MuteState =>
     const tab = tabId ? s.tabs[tabId] : undefined;
     return tab ? muteState(s, tab) : null;
   });
+

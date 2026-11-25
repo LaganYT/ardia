@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, TextInput } from "react-native";
+import { Platform, StyleSheet, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { answerRequest, dismissPress, pressAction } from "../../state/page/actions";
 import { usePageRequest, usePress } from "../../state/page/hooks";
-import { confirmAnswer, pressHeading, pressMenuGroups, PRESS_TITLES, requestPlan, type PressAction, type Request, type RequestChoice } from "../../state/page/pagePrompts";
+import { confirmAnswer, pressHeading, pressMenuGroups, PRESS_TITLES, requestPlan, type PressAction, type Request } from "../../state/page/pagePrompts";
 import { presentSystemRequest } from "./systemRequest";
-import { dialogLayout, Dialog, font, Menu, radius, space, Symbol, useTheme, type MenuItem, type SymbolName } from "../ui";
+import { ActionSheet, Dialog, dialogLayout, font, Menu, menuExitMs, menuLook, pointPlacer, Portal, radius, space, useDesign, useTheme, type MenuItem, type SymbolName, smoothCorners } from "../ui";
+import { materialMenuWidth } from "../ui/MaterialSurfaces";
+import { currentTabs } from "../../state/tabs/store";
+import { findTab } from "../../state/tabs/tabsState";
+import { dismissWords } from "../../lib/sharedWords";
 
 export function PageRequestHost({ tabId }: { tabId: string }) {
   const request = usePageRequest(tabId);
@@ -34,30 +38,15 @@ function RequestDialog({ tabId, request }: { tabId: string; request: Request }) 
       onChangeText={onChange}
       placeholder={label}
       placeholderTextColor={theme.foregroundTertiary}
-      selectionColor={theme.formAccent}
+      selectionColor={theme.spaceAccentInk}
       secureTextEntry={secure}
       autoCapitalize="none"
       autoCorrect={false}
       style={[font.body, styles.field, { color: theme.label, borderColor: theme.separator }]}
     />
   );
-  if (dialog.choices.length) {
-    return (
-      <Dialog title={dialog.title} message={null} onDismiss={dismiss} buttons={[{ title: dialog.cancel ?? "Cancel", onPress: dismiss }]}>
-        {dialog.choices.map((choice) => (
-          <Pressable
-            key={choice.title}
-            accessibilityRole="button"
-            onPress={() => answerRequest(tabId, request, choice.answer)}
-            style={({ pressed }) => [styles.choice, pressed ? { backgroundColor: theme.rowHighlight } : null]}
-          >
-            <Symbol name={CHOICE_ICONS[choice.icon]} size={20} color={theme.formAccent} />
-            <Text style={[font.body, { color: theme.formAccent }]}>{choice.title}</Text>
-          </Pressable>
-        ))}
-      </Dialog>
-    );
-  }
+  if (dialog.choices.length)
+    return <ActionSheet title={dialog.title || null} message={dialog.message} cancel={dialog.cancel ?? dismissWords.cancel} onCancel={dismiss} actions={dialog.choices.map((choice) => ({ title: choice.title, onPress: () => answerRequest(tabId, request, choice.answer) }))} />;
   return (
     <Dialog
       title={dialog.title}
@@ -78,8 +67,6 @@ function RequestDialog({ tabId, request }: { tabId: string; request: Request }) 
 
 const SYSTEM_DIALOGS = Platform.OS === "ios";
 
-const CHOICE_ICONS: Record<RequestChoice["icon"], SymbolName> = { camera: "camera", video: "video", folder: "folderFill" };
-
 const PRESS_ICONS: Record<PressAction, SymbolName> = {
   openInNewTab: "plusSquareOnSquare",
   openInBackground: "squareOnSquare",
@@ -92,21 +79,23 @@ const PRESS_ICONS: Record<PressAction, SymbolName> = {
 export function PressMenu({ width, height }: { width: number; height: number }) {
   const press = usePress();
   const insets = useSafeAreaInsets();
+  const material = useDesign() === "material";
   if (!press) return null;
   const items: MenuItem[] = [{ heading: pressHeading(press.target) }];
   for (const group of pressMenuGroups(press.target)) {
     items.push("divider");
     for (const action of group) items.push({ label: PRESS_TITLES[action], icon: PRESS_ICONS[action], onPress: () => pressAction(press, action) });
   }
-  const left = Math.min(Math.max(press.x, space.s), width - PRESS_MENU_WIDTH - space.s);
-  const top = Math.min(Math.max(press.y + insets.top, insets.top + space.s), height - PRESS_MENU_HEIGHT);
-  return <Menu items={items} place={{ left, top, width: PRESS_MENU_WIDTH }} onDismiss={dismissPress} />;
+  const placer = pointPlacer({ x: press.x, y: press.y + insets.top }, { width, height }, insets, material ? materialMenuWidth(items) : menuLook.width);
+  return (
+    <Portal exitMs={menuExitMs(true)}>
+      <Menu items={items} placer={placer} dimmed frost={null} privately={pressedPrivately(press.tabId)} onDismiss={dismissPress} />
+    </Portal>
+  );
 }
 
-const PRESS_MENU_WIDTH = 280;
-const PRESS_MENU_HEIGHT = 380;
+const pressedPrivately = (tabId: string) => findTab(currentTabs(), tabId)?.isPrivate === true;
 
 const styles = StyleSheet.create({
-  choice: { flexDirection: "row", alignItems: "center", gap: space.m, minHeight: dialogLayout.choiceHeight, paddingHorizontal: space.s, borderRadius: radius.row },
-  field: { minHeight: dialogLayout.fieldHeight, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.row, paddingHorizontal: space.m },
+  field: { minHeight: dialogLayout.fieldHeight, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.row, ...smoothCorners, paddingHorizontal: space.m },
 });

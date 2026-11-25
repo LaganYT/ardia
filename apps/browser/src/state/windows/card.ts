@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser, type BrowserState } from "../browser/store";
+import { fieldWatch, useKeyed } from "../browser/keyedWatch";
 import { activeTabId, engineProfile } from "../browser/model";
 import type { AdoptKind, SplitView, Tab } from "../browser/types";
 import { tabEngine, type PageEngine } from "../engines/engines";
@@ -16,11 +17,17 @@ import { isSmallWindow } from "./small";
 import type { PagerPage } from "./profilePager";
 import { isWebPageUrl } from "../../lib/url";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
+import { PAGE_STACKING } from "../../lib/pageStacking";
 import { webviews } from "../../platform/webviews";
 import { notePageOverlay } from "../telemetry/usage";
 import { liveOf } from "../tabs/tabLive";
+import { warmOrder } from "../tabs/sleepPolicy";
 
 export const useSplitOf = (tabId: string | undefined) => useBrowser((s) => splitOf(s, tabId));
+
+const watchSplits = fieldWatch(() => useBrowser, (s: BrowserState) => s.splits);
+
+export const useInSplit = (tabId: string) => useKeyed(watchSplits, tabId, () => !!splitOf(useBrowser.getState(), tabId));
 
 export const useIsSmallWindow = (windowId: string) => useBrowser((s) => isSmallWindow(s.windows[windowId]));
 
@@ -77,14 +84,15 @@ export function successorWhenLeaving(leaving: string[], windowId: string): strin
   return next && next !== activeTabId(s, windowId) ? next : undefined;
 }
 
-export const useWarmTabIds = (windowId: string, pagerPages: PagerPage[] | null, successor: string | undefined) =>
-  useBrowser(
+export function useWarmTabIds(windowId: string, pagerPages: PagerPage[] | null, successor: string | undefined) {
+  return useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
       const ids = !w || !pagerPages ? [] : pagerPages.map((p) => (p.id === w.profileId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id);
-      return successor && s.tabs[successor]?.windowId === windowId && !ids.includes(successor) ? [...ids, successor] : ids;
+      return warmOrder(ids, successor && s.tabs[successor]?.windowId === windowId ? successor : undefined);
     }),
   );
+}
 
 export const useSplitsOf = (tabIds: string[]) => useBrowser(useShallow((s) => tabIds.map((id) => splitOf(s, id)).filter((v): v is SplitView => !!v)));
 
@@ -158,12 +166,18 @@ export function newTabLingeringOver(windowId: string, from: string | undefined, 
     notePageOverlay("newTabLeftForWebKit");
     return undefined;
   }
+  if (!newTabSinksUnderPages()) {
+    notePageOverlay("newTabLeftWithoutLinger");
+    return undefined;
+  }
   if (PLATFORM_FEATURES.holdsColdPagesUntilPainted && !webviews.has(to) && heldUntilPainted(adoptKind(adoptOf(next))?.kind)) return undefined;
   notePageOverlay("newTabLingered");
   return from;
 }
 
 const holdsForFirstFrame = (engine: PageEngine) => engine === "chromium";
+
+export const newTabSinksUnderPages = () => PLATFORM_FEATURES.newTabWaitsForFirstFrame && !PAGE_STACKING.shellAbovePages;
 
 const heldUntilPainted = (adopted: AdoptKind | undefined) => !adopted || adopted === "restore" || adopted === "clone";
 

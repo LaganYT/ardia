@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ComponentProps } from "react";
 import { Platform, TextInput, type StyleProp, type TextStyle, type TextInputInstance } from "react-native";
+import Animated, { useAnimatedProps, type SharedValue } from "react-native-reanimated";
 import { withAlpha } from "../../lib/color";
 import { inlineOffer } from "../../lib/inlineOffer";
 import { CompletingField, completingFieldIsNative, type CompletingFieldHandle } from "../../platform/completingField";
@@ -7,8 +8,9 @@ import { useSearchCompletedFor, useSearchCompletion } from "../../state/search/h
 import { useTabs } from "../../state/tabs/store";
 import { countUsage } from "../../state/telemetry/telemetry";
 import { font } from "../ui";
+import { searchPanel } from "./searchPanelTokens";
 
-export type TrayInputHandle = { focus(): void; blur(): void; clearsInPlace(): boolean };
+export type TrayInputHandle = { focus(): void; blur(): void; clearsInPlace(): boolean; discardDraft(): void };
 
 type Props = {
   start: string;
@@ -19,9 +21,11 @@ type Props = {
   keyboardAppearance: "default" | "dark";
   holdsScroll?: boolean;
   nativeID?: string;
+  revealFocus?: SharedValue<number>;
   onTyped: (text: string) => void;
   onSubmit: (text: string) => void;
   style: StyleProp<TextStyle>;
+  weight?: "regular" | "medium";
 };
 
 const SHARED = {
@@ -37,7 +41,16 @@ export const TrayInput = forwardRef<TrayInputHandle, Props>(function TrayInput(p
   return completingFieldIsNative() ? <CompletingInput {...props} ref={ref} /> : <PlainInput {...props} ref={ref} />;
 });
 
-const CompletingInput = forwardRef<TrayInputHandle, Props>(function CompletingInput({ start, selectsStart, color, placeholderColor, accent, keyboardAppearance, holdsScroll, nativeID, onTyped, onSubmit, style }, ref) {
+const AnimatedField = Animated.createAnimatedComponent(CompletingField);
+
+type FieldProps = ComponentProps<typeof CompletingField>;
+
+const RevealingField = forwardRef<CompletingFieldHandle, FieldProps & { reveal: SharedValue<number> }>(function RevealingField({ reveal, ...props }, ref) {
+  const revealProps = useAnimatedProps(() => ({ revealFocus: reveal.value }));
+  return <AnimatedField {...props} ref={ref} animatedProps={revealProps} />;
+});
+
+const CompletingInput = forwardRef<TrayInputHandle, Props>(function CompletingInput({ start, selectsStart, color, placeholderColor, accent, keyboardAppearance, holdsScroll, nativeID, revealFocus, onTyped, onSubmit, style, weight = "regular" }, ref) {
   const field = useRef<CompletingFieldHandle>(null);
   const [typed, setTyped] = useState(start);
   const completion = useSearchCompletion();
@@ -56,55 +69,72 @@ const CompletingInput = forwardRef<TrayInputHandle, Props>(function CompletingIn
         typedNow.current("");
         return true;
       },
+      discardDraft: () => {
+        field.current?.setText("", false);
+        setTyped("");
+        typedNow.current("");
+      },
     }),
     [],
   );
   useEffect(() => {
     if (selectsStart && start) field.current?.setText(start, true);
   }, []);
-  return (
-    <CompletingField
-      ref={field}
-      {...SHARED}
-      style={style}
-      text={typed}
-      offer={inlineOffer(completion, completedFor)}
-      highlightColor={withAlpha(accent, 0.3)}
-      keyboardAppearance={keyboardAppearance}
-      holdsScroll={holdsScroll}
-      nativeID={nativeID}
-      selectsAllOnFocus={selectsStart && start.length > 0}
-      cursorColor={accent}
-      selectionColor={withAlpha(accent, 0.3)}
-      color={color}
-      placeholderTextColor={placeholderColor}
-      fontSize={font.title3.fontSize}
-      fontWeight="regular"
-      onTypedChange={(next) => {
+  const fieldProps: FieldProps = {
+      ...SHARED,
+      style,
+      text: typed,
+      offer: inlineOffer(completion, completedFor),
+      highlightColor: withAlpha(accent, 0.3),
+      keyboardAppearance,
+      holdsScroll,
+      nativeID,
+      selectsAllOnFocus: selectsStart && start.length > 0,
+      cursorColor: accent,
+      selectionColor: withAlpha(accent, 0.3),
+      color,
+      placeholderTextColor: placeholderColor,
+      fontSize: font.title3.fontSize,
+      fontWeight: weight,
+      onTypedChange: (next) => {
         setTyped(next);
         onTyped(next);
-      }}
-      onSubmit={onSubmit}
-      onFieldScroll={countFieldScroll}
-    />
-  );
+      },
+      onSubmit,
+      onFieldScroll: countFieldScroll,
+  };
+  return revealFocus ? <RevealingField {...fieldProps} ref={field} reveal={revealFocus} /> : <CompletingField {...fieldProps} ref={field} />;
 });
 
 const countFieldScroll = () => {
   if (!useTabs.getState().incognito) countUsage("address_field_scrolled");
 };
 
-const PlainInput = forwardRef<TrayInputHandle, Props>(function PlainInput({ start, selectsStart, color, placeholderColor, accent, keyboardAppearance, onTyped, onSubmit, style }, ref) {
+const PlainInput = forwardRef<TrayInputHandle, Props>(function PlainInput({ start, selectsStart, color, placeholderColor, accent, keyboardAppearance, onTyped, onSubmit, style, weight = "regular" }, ref) {
   const input = useRef<TextInputInstance>(null);
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(
     selectsStart && start ? { start: 0, end: start.length } : { start: start.length, end: start.length },
   );
-  useImperativeHandle(ref, () => ({ focus: () => input.current?.focus(), blur: () => input.current?.blur(), clearsInPlace: () => false }), []);
+  const typedNow = useRef(onTyped);
+  typedNow.current = onTyped;
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => input.current?.focus(),
+      blur: () => input.current?.blur(),
+      clearsInPlace: () => false,
+      discardDraft: () => {
+        input.current?.clear();
+        typedNow.current("");
+      },
+    }),
+    [],
+  );
   return (
     <TextInput
       ref={input}
       {...SHARED}
-      style={[font.title3, style, { color }]}
+      style={[font.title3, style, { color }, weight === "medium" ? MEDIUM : null]}
       defaultValue={start}
       selection={selection}
       onSelectionChange={() => {
@@ -115,8 +145,11 @@ const PlainInput = forwardRef<TrayInputHandle, Props>(function PlainInput({ star
       placeholderTextColor={placeholderColor}
       selectionColor={accent}
       keyboardAppearance={keyboardAppearance}
+      maxFontSizeMultiplier={searchPanel.maxTextScale}
       submitBehavior="submit"
       disableFullscreenUI
     />
   );
 });
+
+const MEDIUM = { fontWeight: "500" } as const;

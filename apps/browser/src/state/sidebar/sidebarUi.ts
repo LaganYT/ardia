@@ -1,6 +1,8 @@
 import type { View } from "react-native";
 import { create } from "zustand";
 import { snappedToDevicePixels } from "../settings/interfaceScale";
+import { peekShown } from "../windows/dockMotion";
+import { noteSidebarPeekResize } from "../telemetry/dockCounts";
 
 export type Anchor = { x: number; y: number; width: number; height: number };
 export type Target = { kind: "tab" | "group" | "live" | "folder"; id: string };
@@ -9,15 +11,17 @@ export type Hover = Target & { windowId: string; anchor: Anchor };
 type SidebarUi = {
   renaming: (Target & { windowId: string }) | null;
   iconPicker: (Target & { windowId: string; anchor: Anchor | null }) | null;
+  tileLetters: { windowId: string; tabId: string; anchor: Anchor | null } | null;
   hover: Hover | null;
   searchTabs: string | null;
-  switcher: { windowId: string; ids: string[]; index: number; visible: boolean } | null;
+  switcher: { windowId: string; ids: string[]; index: number; mounted: boolean; visible: boolean } | null;
   dragWidth: Record<string, number>;
 };
 
 export const useSidebarUi = create<SidebarUi>()(() => ({
   renaming: null,
   iconPicker: null,
+  tileLetters: null,
   hover: null,
   searchTabs: null,
   switcher: null,
@@ -28,6 +32,7 @@ export const sidebarUi = () => useSidebarUi.getState();
 export const setSidebarUi = (patch: Partial<SidebarUi>) => useSidebarUi.setState(patch);
 
 export function setLiveSidebarWidth(windowId: string, width: number | null) {
+  if (width !== null && !(windowId in useSidebarUi.getState().dragWidth) && peekShown(windowId)) noteSidebarPeekResize();
   useSidebarUi.setState((u) => {
     const { [windowId]: _, ...rest } = u.dragWidth;
     return { dragWidth: width === null ? rest : { ...rest, [windowId]: snappedToDevicePixels(width) } };

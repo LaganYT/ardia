@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PlatformColor, useWindowDimensions, View } from "react-native";
-import { BottomSheet, Button, ConfirmationDialog, ContentUnavailableView, Form, Group, HStack, Image, Label, LabeledContent, List, NavigationLink, NavigationStack, ProgressView, RNHostView, Section, Spacer, Text, TextField, Toggle, Toolbar, ToolbarItem, VStack, ZStack, useNativeState } from "@expo/ui/swift-ui";
+import { BottomSheet, Button, ConfirmationDialog, ContentUnavailableView, Form, Group, HStack, Image, Label, LabeledContent, List, NavigationLink, NavigationStack, ProgressView, RNHostView, Section, Text, TextField, Toggle, Toolbar, ToolbarItem, VStack, ZStack, useNativeState } from "@expo/ui/swift-ui";
 import {
   accessibilityHidden,
   backgroundOverlay,
@@ -35,11 +35,14 @@ import { addList, applyMyFilters, openFromSettings, removeList, resetLists, setL
 import { popSettings, pushSettings, settingsRouteKey, type SettingsRoute } from "../../state/settings/nav";
 import { FILTER_LIST_ADDRESS, filterListAddress, formatNumber, listFacts, listIsBusy, listsStatus, listStatus, listsText, listUpdatedAt, myFiltersCount, myFiltersSummary, resetMessage, rulesText } from "../../state/settings/settingsRules";
 import { PasteAction, SYSTEM_PASTE_SIZE } from "../sync/SyncPage";
-import { FilterTextEditor, legibleInk, modifierList, navigationBarBackButtonHidden, settingsChrome, settingsLayout, settingsPage, settingsSwitchStyle } from "../ui";
+import { FilterTextEditor, legibleInk, modifierList, navigationBarBackButtonHidden, neverBounces, settingsChrome, settingsLayout, settingsPage, settingsSwitchStyle } from "../ui";
 import { haptics } from "../../state/app/haptics";
-import { ExpoHero } from "./ExpoSettingsParts";
+import { ExpoBusyButton, ExpoBusyToolbarAction, ExpoHero } from "./ExpoSettingsParts";
+import { actionWords, blockingWords, dismissWords } from "../../lib/sharedWords";
 
 const FILL = Number.MAX_SAFE_INTEGER;
+
+export const TRUSTED_SITES_EMPTY = { title: "No Trusted Sites", message: `Sites where you turn off ${blockingWords.blockAdsAndTrackers} in the page menu show up here.` } as const;
 const SECONDARY = { type: "hierarchical", style: "secondary" } as const;
 const BLUE = PlatformColor("systemBlue");
 
@@ -65,13 +68,7 @@ export function ExpoFilterListsPage() {
         </Text>
       </ExpoHero>
       <Section footer={<Text>Checked weekly.</Text>}>
-        <Button onPress={() => void updateListsFromButton()} modifiers={[disabled(updating)]}>
-          <HStack>
-            <Text>{updating ? "Updating Lists…" : "Update Now"}</Text>
-            <Spacer />
-            {updating ? <ProgressView /> : null}
-          </HStack>
-        </Button>
+        <ExpoBusyButton title="Update Now" busy={updating} busyValue="Updating Lists…" onPress={() => void updateListsFromButton()} />
       </Section>
       {groups.map(([group, items]) => (
         <Section key={group} title={group}>
@@ -91,7 +88,7 @@ export function ExpoFilterListsPage() {
       <Section>
         <ConfirmationDialog title="Restore Default Filter Lists?" isPresented={confirmingReset} onIsPresentedChange={setConfirmingReset} titleVisibility="visible">
           <ConfirmationDialog.Trigger>
-            <Button role="destructive" label="Restore Defaults…" onPress={() => setConfirmingReset(true)} />
+            <Button role="destructive" label="Restore Defaults…" onPress={() => setConfirmingReset(true)} modifiers={[disabled(updating)]} />
           </ConfirmationDialog.Trigger>
           <ConfirmationDialog.Actions>
             <Button role="destructive" label="Restore Defaults" onPress={() => void resetLists()} />
@@ -156,7 +153,7 @@ function AddListSheet({ open, onOpen, onClose }: { open: boolean; onOpen: () => 
       <Group modifiers={[presentationDetents(["medium", "large"]), presentationDragIndicator("hidden"), interactiveDismissDisabled(adding)]}>
         <NavigationStack>
           <Toolbar>
-            <Form modifiers={[navigationTitle("Add a List"), navigationBarTitleDisplayMode("inline"), tint(BLUE)]}>
+            <Form modifiers={modifierList(navigationTitle("Add a List"), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome(), neverBounces())}>
               <Section title="List Address" footer={footer}>
                 <TextField
                   text={text}
@@ -166,10 +163,10 @@ function AddListSheet({ open, onOpen, onClose }: { open: boolean; onOpen: () => 
                     setAddress(value);
                     setFailure(null);
                   }}
-                  modifiers={[keyboardType("url"), textInputAutocapitalization("never"), autocorrectionDisabled(), submitLabel("done"), onSubmit(() => void add())]}
+                  modifiers={[keyboardType("url"), textInputAutocapitalization("never"), autocorrectionDisabled(), submitLabel("done"), onSubmit(() => void add()), disabled(adding)]}
                 />
               </Section>
-              {address ? null : (
+              {address || adding ? null : (
                 <Section modifiers={[listRowBackground("clear")]}>
                   <RNHostView matchContents>
                     <View style={{ alignItems: "center", minHeight: SYSTEM_PASTE_SIZE.height }}>
@@ -187,9 +184,11 @@ function AddListSheet({ open, onOpen, onClose }: { open: boolean; onOpen: () => 
             </Form>
             <Toolbar.Content>
               <ToolbarItem placement="cancellationAction">
-                <Button label="Cancel" role="cancel" onPress={close} />
+                <Button label={dismissWords.cancel} role="cancel" onPress={close} modifiers={[disabled(adding)]} />
               </ToolbarItem>
-              <ToolbarItem placement="confirmationAction">{adding ? <ProgressView /> : <Button label="Add" onPress={() => void add()} modifiers={[disabled(url === null)]} />}</ToolbarItem>
+              <ToolbarItem placement="confirmationAction">
+                <ExpoBusyToolbarAction title="Add" busy={adding} ready={url !== null} onPress={() => void add()} />
+              </ToolbarItem>
             </Toolbar.Content>
           </Toolbar>
         </NavigationStack>
@@ -205,13 +204,13 @@ export function ExpoFilterListPage({ route }: { route: SettingsRoute }) {
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   if (!list) {
     return (
-      <Form modifiers={modifierList(navigationTitle("Filter List"), navigationBarTitleDisplayMode("inline"), settingsChrome())}>
+      <Form modifiers={modifierList(navigationTitle("Filter List"), navigationBarTitleDisplayMode("inline"), settingsChrome(), neverBounces())}>
         <ContentUnavailableView title="List Removed" systemImage="list.bullet.rectangle" />
       </Form>
     );
   }
   return (
-    <Form modifiers={modifierList(navigationTitle(list.title), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome())}>
+    <Form modifiers={modifierList(navigationTitle(list.title), navigationBarTitleDisplayMode("inline"), tint(BLUE), settingsChrome(), neverBounces())}>
       <Section footer={list.isDefault ? <Text>On by default in uBlock Origin.</Text> : undefined}>
         <Toggle isOn={list.isEnabled} onIsOnChange={(on) => setListEnabled(list.id, on)} modifiers={modifierList(settingsSwitchStyle())}>
           <Text>Use This List</Text>
@@ -220,7 +219,7 @@ export function ExpoFilterListPage({ route }: { route: SettingsRoute }) {
       {list.state === "failed" ? (
         <Section>
           <Label title={list.failure ?? "This list couldn’t be updated."} icon={<Image systemName="exclamationmark.triangle.fill" modifiers={modifierList(legibleInk("orange"))} />} />
-          <Button label="Try Again" onPress={() => void updateLists()} modifiers={[disabled(updating)]} />
+          <Button label={actionWords.tryAgain} onPress={() => void updateLists()} modifiers={[disabled(updating)]} />
         </Section>
       ) : null}
       <Section footer={list.skippedCount > 0 ? <Text>{copy().filterRulesUnsupported}</Text> : undefined}>
@@ -279,11 +278,11 @@ export function ExpoTrustedSitesPage() {
   const [editing, setEditing] = useState(false);
   const page = [navigationTitle("Trusted Sites"), navigationBarTitleDisplayMode("inline"), tint(BLUE)];
   if (hosts.length === 0) {
-    return <ContentUnavailableView title="No Trusted Sites" systemImage="checkmark.shield" description="Sites you allow from the page menu show up here." modifiers={modifierList(...page, frame({ maxWidth: FILL, maxHeight: FILL }), settingsChrome())} />;
+    return <ContentUnavailableView title={TRUSTED_SITES_EMPTY.title} systemImage="checkmark.shield" description={TRUSTED_SITES_EMPTY.message} modifiers={modifierList(...page, frame({ maxWidth: FILL, maxHeight: FILL }), settingsChrome(), neverBounces())} />;
   }
   return (
     <Toolbar>
-      <List modifiers={modifierList(...page, settingsChrome(), environment("editMode", editing ? "active" : "inactive"))}>
+      <List modifiers={modifierList(...page, settingsChrome(), neverBounces(), environment("editMode", editing ? "active" : "inactive"))}>
         <Section>
           <List.ForEach onDelete={(indices) => indices.forEach((index) => hosts[index] && trustSite(hosts[index], false))}>
             {hosts.map((host) => (
@@ -294,7 +293,7 @@ export function ExpoTrustedSitesPage() {
       </List>
       <Toolbar.Content>
         <ToolbarItem placement="topBarTrailing">
-          <Button label={editing ? "Done" : "Edit"} onPress={() => setEditing(!editing)} modifiers={editing ? [font({ weight: "semibold" })] : []} />
+          <Button label={editing ? dismissWords.done : "Edit"} onPress={() => setEditing(!editing)} modifiers={editing ? [font({ weight: "semibold" })] : []} />
         </ToolbarItem>
       </Toolbar.Content>
     </Toolbar>
@@ -325,8 +324,8 @@ export function ExpoMyFiltersPage() {
   };
   return (
     <Toolbar>
-      <VStack spacing={0} modifiers={modifierList(navigationTitle("My Filters"), navigationBarTitleDisplayMode("inline"), navigationBarBackButtonHidden(changed), tint(BLUE), settingsChrome())}>
-        <ZStack alignment="topLeading">
+      <VStack spacing={0} modifiers={modifierList(navigationTitle("My Filters"), navigationBarTitleDisplayMode("inline"), navigationBarBackButtonHidden(changed), tint(BLUE), settingsChrome(), neverBounces())}>
+        <ZStack alignment="topLeading" modifiers={[disabled(applying)]}>
           <FilterTextEditor text={text} onTextChange={setDraft} />
           {text ? null : (
             <Text modifiers={[font({ textStyle: "callout", design: "monospaced" }), foregroundStyle({ type: "hierarchical", style: "tertiary" }), padding({ leading: MY_FILTERS_INSET + 5, trailing: MY_FILTERS_INSET, top: 8 }), accessibilityHidden(true)]}>{MY_FILTERS_PLACEHOLDER}</Text>
@@ -341,10 +340,12 @@ export function ExpoMyFiltersPage() {
       <Toolbar.Content>
         {changed ? (
           <ToolbarItem placement="cancellationAction">
-            <Button label="Revert" onPress={() => setDraft(null)} />
+            <Button label="Revert" onPress={() => setDraft(null)} modifiers={[disabled(applying)]} />
           </ToolbarItem>
         ) : null}
-        <ToolbarItem placement="confirmationAction">{applying ? <ProgressView /> : <Button label="Apply" onPress={() => void apply()} modifiers={[buttonStyle("glassProminent"), disabled(!changed)]} />}</ToolbarItem>
+        <ToolbarItem placement="confirmationAction">
+          <ExpoBusyToolbarAction title="Apply" prominent busy={applying} ready={changed} onPress={() => void apply()} />
+        </ToolbarItem>
       </Toolbar.Content>
     </Toolbar>
   );

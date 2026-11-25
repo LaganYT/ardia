@@ -1,5 +1,8 @@
 import { shownPageTone, usePages, type PageState, type PageTone } from "../pages/store";
+import { usePullBar } from "./deckPull";
 import { useBrowse } from "./store";
+
+export const useDeckOwnsBar = () => usePullBar((s) => s.deckOwns);
 
 export const useSurface = () => useBrowse((s) => s.surface);
 
@@ -17,6 +20,12 @@ export const useOpeningTab = () => useBrowse((s) => s.opening);
 export const usePageVeiled = (id: string) => useBrowse((s) => s.veiled === id);
 
 export const usePageCovered = (id: string) => useBrowse((s) => s.covered === id);
+
+export const usePageArriving = (id: string) => useBrowse((s) => s.arriving === id);
+
+export const useArrivalCover = () => useBrowse((s) => s.arrivalCover);
+
+export const useOpeningCover = () => useBrowse((s) => s.openingCover);
 
 export const useLeavingTab = () => useBrowse((s) => s.leaving);
 

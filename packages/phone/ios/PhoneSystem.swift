@@ -130,6 +130,10 @@ public final class SystemModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ArdiaPhoneSystem")
 
+    OnCreate {
+      PhoneExits.shared.follow(sharing: UsageConsent.state().sharing)
+    }
+
     Events("onSystemLink")
 
     OnStartObserving {
@@ -142,8 +146,34 @@ public final class SystemModule: Module {
       onMain { PhoneSystemLinks.shared.sink = nil }
     }
 
+    Function("labLog") { (line: String) in
+      if PhoneTestBuild.isOn { NSLog("%@", line) }
+    }
+
     Function("setWidgetColorChoice") { (choice: String?) in
       DispatchQueue.main.async { MainActor.assumeIsolated { PhoneSyncHost.shared.widgetColorChoice = choice } }
+    }
+
+    Function("usageConsent") { () -> [String: Any] in
+      let state = UsageConsent.state()
+      return ["sharing": state.sharing, "generation": Double(state.generation)]
+    }
+
+    Function("setUsageConsent") { (sharing: Bool) in
+      UsageConsent.set(sharing: sharing)
+      PhoneExits.shared.follow(sharing: sharing)
+    }
+
+    Function("takePendingCounts") { () -> [String: Int] in
+      PendingCounts.take()
+    }
+
+    Function("peekPendingCounts") { () -> [String: Int] in
+      PendingCounts.peek()
+    }
+
+    Function("takeExits") { () -> [[String: Any]] in
+      PhoneExits.take()
     }
 
     Function("processStartedAt") { () -> Double? in
@@ -152,6 +182,10 @@ public final class SystemModule: Module {
 
     Function("launchBackdropShownAt") { () -> Double? in
       LaunchBackdrop.shownAtEpochMilliseconds()
+    }
+
+    Function("launchInterfaceDrawn") { () in
+      DispatchQueue.main.async { MainActor.assumeIsolated { LaunchBackdrop.interfaceDrawn() } }
     }
 
     AsyncFunction("initialLink") { () -> [String: Any]? in

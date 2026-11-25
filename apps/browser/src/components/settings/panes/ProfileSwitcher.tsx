@@ -14,6 +14,7 @@ import { openProfileItemMenu } from "../../profiles/profileMenu";
 import { requestCreateProfile } from "../../../state/profiles/createProfileRequest";
 import { curve } from "../../ui/motion";
 import { settingsMotion } from "../tokens";
+import { noteSettingsProfilePick } from "../../../state/telemetry/usage";
 
 export const listOf = (names: string[], joiner = "and") => (names.length <= 2 ? names.join(` ${joiner} `) : `${names.slice(0, -1).join(", ")}, ${joiner} ${names.at(-1)}`);
 
@@ -24,6 +25,11 @@ export function useSharedWith(profileId: string): string[] {
     const others = sharingProfiles({ profiles, profileOrder: order }, profileId);
     return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
   }, [order, profiles, profileId]);
+}
+
+function pickProfile(profileId: string) {
+  noteSettingsProfilePick();
+  replaceSettingsPlace(profileId);
 }
 
 const settle = (value: Animated.Value, toValue: number) =>
@@ -180,7 +186,7 @@ function ProfilePill({
       <ContextMenuArea onContextMenu={() => void openProfileItemMenu(profileId, "settings", SETTINGS_WINDOW_ID, anchor.current)}>
         <View {...hoverProps} ref={anchor} collapsable={false}>
           <Pressable
-            onPress={() => !selected && replaceSettingsPlace(profileId)}
+            onPress={() => !selected && pickProfile(profileId)}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             accessibilityLabel={profile.name}

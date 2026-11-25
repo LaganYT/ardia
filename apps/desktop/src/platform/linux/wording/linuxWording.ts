@@ -35,12 +35,8 @@ export const LINUX_WORDING: readonly Wording[] = [
     ],
   },
   {
-    file: "components/onboarding/previews/MockWindow.tsx",
-    replacements: [["{`Auto · ${look.dark ? \"Dark\" : \"Light\"} like your ${PLATFORM_TERMS.computer}`}", "{`Auto · ${look.dark ? \"Dark\" : \"Light\"} like your desktop`}"]],
-  },
-  {
     file: "components/onboarding/previews/scenes/LookScenes.tsx",
-    replacements: [["`Auto · ${toDark ? \"Dark\" : \"Light\"} like your ${PLATFORM_TERMS.computer}`", "`Auto · ${toDark ? \"Dark\" : \"Light\"} like your desktop`"]],
+    replacements: [["`Auto · ${isDark ? \"Dark\" : \"Light\"} like your ${PLATFORM_TERMS.computer}`", "`Auto · ${isDark ? \"Dark\" : \"Light\"} like your desktop`"]],
   },
   {
     file: "components/settings/panes/General.tsx",

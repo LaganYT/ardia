@@ -3,7 +3,7 @@ import type { ProfileTheme } from "./profileLook";
 export type ThemeEdit = { theme: ProfileTheme | null; target: string };
 
 type Deps = {
-  apply: (theme: ProfileTheme | null) => void;
+  apply: (theme: ProfileTheme | null, final: boolean) => void;
   showing: () => string;
   current: () => unknown;
   draft: (edit: ThemeEdit | null) => void;
@@ -21,7 +21,7 @@ export function themeGesture(deps: Deps) {
     if (frame !== null) deps.cancelFrame(frame);
     frame = null;
   };
-  const flush = () => {
+  const flush = (final = false) => {
     frame = null;
     const edit = pending;
     pending = undefined;
@@ -31,7 +31,7 @@ export function themeGesture(deps: Deps) {
       deps.draft(null);
       return;
     }
-    deps.apply(edit.theme);
+    deps.apply(edit.theme, final);
     expected = deps.current();
   };
   const drop = () => {
@@ -60,10 +60,10 @@ export function themeGesture(deps: Deps) {
       deps.draft(settle ? null : pending);
       if (settle) {
         stopFrame();
-        flush();
+        flush(true);
         gesture = null;
         cancelled = false;
-      } else if (frame === null) frame = deps.requestFrame(flush);
+      } else if (frame === null) frame = deps.requestFrame(() => flush());
     },
     selectionChanged() {
       if (gesture === null) return;

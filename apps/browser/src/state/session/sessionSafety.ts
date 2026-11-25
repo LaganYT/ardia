@@ -10,6 +10,8 @@ export type FoundDocument =
   | { state: "unusable"; reason: UnusableReason; text: string | null }
   | { state: "unknown"; exists: Promise<boolean> };
 
+export const fromNewerBuild = (found: FoundDocument) => found.state === "unusable" && found.reason === "newer";
+
 export function findDocument(name: string, version: number, migrations: Migrations, whole: (doc: SavedObject) => boolean = () => true): FoundDocument {
   let text: unknown = null;
   try {

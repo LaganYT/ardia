@@ -66,7 +66,7 @@ const FREEZE_WORDING = [
   "freeing its memory",
   "freezes for 0.4 seconds or more",
   "program addresses",
-  "“system” or “other”",
+  "shared system code with that system code's build ID",
   "the last 20 times Ardia froze",
   "Copy Last Freeze",
 ];

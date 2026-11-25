@@ -4,7 +4,8 @@ import { menuSyncTotals } from "./menuSyncTotals";
 import { nativeConsent } from "../telemetry/nativeConsent";
 import { onDownload } from "../../platform/downloads";
 import { releaseProfile } from "../../platform/profiles";
-import { closeWindow, onWindowEvent, openWindow, restoreFullScreen, setTrafficLightsCenter, setWindowTitle, windowIds } from "../../platform/windows";
+import { closeWindow, onWindowEvent, openWindow, restoreFullScreen, setWindowTitle, windowIds } from "../../platform/windows";
+import { setTrafficLightsCenter } from "../windows/nativeWindow";
 import { isDarkAppearance, onAppEvent, onOpenURLs, replyToTerminate } from "../../platform/app";
 import { startNativeSettings } from "../settings/nativeSettings";
 import { startInterfaceScaleRefresh } from "./interfaceScaleRefresh";
@@ -13,6 +14,7 @@ import { Appearance } from "react-native";
 import { useBrowser } from "../browser/store";
 import { setLastTabKeepsWindow } from "../omnibox/newTabBarPolicy";
 import { isUtilityWindowId } from "../settings/settingsWindows";
+import { INTRO_WINDOW_ID } from "../onboarding/introWindow";
 import { openingLightsCenter } from "../windows/layout";
 import { createWindowSync, type WindowPort } from "../windows/windowSync";
 import { closeLittleArdiaForAppLink, openExternalUrls } from "../littleArdia/actions";
@@ -118,7 +120,7 @@ export function startNativeSync() {
     getState: store.getState,
     isQuitting,
     lightsCenter: (s, id) => (s.windows[id]?.kind === "small" ? SMALL_LIGHTS_CENTER : openingLightsCenter(s, id)),
-    isUtilityWindow: isUtilityWindowId });
+    isUtilityWindow: (id) => isUtilityWindowId(id) || id === INTRO_WINDOW_ID });
   windows.listen();
 
   let lastMenu = "";

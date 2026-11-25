@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 import { fieldGlowAvailable } from "../../state/tabs/fieldGlow";
-import { GradientFill } from "../ui";
+import { continuousCorners, GradientFill } from "../ui";
 import { driveFieldLoad, fieldLoadPlates, filledAt, frontOf, type Front, type LoadSink } from "./fieldLoadDrive";
 import { FieldGlowFill, type FieldLoadFillProps } from "./FieldGlowFill";
 import { FIELD_LOAD } from "./tokens";
@@ -82,7 +82,7 @@ const JsFieldLoadFill = memo(function JsFieldLoadFill({ tabId, color, height, ra
   }, [width, height, color]);
 
   return (
-    <View pointerEvents="none" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}>
+    <View pointerEvents="none" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={[StyleSheet.absoluteFill, continuousCorners(radius), { overflow: "hidden" }]}>
       {layers}
     </View>
   );

@@ -306,6 +306,9 @@ export type Radius = keyof typeof radius;
 
 export const concentric = (outer: number, inset: number) => Math.max(0, outer - inset);
 
+export const continuousCorners = (borderRadius: number) => ({ borderRadius, borderCurve: "continuous" as const });
+export const clippedContinuousCorners = (borderRadius: number) => ({ ...continuousCorners(borderRadius), overflow: "hidden" as const });
+
 export const capsule = (height: number) => height / 2;
 
 export type TypeSize = keyof typeof font;

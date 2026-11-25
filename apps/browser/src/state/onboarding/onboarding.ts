@@ -17,6 +17,7 @@ import { pluginsStepShown } from "./pluginsOffer";
 
 import { QUESTIONS, QUESTION_ORDER, type OnboardingStep, type Question, type QuestionId } from "./questionList";
 import { markCompleted, readSaved, saveOnboarding as save, type Saved } from "./onboardingDocument";
+import { holdWindowForIntro } from "./introWindow";
 
 export { QUESTIONS, QUESTION_ORDER, type OnboardingStep, type QuestionId };
 export {
@@ -228,9 +229,9 @@ export function confirmDefaultBrowserAnswer(picked: string[]) {
   if (step === "home" && sub === 0) confirmAnswer("default", {}, picked);
 }
 
-export function skipStep() {
+export function skipStep(scope: "step" | "question" = "step") {
   const { step, sub } = useOnboarding.getState();
-  const rest = questionsFor(step).slice(sub);
+  const rest = questionsFor(step).slice(sub, scope === "step" ? undefined : sub + 1);
   const keys = rest.flatMap((q) => q.keys);
   noteOnboarding("stepSkipped");
   revertLive([...keys, ...(rest.some((q) => q.id === "color") ? (["color", "looks"] as const) : [])]);
@@ -239,6 +240,7 @@ export function skipStep() {
     for (const key of keys) delete draft[key];
     return { draft };
   });
+  if (scope === "question") return nextStep();
   const after = stepAfter(step, 1);
   if (after) goToStep(after);
   else finishOnboarding();
@@ -287,6 +289,7 @@ export function startOnboarding(windowId?: string | null, step: OnboardingStep =
   const id = resolveWindowId(useBrowser.getState(), windowId);
   if (!id) return;
   endToolTour();
+  if (step === "intro") holdWindowForIntro(id);
   useOnboarding.setState((s) => ({ ...FRESH, windowId: id, step, sub: 0, leaving: false, tourAfter: false, session: s.session + 1 }));
   save({ step, sub: 0, source: null, preset: "dia", picked: {} });
 }
@@ -297,10 +300,11 @@ export function redoOnboarding(windowId?: string | null) {
   endToolTour();
   const saved = readSaved();
   const source = saved?.source ?? null;
+  holdWindowForIntro(id);
   useOnboarding.setState((s) => ({
     ...FRESH,
     windowId: id,
-    step: "source",
+    step: "intro",
     sub: 0,
     leaving: false,
     tourAfter: false,

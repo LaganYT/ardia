@@ -237,6 +237,10 @@ Greptile reads every pull request before we do.
 
 <a href="https://www.greptile.com/?utm_source=oss_badge&utm_medium=readme&utm_campaign=greptile_for_open_source"><img src="https://www.greptile.com/badge.svg" alt="Greptile: The War on Bugs"></a>
 
+[Blacksmith](https://www.blacksmith.sh) runs our CI.
+
+Monthly donors who asked to be listed are on [ardia.dev](https://ardia.dev/#sponsors). [Chip in](https://ardia.dev/#donate) to join them.
+
 ## License
 
 Ardia as distributed is licensed under the [GNU General Public License v3](LICENSE), because its engine is built

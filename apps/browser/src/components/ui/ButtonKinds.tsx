@@ -5,7 +5,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useHover } from "./useHover";
 import { HoverFill, HoverSwap } from "./HoverFill";
 import { hex, useTheme, type Theme } from "./theme";
-import { capsule, closeOnArt, opacity, pillHeight, radius as radii, space, stepperSize, font as typeScale, weight as weights } from "./tokens";
+import { capsule, closeOnArt, clippedContinuousCorners, continuousCorners, opacity, pillHeight, radius as radii, space, stepperSize, font as typeScale, weight as weights } from "./tokens";
 import { buttonMotion, usePressScaleMotion } from "./motion";
 import type { CloseProps, PillProps, PushProps, StepperProps } from "./Button";
 
@@ -36,7 +36,7 @@ export function StepperButtonView({ icon, onPress, width = stepperSize.width, he
             style={{
               width,
               height,
-              borderRadius: radii.control,
+              ...clippedContinuousCorners(radii.control),
               alignItems: "center",
               justifyContent: "center",
               borderWidth: StyleSheet.hairlineWidth * 2,
@@ -208,7 +208,7 @@ export function PushButtonView({ title, onPress, kind = "default", disabled, ico
           <Animated.View
             style={[{
               height: plain ? undefined : 22,
-              borderRadius: radii.control,
+              ...(plain || primary ? continuousCorners(radii.control) : clippedContinuousCorners(radii.control)),
               paddingHorizontal: plain ? 0 : space.ml,
               flexDirection: "row",
               alignItems: "center",

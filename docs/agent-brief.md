@@ -57,6 +57,9 @@ variables) is in `docs/conventions.md`, enforced by `apps/browser/src/convention
 ## The engine
 - ArdiaCore is built outside the repo in `~/chromium-build` (the tree and its patches: `engine/patches`,
   `docs/engine-build.md` › "Rebuilding"; `engine/chromium/apply.sh` and `engine/ardiacore/apply.sh` copy our code in).
+  Fresh Mac Chromium builds (full rebuilds and version bumps) run on `mbp1` (MacBook M5 Pro, when plugged in) and are
+  synced to `mbp2` and `mini`; incremental builds run on whichever Mac has resources free, prioritizing plugged-in
+  machines (`pmset -g batt`; if both MacBooks are on battery, use `mini`).
   The app's build stages a copy of `out/Release_GN_arm64/Chromium Framework.framework`
   (`packages/ardiacore/scripts/stage-framework.sh`: copied and signed once per engine build into
   `apps/browser/build-ardiacore/staged`, then cloned into each build's own derived data, `ARDIACORE_STAGE_DIR`), links it
@@ -216,7 +219,7 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
     read-only `node_modules`. If a later build step must write into `node_modules`, it fails loudly on the
     read-only tree rather than changing it: use a real install (`--undo`) for that worktree.
   - The script drops `.metadata_never_index` into the worktree, the cache, `~/ardia-scratch` and `~/ardia-wt`. On
-    the Mac mini, run it there the same way, or `touch ~/ardia-scratch/.metadata_never_index` once.
+    the other Macs (`mbp2`, `mini`), run it there the same way, or `touch ~/ardia-scratch/.metadata_never_index` once.
 - **Commit your own work to `main`** from the shared checkout, or push a branch from your worktree (`git add -p`
   or explicit paths, only your hunks). Never commit another agent's work in progress. The index and the working
   tree are shared, and `git commit -- <paths>` (`--only`) takes the whole working-tree file, other agents' hunks included: check `git diff --cached --stat` lists only your

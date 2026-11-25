@@ -452,6 +452,9 @@ fake device, "Ardia Test Sink", and records routes without sending anything anyw
 
 ## Building on Linux
 
+x64 Linux engine builds and development run in **`msi`'s WSL 2 Ubuntu**. ARM64 Linux builds (`AC_TARGET_CPU=arm64`)
+are configured in the scripts but untested and not shipped yet.
+
 Use a dedicated build root, apart from any Mac Chromium tree. `01-sync.sh` is for a fresh tree and refuses to run
 when an output directory exists; after that, builds are incremental.
 
@@ -866,7 +869,8 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
   instance or a build without `lib/ardia/VERSION`. Where Ardia can update itself (below), a newer release is
   downloaded and installed in the background, with "Automatically update Ardia" on (the default), or on Check Now, the
   app menu's Check for Updates or the offer toast's Update when it's off. Then a sticky toast says the release is
-  ready, and Check Now and the app menu read Restart to Update. Where it can't (an engine without the methods, or
+  ready, and Check Now and the app menu read Restart to Update. Every update toast has Later, which only closes it:
+  the same version isn't offered again, and a dismissed Restart toast isn't shown again by another window. Where it can't (an engine without the methods, or
   `unsupported`), Check Now asks before opening the release page and an automatic check offers it once as a toast, and
   the toggle is hidden. An install pacman or rpm owns (`managed`, the AUR's `ardia-bin`) is told to update with its
   package manager. A failed download or install falls back to the release page once and isn't retried automatically.
@@ -904,7 +908,7 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
 - **Kill switches.** `ArdiaShell.fetchKillSwitches` fetches `ardia.dev/switches.json` (at most 16 KiB) once per
   browser process for every window, and the shared refresh runs under the Mac's rule (automatic checks on).
 - **Telemetry.** `update_checks_asked`, `update_checks_automatic`, `update_check_failures`, `update_checks_found`,
-  `update_release_page_opens`, `kill_switch_refreshes`, `kill_switch_refresh_failures`, and for self-update
+  `update_release_page_opens`, `update_notices_dismissed`, `kill_switch_refreshes`, `kill_switch_refresh_failures`, and for self-update
   `update_downloads_started`, `update_downloads_finished`, `update_download_failures_<reason>`,
   `update_installs_<deb|tarball|appimage>`, `update_install_failures_<reason>` and `update_restarts`. Watch installs
   against found updates, and the `signature`, `polkit` and `network` failures.
@@ -1190,7 +1194,7 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
 - **Ctrl-scroll zoom.** Chromium zooms a tab when a page leaves a Ctrl-wheel event unhandled
   (`BrowserWebContentsDelegate::ContentsZoomChange`). `chromium-linux-wheel-zoom.patch` puts one gate there,
   `g_ardia_linux_wheel_zoom_off`, and `webView.setCommandScrollZoom {enabled}` sets it for every window and profile
-  (`SetLinuxPageOption`), so Settings › Privacy › Zoom works. The host advertises the call.
+  (`SetLinuxPageOption`), so Settings › Advanced › Browsing › Zoom pages with Ctrl-scroll works. The host advertises the call.
 - **Typeahead.** Keys typed before a new window's UI is ready are held and replayed into the focused text field. The
   hold takes at most 512 events and lasts at most 10 s.
 - **Wayland placement.** Wayland gives clients no global window position. `windowFrame` returns null there, only
@@ -2340,7 +2344,7 @@ These were open at the time of the PR.
   `apps/desktop/src/fieldTiming.ts`, which reports no timing data (`lastInput` is `[0, 0]`, `drain` is empty), so the
   field journeys send no samples from Linux. UI only; the engine key is unchanged.
 - **Settings rows without a backend are hidden**, each until the host advertises its capability
-  (`unavailableSettingIds` in `hostCapabilities.ts`): Zoom with Ctrl and the mouse wheel
+  (`unavailableSettingIds` in `hostCapabilities.ts`): Zoom pages with Ctrl-scroll
   (`webView.setCommandScrollZoom`), Keep new-tab links inside a Little Ardia window
   (`webView.setLittleArdiaOpensNewTabLinks`), Open a Peek window when clicking on links to other sites
   (`webView.setPeekOtherSiteTabs`), Scroll bars (`ArdiaSystem.setThinScrollBars`), all four advertised by the

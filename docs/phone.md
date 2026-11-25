@@ -3044,7 +3044,7 @@ gh workflow run android-release.yml -f mode=draft -f commit=<sha> -f version=<re
 gh run watch --exit-status                                     the run's summary has the stamp and every check
 ```
 
-- **What a run does.** It builds the shrunk arm64 APK on `ubuntu-latest` with `build-apk --store` from the commit's
+- **What a run does.** It builds the shrunk arm64 APK on `blacksmith-8vcpu-ubuntu-2404` with `build-apk --store` from the commit's
   export, so the lab is off and `ardia_sync_offered` is false. Then it runs `sign-release-apk.test.sh`, signs the APK
   with the release key through `apps/phone/scripts/sign-release-apk`, and runs `check-release-apk`.
   - **dry-run** keeps `Ardia-<version>.apk`, its `.txt` stamp and `.sha256` as a workflow artifact for 14 days.
@@ -4258,7 +4258,7 @@ d5fbaabc1). After a hand edit to the project, run `pod install` and commit what 
     app group and web-browser entitlements.
   - The Settings footer follows main's `AppVersionLabel`: "Ardia 0.2.47 Nightly 2 (10)" from TestFlight.
   - `.github/workflows/ios-release.yml` builds it, the only iPhone app since the clean-up. It installs the app's
-    packages and Pods on the `xcode-27` runner and runs that script. An upload with `public_testers` on is refused,
+    packages and Pods on Blacksmith's `blacksmith-12vcpu-macos-27` runner and runs that script. An upload with `public_testers` on is refused,
     so it can only reach the Internal group.
   - **On a cable** (main's 2c6b7fae4 and 218f50ee4, carried over to the Expo path). `-f mode=device -f udid=<udid>`
     registers that iPhone on the team (`xcrun devicectl list devices` shows the UDID; `asc.mjs register-device` leaves
@@ -4281,7 +4281,7 @@ d5fbaabc1). After a hand edit to the project, run `pod install` and commit what 
      - It needs the repository secrets main's SwiftUI path used: `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and `NOTARY_ISSUER`
        (the App Store Connect key), and `IOS_DEVELOPMENT_P12` with `IOS_DEVELOPMENT_P12_PASSWORD` (the development
        certificate).
-     - It runs on GitHub's `xcode-27` runner, with Xcode 27.1 and CocoaPods.
+     - It runs on Blacksmith's `blacksmith-12vcpu-macos-27` runner, with Xcode 27.1 and CocoaPods.
      - It is the first time this project signs with the team's identity. Automatic signing for the same four bundle
        ids as main's app should reuse their profiles. The run's logs show it.
   3. **The upload, the owner's moment:** `gh workflow run ios-release.yml --ref t3/unify-expo-architecture -f

@@ -54,7 +54,7 @@ concurrency:
 jobs:
   gate:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: read
@@ -82,8 +82,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - { os: macos-latest, runner: blacksmith-6vcpu-macos-latest }
+          - { os: ubuntu-latest, runner: blacksmith-8vcpu-ubuntu-2404 }
+          - { os: windows-latest, runner: windows-latest }
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
       BINDGEN_CLI_VERSION: "0.73.2"
@@ -207,7 +210,7 @@ jobs:
     name: Linux update helper and ardia-update-verify in Debian, Ubuntu and Arch
     needs: gate
     if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -228,7 +231,7 @@ jobs:
   plugin-broker:
     needs: gate
     if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     defaults:
       run:

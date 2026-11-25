@@ -59,6 +59,7 @@ export const shell = defineModuleDomain({
         setTrafficLightsCenter: { args: [["id", "string"], ["center", "[number, number] | null", "CGPoint?"], ["trailing", "boolean"]], result: "void", async: true, queue: "main", mac: "custom", desktop: "absent", windows: "custom" },
         watchSidebarEdge: { args: [["id", "string"], ["on", "boolean"], ["hold", "number"], ["right", "boolean"], ["whilePressed", "boolean"]], result: "void", async: true, queue: "main", mac: "custom", desktop: "absent", windows: "custom" },
         focusWindow: { args: [["id", "string"]], result: "void", async: true, queue: "main", mac: "custom", desktop: "absent", windows: "custom" },
+        setWindowShown: { args: [["id", "string"], ["shown", "boolean"], ["burst", "boolean"]], result: "void", async: true, queue: "main", optional: true, mac: "custom", desktop: "absent", windows: "absent" },
         restoreFullScreen: { args: [["ids", "string[]"], ["focus", "string | null", "String?"]], result: "void", async: true, queue: "main", mac: "custom", desktop: "absent", windows: "custom" },
         dragPreviewBegin: { args: [["windowId", "string"], ["chip", "Rect4", "CGRect"], ["grab", "[number, number]", "CGPoint"]], result: "void", async: true, queue: "main", mac: "custom", desktop: "absent", windows: "absent" },
         dragPreviewPage: { args: [["base64", "string"], ["frame", "Rect4", "CGRect"]], result: "void", async: true, queue: "main", mac: "custom", desktop: "absent", windows: "absent" },
@@ -267,10 +268,10 @@ export const shell = defineModuleDomain({
       functions: {
         isDefaultBrowser: { args: [], result: "boolean", async: true, queue: "main", mac: "custom", desktop: "host", windows: "custom" },
         setAsDefaultBrowser: { args: [], result: "boolean", async: true, promise: true, queue: "main", mac: "custom", desktop: "host", windows: "custom" },
-        launchAtLoginStatus: { args: [], result: "LaunchAtLoginStatus", swiftResult: "String", async: true, queue: "main", mac: "custom", desktop: "host", windows: "custom" },
+        launchAtLoginStatus: { args: [], result: "LaunchAtLoginStatus", swiftResult: "String", async: true, queue: "utility", mac: "custom", desktop: "host", windows: "custom" },
         setLaunchAtLogin: { args: [["enabled", "boolean"]], result: "void", async: true, queue: "main", throws: true, mac: "custom", desktop: "host", windows: "custom" },
         fileExists: { args: [["path", "string"]], result: "boolean", async: false, mac: "custom", desktop: "custom", windows: "custom" },
-        openFile: { args: [["path", "string"]], result: "boolean", async: true, queue: "main", mac: "custom", desktop: "adapted", windows: "custom" },
+        openFile: { args: [["path", "string"]], result: "boolean", async: true, promise: true, queue: "main", mac: "custom", desktop: "adapted", windows: "custom" },
         revealFile: { args: [["path", "string"]], result: "boolean", async: true, queue: "main", mac: "custom", desktop: "custom", windows: "custom" },
         moveToTrash: { args: [["path", "string"]], result: "boolean", async: true, queue: "main", mac: "custom", desktop: "adapted", windows: "custom" },
         fileIcon: { args: [["path", "string"], ["size", "number"]], result: "string | null", swiftResult: "String?", async: true, queue: "main", mac: "custom", desktop: "adapted", windows: "custom" },
@@ -346,6 +347,14 @@ export const shell = defineModuleDomain({
     ArdiaMagnifyArea: {
       functions: {
         devMagnify: { args: [["windowId", "string"], ["x", "number"], ["y", "number"], ["steps", "MagnifyUpdate[]", "[[String: Any]]"]], result: "{ claimed?: boolean[]; hit?: string; error?: string }", swiftResult: "[String: Any]", async: true, queue: "main", mac: "custom", desktop: "custom", windows: "absent" },
+      },
+      events: {},
+    },
+    ArdiaWheelArea: {
+      functions: {
+        devWheel: { args: [["windowId", "string"], ["x", "number"], ["y", "number"], ["steps", "{ phase?: string; dy: number; momentum?: boolean; precise?: boolean; afterMs?: number }[]", "[[String: Any]]"]], result: "{ claimed?: boolean[]; inputs?: { t: number; dy: number }[]; frames?: { t: number; model: number; shown: number }[]; error?: string }", async: true, promise: true, queue: "main", mac: "custom", desktop: "absent", windows: "absent" },
+        glideScroll: { args: [["tag", "number", "Int"], ["y", "number"], ["durationMs", "number"]], result: "void", async: true, queue: "main", instance: "strong", mac: "custom", desktop: "absent", windows: "absent" },
+        steerScroll: { args: [["tag", "number", "Int"], ["lo", "number"], ["hi", "number"], ["glideMs", "number"], ["canForward", "boolean"], ["canBack", "boolean"]], result: "void", async: true, queue: "main", instance: "strong", mac: "custom", desktop: "absent", windows: "absent" },
       },
       events: {},
     },

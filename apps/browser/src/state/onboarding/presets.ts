@@ -1,4 +1,6 @@
 import type { Settings } from "../settings/settings";
+import type { CtrlTabPreset } from "../commands/ctrlTabKeys";
+import { PLATFORM_FEATURES, type PlatformFeatures } from "../../lib/platformFeatures";
 
 export type BrowserSourceId = "arc" | "dia" | "chrome" | "safari" | "firefox" | "zen" | "brave" | "edge" | "helium" | "chromium" | "vivaldi" | "opera" | "fresh";
 
@@ -20,8 +22,8 @@ export const PRESET_NAMES: Record<Preset, string> = {
   fresh: "Ardia",
 };
 
-const CLASSIC_TABS: Partial<Settings> = {
-  tabLayout: "top",
+export const classicTabs = ({ classicPresetsPutTabsOnTop }: Pick<PlatformFeatures, "classicPresetsPutTabsOnTop">): Partial<Settings> => ({
+  ...(classicPresetsPutTabsOnTop ? { tabLayout: "top" as const } : {}),
   addressBar: "toolbar",
   commandBarPlacement: "field",
   newTabOpens: "page",
@@ -42,7 +44,9 @@ const CLASSIC_TABS: Partial<Settings> = {
   openLinksInLittleArdia: false,
   peekLinksToOtherSites: false,
   newTabLinksOpenIn: "tab",
-};
+});
+
+const CLASSIC_TABS = classicTabs(PLATFORM_FEATURES);
 
 export const PRESETS: Record<Preset, Partial<Settings>> = {
   dia: {
@@ -124,6 +128,21 @@ export const PRESETS: Record<Preset, Partial<Settings>> = {
   vivaldi: CLASSIC_TABS,
   opera: CLASSIC_TABS,
   fresh: { addressBar: "sidebar", commandBarPlacement: "centred", newTabPosition: "nextToCurrent", newTabButtonPosition: "bottom" },
+};
+
+export const CTRL_TAB_LIKE: Partial<Record<Preset, CtrlTabPreset>> = {
+  arc: "switcher",
+  dia: "switcher",
+  vivaldi: "switcher",
+  opera: "switcher",
+  chrome: "step",
+  safari: "step",
+  firefox: "step",
+  zen: "step",
+  brave: "step",
+  edge: "step",
+  helium: "step",
+  chromium: "step",
 };
 
 export const setsUpLikeBrowser = (source: BrowserSourceId | null): source is Exclude<BrowserSourceId, "fresh"> => !!source && source !== "fresh";

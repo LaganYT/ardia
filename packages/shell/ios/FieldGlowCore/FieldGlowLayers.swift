@@ -95,7 +95,7 @@ public final class FieldGlowLayers: NSObject, FieldGlowTarget {
     super.init()
     for layer in [clip, slide, steady, comet] { layer.anchorPoint = .zero }
     clip.masksToBounds = true
-    clip.cornerCurve = .circular
+    clip.cornerCurve = .continuous
     steady.addSublayer(tailPlate)
     steady.addSublayer(capPlate)
     comet.addSublayer(cometPlate)

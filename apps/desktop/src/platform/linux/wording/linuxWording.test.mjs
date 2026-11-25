@@ -32,7 +32,7 @@ const MODULES = [
   { name: "sync", list: SYNC_WORDING, reword: rewordSync, plugin: syncWording, pick: whole, macos: /\bMacs?\b|iCloud Drive|iCloud Settings|in Finder|iPhone|Universal Clipboard|Keychain|x-apple\.|\bUsers\b|\{PLATFORM_TERMS\.\w+\}/, surfaces: ["components/settings/panes/SyncSection.tsx", "components/settings/panes/SyncSheets.tsx"], probe: "components/settings/panes/SyncSection.tsx" },
   {
     name: "linux", list: LINUX_WORDING, reword: rewordForLinux, plugin: linuxWording, pick: strings, macos: /\bMacs?\b|macOS|iCloud|Keychain|keychain|Tahoe|\{PLATFORM_TERMS\.\w+\}/, probe: "components/onboarding/LookStep.tsx",
-    surfaces: ["state/extensions/actions.ts", "components/onboarding/SourceStep.tsx", "components/onboarding/LookStep.tsx", "components/settings/panes/General.tsx", "state/telemetry/copy.ts", "components/import/steps/ChooseStep.tsx", "components/import/steps/SafariStep.tsx", "state/import/runImport.ts", "components/onboarding/previews/MockWindow.tsx", "components/onboarding/previews/scenes/LookScenes.tsx", "state/commands/appCommands.ts", "state/report/details.ts", "components/report/ReportPreview.tsx"],
+    surfaces: ["state/extensions/actions.ts", "components/onboarding/SourceStep.tsx", "components/onboarding/LookStep.tsx", "components/settings/panes/General.tsx", "state/telemetry/copy.ts", "components/import/steps/ChooseStep.tsx", "components/import/steps/SafariStep.tsx", "state/import/runImport.ts", "components/onboarding/previews/scenes/LookScenes.tsx", "state/commands/appCommands.ts", "state/report/details.ts", "components/report/ReportPreview.tsx"],
   },
 ];
 
@@ -59,6 +59,7 @@ const EXPECTED = [
   ["components/onboarding/LayoutSteps.tsx", ["title: `Shift-click`"], []],
   ["components/settings/rows/appearanceRows.ts", ["Below the toolbar. Ctrl+Shift+B toggles it.", "no toolbar. Ctrl+Super+M toggles it."], ["⇧⌘B", "⌃⌘M"]],
   ["components/settings/panes/Advanced.tsx", ["or in power saver mode"], ["${PLATFORM_TERMS.lowPowerMode}"]],
+  ["components/settings/rows/advancedRows.ts", ["title: `Zoom pages with Ctrl-scroll`", "description: `Sites that use Ctrl-scroll themselves, like maps, still get it.`"], ["${keyText(\"⌘\")}-scroll"]],
   ["components/downloads/Downloads.tsx", ["tooltip=\"Show in Folder\""], ["Show in ${PLATFORM_TERMS.fileManager}"]],
   ["components/pages/DownloadsPage.tsx", ["title=\"Show in Folder\""], ["Show in ${PLATFORM_TERMS.fileManager}"]],
   ["state/downloads/downloadMenu.ts", ["title: \"Show in Folder\""], ["Show in ${PLATFORM_TERMS.fileManager}"]],

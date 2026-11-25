@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { Animated, Pressable, View, type LayoutChangeEvent } from "react-native";
-import { Button, ContextMenuArea, drawnSymbol, HoverFill, perLook, radius, sidebarPoints, space, Text, useHover, withAlpha } from "../ui";
+import { Button, ContextMenuArea, continuousCorners, drawnSymbol, HoverFill, perLook, radius, sidebarPoints, space, Text, useHover, withAlpha } from "../ui";
 import { hex, layout, useTheme } from "../ui/theme";
 import { HoverSlot } from "../ui/HoverSlot";
 import { newTab } from "../../state/tabs/actions";
@@ -86,7 +86,7 @@ export const NewTabRow = memo(function NewTabRow({ windowId, shift = null, clip 
               style={[
                 {
                   height: layout.rowHeight,
-                  borderRadius: radius.chrome,
+                  ...continuousCorners(radius.chrome),
                   flexDirection: "row",
                   alignItems: "center",
                   paddingLeft: TAB_ROW.contentLeft,

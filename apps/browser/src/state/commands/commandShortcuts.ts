@@ -133,11 +133,16 @@ function watchShortcuts(_key: string, listener: () => void): () => void {
 
 export const ctrlTabChoice = (s: ShortcutState = useBrowser.getState()): CtrlTabChoice => ctrlTabChoiceOf(resolvedShortcuts(s));
 
+export function ctrlTabShortcuts(preset: CtrlTabPreset, s: ShortcutState = useBrowser.getState()): ShortcutOverrides | null {
+  const resolved = resolvedShortcuts(s);
+  const combos = ctrlTabCombos(resolved);
+  return combos && ctrlTabOverrides(s.settings.shortcuts, combos, preset, resolved.defaultsOf);
+}
+
 export function setCtrlTab(preset: CtrlTabPreset): boolean {
-  const s = useBrowser.getState();
-  const combos = ctrlTabCombos(resolvedShortcuts(s));
-  if (!combos) return false;
-  s.updateSettings({ shortcuts: ctrlTabOverrides(s.settings.shortcuts, combos, preset, resolvedShortcuts(s).defaultsOf) });
+  const shortcuts = ctrlTabShortcuts(preset);
+  if (!shortcuts) return false;
+  useBrowser.getState().updateSettings({ shortcuts });
   return true;
 }
 

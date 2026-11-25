@@ -10,7 +10,7 @@ import { newCapture } from "../../state/sidebar/listCapture";
 import { useCapturedGroupEntries, useGroupTabIds, useKeptEntries, useShowsExtraTabs } from "../../state/sidebar/hooks";
 import { MeetingTimeLabel, useMeetingCountdown } from "../live/MeetingCountdown";
 import { HoverSlot } from "../ui/HoverSlot";
-import { Button, ContextMenuArea, ink, Symbol, weight, withAlpha } from "../ui";
+import { Button, ContextMenuArea, clippedContinuousCorners, ink, Symbol, weight, withAlpha } from "../ui";
 import { commitRename, endRename } from "../../state/sidebar/actions";
 import { useDragFolded, useDragItem, useDropInto } from "./DragProvider";
 import { useShift, type EntryMotion } from "./EntryMotion";
@@ -124,7 +124,7 @@ export const GroupBlock = memo(function GroupBlock({
       <View {...moved} {...box.hoverProps} ref={movedRef} style={[{ paddingVertical: GROUP_BORDER }, moved.style as object]}>
         <Animated.View
           pointerEvents="none"
-          style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: GROUP_RADIUS, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, opacity: boxOpacity }}
+          style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, ...clippedContinuousCorners(GROUP_RADIUS), backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, opacity: boxOpacity }}
         />
         <View ref={headerRef} {...handle}>
           <GroupHeader groupId={groupId} windowId={windowId} collapsed={collapsed} open={fold.open} />

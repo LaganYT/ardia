@@ -32,7 +32,7 @@ env:
 
 jobs:
   preflight:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     outputs:
       tree: ${{ steps.plan.outputs.tree }}
@@ -97,7 +97,7 @@ jobs:
 
   checks:
     needs: preflight
-    runs-on: xcode-27
+    runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -122,7 +122,7 @@ jobs:
 
   build:
     needs: preflight
-    runs-on: xcode-27
+    runs-on: blacksmith-12vcpu-macos-27
     timeout-minutes: 120
     env:
       CAS_PATH: ${{ github.workspace }}/.xcode-cas
@@ -238,7 +238,7 @@ jobs:
 
   sign:
     needs: [preflight, build]
-    runs-on: xcode-27
+    runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 150
     env:
       APPCAST_DELTAS: ${{ vars.APPCAST_DELTAS }}
@@ -349,7 +349,7 @@ jobs:
 
   linux:
     needs: preflight
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     env:
       TREE: ${{ needs.preflight.outputs.linux_tree }}
@@ -425,7 +425,7 @@ jobs:
 
   linux-sign:
     needs: [linux]
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -482,7 +482,7 @@ jobs:
   publish:
     needs: [preflight, checks, sign, linux, linux-sign, windows]
     if: ${{ !cancelled() && needs.checks.result == 'success' && needs.sign.result == 'success' }}
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     timeout-minutes: 30
     permissions:
       contents: write
@@ -566,7 +566,7 @@ jobs:
       group: ${{ (inputs.dry_run == true || inputs.dry_run == 'true') && format('ardia-windows-alpha-dry-run-{0}', github.run_id) || 'ardia-windows-alpha-publish' }}
       cancel-in-progress: false
       queue: max
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     permissions:
       contents: write
@@ -616,7 +616,7 @@ jobs:
     needs: [preflight, linux, publish]
     continue-on-error: true
     if: ${{ !cancelled() && needs.linux.result == 'success' && needs.publish.result == 'success' && !contains(inputs.version, '-') }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

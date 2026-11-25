@@ -677,3 +677,48 @@ test("windows update manifest and verified update parser refuse every hostile in
   assert.equal({}.ardiaPolluted, undefined);
   assert.equal(Object.prototype.polluted, undefined);
 });
+
+test("windows webui native update policy keeps every hostile input and call argument away from the installer download, launch and claim gates while passing valid controls", (t) => {
+  const { spawnSync } = process.getBuiltinModule("node:child_process");
+  const { mkdtempSync, rmSync, writeFileSync } = process.getBuiltinModule("node:fs");
+  const { tmpdir } = process.getBuiltinModule("node:os");
+  const { join } = process.getBuiltinModule("node:path");
+  const { fileURLToPath } = process.getBuiltinModule("node:url");
+  const repo = fileURLToPath(new URL("../../../", import.meta.url));
+  const compiler = ["c++", "clang++", "g++"].find((name) => spawnSync(name, ["--version"], { stdio: "ignore" }).status === 0);
+  if (!compiler) {
+    if (process.env.CI) assert.fail("no C++ compiler to build scripts/windows/engine/tests/webui_update_policy_test.cc");
+    return t.skip("no C++ compiler");
+  }
+  const scratch = mkdtempSync(join(tmpdir(), "ardia-update-policy-"));
+  try {
+    const binary = join(scratch, "webui_update_policy_test");
+    const build = spawnSync(compiler, ["-std=c++20", "-I", join(repo, "scripts/windows/engine/src"), join(repo, "scripts/windows/engine/tests/webui_update_policy_test.cc"), "-o", binary], { encoding: "utf8" });
+    assert.equal(build.status, 0, build.stderr);
+    const describe = (value) => {
+      if (value === null || value === undefined) return "z:";
+      if (typeof value === "boolean") return "b:";
+      if (typeof value === "number") return Number.isInteger(value) && Math.abs(value) <= 2 ** 31 - 1 ? `i:${value}` : `d:${value}`;
+      if (typeof value === "string") return `s:${Buffer.from(value, "utf8").toString("hex")}`;
+      return Array.isArray(value) ? "a:" : "o:";
+    };
+    const wire = (value) => JSON.parse(JSON.stringify({ args: value }) ?? "{}").args;
+    const lines = HOSTILE_VALUES.map(({ value }) => {
+      const single = JSON.parse(JSON.stringify([value]))[0];
+      const args = wire(value);
+      const whole = args === undefined ? "O" : Array.isArray(args) ? `L${args.map(describe).join(",")}` : "N";
+      return `${describe(single)}|${whole}`;
+    });
+    const strings = HOSTILE_VALUES.filter(({ value }) => typeof JSON.parse(JSON.stringify([value]))[0] === "string").length;
+    assert.ok(strings >= HOSTILE_STRINGS.length);
+    const corpus = join(scratch, "hostile.txt");
+    writeFileSync(corpus, lines.join("\n") + "\n");
+    const run = spawnSync(binary, ["--hostile", corpus], { encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    assert.match(run.stdout, new RegExp(`hostile: ${HOSTILE_VALUES.length} values, ${strings} strings, ${strings * 33} answers, \\d+ reached the download gate with a valid offer, ${HOSTILE_VALUES.length * 18} calls, \\d+ reached a call sink with a valid request, controls reached them`));
+    const unit = spawnSync(binary, [], { encoding: "utf8" });
+    assert.equal(unit.status, 0, unit.stderr || unit.stdout);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});

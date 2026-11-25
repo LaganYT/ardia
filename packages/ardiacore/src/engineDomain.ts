@@ -10,6 +10,7 @@ export type EngineInfo = {
   chromeWindows: number;
   focus?: string;
   pictureInPictureCloses?: string;
+  pictureInPictureGestures?: string;
 };
 
 export type EngineComponent = {

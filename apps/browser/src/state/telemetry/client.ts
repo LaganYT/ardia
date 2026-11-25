@@ -9,6 +9,7 @@ import type { RequestLogEntry } from "./requestLog";
 import { appInfo, mayPost, post } from "./transport";
 import { telemetryRelay, type AskPlacement, type CaptureOptions, type SharingSource } from "./relay";
 import { uuidv4, uuidv7 } from "./ids";
+import { upcomingInstallId } from "./installId";
 import { parseSaved, versionedJson } from "../../lib/savedDocument";
 import { withDeadline } from "../../lib/deadline";
 import { isFields, isString } from "../../lib/decode";
@@ -293,7 +294,7 @@ export function setSharing(on: boolean, source: SharingSource, placement?: AskPl
   }
   save({
     sharing: true,
-    installId: current.installId ?? uuidv4(),
+    installId: current.installId ?? upcomingInstallId(),
     crashCursor: now,
     lastVersion: appInfo().appVersion,
     lastBuild: appInfo().appBuild,

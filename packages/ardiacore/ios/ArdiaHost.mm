@@ -3,6 +3,7 @@
 #import "ArdiaEarlyWindow.h"
 #import "ArdiaServices.h"
 #import "ArdiaNavigationDownloads.h"
+#import "ArdiaPiPGestureLog.h"
 #import "ArdiaStartup.h"
 #import "ArdiaTabParking.h"
 #import "ArdiaWebViewInternal.h"
@@ -528,6 +529,7 @@ static NSDictionary<NSString *, id> *OffscreenRefusal(NSString *reason) {
     @"chromeWindows" : @(chromeWindows),
     @"keepAlive" : engine.keepAliveState ?: @"",
     @"pictureInPictureCloses" : engine.pictureInPictureCloses ?: @"",
+    @"pictureInPictureGestures" : ardia_pip::GestureLog(),
     @"lastUsedProfile" : engine.defaultProfile.name ?: @"",
     @"focus" : ardia_host::FocusState(),
   };

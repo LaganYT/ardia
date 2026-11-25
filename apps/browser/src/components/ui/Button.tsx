@@ -12,7 +12,7 @@ import { useTheme } from "./theme";
 import { buttonMotion, usePressMotion, usePressScaleMotion } from "./motion";
 import { capsule, iconButton, opacity, radius as radii, space, font as typeScale, weight as weights, type ColorRole, type IconButtonSize, type Space, type TypeSize, type Weight } from "./tokens";
 
-export type ButtonHit = { width: number; height: number; plateX: number; plateY: number; box?: number; radius?: number };
+export type ButtonHit = { width: number; height: number; plateX: number; plateY: number; box?: number; radius?: number; topLeftRadius?: number };
 
 export type IconPalette = { icon: string; iconDisabled: string; hover: string; pressed: string };
 
@@ -62,6 +62,7 @@ type TextProps = {
   tone?: ColorRole;
   hoverTone?: ColorRole;
   label?: string;
+  centersCapitals?: boolean;
 };
 
 type PillSize = "m" | "l" | "xl";
@@ -160,7 +161,7 @@ function IconButtonView(props: IconProps) {
         justifyContent: "center",
       }}
     >
-      {lit ? <HoverFill shown={!disabled && (pressed || !!active || hovered)} instant={!!active} color={pressed || active ? pressedFill : hover} radius={plateRadius} /> : null}
+      {lit ? <HoverFill shown={!disabled && (pressed || !!active || hovered)} instant={!!active} color={pressed || active ? pressedFill : hover} radius={plateRadius} topLeftRadius={hit?.topLeftRadius} /> : null}
       {face}
       {badge}
     </View>
@@ -204,7 +205,7 @@ const TEXT_LOOKS: Record<TextLook, { plate: "toolbar" | "hover" | "none"; height
 const UNDERLINE = { textDecorationLine: "underline" } as const;
 
 function TextButtonView(props: TextProps) {
-  const { title, onPress, disabled, look, hoverTone, padY, label } = props;
+  const { title, onPress, disabled, look, hoverTone, padY, label, centersCapitals } = props;
   const base = look ? TEXT_LOOKS[look] : null;
   const plate = props.plate ?? base?.plate ?? "toolbar";
   const height = props.height ?? base?.height;
@@ -230,7 +231,7 @@ function TextButtonView(props: TextProps) {
     return (
       <View {...hoverProps}>
         <Pressable onPress={onPress} onPressIn={pressMotion.onPressIn} onPressOut={pressMotion.onPressOut} disabled={disabled} {...a11y}>
-          <Label style={[textStyle(hovered && hoverTone ? theme[hoverTone] : theme[tone]), { paddingVertical: padY ? space[padY] : undefined }, look === "link" && hovered ? UNDERLINE : null, scaleStyle]}>{title}</Label>
+          <Label ardiaCentersCapitals={centersCapitals} style={[textStyle(hovered && hoverTone ? theme[hoverTone] : theme[tone]), { paddingVertical: padY ? space[padY] : undefined }, look === "link" && hovered ? UNDERLINE : null, scaleStyle]}>{title}</Label>
         </Pressable>
       </View>
     );
@@ -241,7 +242,7 @@ function TextButtonView(props: TextProps) {
         {({ pressed }) => (
           <Plate style={[{ height, paddingHorizontal: space[pad], justifyContent: "center" }, scaleStyle]}>
             {lit ? <HoverFill shown={shows(pressed)} color={plate === "toolbar" && pressed ? theme.toolbarPressed : theme.toolbarHover} radius={radii.control} /> : null}
-            <Text style={textStyle(disabled ? theme.iconDisabled : hovered && hoverTone ? theme[hoverTone] : theme[tone])}>{title}</Text>
+            <Text ardiaCentersCapitals={centersCapitals} style={textStyle(disabled ? theme.iconDisabled : hovered && hoverTone ? theme[hoverTone] : theme[tone])}>{title}</Text>
           </Plate>
         )}
       </Pressable>

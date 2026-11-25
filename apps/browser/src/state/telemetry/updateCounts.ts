@@ -24,7 +24,7 @@ const SELF_UPDATE_FIELDS = [
 
 const noSelfUpdates = () => Object.fromEntries(SELF_UPDATE_FIELDS.map((field) => [field, 0])) as Record<string, number>;
 
-let checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
+let checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, noticesDismissed: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
 let selfUpdates = noSelfUpdates();
 
 const countSelfUpdate = (field: string, consent: ConsentToken | null | undefined) => countFor(consentOrNow(consent), () => void (selfUpdates[field] = (selfUpdates[field] ?? 0) + 1));
@@ -40,6 +40,7 @@ export function noteUpdateCheck(asked: boolean, outcome: "found" | "upToDate" | 
 }
 
 export const noteUpdatePageOpened = (consent?: ConsentToken | null) => countFor(consentOrNow(consent), () => void (checks.pageOpens += 1));
+export const noteUpdateNoticeDismissed = (consent?: ConsentToken | null) => countFor(consentOrNow(consent), () => void (checks.noticesDismissed += 1));
 
 const updateDownloadFailure = (reason: unknown): UpdateDownloadFailure => (UPDATE_DOWNLOAD_FAILURES as readonly unknown[]).includes(reason) ? (reason as UpdateDownloadFailure) : "other";
 const updateInstallFailure = (reason: unknown): UpdateInstallFailure => (UPDATE_INSTALL_FAILURES as readonly unknown[]).includes(reason) ? (reason as UpdateInstallFailure) : "other";
@@ -71,6 +72,7 @@ export function takeUpdateCounts() {
     update_check_failures: checks.failed,
     update_checks_found: checks.found,
     update_release_page_opens: checks.pageOpens,
+    update_notices_dismissed: checks.noticesDismissed,
     kill_switch_refreshes: checks.switchRefreshes,
     kill_switch_refresh_failures: checks.switchRefreshFailures,
     launches_without_sandbox: checks.unsandboxed,
@@ -79,7 +81,7 @@ export function takeUpdateCounts() {
     login_password_checks_cancelled: checks.passwordCancelled,
     ...selfUpdates,
   };
-  checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
+  checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, noticesDismissed: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
   selfUpdates = noSelfUpdates();
   return taken;
 }

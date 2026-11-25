@@ -11,20 +11,42 @@ const read = (path) => readFileSync(new URL(`../../../../${path}`, import.meta.u
 const installer = read("scripts/windows/installer/Ardia.iss");
 const native = read("apps/browser/windows/Ardia/SystemModule.h");
 const check = read("scripts/windows/installer-check.ps1");
+const layout = read("scripts/windows/shell-layout.ps1");
 
-const entries = installer
-  .split("\n")
-  .filter((line) => line.startsWith("Root: HKCU;"))
-  .map((line) => Object.fromEntries([...line.matchAll(/(\w+): ("(?:[^"]|"")*"|[^;]+)/g)].map(([, key, value]) => [key, value.startsWith('"') ? value.slice(1, -1).replace(/""/g, '"') : value.trim()])));
-const value = (subkey, name) => entries.find((e) => e.Subkey === subkey && e.ValueName === name)?.ValueData;
+const shellDefines = (shell) => {
+  const block = installer.match(/#if Shell == "webui"\n([\s\S]*?)#else\n([\s\S]*?)#endif\n/);
+  const lines = block[shell === "webui" ? 1 : 2];
+  return Object.fromEntries([...lines.matchAll(/#define (\w+) "([^"]*)"/g)].map(([, name, text]) => [name, text]));
+};
+const registryFor = (shell) => {
+  const defines = shellDefines(shell);
+  return installer
+    .split("\n")
+    .filter((line) => line.startsWith("Root: HKCU;"))
+    .map((line) => line.replace(/\{#(\w+)\}/g, (_, name) => defines[name]))
+    .map((line) => Object.fromEntries([...line.matchAll(/(\w+): ("(?:[^"]|"")*"|[^;]+)/g)].map(([, key, value]) => [key, value.startsWith('"') ? value.slice(1, -1).replace(/""/g, '"') : value.trim()])));
+};
+const entries = registryFor("rnw");
+const webuiEntries = registryFor("webui");
+const value = (subkey, name, from = entries) => from.find((e) => e.Subkey === subkey && e.ValueName === name)?.ValueData;
 
 test("the installer registers the ProgID the app checks, opening the launcher with one argument", () => {
   const progId = native.match(/ArdiaProgId\[\] = L"([^"]+)"/)?.[1];
   assert.equal(progId, "ArdiaHTM");
+  assert.match(installer, /^#ifndef Shell\n {2}#define Shell "rnw"\n#endif$/m, "the installer is the React Native shell's unless make-installer asks otherwise");
   assert.equal(value(`Software\\Classes\\${progId}\\shell\\open\\command`, ""), '"{app}\\Ardia.exe" --single-argument %1');
+  assert.equal(value("Software\\Clients\\StartMenuInternet\\Ardia\\shell\\open\\command", ""), '"{app}\\Ardia.exe"');
   assert.match(native, /--single-argument %1/);
-  assert.match(check, /--single-argument %1/);
+  assert.match(layout, /--single-argument %1/);
+  assert.match(check, /Get-ShellDocumentCommand/);
   assert.match(check, /Classes\\ArdiaHTM/);
+});
+
+test("the WebUI shell's installer opens the same launcher with --ardia-shell=webui before the one argument", () => {
+  assert.equal(value("Software\\Classes\\ArdiaHTM\\shell\\open\\command", "", webuiEntries), '"{app}\\Ardia.exe" --ardia-shell=webui --single-argument %1');
+  assert.equal(value("Software\\Clients\\StartMenuInternet\\Ardia\\shell\\open\\command", "", webuiEntries), '"{app}\\Ardia.exe" --ardia-shell=webui');
+  assert.equal(value("Software\\Classes\\ArdiaHTM\\Application", "AppUserModelId", webuiEntries), "Ardia.Browser");
+  assert.deepEqual(webuiEntries.map((e) => `${e.Subkey}|${e.ValueName}`), entries.map((e) => `${e.Subkey}|${e.ValueName}`), "both shells register the same keys");
 });
 
 test("the browser's capabilities name Ardia for http, https and web pages, and Windows can find them", () => {

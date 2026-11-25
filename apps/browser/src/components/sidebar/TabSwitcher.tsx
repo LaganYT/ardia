@@ -6,7 +6,7 @@ import { useSidebarUi } from "../../state/sidebar/sidebarUi";
 import { lastPicture, onPicturesChanged } from "../../state/tabs/tabPictures";
 import { commitSwitcher, hoverSwitcherRow, leaveSwitcherRow, subscribeSwitcherTabChanges } from "../../state/sidebar/switcher";
 import { noteTabSwitcherOverflowClick, noteTabSwitcherOverflowOpened, noteTabSwitcherPictureLate, noteTabSwitcherWheelScrolled } from "../../state/telemetry/tabSwitcherOpens";
-import { Symbol, Text, Panel } from "../ui";
+import { clippedContinuousCorners, continuousCorners, Symbol, Text, Panel } from "../ui";
 import { useTheme } from "../ui/theme";
 import { TabIcon } from "./TabIcon";
 import { previewBackdrop } from "./switcherPreview";
@@ -155,12 +155,12 @@ const SwitcherCard = memo(function SwitcherCard({ tabId, index, focused, accent,
         onMouseEnter={() => hoverSwitcherRow(index)}
         onMouseLeave={() => leaveSwitcherRow(index)}
       >
-        <View style={{ width: T.card, padding: T.cardInset, borderRadius: T.cardRadius, backgroundColor: focused ? colors.focusFill : undefined }}>
+        <View style={{ width: T.card, padding: T.cardInset, ...continuousCorners(T.cardRadius), backgroundColor: focused ? colors.focusFill : undefined }}>
           <View
             style={{
               width: SHOT_WIDTH,
               height: SHOT,
-              borderRadius: T.previewRadius,
+              ...continuousCorners(T.previewRadius),
               overflow: "hidden",
               backgroundColor: backdrop.fill,
               alignItems: "center",
@@ -173,7 +173,7 @@ const SwitcherCard = memo(function SwitcherCard({ tabId, index, focused, accent,
                 source={source}
                 resizeMode="cover"
                 onLoad={() => setDecoded(source)}
-                style={[StyleSheet.absoluteFill, { borderRadius: T.previewRadius, opacity: shown ? 1 : 0 }]}
+                style={[StyleSheet.absoluteFill, continuousCorners(T.previewRadius), { opacity: shown ? 1 : 0 }]}
               />
             )}
             <View
@@ -181,7 +181,7 @@ const SwitcherCard = memo(function SwitcherCard({ tabId, index, focused, accent,
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  borderRadius: T.previewRadius,
+                  ...clippedContinuousCorners(T.previewRadius),
                   borderWidth: focused ? T.ring.focused : T.ring.rest,
                   borderColor: focused ? accent : colors.restRing,
                 },

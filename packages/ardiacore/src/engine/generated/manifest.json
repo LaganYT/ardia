@@ -1518,8 +1518,8 @@
       "types": "packages/shell/src/generated/native.ts",
       "swift": "packages/shell/ios/ShellNative.swift",
       "sha256": {
-        "types": "25ce93a844a411ce16ac7fcd3c5e63ba6e9a859855d68bcc3bcd4cf187395fe0",
-        "swift": "b11487a0232b8f7ff070b0726b13e18a14dffe7bccf08736e9db4ce35fea6353"
+        "types": "f3b20f64c784140f87ede3cd3030ce091817a90756923b854f75edbca363cee0",
+        "swift": "6ba441eb8d5831b21356a6797fd5b99804bb347892870efc6a2b7ce2c8e50d90"
       },
       "modules": {
         "ArdiaShell": {
@@ -1691,6 +1691,17 @@
               "mac": "custom",
               "desktop": "absent",
               "windows": "custom"
+            },
+            "setWindowShown": {
+              "args": [
+                "id",
+                "shown",
+                "burst"
+              ],
+              "async": true,
+              "mac": "custom",
+              "desktop": "absent",
+              "windows": "absent"
             },
             "restoreFullScreen": {
               "args": [
@@ -3412,6 +3423,49 @@
               "async": true,
               "mac": "custom",
               "desktop": "custom",
+              "windows": "absent"
+            }
+          },
+          "events": {}
+        },
+        "ArdiaWheelArea": {
+          "native": "WheelAreaNative",
+          "functions": {
+            "devWheel": {
+              "args": [
+                "windowId",
+                "x",
+                "y",
+                "steps"
+              ],
+              "async": true,
+              "mac": "custom",
+              "desktop": "absent",
+              "windows": "absent"
+            },
+            "glideScroll": {
+              "args": [
+                "tag",
+                "y",
+                "durationMs"
+              ],
+              "async": true,
+              "mac": "custom",
+              "desktop": "absent",
+              "windows": "absent"
+            },
+            "steerScroll": {
+              "args": [
+                "tag",
+                "lo",
+                "hi",
+                "glideMs",
+                "canForward",
+                "canBack"
+              ],
+              "async": true,
+              "mac": "custom",
+              "desktop": "absent",
               "windows": "absent"
             }
           },

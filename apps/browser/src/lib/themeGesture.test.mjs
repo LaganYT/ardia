@@ -7,11 +7,12 @@ const look = (intensity) => ({ stops: [{ x: 0.5, y: 0.5, color: { r: 0.5, g: 0.4
 
 function rig(showing = "p:plum") {
   const applied = [];
+  const finals = [];
   const frames = new Map();
   let next = 1;
   const state = { showing, draft: null, current: {} };
   const g = themeGesture({
-    apply: (theme) => (applied.push([state.showing, theme?.intensity ?? null]), (state.current = {})),
+    apply: (theme, final) => (applied.push([state.showing, theme?.intensity ?? null]), finals.push(final), (state.current = {})),
     showing: () => state.showing,
     current: () => state.current,
     draft: (edit) => void (state.draft = edit),
@@ -23,7 +24,7 @@ function rig(showing = "p:plum") {
     frames.clear();
     runs.forEach((run) => run());
   };
-  return { g, applied, state, tick, frames };
+  return { g, applied, finals, state, tick, frames };
 }
 
 test("a drag writes once a frame and its release lands at once", () => {
@@ -33,6 +34,16 @@ test("a drag writes once a frame and its release lands at once", () => {
   tick();
   g.change(look(0.3), "p:plum", true);
   assert.deepEqual(applied, [["p:plum", 0.2], ["p:plum", 0.3]]);
+});
+
+test("frames during a drag are marked live and only the release is marked final", () => {
+  const { g, finals, tick } = rig();
+  g.change(look(0.1), "p:plum");
+  tick();
+  g.change(look(0.2), "p:plum");
+  tick();
+  g.change(look(0.3), "p:plum", true);
+  assert.deepEqual(finals, [false, false, true]);
 });
 
 test("switching presets mid-drag drops the queued frame and the rest of that drag, and the next drag edits the new preset", () => {

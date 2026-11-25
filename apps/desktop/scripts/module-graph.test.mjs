@@ -116,6 +116,10 @@ test("production graph uses current Linux adapters and one canonical shared stat
   }
   assert.deepEqual(graph.get(`${browser}components/toolbar/AutoHideToolbar.tsx`).importers, [`${desktop}AutoHideToolbarRegion.tsx`], "the shared auto-hide toolbar is reached only through the Linux region");
 
+  const card = graph.get(`${browser}components/window/ContentCard.tsx`);
+  assert.ok(card.importedIds.includes(`${desktop}SplitToastRegion.tsx`), "toasts reserve their input region over the page, so their buttons take the click");
+  assert.ok(!card.importedIds.includes(`${browser}components/split/SplitChrome.tsx`));
+
   assert.ok(graph.has(`${browser}lib/platformChrome.windows.ts`), "Linux lays out its window like the Windows build");
   assert.ok(!graph.has(`${browser}platform/windowControls.ts`) && !graph.has(`${browser}platform/windowControls.windows.ts`), "window buttons reach the Linux host, not a native Windows module");
   assert.ok(graph.get(`${browser}state/windows/controls.ts`).importedIds.includes(`${desktop}hostWindowControls.ts`));
@@ -142,6 +146,7 @@ test("production graph uses current Linux adapters and one canonical shared stat
     assert.ok(graph.has(`${browser}${twin}.${suffix}.ts`), `${twin} resolves to its .${suffix} twin`);
     assert.ok(!graph.has(`${browser}${twin}.ts`), `the macOS ${twin} stays out of the Linux bundle`);
   }
+  assert.ok(graph.get(`${browser}state/onboarding/presets.ts`).importedIds.includes(`${browser}lib/platformFeatures.linux.ts`), "onboarding's classic-browser presets read Linux's features, so they leave the tab layout to the sidebar default");
   assert.ok(!graph.has(`${browser}platform/fieldTiming.ts`), "the macOS-only field timing module stays out of the Linux bundle");
   assert.ok(graph.get(`${browser}state/telemetry/journeys.ts`).importedIds.includes(`${desktop}fieldTiming.ts`), "journeys reads the Linux field timing stub");
   for (const shared of ["state/live/sources.ts", "state/live/net.ts"]) assert.ok(!graph.has(`${browser}${shared}`), `${shared} and its renderer fetch stay out of the Linux bundle`);
@@ -320,6 +325,7 @@ const WIN_TWINS = [
   ["state/commands/comboWords", "desktop"],
   ["state/commands/keyText", "win"],
   ["state/telemetry/copyWords", "win"],
+  ["platform/windowsUpdateCounts", "win"],
   ["state/tabs/engineKeptCodes", "desktop"],
 ];
 const WINDOWS_WORDING = new Set([`${browser}lib/platformTerms.windows.ts`, `${browser}lib/platformChrome.windows.ts`, `${browser}state/telemetry/copyWords.windows.ts`]);
@@ -339,15 +345,17 @@ test("the win build shares every desktop adapter, takes Windows terms, and leave
   const seams = [
     ["main.tsx", "platform/buttonLayout.win.ts"],
     ["main.tsx", "platform/launchNotice.desktop.ts"],
-    ["main.tsx", "platform/updater.desktop.ts"],
+    ["main.tsx", "platform/updater.win.ts"],
+    ["AppMenuButton.tsx", "platform/updater.win.ts"],
     ["hostModules.ts", "platform/calendar.desktop.ts"],
-    ["hostSystem.ts", "platform/updates.desktop.ts"],
-    ["settingsIndex.ts", "platform/updates.desktop.ts"],
+    ["hostSystem.ts", "platform/updates.win.ts"],
+    ["settingsIndex.ts", "platform/updates.win.ts"],
     ["shortcutFormat.ts", "platform/keyNames.win.ts"],
     ["credentialNotices.ts", "platform/secretWording.win.ts"],
     ["syncKeyStore.ts", "platform/secretWording.win.ts"],
   ];
   for (const [importer, seam] of seams) assert.ok(graph.get(`${desktop}${importer}`)?.importedIds.includes(`${desktop}${seam}`), `${importer} imports ${seam}`);
+  assert.ok(graph.get(`${desktop}platform/win/hostUpdates.ts`)?.importedIds.includes(`${browser}platform/windowsUpdateCounts.win.ts`), "the Windows updater counts manifest checks in the same twin the hourly telemetry takes them from");
   const code = chunks.map((chunk) => chunk.code).join("\n");
   for (const linux of ["Evolution Data Server", "yay -Syu", "Super+", "(polkit)", "Ardia is running without Chromium's sandbox", '"hyprland","sway","niri"']) assert.ok(!code.includes(linux), `the win bundle says ${linux}`);
   for (const windows of ["File Explorer", "Windows Hello or your Windows password"]) assert.ok(code.includes(windows), `the win bundle lacks ${windows}`);

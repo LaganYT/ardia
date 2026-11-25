@@ -1,6 +1,7 @@
 #import "ArdiaPictureInPicture.h"
 #import "ArdiaWebViewInternal.h"
 #import "ArdiaPiPThrowMath.h"
+#import "ArdiaPiPGestureLog.h"
 
 #include <vector>
 

@@ -1792,6 +1792,43 @@
    "detected": false
   },
   {
+   "id": "update:windows-webui-manifest",
+   "source": "update",
+   "guard": "Windows WebUI host (--ardia-shell=webui): webui_updates.cc fetches windows-update.json (at most 64 KiB) and windows-update.json.sig (exactly 64 bytes) through Chromium's system URLLoaderFactory with credentials omitted and the cache off, only from the GitHub windows-alpha release (or, in a test instance only, an ARDIA_INSTANCE updateFeed that ValidFeedUrl accepts: https, or http to 127.0.0.1, localhost or 10.0.2.2), and follows a redirect only to https on port 443 at github.com, objects.githubusercontent.com or release-assets.githubusercontent.com for the release feed and never for a test feed (AllowedRedirect); while holding the Updates folder and a fresh scratch folder inside it open without delete sharing, it creates each file with CREATE_NEW, no sharing and FILE_FLAG_OPEN_REPARSE_POINT, checks its final path (GetFinalPathNameByHandleW) is a direct child and it has one link before writing, then reopens it read-only with only FILE_SHARE_READ, checks it is the same file (volume and file index) with the bytes it wrote, and holds that handle while it runs the bundled ardia-update-verify.exe windows-manifest against the pinned windows-update.pem beside Ardia.exe (a test key only in a test instance) with a 15 s deadline and only its own pipe and NUL inherited; ReadVerifierAnswer takes only its last line, an ok line of exactly five words whose version, build above Ardia.build.json's, URL under the published prefix (ValidInstallerUrl), lowercase SHA-256 and size up to 1 GiB all pass, and keeps the verified offer and its signed bytes in the browser process: the renderer never sends a URL, hash or path. The installer streams (SimpleURLLoader DownloadAsStream) into a staging file with an unpredictable name (StagingFileName, Ardia-Setup-<sha16>-<random 64 bits>.part) created the same way and held with no sharing, capped at the signed size and hashed as it is written; it is renamed through that handle (FileRenameInfo), reopened with only FILE_READ_DATA, FILE_READ_ATTRIBUTES and SYNCHRONIZE (never DELETE, so CreateProcessW can open the image) and only FILE_SHARE_READ (kHeldInstallerAccess, kHeldInstallerShare, HeldInstallerLetsItRun), checked to be the same file (volume and file index) with the signed size and SHA-256, and that handle is held through ardia-update-verify.exe windows-package and until CreateProcessW on Restart to Update (InstallerSink), so no other writer can change it in between; one install at a time is reserved on the UI sequence (BeginInstall), a second Restart from any window gets busy, and a background instance never runs it. A file that fails a check is deleted only through the handle Ardia created or verified (FileDispositionInfo), never by path, and one whose identity can't be confirmed is left alone; a failed launch releases the held installer. Automatic checks run only when the app-data folder is the production one (ScratchDataDirectory), so a scratch ARDIA_DATA_DIR instance never checks unless a test instance names updateFeed. scripts/windows/engine/tests/webui_update_policy_test.cc unit-tests the pure policy, and apps/browser/src/hostileInputs.test.mjs compiles it and pipes the whole shared hostile list through every verifier answer field and line, asserting that only valid offers ever pass BeginDownload and BeginInstall, with a valid control",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/webui/webui_updates.cc#VerifyManifest",
+    "scripts/windows/engine/src/ardia/win/webui/webui_update_policy.h#ReadVerifierAnswer",
+    "scripts/windows/engine/src/ardia/win/webui/webui_update_policy.h#AllowedRedirect",
+    "scripts/windows/engine/tests/webui_update_policy_test.cc#TestVerifierAnswers",
+    "scripts/windows/engine/tests/webui_update_policy_test.cc#TestFeedsAndUrls",
+    "packages/core-rs/crates/ardia-update-verify/src/main.rs#fn verify_windows(",
+    "scripts/windows/engine/src/ardia/win/webui/webui_updates.cc#class InstallerSink",
+    "scripts/windows/engine/src/ardia/win/webui/webui_update_policy.h#BeginInstall",
+    "scripts/windows/engine/tests/webui_update_policy_test.cc#TestStateMachine",
+    "scripts/windows/engine/src/ardia/win/webui/webui_update_policy.h#ScratchDataDirectory",
+    "scripts/windows/engine/tests/webui_update_policy_test.cc#RunHostileCorpus",
+    "apps/browser/src/hostileInputs.test.mjs#windows webui native update policy keeps every hostile input and call argument away",
+    "scripts/windows/engine/src/ardia/win/webui/webui_update_policy.h#HeldInstallerLetsItRun"
+   ],
+   "detected": false
+  },
+  {
+   "id": "windows-webui-updates:calls",
+   "source": "frame",
+   "guard": "Windows WebUI host (--ardia-shell=webui): ArdiaUpdates.installKind, status, check, update, claimOutcome and restart run only for the live trusted chrome://ardia/ shell document; every call goes through the pure CheckUpdateCall in webui_update_policy.h before it reaches the service: an args value that is present but not a list is refused, installKind, status, check and restart take no arguments, update takes one whole build number from 1 to 2^53-1 (BuildArgument), starts only when it is the build the last verified check offered and the copy is installed (BeginDownload), and says whether this call started the run, so only the window that started it records the consent period, claimOutcome takes one whole run number (RunArgument) and answers with the outcome it consumed, so a window counts and shows only that, anything else is refused with an error; the renderer reads every reply through readEngineStatus and readCheckAnswer in apps/desktop/src/platform/win/hostUpdates.ts, which keep only known phases and kinds, map any reason outside the engine's own set to other, drop an offer unless it is newer than the running build, versions matching ^[0-9][0-9A-Za-z.+-]{0,63}$, safe integer builds above the running build and sizes up to 1 GiB, and messages of at most 200 characters without control characters; apps/browser/src/hostileInputs.test.mjs compiles webui_update_policy_test and sends every shared hostile value, after the same JSON round trip the bridge makes, as each call's only argument, beside a second argument and as the whole args value, asserting that only whole numbers in range ever pass and that none but the valid controls reach BeginDownload or ClaimOutcome; apps/desktop/src/platform/win/hostUpdates.test.mjs runs the shared hostile list through both readers and the saved preferences",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/webui/webui_update_policy.h#BeginDownload",
+    "apps/desktop/src/platform/win/hostUpdates.ts#readEngineStatus",
+    "apps/desktop/src/platform/win/hostUpdates.ts#readCheckAnswer",
+    "apps/desktop/src/platform/win/hostUpdates.test.mjs#windows webui update replies refuse every hostile input",
+    "scripts/windows/engine/src/ardia/win/webui/webui_update_policy.h#CheckUpdateCall",
+    "scripts/windows/engine/src/ardia/win/webui/webui_updates.cc#policy::CheckUpdateCall",
+    "scripts/windows/engine/tests/webui_update_policy_test.cc#CheckHostileCall",
+    "apps/browser/src/hostileInputs.test.mjs#windows webui native update policy keeps every hostile input and call argument away"
+   ],
+   "detected": false
+  },
+  {
    "id": "import:netscape-html-rust",
    "source": "import",
    "guard": "Rust Netscape HTML bookmarks parser behind libardia_import, not linked by any host yet: a file over 64 MiB is refused before it is read, 64 folder levels and 250,000 nodes with each folder reserved before its contents, no recursion on the input, and one slot per attribute the parser reads whatever a tag carries; entities decode once and titles and URLs reach the tree verbatim, place: queries are skipped and scheme policy stays with import:bookmarks; the shared hostile list runs through the static library",
@@ -1861,14 +1898,56 @@
   {
    "id": "windows-webui-bridge:ardiaRequest",
    "source": "frame",
-   "guard": "Windows WebUI pilot (--ardia-shell=webui): ardiaRequest is taken only from the shell WebContents' live primary main frame whose committed origin is chrome://ardia/, by the handler bound to that document's generation; a new document (reload or renderer swap) or a renderer exit retires the generation, dropping its pending replies, events and pages, and a page asked for by a retired document is never created and its profile never loaded; OnJavascriptDisallowed drops that handler's pending replies at once and retires the generation only if the handler no longer owns the live document; requests of the wrong shape are dropped; tab URLs pass AllowedPageUrl before any profile loads and before each navigation, refusing javascript:, chrome://ardia in any spelling or behind view-source:, non-text URLs and anything unparsable; private profiles are refused; scripts/windows/webui-pilot/bridge.ps1 sends the hostile cases at the sinks in a Windows guest",
+   "guard": "Windows WebUI host (--ardia-shell=webui): ardiaRequest is taken only from the shell WebContents' live primary main frame whose committed origin is chrome://ardia/, by the handler bound to that document's generation; a new document (reload or renderer swap) or a renderer exit retires the generation, dropping its pending replies, events and pages, and a page asked for by a retired document is never created and its profile never loaded; OnJavascriptDisallowed drops that handler's pending replies at once and retires the generation only if the handler no longer owns the live document; requests of the wrong shape are dropped; tab URLs pass AllowedPageUrl before any profile loads and before each navigation, refusing javascript:, chrome://ardia in any spelling or behind view-source:, non-text URLs and anything unparsable; private profiles are refused; scripts/windows/webui-pilot/bridge.ps1 sends the hostile cases at the sinks in a Windows guest Each Chromium browser window carries its own ShellHostView over its BrowserView, and a bridge answers only the host whose shell WebContents it was created for (WindowRegistry::HostForShell), so one window's shell document cannot drive another window; tab.create, tab.viewport, tab.command, tab.release, tab.presentations and tab.close act only on a tab whose numeric id and non-empty claim match a binding this window holds (ClaimedBinding), keys and claims are 1-256 bytes without control characters (ValidTabKey, ValidClaim), viewport and input-region rectangles must be finite, non-negative in size and within +/-1e6 (ValidRect), an adoptId is only tab:<1..INT_MAX> naming an unbound tab in one of this window's own browsers with the requested profile (ParseAdoptId), a key held by another window moves only after that window marked it transferable and only within the same profile, and scripts/windows/engine/tests/webui_window_policy_test.cc unit-tests these validators.",
    "checks": [
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#Trusted",
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#OwnsHandler",
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#DeliverReply",
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#CreatePageIn",
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#StartPage",
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#AllowedPageUrl"
+    "scripts/windows/engine/src/ardia/win/webui/webui_bridge.cc#Request",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_view.cc#Trusted",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_view.cc#OwnsHandler",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_view.cc#DeliverReply",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_tabs.cc#CreateTabIn",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_tabs.cc#StartTab",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_view.cc#AllowedPageUrl"
+   ],
+   "detected": false
+  },
+  {
+   "id": "windows-webui-documents:documentStore",
+   "source": "frame",
+   "guard": "Windows WebUI host (--ardia-shell=webui): ArdiaShell.readDocument, writeDocument, saveDocument and removeDocument run only for the live trusted chrome://ardia/ shell document; document names must pass ValidWindowsDocumentName (1-200 [A-Za-z0-9._-], matching ardia-shell-migration's DOCUMENT_NAME_LIMIT, no path separators, colons/ADS, control chars, .., leading/trailing dots or spaces, or Windows reserved device names CON/PRN/AUX/NUL/COM0-9/LPT0-9) and must not be reserved (session.json, live.json, live.canonical.json, rnw-migration.json, rnw-migration.lock, launch-starts.txt, launch-starts.txt.tmp, window-placement.txt, case-insensitive), and writes and removes also refuse the engine-owned launch-guard.json in any case (WritableWindowsDocumentName) while reads and bootstrap.documents keep it for launch telemetry; writes are capped at WindowsDocumentLimit (8 MiB, 48 MiB for sync-state.nns in any letter case) and reads at kWindowsDocumentReadLimit (64 MiB, the migrator's DOCUMENT_LIMIT); reads, writes and deletes open the destination directory and target handles with FILE_FLAG_OPEN_REPARSE_POINT, refuse directories/devices/reparse points and multiply-linked files (nNumberOfLinks != 1), verify final-path direct-child containment inside the app-data directory's canonical final path (the root is opened following reparse points, so the root itself may be a junction; every document file is opened with FILE_FLAG_OPEN_REPARSE_POINT) via GetFinalPathNameByHandleW and IsDirectChildOfWinDirectory, validate UTF-8 on reads (base::IsStringUTF8), stage writes through a CREATE_NEW handle committed handle-relatively via NtSetInformationFile (FileRenameInformationEx fallback FileRenameInformation with held RootDirectory handle and leaf name only) and delete via FileDispositionInformationEx/FileDispositionInfo on the open handle; bootstrap.documents enumerates only eligible non-reparse single-link valid-UTF-8 regular files bounded by count and total bytes (BootstrapDocumentFits, checked against the listed size before a file is opened and again after the read) and reaches the page through JSON.parse (BootstrapAssignmentScript), so a document named __proto__ stays an own property; ReadAsset verifies regular single-link non-reparse disk files and strict final-path containment inside AssetDirectory() via IsStrictlyWithinWinDirectory; scripts/windows/webui-pilot/bridge.ps1 runs the shared hostile corpus against the document sinks, requiring the exact native ERR_DOCUMENT_REQUEST/ERR_DOCUMENT_NAME code for refused values (a synchronous throw, transport error or timeout fails) and a confined write/read/remove round trip for names the policy accepts (prototype keys, \"1\", \"true\") with Object.prototype unchanged, plus reparse-point escape checks (ERR_DOCUMENT_READ/WRITE/REMOVE) and a reload proving a __proto__ document survives in bootstrap.documents, scripts/windows/webui-pilot/junction.ps1 proves junction escapes out of ardia-ui are refused with a CSP-allowed image control and sends the shared hostile corpus raw and URL-encoded through chrome://ardia/ checking each request against ArdiaShell.testAssetSink (counted only in a test instance): a same-origin request moves exactly one of served/refused/outsideRoot/unreadable and never served or outsideRoot, a cross-origin one moves none, and values the URL parser resolves to the shell page are counted and not sent, final paths are compared case-sensitively after the drive letter or UNC share (WinFinalPathStartsWith), and scripts/windows/engine/tests/webui_policy_test.cc unit-tests the pure validators The engine's own live.canonical.json and window-placement.txt go through ReadDocumentFile and WriteDocumentFile, the same handle-checked I/O without the reserved-name refusal, and are never named by a page request.",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/webui/webui_policy.h#ValidWindowsDocumentName",
+    "scripts/windows/engine/src/ardia/win/webui/webui_policy.h#ReservedWindowsDocumentName",
+    "scripts/windows/engine/src/ardia/win/webui/webui_policy.h#IsStrictlyWithinWinDirectory",
+    "scripts/windows/engine/src/ardia/win/webui/webui_policy.h#IsDirectChildOfWinDirectory",
+    "scripts/windows/engine/src/ardia/win/webui/webui_policy.h#ValidWinRenameLeafName",
+    "scripts/windows/engine/src/ardia/win/webui/webui_policy.h#WinFileRenameInfoBufferBytes",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#ReadStoredDocument",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#WriteStoredDocument",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#RemoveStoredDocument",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#ReadBootstrapDocuments",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#ReadAsset",
+    "scripts/windows/webui-pilot/bridge.ps1#documents-refuse-hostile-corpus",
+    "scripts/windows/webui-pilot/bridge.ps1#documents-refuse-reparse-point",
+    "scripts/windows/webui-pilot/bridge.ps1#documents-launch-guard-read-only",
+    "scripts/windows/webui-pilot/junction.ps1#asset-junction-escape-refused",
+    "scripts/windows/webui-pilot/junction.ps1#asset-sink-refuses-hostile-corpus",
+    "scripts/windows/webui-pilot/junction.ps1#documents-read-under-junction-app-data-root",
+    "scripts/windows/engine/tests/webui_policy_test.cc#TestDocumentNames",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#ValidDocumentRequest",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#ReadDocumentFile",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#WriteDocumentFile"
+   ],
+   "detected": false
+  },
+  {
+   "id": "windows-webui-telemetry:post",
+   "source": "frame",
+   "guard": "Windows WebUI host (--ardia-shell=webui): ArdiaTelemetry.post runs only for the live trusted chrome://ardia/ shell document, requires exactly two string arguments passing TelemetryPostAllowed (ardia::desktop_telemetry_policy::PostAcceptable: a non-empty body <= 512 KiB starting with { and an ak_<kind>_<24 hex> ingest key with no header-injection bytes; then base::JSONReader in RFC mode must parse the body as a JSON object), caps concurrent in-flight requests at kMaxInFlight, posts only to the hardcoded kEndpoint (in a test instance only, ARDIA_TEST_TELEMETRY_ENDPOINT may name an http localhost URL instead) through Chromium's system URLLoaderFactory with CredentialsMode::kOmit, RedirectMode::kError and LOAD_DISABLE_CACHE, cancels in-flight posts on TearDown, and replies only with the filtered HTTP status code; scripts/windows/webui-pilot/bridge.ps1 runs the shared hostile corpus in both argument positions plus malformed, non-object and oversized bodies and bad keys, requires the native ERR_TELEMETRY_REFUSED code for each (a synchronous throw, transport error or timeout fails), checks at the sink that ArdiaShell.testTelemetrySink's requestsStarted (counted where the request is handed to the network) stays 0, and sends a valid control that must reach a loopback listener with the same body and key; scripts/windows/engine/tests/webui_policy_test.cc unit-tests the shared telemetry policy",
+   "checks": [
+    "engine/ardiacore-desktop/src/ardia/desktop/ac_desktop_telemetry_policy.h#PostAcceptable",
+    "scripts/windows/engine/src/ardia/win/webui/webui_telemetry.cc#WinTelemetryClient",
+    "scripts/windows/webui-pilot/bridge.ps1#telemetry-refuses-invalid-requests",
+    "scripts/windows/engine/tests/webui_policy_test.cc#TestDesktopTelemetryPolicy"
    ],
    "detected": false
   },
@@ -1886,8 +1965,8 @@
     "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#CapabilityFor",
     "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#PlainCodePoints",
     "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#RawUserInfo",
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#CapabilityFor",
-    "scripts/windows/engine/src/ardia/win/webui/webui_shell.cc#Trusted",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#CapabilityFor",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_view.cc#Trusted",
     "scripts/windows/webui-pilot/platform.ps1#set-launch-at-login-refuses-shared-corpus",
     "scripts/windows/webui-pilot/platform.ps1#set-default-browser-refuses-shared-corpus",
     "scripts/windows/engine/src/ardia/win/webui/desktop_platform_win.cc#g_default_apps_opens",
@@ -2035,6 +2114,80 @@
     "engine/chromium/src/chrome/browser/ardia/ac_cli_screenshot.cc#kMaxPixels",
     "engine/chromium/src/chrome/browser/ardia/ac_cli_screenshot.cc#ClipFrom",
     "engine/chromium/src/chrome/browser/ardia/ac_cli_screenshot.cc#ScreenshotOptionsFromCdp"
+   ],
+   "detected": false
+  },
+  {
+   "id": "windows-webui-documents:liveDocuments",
+   "source": "frame",
+   "guard": "Windows WebUI host (--ardia-shell=webui): documents.watch, unwatch, commit and flush arrive as engine.call from the live trusted chrome://ardia/ shell document only, for the app profile name \"default\" only, with JSON text of at most 8 MiB (DocumentEngineRequestAllowed) parsed in RFC mode to depth 48 as an object (ParseDocumentVerb picks the verb; anything else is ERR_DOCUMENT_REQUEST); a subscription names exactly {document: \"live.json\"}; a private window gets ERR_DOCUMENT_AUTH; the client id is scoped to the authority, the window and the renderer generation (EnsureDocumentClient) and is retired with the renderer; change events reach the shell only while the subscription sequence that asked for them is current (DocumentSubscription) and the authority scope still matches; the shared LinuxDocumentService from engine/ardiacore-linux validates every operation and reads and writes its envelope through ReadCanonicalDocument and WriteCanonicalEnvelope, capped at kLinuxLiveMaxBytes; scripts/windows/engine/tests/webui_window_policy_test.cc unit-tests the verb parser and the subscription sequence",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#ParseDocumentVerb",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#DocumentEngineRequestAllowed",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#DocumentSubscription",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#DocumentCall",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#EnsureDocumentClient",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#ReadCanonicalDocument",
+    "scripts/windows/engine/src/ardia/win/webui/webui_storage.cc#WriteCanonicalEnvelope",
+    "engine/ardiacore-linux/src/ardia/linux/ac_linux_documents.cc#Commit",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestDocumentVerbs",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestHostileSinks"
+   ],
+   "detected": false
+  },
+  {
+   "id": "windows-webui-windows:openWindow",
+   "source": "frame",
+   "guard": "Windows WebUI host (--ardia-shell=webui): ArdiaShell.openWindow, focusWindow and setActiveProfile come only from a live trusted shell document; a window id is 1-256 of [A-Za-z0-9._:-] (ValidWindowId), settings and import open only under their own id and no browser window may take those ids (ClassifyOpenWindow), a private seed needs incognito and a private profile name, utility windows are never private and a small-window seed only opens a non-private small window (OpenWindowProfileAllowed), seeds are capped at 64 KiB of JSON, at most 64 windows are open, a requested frame must be finite and is fitted to the display's work area (ValidRect, FitToWorkArea), a profile joins a window as a hidden companion browser only when neither side is private, a utility window or closing (RouteProfile), and setActiveProfile drops any selection older than the newest one for the same renderer (SelectionSequence); scripts/windows/engine/tests/webui_window_policy_test.cc unit-tests each rule; a window opens only for the shell document that asked: the request and the profile load that follows both check that this window's renderer generation is still the live one (LiveFor), so a reloaded or closed shell document cannot open a window late, and ArdiaShell.minimizeWindow names its target window by id through the registry; Chromium's Open link in private window (the taken chromium-linux-private-links hook) never opens a Chromium private window: OffTheRecordNavigation hands the link to the shell as an openWindow page event only for a tab a live shell document owns, naming a regular profile that passes PrivateLinkProfile, and refuses it otherwise; any other private window Chromium opens is hidden and its pages are offered the same way to the shell of the private window sharing its session or the front regular window, retried for 5 s, then moved into the same-session private window as unclaimed tabs (HandOverPrivateWindow, NextHandOverStep, OriginalProfileOf)",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#ClassifyOpenWindow",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#OpenWindowProfileAllowed",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#RouteProfile",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#SelectionSequence",
+    "scripts/windows/engine/src/ardia/win/webui/webui_windows.cc#OpenRequested",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_view.cc#LiveFor",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#SetActiveProfile",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestOpenWindowRequests",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestCompanionRouting",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestSelectionSequence",
+    "scripts/windows/engine/src/ardia/win/webui/webui_windows.cc#OffTheRecordNavigation",
+    "scripts/windows/engine/src/ardia/win/webui/webui_windows.cc#HandOverPrivateWindow",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#PrivateLinkProfile",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestHostileSinks",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#NextHandOverStep",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestPrivateHandOver"
+   ],
+   "detected": false
+  },
+  {
+   "id": "windows-webui-files:pickersAndClipboard",
+   "source": "frame",
+   "guard": "Windows WebUI host (--ardia-shell=webui): ArdiaShell.pickFolder takes at most a current folder and a button title, each a string or null; the title is used only when PickerPromptUsable accepts it (1-200 bytes of valid UTF-8 with no control characters) and the start folder only when absolute; pickFiles takes no arguments; one dialog per window at a time (ERR_PICKER_OPEN), refused when policy disables file choosers, and a background test instance answers null or [] without showing a dialog; ArdiaShell.copyText takes exactly one string that CopyTextFits (valid UTF-8 of at most 1 MiB), and readText returns the clipboard text cut to 1 MiB of UTF-8 bytes at a character boundary (TruncateUtf8), never UTF-16 units; scripts/windows/engine/tests/webui_window_policy_test.cc runs a hostile corpus (NULs, control characters, overlong and surrogate UTF-8, bidi overrides, path traversal, foreign schemes, oversized values) through each of these rules",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/webui/webui_file_picker.cc#PickFolder",
+    "scripts/windows/engine/src/ardia/win/webui/webui_file_picker.cc#PickFiles",
+    "scripts/windows/engine/src/ardia/win/webui/webui_file_picker.cc#FileSelectDialogsAllowed",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#PickerPromptUsable",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#CopyTextFits",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#TruncateUtf8",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#CopyText",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#ReadText",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestHostileSinks"
+   ],
+   "detected": false
+  },
+  {
+   "id": "windows-webui-relaunch:openUrls",
+   "source": "other-app",
+   "guard": "Windows WebUI host (--ardia-shell=webui): a second launch of Ardia hands its command-line arguments to the running browser (WebUIRelaunched); WebUIRelaunchUrls keeps only arguments that parse as valid URLs (a relative file path is fixed up against the caller's folder first) whose scheme is http, https or file, each at most 32 KiB and at most 64 of them (RelaunchUrlAccepted); the registry queues them and delivers them only as ArdiaShell onOpenURLs to the most recently active browser window that is not private, not a utility window, not closing, and whose live shell document called ArdiaShell.listenForOpenURLs for its current renderer generation (DeliverOpenUrls, OpenUrlsListening); scripts/windows/engine/tests/webui_window_policy_test.cc runs the hostile corpus through the scheme and size rules",
+   "checks": [
+    "scripts/windows/engine/src/ardia/win/main.cc#WebUIRelaunchUrls",
+    "scripts/windows/engine/src/ardia/win/main.cc#WebUIRelaunched",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#RelaunchUrlAccepted",
+    "scripts/windows/engine/src/ardia/win/webui/webui_window_policy.h#RelaunchUrlSchemeAllowed",
+    "scripts/windows/engine/src/ardia/win/webui/webui_windows.cc#DeliverOpenUrls",
+    "scripts/windows/engine/src/ardia/win/webui/webui_host_calls.cc#OpenUrlsListening",
+    "scripts/windows/engine/tests/webui_window_policy_test.cc#TestHostileSinks"
    ],
    "detected": false
   }

@@ -9,6 +9,7 @@ import type {
   NativeContextMenuAreaProps,
   NativeFileDropAreaProps,
   NativeMagnifyAreaProps,
+  NativeWheelAreaProps,
   NativeMouseAreaProps,
   OutsidePressAreaProps,
   WindowProfileProps,
@@ -355,6 +356,14 @@ export const WindowProfile = forwardRef<View, WindowProfileProps>(function Windo
   }, [profile, windowId]);
   return (
     <View {...rest} ref={ref} pointerEvents="none" style={style}>
+      {children}
+    </View>
+  );
+});
+
+export const WheelArea = forwardRef<View, NativeWheelAreaProps>(function WheelArea({ onStep: _onStep, children, ...rest }, ref) {
+  return (
+    <View {...rest} ref={ref}>
       {children}
     </View>
   );

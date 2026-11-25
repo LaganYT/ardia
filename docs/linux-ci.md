@@ -8,7 +8,7 @@ Hosted CI never runs `gclient sync`, GN or a Chromium build.
 
 | Piece | What it does |
 | --- | --- |
-| [`.github/workflows/linux.yml`](../.github/workflows/linux.yml) | Runs on pull requests and pushes to `main` that touch what the Linux build and its fixture suites read (not the Mac, iPhone, Android or Windows native code beyond the few files the parity fixtures compare against, which `scripts/ci/workflow-paths.test.mjs` checks), and by hand: a vouch `gate` job for pull requests from forks, then two `checks` jobs (the UI checks and the engine fixtures) and a `package` job on `ubuntu-24.04`. A pull request packages and smoke-tests the tarball alone unless it changes `scripts/linux`, the workflow or its setup action, or carries the `full-ci` label; pushes and manual runs also build, smoke-test and install the `.deb` and the AppImage |
+| [`.github/workflows/linux.yml`](../.github/workflows/linux.yml) | Runs on pull requests and pushes to `main` that touch what the Linux build and its fixture suites read (not the Mac, iPhone, Android or Windows native code beyond the few files the parity fixtures compare against, which `scripts/ci/workflow-paths.test.mjs` checks), and by hand: a vouch `gate` job for pull requests from forks, then two `checks` jobs (the UI checks and the engine fixtures) and a `package` job on Blacksmith's `blacksmith-8vcpu-ubuntu-2404`. A pull request packages and smoke-tests the tarball alone unless it changes `scripts/linux`, the workflow or its setup action, or carries the `full-ci` label; pushes and manual runs also build, smoke-test and install the `.deb` and the AppImage |
 | [`.github/actions/linux-setup`](../.github/actions/linux-setup/action.yml) | Ubuntu packages for the fixtures (clang, dbus, NSS tools, gnome-keyring, PyGObject), Node 24, pnpm and `pnpm install --frozen-lockfile` |
 | [`scripts/linux/ci-checks.sh`](../scripts/linux/ci-checks.sh) | The engine-free checks. `--part ui` runs the `apps/desktop` and `scripts/linux` checks side by side; `--part engine --shard I/N` runs every Nth Python suite and `engine/ardiacore-linux/tests` module, those in parallel, because the suite takes well over five minutes serially. With no options it runs everything |
 | [`scripts/linux/publish-engine.sh`](../scripts/linux/publish-engine.sh) | Builder side: stages, strips and archives an engine from a Chromium out dir; `--upload` publishes it and adds its table row |
@@ -281,10 +281,8 @@ hand. The one-time setup is in [releasing.md](releasing.md#linux-package).
   pull request from a fork, and both jobs need it. An unvouched author's pull request waits until a maintainer comments
   `vouch` or adds `run-ci`; `linux.yml` is in `GATED_WORKFLOWS` (`.github/vouch/vouch.cjs`), so that re-runs its
   skipped run. Pushes, manual runs and pull requests from a branch of this repository skip the gate and build at once:
-  only people with write access push those branches, and the gate would only spend an `ubuntu-latest` slot to say so.
+  only people with write access push those branches, and the gate would only spend a runner to say so.
   A newer push cancels the run before it, on `main` too; manual runs are never cancelled.
-- **Runner.** A `route` job picks `ubuntu-24.04` or, when GitHub's runners are busy, Boat CI's `boat-large` for
-  `checks` and `package` ([ci-boat-overflow.md](ci-boat-overflow.md)). It is skipped for forks, and a skipped or failed
-  route job keeps both on `ubuntu-24.04`.
+- **Runner.** `checks` and `package` run on Blacksmith's `blacksmith-8vcpu-ubuntu-2404` ([ci-runners.md](ci-runners.md)).
 - **No engine.** With no published engine for this commit's key or the 200 engine commits before it, `package` fails
   and says to publish one.

@@ -5,14 +5,14 @@ import { useShallow } from "zustand/react/shallow";
 import { Animated, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 import { useTheme } from "../ui/theme";
 import { TOOLBAR_ROWS, toolbarTrailing, urlFieldOf, type ToolbarRow } from "../../lib/toolbarRow";
-import { ToolbarRowContext } from "../ui/toolbarRowContext";
+import { ToolbarRowContext, useToolbarRowContext } from "../ui/toolbarRowContext";
 import { activate } from "../../state/tabs/actions";
 import { toggleSidebar } from "../../state/windows/actions";
 import { openBarFromAddress } from "../../state/omnibox/barState";
 import { useIsBookmarked, useSettings, useTab, useTabLive, useTabsPlace, useTabsShown } from "../../state/browser/hooks";
 import type { Tab } from "../../state/browser/types";
-import { Button, ContextMenuArea, Divider, FadeLabel, ink, monoFace, sidebarFont, sidebarPoints, drawnSymbol, space, Text, useHover, WindowDragRegion } from "../ui";
-import { type ToolbarGeometry } from "../window/geometry";
+import { Button, ContextMenuArea, continuousCorners, Divider, FadeLabel, ink, monoFace, sidebarFont, sidebarPoints, drawnSymbol, space, Text, useHover, WindowDragRegion } from "../ui";
+import { toolbarButtonPlacements, type ToolbarGeometry } from "../window/geometry";
 import { usePage, usePages, type PageState } from "../../state/tabs/pageState";
 import { togglePopover } from "../../state/tabs/popoverDismiss";
 import { useHistoryAvailability } from "../../state/tabs/navigation";
@@ -24,7 +24,7 @@ import { splitViewAvailable } from "../../state/splits/splits";
 import { useEasedColor, type ToolbarPalette } from "../ui/toolbarColors";
 import { useSitePalette } from "./useSitePalette";
 import { setToolbarExtensionsWidth } from "../../state/windows/layout";
-import { SIDEBAR_FIELD } from "../sidebar/geometry";
+import { SIDEBAR_FIELD, SIDEBAR_FIELD_CONTROL, sidebarFieldToolbarRow } from "../sidebar/geometry";
 import { FieldSiteButton, SidebarFieldFill } from "../sidebar/SidebarField";
 import { showUrlBarMenu } from "../../state/omnibox/paste";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
@@ -117,13 +117,7 @@ export const Toolbar = memo(function Toolbar({
   const toggleTabs = useCallback(() => toggleSidebar(windowId), [windowId]);
   const splitMenu = useCallback(() => showSplitMenu(tabId), [tabId]);
   const closeThisPane = useCallback(() => pressClosePane(tabId), [tabId]);
-  const at = useMemo(() => {
-    const top = row.center - row.button / 2;
-    const place = (center: number | null) => ({ position: "absolute" as const, top, left: (center ?? 0) - row.button / 2 });
-    const hit = { width: row.button, height: row.button, plateX: 0, plateY: 0, box: row.button, radius: row.buttonRadius };
-    const nav = (center: number | null) => ({ style: place(center), hit });
-    return { top, sidebarButton: place(geometry.sidebarButton), back: nav(geometry.back), forward: nav(geometry.forward), reload: nav(geometry.reload) };
-  }, [geometry, row]);
+  const at = useMemo(() => toolbarButtonPlacements(geometry, row), [geometry, row]);
   const trailing = useMemo(
     () => toolbarTrailing(row, { pinnedWidth: trailingWidth, split: inSplit, cardRadius: geometry.cardRadius }),
     [row, trailingWidth, inSplit, geometry.cardRadius],
@@ -141,7 +135,8 @@ export const Toolbar = memo(function Toolbar({
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: dim }]} pointerEvents="box-none">
         {geometry.sidebarButton !== null && (
           <Button variant="icon" toolbar
-            style={at.sidebarButton}
+            style={at.sidebarButton.style}
+            hit={at.sidebarButton.hit}
             palette={palette}
             icon={tabsIcon}
             look="row"
@@ -220,7 +215,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
   const glass = useGlass();
 
   return (
-    <View {...field.hoverProps} style={[style, { flexDirection: "row", alignItems: "center", height: row.field, borderRadius: row.fieldRadius, backgroundColor: hovered && !glass ? palette.pill : undefined }]}>
+    <View {...field.hoverProps} style={[style, { flexDirection: "row", alignItems: "center", height: row.field, backgroundColor: hovered && !glass ? palette.pill : undefined }, continuousCorners(row.fieldRadius)]}>
       {glass ? (
         <GlassFill state={hovered ? "lit" : "rest"} radius={row.fieldRadius} dark={palette.background ? palette.text.startsWith(ink.white) : undefined} />
       ) : null}
@@ -289,7 +284,7 @@ export const SidebarUrlField = memo(function SidebarUrlField({ tab, palette, win
   });
 
   return (
-    <View {...field.hoverProps} style={{ flexDirection: "row", alignItems: "center", height, borderRadius: SIDEBAR_FIELD.radius }}>
+    <View {...field.hoverProps} style={{ flexDirection: "row", alignItems: "center", height, paddingRight: SIDEBAR_FIELD_CONTROL.inset, borderRadius: SIDEBAR_FIELD.radius }}>
       <SidebarFieldFill hovered={hovered} />
       <FieldLoadFill tabId={tab.id} color={loadFillColor(palette, theme.accent)} height={height} radius={SIDEBAR_FIELD.radius} />
       {shown.leading && (
@@ -312,7 +307,7 @@ export const SidebarUrlField = memo(function SidebarUrlField({ tab, palette, win
           </View>
         </Pressable>
       </ContextMenuArea>
-      <ToolbarRowContext.Provider value={TOOLBAR_ROWS.regular}>
+      <ToolbarRowContext.Provider value={sidebarFieldToolbarRow()}>
         <FieldButtons tab={tab} palette={palette} onFocus={onFocus} popover={popover} toggleSiteControls={openSiteControls} accessory={shown.extensions ? accessory : null} quiet={!shown.page}>
           {shown.page && <PageButton tab={tab} palette={palette} windowId={windowId} />}
           {shown.siteControls && <Button variant="icon" toolbar palette={palette} icon="slider.horizontal.3" look="field" onPress={openSiteControls} active={popover === "siteControls"} tooltip="Site Controls" />}
@@ -363,11 +358,12 @@ function FieldButtons({
   quiet?: boolean;
   children: ReactNode;
 }) {
+  const row = useToolbarRowContext();
   const popups = usePage(tab.id, (p) => p.popups.length);
   const capture = usePage(tab.id, (p) => p.mediaAccess);
   const reader = useReaderButtonShown(tab.id, quiet);
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", paddingRight: space.xs }}>
+    <View style={{ flexDirection: "row", alignItems: "center", paddingRight: row.fieldTrailingInset ?? space.xs }}>
       {children}
       {capture && <CaptureIndicator camera={capture.camera} microphone={capture.microphone} screen={capture.screen} onPress={toggleSiteControls} />}
       {reader && <ReaderButton tabId={tab.id} palette={palette} onFocus={onFocus} quiet={quiet} />}
@@ -397,4 +393,3 @@ function CaptureIndicator({ camera, microphone, screen, onPress }: { camera: boo
   const what = [camera && "camera", microphone && "microphone", screen && "screen"].filter(Boolean).join(" and ");
   return <Button variant="icon" icon={icon} look="field" color={theme.destructive} onPress={onPress} tooltip={`This page is using your ${what}`} />;
 }
-

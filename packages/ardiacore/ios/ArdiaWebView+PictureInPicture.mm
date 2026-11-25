@@ -2,6 +2,7 @@
 #import "ArdiaRuntime.h"
 #import "ArdiaLaunchConfig.h"
 #import "ArdiaPictureInPicture.h"
+#import "ArdiaPiPGestureLog.h"
 #import "ArdiaChromeWindowHost.h"
 
 #import <objc/runtime.h>
@@ -242,6 +243,8 @@ BOOL TracingPictureInPicture() {
   if ([state[@"active"] boolValue]) _pictureInPictureRequestStamp = nil;
   const BOOL active = [state[@"active"] boolValue];
   NSMutableDictionary *payload = [@{@"kind" : [state[@"kind"] isEqual:@"document"] ? @"document" : @"video", @"active" : @(active)} mutableCopy];
+  ardia_pip::NoteGesture(@"pip %@ kind=%@ by=%@ auto=%d appActive=%d seenByUser=%d", active ? @"opened" : @"closed", payload[@"kind"],
+                         active ? @"-" : state[@"closedBy"] ?: @"unknown", active ? _reports.autoPictureInPictureActive : [state[@"auto"] boolValue], NSApp.isActive, _reports.seenByUser);
   if (!active) {
     ardia_pip::RefreshPinchesFromOtherApps();
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{

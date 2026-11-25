@@ -15,6 +15,8 @@ import { WindowPopups } from "./components/window/WindowPopups";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
 import { isUtilityWindowId } from "./state/settings/settingsWindows";
 import { OnboardingOverlay } from "./components/onboarding";
+import { IntroWindow } from "./components/onboarding/IntroWindow";
+import { INTRO_WINDOW_ID } from "./state/onboarding/introWindow";
 import { useFullscreenTab } from "./state/tabs/pageState";
 import { ProfileTint } from "./components/window/ProfileSwipe";
 import { TOP_STRIP_HEIGHT, TopStripPeek, TopTabStrip } from "./components/tabstrip/TopTabStrip";
@@ -39,6 +41,12 @@ import { forgetWindowRootSize, setWindowRootSize } from "./state/windows/rootSiz
 provideProfileLooks({ accent: profileAccent, theme: (profile, appDark, source) => profileTheme(profile, appDark, source, currentBasePalette()) });
 
 export function WindowRoot({ windowId }: { windowId?: string }) {
+  if (windowId === INTRO_WINDOW_ID)
+    return (
+      <ThemeScope>
+        <IntroWindow />
+      </ThemeScope>
+    );
   if (isUtilityWindowId(windowId))
     return (
       <ThemeScope>

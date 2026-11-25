@@ -169,8 +169,10 @@ test("the Linux and Windows hosts route through the generated header and keep no
   assert.ok(linuxContract.includes('#include "ardia/desktop/generated/ac_desktop_routes.h"'));
   assert.doesNotMatch(linuxContract, /\bstruct Route\b|\bkRoutes\s*(\[\])?\s*=/);
   assert.ok(read("engine/ardiacore-desktop/src/ardia/desktop/BUILD.gn").includes('"generated/ac_desktop_routes.h",'));
-  const windowsShell = stripComments(read("scripts/windows/engine/src/ardia/win/webui/webui_shell.cc"));
-  assert.ok(windowsShell.includes("ardiacore::linux_contract::kRoutes") && windowsShell.includes("ardiacore::linux_contract::FindRoute("));
+  const windowsShell = ["webui_host_view.cc", "webui_host_calls.cc"]
+    .map((file) => stripComments(read(`scripts/windows/engine/src/ardia/win/webui/${file}`)))
+    .join("\n");
+  assert.ok(windowsShell.includes("ardia::desktop_routes::kRoutes") && windowsShell.includes("ardia::desktop_routes::FindRoute("));
   assert.doesNotMatch(windowsShell, /\bkRoutes\s*(\[\])?\s*=/);
 });
 

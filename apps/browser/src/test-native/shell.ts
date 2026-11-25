@@ -79,6 +79,7 @@ export const windows = {
   open: new Map<string, FakeWindow>(),
   closed: [] as string[],
   focused: null as string | null,
+  shown: new Map<string, boolean>(),
   emit: (event: WindowEvent) => shellEvents.emit("onWindowEvent", event),
   geometry: windowGeometries,
 };
@@ -112,6 +113,10 @@ const windowsModule: Modules["ArdiaAppWindows"] & { requestClose(id: string): Pr
     windows.open.delete(id);
     windows.closed.push(id);
     if (windows.focused === id) windows.focused = null;
+    return Promise.resolve();
+  },
+  setWindowShown: (id, shown) => {
+    windows.shown.set(id, shown);
     return Promise.resolve();
   },
   focusWindow: (id) => {
@@ -445,6 +450,7 @@ const translate: Modules["ArdiaTranslate"] = {
 };
 
 const magnifyArea: Modules["ArdiaMagnifyArea"] = { devMagnify: () => unfaked("ArdiaMagnifyArea", "devMagnify") };
+const wheelArea: Modules["ArdiaWheelArea"] = { devWheel: () => unfaked("ArdiaWheelArea", "devWheel"), glideScroll: async () => {}, steerScroll: async () => {} };
 const fileDrop: Modules["ArdiaFileDrop"] = {
   devDrag: () => unfaked("ArdiaFileDrop", "devDrag"),
   devLastFileDrag: () => Promise.resolve([]),
@@ -683,7 +689,7 @@ export const pluginHost = {
   }[],
   pinned: undefined as undefined | null | { name: string; version: string; folderId: string }[],
   officialArtifacts: {} as Record<string, string>,
-  officialFetchResults: {} as Record<string, { ok: false; code: "offline" | "failed" | "verify" | "cancelled" | "unsupported"; reason: string }>,
+  officialFetchResults: {} as Record<string, { ok: false; code: "offline" | "failed" | "verify" | "cancelled" | "unsupported"; reason: string; cause?: string }>,
   officialFetchGate: null as null | Promise<void>,
   officialFetchLog: [] as string[],
   officialCancels: [] as string[],
@@ -856,6 +862,7 @@ export const shellNativeModules: Modules = {
   ArdiaInlineCompletion: { complete: () => Promise.resolve(0), copyFieldAs: () => Promise.resolve() },
   ArdiaTranslate: translate,
   ArdiaMagnifyArea: magnifyArea,
+  ArdiaWheelArea: wheelArea,
   ArdiaPeekStage: { devState: () => Promise.resolve([]), devPageFrames: () => Promise.resolve([]) },
   ArdiaFileDrop: fileDrop,
   ArdiaCli: cli,

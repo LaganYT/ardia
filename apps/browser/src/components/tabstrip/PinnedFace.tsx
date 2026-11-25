@@ -4,7 +4,7 @@ import { useTileTheme } from "../../state/favicons/tileTheme";
 import { TabBadges } from "../media/TabBadges";
 import { TabIcon } from "../sidebar/TabIcon";
 import { TileUnread } from "../unread/UnreadBadge";
-import { DockSelection, HoverFill, Text, withAlpha } from "../ui";
+import { clippedContinuousCorners, DockSelection, HoverFill, Text, withAlpha } from "../ui";
 import { GlassFill, useGlass } from "../ui/Glass";
 import { hex, useTheme } from "../ui/theme";
 import { useSelectedTopApp } from "../../state/app/theme";
@@ -57,7 +57,7 @@ export function PinnedFace({ tabId, active, hovered, pressed, frame = "cell" }: 
           pointerEvents="none"
           style={{
             ...face,
-            borderRadius: pinnedFaceRadius(),
+            ...clippedContinuousCorners(pinnedFaceRadius()),
             borderWidth: active && topApp === "outline" ? PINNED_RING_STROKE : 0,
             borderColor: theme.pinnedSelectedFill,
             backgroundColor: active && topApp !== "outline" && !pressed ? theme.pinnedSelectedFill : undefined,

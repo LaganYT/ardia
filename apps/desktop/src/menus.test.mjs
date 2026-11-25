@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { heldModifiers } from "./clickModifiers.ts";
-import { alternateShown, hasSymbolColumn, menuButtonPresses, menuShown, pickMenuItem, shownMenu, showMenu } from "./menus.tsx";
+import { alternateShown, hasSymbolColumn, menuButtonPresses, menuShown, menuSwatch, pickMenuItem, shownMenu, showMenu } from "./menus.tsx";
 import { notingPageFocus } from "./pageFocus.ts";
 import { linuxShellMethod } from "./shellMethods.ts";
 
@@ -114,4 +114,31 @@ test("Linux lists no captured page menus and has no menu bar catalog, so the con
   for (const [method, args] of [["menuBar", []], ["performMenuBarItem", ["cmd:newTab", "main"]], ["dismissSurface", ["m1"]]]) {
     await assert.rejects(linuxShellMethod(method)(...args), (error) => error.code === "ERR_UNAVAILABLE", method);
   }
+});
+
+test("a tab group's Color menu draws each colour's swatch as the Mac does: the dark one in a dark menu, a ring for None, in the icon column", async () => {
+  const { groupColorItems } = await import("../../browser/src/state/sidebar/groupMenu.ts");
+  const items = groupColorItems(null, "#d14836").map(({ value, ...item }) => ("separator" in item ? item : { ...item, id: JSON.stringify(value) }));
+  assert.equal(hasSymbolColumn(items), true, "swatch rows keep the icon column, so every title lines up");
+  const named = (title) => items.find((i) => i.title === title);
+  assert.deepEqual(menuSwatch(named("None"), false), { fill: null });
+  assert.deepEqual(menuSwatch(named("Neutral"), false), { fill: "#0000004D" });
+  assert.deepEqual(menuSwatch(named("Neutral"), true), { fill: "#FFFFFF4D" });
+  for (const item of items.filter((i) => !("separator" in i) && !["None", "Neutral", "Match Site Color"].includes(i.title))) {
+    assert.match(menuSwatch(item, true)?.fill ?? "", /^#[0-9a-f]{6}$/i, item.title);
+  }
+  assert.equal(menuSwatch({ id: "copy", title: "Copy Link" }, false), null);
+  assert.equal(menuSwatch({ separator: true }, false), null);
+});
+
+test("in a forced-colours (high contrast) theme every swatch keeps a solid CanvasText edge, so None's ring doesn't vanish with its box-shadow", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("./base.css", import.meta.url), "utf8");
+  const forced = css.slice(css.indexOf("@media (forced-colors: active)"));
+  assert.ok(forced.length < css.length, "no forced-colors block");
+  const rule = (selector) => forced.match(new RegExp(`${selector.replace(/\./g, "\\.")}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+  assert.match(rule(".ardia-menu-swatch"), /border:\s*1px solid CanvasText/);
+  assert.match(rule(".ardia-menu-swatch"), /forced-color-adjust:\s*none/, "the colour discs keep their colours");
+  assert.match(rule(".ardia-menu-swatch.empty"), /opacity:\s*1/, "None's ring is drawn at full strength");
+  assert.match(rule(".ardia-menu-swatch.empty"), /box-shadow:\s*none/, "None drops its inset shadow so forced-colors draws a single ring");
 });

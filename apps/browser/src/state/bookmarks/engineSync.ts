@@ -36,6 +36,7 @@ type EngineState = {
 const engines = new Map<string, EngineState>();
 const isCurrent = (engine: string, state: EngineState) => engines.get(engine) === state;
 const BOOKMARK_WRITE_WAIT_MS = 10_000;
+const BOOKMARKS_CURRENT_WAIT_MS = 15_000;
 const idleWaiters = new Map<string, (() => void)[]>();
 const idle = (state: EngineState | undefined) => !state?.shadow || (!state.busy && !state.needPush && !state.needRead);
 
@@ -64,15 +65,10 @@ const stateOf = (engine: string) => {
 let legacyMoved = false;
 let adopting = false;
 let syncing = false;
-const BOOKMARKS_CURRENT_WAIT_MS = 15_000;
 
 function adopt(engine: string, flat: Flat, { ready = legacyMoved } = {}) {
   adopting = true;
-  try {
-    adoptNow(engine, flat, ready);
-  } finally {
-    adopting = false;
-  }
+  try { adoptNow(engine, flat, ready); } finally { adopting = false; }
 }
 
 function adoptNow(engine: string, flat: Flat, ready: boolean) {

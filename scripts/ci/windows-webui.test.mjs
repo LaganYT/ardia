@@ -27,7 +27,7 @@ function triggerPaths(text, event) {
 const steps = (block) => block.split(/\n      - /).slice(1);
 const stepNamed = (block, name) => steps(block).find((step) => step.includes(`name: ${name}\n`));
 
-test("the WebUI jobs run beside the React Native jobs, gated like them, on GitHub's x64 and arm64 Windows runners", () => {
+test("the WebUI jobs are the Windows build, gated for outside pull requests, on GitHub's x64 and arm64 Windows runners", () => {
   const blocks = jobBlocks(WORKFLOW);
   const job = blocks.webui;
   assert.ok(job, "windows.yml has a webui job");
@@ -35,7 +35,7 @@ test("the WebUI jobs run beside the React Native jobs, gated like them, on GitHu
   assert.ok(job.includes("    if: ${{ !cancelled() && needs.identity.result == 'success' && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) }}\n"), "an unvouched pull request waits for vouch like the other builds");
   assert.ok(job.includes("    runs-on: windows-latest\n"));
   assert.ok(job.includes("    permissions:\n      contents: write\n"), "the job's token can read the engine's release, as the x64 job's does");
-  assert.equal(stepNamed(job, "Fetch the engine"), stepNamed(blocks.x64, "Fetch the engine"), "the engine is fetched exactly as the x64 job fetches it");
+  assert.ok(stepNamed(job, "Fetch the engine").includes("run: scripts/windows/fetch-engine.ps1 -Cpu $env:SLUG -Out"), "each job fetches the engine for its own CPU");
   assert.ok(!/concurrency:/.test(job), "the job shares the workflow's concurrency group instead of naming its own");
   assert.ok(job.includes("    steps: &webui_steps\n"));
   assert.ok(job.includes("      SLUG: x64\n      TOUR: \"true\"\n"));
@@ -46,22 +46,16 @@ test("the WebUI jobs run beside the React Native jobs, gated like them, on GitHu
   assert.ok(arm.includes("      SLUG: arm64\n      TOUR: \"false\"\n"));
   assert.ok(arm.includes("    steps: *webui_steps\n"), "arm64 runs the same steps");
   assert.equal(arm.split("\n    if: ")[1].split("\n")[0], job.split("\n    if: ")[1].split("\n")[0], "arm64 is gated exactly like x64");
-  for (const name of ["app", "arm64-app", "x64", "x64-input", "x64-tour", "x64-tour-first-run", "x64-gate", "arm64", "arm64-gate"]) {
-    assert.ok(blocks[name], `the React Native job ${name} is still there`);
-    assert.ok(!blocks[name].includes("assemble-webui.ps1"), `${name} still assembles the React Native shell`);
-  }
+  assert.deepEqual(Object.keys(jobBlocks(WORKFLOW.slice(WORKFLOW.indexOf("\njobs:\n")))), ["gate", "identity", "source", "webui", "webui-arm64"], "no React Native Windows job is left");
+  assert.ok(!/assemble\.ps1|launch-smoke\.ps1|rebundle\.ps1|relaunch-check\.ps1/.test(WORKFLOW), "nothing builds or launches the React Native shell");
 });
 
-test("the React Native jobs still build and package their shell for a rollback, but never ship it", () => {
-  const launch = jobBlocks(WORKFLOW).x64;
-  assert.ok(launch.includes('run: scripts/windows/assemble.ps1 -App $env:APP -Engine "${{ runner.temp }}/engine" -Out "${{ runner.temp }}/Ardia" -Version $env:VERSION -Build $env:BUILD\n'));
-  assert.ok(launch.includes('run: scripts/windows/make-installer.ps1 -Source "${{ runner.temp }}/Ardia" -Out "${{ runner.temp }}/installer" -Cpu $env:SLUG -Version $env:VERSION -Shell rnw\n'));
-  assert.ok(launch.includes('run: scripts/windows/installer-check.ps1 -Setup "${{ runner.temp }}/installer/Ardia-Setup-$env:SLUG.exe" -Shell rnw\n'));
-  assert.ok(launch.includes("name: Ardia-Setup-rnw-${{ env.SLUG }}\n"));
-  assert.ok(launch.includes("name: Ardia-windows-rnw-${{ env.SLUG }}\n"));
-  assert.ok(!launch.includes("windows-release-"), "a release never takes the React Native installers");
-  assert.ok(!launch.includes("release-files.ps1"));
-  assert.ok(!launch.includes("name: Ardia-Setup-${{ env.SLUG }}\n"), "the installer artifact publish-alpha.sh takes is the WebUI one");
+test("no path of the deleted React Native Windows app starts the workflow", () => {
+  for (const event of ["pull_request", "push"]) {
+    const paths = triggerPaths(WORKFLOW, event);
+    for (const gone of ["apps/browser/windows/**", "packages/expo-windows/**", "apps/browser/NuGet.config", "apps/browser/index.windows.js"]) assert.ok(!paths.includes(gone), `${event} no longer lists ${gone}`);
+    assert.ok(paths.includes("apps/browser/windows/Ardia/Ardia.ico"), "the icon the installer and the engine brand with still starts Windows");
+  }
 });
 
 test("the WebUI job builds the UI and the migrator, assembles a shippable build and checks it", () => {
@@ -79,6 +73,7 @@ test("the WebUI job builds the UI and the migrator, assembles a shippable build 
     "Make the WebUI installer",
     "Install and uninstall the WebUI build",
     "Tour the WebUI build",
+    "Check the WebUI test gate",
   ];
   const at = order.map((name) => job.indexOf(`name: ${name}\n`));
   assert.ok(at.every((index) => index > 0), "every WebUI step is there");
@@ -100,8 +95,8 @@ test("the WebUI job builds the UI and the migrator, assembles a shippable build 
 test("the WebUI installer runs on full runs and ships; the x64 tour gates the run", () => {
   const job = jobBlocks(WORKFLOW).webui;
   assert.ok(stepNamed(job, "Make the WebUI installer").includes("env.FULL == 'true'"));
-  assert.ok(stepNamed(job, "Make the WebUI installer").includes("-Shell webui"));
-  assert.ok(stepNamed(job, "Install and uninstall the WebUI build").includes("-Shell webui"));
+  assert.ok(stepNamed(job, "Make the WebUI installer").includes('make-installer.ps1 -Source "${{ runner.temp }}/ArdiaWebUI"'));
+  assert.ok(stepNamed(job, "Install and uninstall the WebUI build").includes("installer-check.ps1 -Setup"));
   const release = stepNamed(job, "Name it for a release");
   assert.ok(release.includes('release-files.ps1 -Installer "${{ runner.temp }}/installer-webui" -Identity "${{ runner.temp }}/ArdiaWebUI/Ardia.build.json" -Cpu $env:SLUG'));
   assert.ok(job.includes("name: Ardia-Setup-${{ env.SLUG }}\n          path: ${{ runner.temp }}/installer-webui\n"), "publish-alpha.sh's Ardia-Setup-<cpu> artifacts are the WebUI installers");
@@ -114,6 +109,11 @@ test("the WebUI installer runs on full runs and ships; the x64 tour gates the ru
   assert.ok(!tour.includes("continue-on-error"), "a failed WebUI tour fails the run");
   assert.ok(tour.includes("scripts/windows/webui-pilot/tour-webui.ps1"));
   assert.ok(tour.includes('"Ardia.test-build"'), "the tour runs a copy marked as a test build, never the shippable folder");
+  const gate = stepNamed(job, "Check the WebUI test gate");
+  assert.ok(gate, "the WebUI job runs the test-gate check");
+  assert.ok(gate.includes("steps.assemble.outcome == 'success' && env.TOUR == 'true'"), "the test-gate check runs on every x64 build, fast or full");
+  assert.ok(!gate.includes("continue-on-error"), "a failed test-gate check fails the run");
+  assert.ok(gate.includes('scripts/windows/webui-pilot/test-gate-check.ps1 -App "${{ runner.temp }}/ArdiaWebUI" -Out "${{ runner.temp }}/test-gate-webui" -RequireRealProfile'), "the test-gate check runs against the unmarked shippable build with real-profile checks required");
 });
 
 test("pushes to main and pull requests start Windows on the same paths, including the WebUI sources", () => {
@@ -122,21 +122,20 @@ test("pushes to main and pull requests start Windows on the same paths, includin
   for (const path of ["apps/desktop/**", "packages/core-rs/crates/ardia-shell-migration/**", "scripts/windows/**"]) assert.ok(pull.includes(path), `${path} starts Windows`);
 });
 
-test("the installer is the WebUI shell's unless make-installer asks for the React Native shell", () => {
-  assert.match(SCRIPT, /^#ifndef Shell\n {2}#define Shell "webui"\n#endif\n/);
-  assert.match(SCRIPT, /#if Shell == "webui"\n {2}#define LaunchSwitch "--ardia-shell=webui"\n {2}#define OpenSuffix " --ardia-shell=webui"\n {2}#define ShellMarker "ardia-ui\\index\.html"\n(?: {2}#define Retired\w+ .*\n)+ {2}#define LoginItemName "Ardia WebUI"\n {2}#define RetiredLoginItemName "Ardia"\n#else\n {2}#define LaunchSwitch ""\n {2}#define OpenSuffix ""\n {2}#define ShellMarker "ArdiaApp\.dll"\n(?: {2}#define Retired\w+ .*\n)+ {2}#define LoginItemName "Ardia"\n {2}#define RetiredLoginItemName "Ardia WebUI"\n#endif\n/);
+test("the installer is the WebUI shell's only, and still launches it with the switch an older engine reads", () => {
+  assert.match(SCRIPT, /^#define Shell "webui"\n#define LaunchSwitch "--ardia-shell=webui"\n#define OpenSuffix " --ardia-shell=webui"\n#define ShellMarker "ardia-ui\\index\.html"\n#define RetiredShell "rnw"\n#define RetiredMarker "ArdiaApp\.dll"\n#define LoginItemName "Ardia WebUI"\n#define RetiredLoginItemName "Ardia"\n/);
+  assert.ok(!/#if Shell|#else|#ifndef Shell|RetiredMarkerAlt|\[Dirs\]/.test(SCRIPT), "there is no React Native build of the installer, and the WebUI one makes no React Native profile folder");
   assert.ok(SCRIPT.includes('ValueData: """{app}\\Ardia.exe""{#OpenSuffix} --single-argument %1"'));
   assert.ok(SCRIPT.includes('Name: "{autoprograms}\\Ardia"; Filename: "{app}\\Ardia.exe"; Parameters: "{#LaunchSwitch}"; IconFilename: "{app}\\Ardia.ico"; AppUserModelID: "Ardia.Browser"'));
   assert.equal((SCRIPT.match(/Parameters: "\{#LaunchSwitch\}"/g) || []).length, 4, "both shortcuts and both launches after setup carry the switch");
   const installer = read("scripts/windows/make-installer.ps1");
-  assert.ok(installer.includes('"/DShell=$shellKind"'), "make-installer passes the shell it found");
-  assert.ok(installer.includes('[ValidateSet("auto", "rnw", "webui")][string]$Shell = "webui"'));
+  assert.ok(!installer.includes("/DShell="), "the installer script names its own shell");
+  assert.ok(installer.includes('$shellKind = Resolve-ShellLayout $sourceRoot "webui"'), "make-installer packages only a WebUI folder");
 });
 
 test("switching shells deletes only files the other shell shipped, after this shell is installed, and folders only once empty", () => {
   assert.ok(!/\[InstallDelete\]|DelTree|RemoveReactNativeShell/.test(SCRIPT), "nothing removes a folder with what's inside it, or anything before the copy");
-  assert.match(SCRIPT, /#if Shell == "webui"\n(?: {2}#define \w+ .*\n)*? {2}#define RetiredShell "rnw"\n {2}#define RetiredMarker "ArdiaApp\.dll"\n/);
-  assert.match(SCRIPT, /#else\n(?: {2}#define \w+ .*\n)*? {2}#define RetiredShell "webui"\n {2}#define RetiredMarker "ardia-ui\\index\.html"\n {2}#define RetiredMarkerAlt "ardia-webui-migrate\.exe"\n/);
+  assert.match(SCRIPT, /\n#define RetiredShell "rnw"\n#define RetiredMarker "ArdiaApp\.dll"\n/, "an install over the React Native shell still retires its files");
   assert.ok(SCRIPT.includes('#ifdef ShellManifest\nSource: "{#ShellManifest}"; DestDir: "{app}"; DestName: "ardia-{#Shell}-files.txt"; Flags: ignoreversion\n#endif'), "each install carries the list of files its shell shipped");
   assert.ok(SCRIPT.includes('#ifdef RetiredList\nSource: "{#RetiredList}"; DestName: "retired-shell.txt"; Flags: dontcopy\n#endif'));
   const hook = SCRIPT.slice(SCRIPT.indexOf("procedure CurStepChanged"));
@@ -229,7 +228,6 @@ test("an install moves the replaced shell's login item to its own value name, ca
   assert.ok(update.includes("DestExisted := RegValueExists(HKCU, LoginItemsKey, '{#LoginItemName}');"));
   const hook = code.slice(code.indexOf("procedure CurStepChanged"));
   assert.ok(hook.indexOf("#endif") < hook.indexOf("if CurStep = ssPostInstall then\n    UpdateLoginItems;"), "login items move whether or not the installer retires another shell's files");
-  assert.match(SCRIPT, /#if Shell == "rnw"\n\[Dirs\]\nName: "\{localappdata\}\\Ardia\\User Data"\n#endif\n/, "only the React Native installer makes the React Native profile folder");
   const check = read("scripts/windows/installer-check.ps1");
   for (const thrown of ["the install left the $($loginSeed.Retired) login item", "login item is '$item' after the install", "does not carry the disabled approval of $($loginSeed.Retired)", "the install left StartupApproved\\Run\\$($loginSeed.Retired)", "a login item with its own arguments became", "an unrelated login item became"]) assert.ok(check.includes(thrown), thrown);
   assert.ok(check.indexOf("$installedByCheck = $true") < check.indexOf("} finally {"));
@@ -277,4 +275,41 @@ test("the WebUI tour double-clicks a real title bar, opens Split View with Ctrl+
   assert.ok(read("scripts/windows/webui-pilot/lib.ps1").includes("public static List<IntPtr> Shells()"));
   const beforeFlagless = tour.slice(tour.indexOf("Check 'no-stray-processes'"), tour.indexOf("if ($liveProfiles.Count) {"));
   assert.ok(beforeFlagless.includes("Stop-Engine") && beforeFlagless.includes("(Engine-Processes).Count -eq 0"), "an earlier failure never leaves a process the flagless check would count");
+});
+
+test("the WebUI test-gate check verifies DecideTestGate refusals, install_static refusals and controls with cleanup in finally", () => {
+  const gate = read("scripts/windows/webui-pilot/test-gate-check.ps1");
+  for (const name of [
+    "unmarked-webui-build",
+    "unmarked-build-refused",
+    "relative-data-dir-refused",
+    "scratch-junction-refused",
+    "load-extension-and-debug-switches-unmarked-refused",
+    "real-webui-profile-refused",
+    "junction-to-real-webui-profile-refused",
+    "real-rnw-profile-refused",
+    "junction-to-real-rnw-profile-refused",
+    "empty-type-on-real-webui-profile-refused",
+    "other-user-data-dir-to-rnw-refused",
+    "other-user-data-dir-without-scratch-refused",
+    "load-extension-and-debug-switches-no-scratch-refused",
+    "marked-scratch-test-instance-allowed",
+    "load-extension-control-in-test-instance",
+    "switch-propagation-control-in-test-instance",
+  ]) assert.ok(gate.includes(`'${name}'`), `test-gate-check.ps1 checks ${name}`);
+  assert.ok(gate.includes("not a test instance \\($ExpectedReasonPattern\\); ardiacore test instance: no; reauth=granted honoured: no$"), "refusals check both the reason and ardiacore's gate facts");
+  assert.ok(gate.includes("a test instance; remote debugging port: $gatePort; ardiacore test instance: yes; reauth=granted honoured: yes$"), "the positive control checks the approved gate line");
+  assert.ok(gate.includes("-not $hasMarker"), "the shippable folder passed to -App must start unmarked");
+  assert.ok(gate.includes("$unmarkedApp = Join-Path $runs 'unmarked-app'") && gate.includes("$markedApp = Join-Path $runs 'marked-app'"), "both unmarked and marked launches run from private copies under $runs");
+  assert.ok(!/Stop-FolderProcesses \$App\b/.test(gate), "the script never kills processes outside its private run copies");
+  assert.ok(gate.includes("'.ardia-test-gate-owned'") && gate.includes("Clear-OwnedProfile") && gate.includes("[System.IO.Directory]::Move($staging, $Path)"), "real-profile folders are created atomically with an ownership marker before cleanup can remove them");
+  assert.ok(gate.includes("Test-ChildSwitchesStripped") && gate.includes("--renderer-cmd-prefix") && gate.includes("Name = 'cmd.exe'"), "refused launches verify stripped switches on live child process command lines and no cmd.exe renderer wrapper");
+  assert.ok(gate.includes("Invoke-CorsProbe") && gate.includes("cors-probe.mjs") && gate.includes("$corsState -eq 'blocked'") && gate.includes("$corsState -eq 'leaked'"), "a live cross-origin probe verifies --disable-web-security is stripped outside a test instance and active in the control");
+  const probe = read("scripts/windows/webui-pilot/cors-probe.mjs");
+  assert.ok(probe.includes('"/secret"') && probe.includes('"/probe"') && probe.includes('"/result"') && !probe.includes("Access-Control-Allow-Origin"), "cors-probe.mjs serves a cross-origin target without CORS headers and records blocked vs leaked");
+  assert.ok(gate.includes("Test-EarlyRefusal 'relative-data-dir-refused'"), "relative ARDIA_DATA_DIR is checked as an early exit-1 refusal");
+  const outerFinally = gate.slice(gate.lastIndexOf("} finally {"));
+  assert.ok(outerFinally.includes("Stop-FolderProcesses $unmarkedApp") && outerFinally.includes("Stop-FolderProcesses $markedApp"), "both private process trees are stopped in finally");
+  assert.ok(outerFinally.includes("Clear-OwnedProfile $realWebUI") && outerFinally.includes("Clear-OwnedProfile $realRnw") && outerFinally.includes("Clear-OwnedRun $runs"), "owned real-profile folders and temp runs are cleaned safely in finally");
+  assert.ok(gate.includes("cmd /c rmdir \"$Path\""), "junctions are removed without traversing their targets");
 });

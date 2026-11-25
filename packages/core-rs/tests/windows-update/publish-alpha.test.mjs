@@ -778,7 +778,7 @@ test("live publish fails closed without a signing key while --dry-run works loca
   }
 });
 
-test("only the WebUI shell's installers publish unless --shell rnw asks for a React Native rollback", () => {
+test("only the WebUI shell's installers publish: a retired React Native build or an unknown shell is refused", () => {
   ensureVerifier();
   const dir = mkdtempSync(join(tmpdir(), "ardia-win-pub-shell-"));
   try {
@@ -789,14 +789,9 @@ test("only the WebUI shell's installers publish unless --shell rnw asks for a Re
     const unstamped = makeFixture(join(dir, "unstamped"), "0.2.99", 500, { shell: null });
     const refused = dryRun(unstamped.installers, "out-unstamped");
     assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /is the rnw shell's build, not the webui shell's: only --shell rnw publishes it/);
-    const rollback = dryRun(unstamped.installers, "out-rollback", ["--shell", "rnw"]);
-    assert.equal(rollback.status, 0, rollback.stderr + rollback.stdout);
+    assert.match(refused.stderr, /is the rnw shell's build: only the WebUI shell's installers are published/);
 
     const webui = makeFixture(join(dir, "webui"), "0.2.99", 500);
-    const asRnw = dryRun(webui.installers, "out-webui-as-rnw", ["--shell", "rnw"]);
-    assert.notEqual(asRnw.status, 0);
-    assert.match(asRnw.stderr, /is the webui shell's build, not the rnw shell's/);
     const shipped = dryRun(webui.installers, "out-webui");
     assert.equal(shipped.status, 0, shipped.stderr + shipped.stdout);
 
@@ -805,9 +800,9 @@ test("only the WebUI shell's installers publish unless --shell rnw asks for a Re
     assert.notEqual(unknownRes.status, 0);
     assert.match(unknownRes.stderr, /names no known shell/);
 
-    const badFlag = dryRun(webui.installers, "out-bad-flag", ["--shell", "auto"]);
-    assert.notEqual(badFlag.status, 0);
-    assert.match(badFlag.stderr, /--shell takes webui or rnw, not auto/);
+    const gone = dryRun(webui.installers, "out-gone", ["--shell", "rnw"]);
+    assert.notEqual(gone.status, 0);
+    assert.match(gone.stderr, /unknown option --shell/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

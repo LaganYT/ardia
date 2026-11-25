@@ -3,7 +3,6 @@ import { test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
 const { importBookmarks } = await import("./apply.ts");
 const { bookmarkRoots } = await import("../bookmarks/bookmarks.ts");
-const { bookmarksFromHtml } = await import("../../../../../packages/expo-windows/src/import/fileFormats.ts");
 
 const S = () => useBrowser.getState();
 const P = "default";
@@ -97,10 +96,3 @@ const EXPORT = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
     </DL><p>
 </DL><p>
 `;
-
-test("through the Windows parser, empty-named folders stay folders with or without a date, and an unnamed list lands loose", () => {
-  fresh();
-  const root = bookmarksFromHtml(EXPORT, "bookmarks.html");
-  assert.equal(importBookmarks(P, root, "HTML File"), 3);
-  assert.deepEqual(otherBookmarks(), [{ "": [] }, { "": [] }, { "": ["Kept"] }, { "": ["Zero"] }, "Loose"]);
-});

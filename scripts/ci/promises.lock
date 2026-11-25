@@ -89,11 +89,9 @@ issue	hash	file	test
 1301	87427c3db87b0d1b	apps/browser/src/state/windows/toolbarAutoHide.test.mjs	a scroller that snaps vertically and mandatorily (a Shorts or Reels feed) never reports down (#1301)
 1454	5ed56f65501a040c	apps/browser/src/state/tabs/popupsOpenAsTabs.test.mjs	a ⇧-clicked link that asks for a new window opens as a Peek when ⇧ is the Peek key, from frames the page script can't reach (#1454)
 1630	d789bc3985d65b0d	apps/browser/src/components/window/dockMotion.test.mjs	the slide is an ease-in-out over 200 ms that never passes its final width (#1630: an overshoot laid pages out too wide and back)
-1687	5437f5bd0771b188	apps/browser/src/platform/windowsDialogPages.test.mjs	a pop-up menu tracks on a RunModal thread, owned by that thread's own window, so pages keep loading while it is open (#1687)
 1727	8c355c87980c45e9	apps/browser/src/components/settings/panes/passwordRows.test.mjs	a short list shows every row
 1727	107080e2f8eeb410	apps/browser/src/components/settings/panes/passwordRows.test.mjs	unlocking thousands of saved passwords puts one page of rows on screen, and scrolling near the end adds the next page
 1782	833accea3ff86a52	apps/browser/src/state/windows/quitWarning.test.mjs	on the Mac closing a window never shows the quit warning
-1782	6cc7f068127fae33	apps/browser/src/state/windows/quitWarning.test.mjs	only Windows quits when its last window closes
 1782	15b6de3a8ac53d52	apps/browser/src/state/windows/quitWarning.test.mjs	the warning uses the Mac's words and its don't-ask-again
 1852	a677fba109d4f44c	apps/browser/src/components/ui/gated.test.mjs	a closed gate gives exactly the rest value whatever the source still takes
 1852	9f8b2533f43bd146	apps/browser/src/components/ui/gated.test.mjs	an open gate passes the source through

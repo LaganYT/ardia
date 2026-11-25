@@ -8,7 +8,6 @@ import { DEFAULT_SETTINGS } from "../settings/settings.ts";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures.ts";
 import { PLATFORM_FEATURES as LINUX_FEATURES } from "../../lib/platformFeatures.linux.ts";
 import { PLATFORM_FEATURES as WIN_FEATURES } from "../../lib/platformFeatures.win.ts";
-import { PLATFORM_FEATURES as WINDOWS_FEATURES } from "../../lib/platformFeatures.windows.ts";
 import { usePlugins } from "../plugins/store.ts";
 import { loadSession, SESSION_VERSION } from "../session/persist.ts";
 import * as stub from "../../test-native/index.ts";
@@ -39,7 +38,7 @@ test("sidebar tabs are the app's default layout", () => {
 
 test("only Linux keeps the classic-browser presets from putting tabs along the top", () => {
   assert.equal(LINUX_FEATURES.classicPresetsPutTabsOnTop, false);
-  for (const features of [PLATFORM_FEATURES, WIN_FEATURES, WINDOWS_FEATURES]) assert.equal(features.classicPresetsPutTabsOnTop, true);
+  for (const features of [PLATFORM_FEATURES, WIN_FEATURES]) assert.equal(features.classicPresetsPutTabsOnTop, true);
   assert.equal("tabLayout" in classicTabs(LINUX_FEATURES), false);
   assert.equal(classicTabs(PLATFORM_FEATURES).tabLayout, "top");
   for (const source of CLASSIC_SOURCES) assert.equal(PRESETS[source].tabLayout, "top", `${source} on macOS`);

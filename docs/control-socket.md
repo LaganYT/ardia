@@ -595,9 +595,8 @@ socket's `failed`, "Timed out…"), and the window stays busy until that transit
 against the request, waits for the store to follow (`failed` if it doesn't within 4 s), and answers `refused` while a
 page is full screen in the window, `failed` if the window didn't get there. None of the three acts while a page is full screen in the window. The store's `frame` and `fullScreen` follow through the
 window events they already listen to. `PLATFORM_FEATURES.windowGeometry` is on for macOS only: Linux needs the same
-four calls in `engine/ardiacore-linux` (an engine change, so a new engine), and Windows in `WindowManager` of
-`apps/browser/windows` (its maximize already exists as `toggleMaximizeWindow`); until then the methods are `refused`
-there.
+four calls in `engine/ardiacore-linux` (an engine change, so a new engine), and Windows in the WebUI host
+(`scripts/windows/engine/src/ardia/win/webui`); until then the methods are `refused` there.
 
 ### Clearing site data is per site
 

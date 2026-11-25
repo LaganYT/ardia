@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { goToSettingsPane, onTargetedSettingsOpen, type SettingsPane, type SettingsPlace, useSettingsNav } from "./settingsWindows";
+import { goToSettingsPane, newSettingsVisit, onTargetedSettingsOpen, shownSettingsProfile, type SettingsPane, type SettingsPlace, useSettingsNav } from "./settingsWindows";
 import { settingsProfileFor } from "../extensions/store";
 import { noteSettingsRevealMiss, noteSettingsSearch, noteSettingsSearchReveal } from "../telemetry/usage";
 import { consentToken, type ConsentToken } from "../telemetry/choice";
@@ -218,7 +218,7 @@ export function previewSetting({ id, pane, section }: Target) {
 function showWithoutHistory(pane: SettingsPane) {
   const nav = useSettingsNav.getState();
   const profileId = settingsProfileFor(pane, nav);
-  if (nav.pane !== pane || nav.profileId !== profileId || nav.detail) useSettingsNav.setState({ pane, profileId, detail: null, forward: [] });
+  if (nav.pane !== pane || nav.profileId !== profileId || nav.detail) useSettingsNav.setState({ pane, profileId, detail: null, scroll: 0, visit: newSettingsVisit(), shownProfile: shownSettingsProfile({ pane, profileId, detail: null }), forward: [] });
 }
 
 export const setShortcutsQuery = (shortcutsQuery: string) => useSettingsSearch.setState({ shortcutsQuery });

@@ -1789,13 +1789,10 @@
   {
    "id": "update:windows-manifest",
    "source": "update",
-   "guard": "UpdateModule fetches windows-update.json (at most 64 KiB) and windows-update.json.sig (64 bytes) only from GitHub releases (or a test instance's updateFeed) and runs ardia-update-verify.exe (ardia-update-core) against the pinned windows-update.pem without following symlinks or reparse points; anything unsigned, tampered, malformed, oversized, non-newer or outside the allowed HTTPS prefix is refused before download, and packages/expo-windows/src/updater/manifest.ts validates the verified reply again; the shared hostile list runs through both the verifier binary and the TypeScript parser",
+   "guard": "windows-update.json and its 64-byte windows-update.json.sig are checked only by ardia-update-verify (ardia-update-core) against the pinned windows-update.pem: anything unsigned, tampered, malformed, oversized or outside the allowed HTTPS prefix is refused; the shared hostile list runs through the verifier binary",
    "checks": [
-    "apps/browser/windows/Ardia/UpdateModule.h#VerifyUpdate",
     "packages/core-rs/crates/ardia-update-verify/src/main.rs#fn verify_windows(",
     "packages/core-rs/crates/ardia-update-core/src/windows.rs#pub fn verify_windows_update",
-    "packages/expo-windows/src/updater/manifest.ts#parseVerifiedUpdate",
-    "apps/browser/src/hostileInputs.test.mjs#windows update manifest",
     "packages/core-rs/tests/windows-update/test_windows_update.py#test_no_hostile_string_passes_the_windows_verifier"
    ],
    "detected": false
@@ -2003,7 +2000,6 @@
    "source": "native",
    "guard": "Background renderer efficiency counts kept by the Windows engine layer itself, asked for and kept per consent epoch; only whole positive numbers under the seven known keys are added, anything else counts as 0",
    "checks": [
-    "packages/expo-windows/src/engine/rendererEfficiency.ts",
     "scripts/windows/engine/src/ardia/win/renderer_efficiency.cc"
    ],
    "detected": false

@@ -5,7 +5,7 @@ const copy = await import("./copy.ts");
 const { copyWords: macWords } = await import("./copyWords.ts");
 const { PHRASES_ONLY_WITH, platformWording, rewordInPlace } = await import("./platformWording.ts");
 const { PLATFORM_TERMS: windowsTerms } = await import("../../lib/platformTerms.windows.ts");
-const { PLATFORM_FEATURES: windowsFeatures } = await import("../../lib/platformFeatures.windows.ts");
+const { PLATFORM_FEATURES: windowsFeatures } = await import("../../lib/platformFeatures.win.ts");
 const { PLATFORM_TERMS: macTerms } = await import("../../lib/platformTerms.ts");
 const { PLATFORM_FEATURES: macFeatures } = await import("../../lib/platformFeatures.ts");
 const { windowsKeyText } = await import("../commands/windowsKeyText.ts");
@@ -15,11 +15,6 @@ const pairs = JSON.parse(readFileSync(new URL("./fixtures/whats-sent-windows-202
 const source = readFileSync(new URL("./copy.ts", import.meta.url), "utf8");
 const EXPORTS = ["SHARING_COPY", "WHATS_SENT", "IDENTITY_COPY", "LOCAL_COPY", "WATCH_COPY"];
 
-const KEYS_THE_BRANCH_MISSED = [
-  ["How many times ⌘T kept", "How many times Ctrl+T kept"],
-  ["How many times ⌥↩ in the command bar", "How many times Alt+Enter in the command bar"],
-];
-
 function strings(value, out = []) {
   if (typeof value === "string") out.push(value);
   else if (value && typeof value === "object") for (const field of Object.values(value)) strings(field, out);
@@ -27,15 +22,6 @@ function strings(value, out = []) {
 }
 
 const live = strings(EXPORTS.map((name) => copy[name]));
-
-test("Windows words every sentence as the branch wrote it by hand on 2026-11-14", () => {
-  assert.equal(pairs.length, 158);
-  for (const [mac, windows] of pairs) {
-    const missed = KEYS_THE_BRANCH_MISSED.find(([before]) => mac.startsWith(before));
-    const expected = missed ? windows.replace(missed[0], missed[1]) : windows;
-    assert.equal(windowsWords(mac), expected);
-  }
-});
 
 test("the Mac's words are its source, byte for byte", () => {
   for (const [mac] of pairs) assert.equal(macWords(mac), mac);

@@ -30,6 +30,7 @@ export {
 export { FadeLabel } from "./web/FadeLabel";
 export { EdgeFadeMask } from "./web/EdgeFadeMask";
 export { MouseArea } from "./web/MouseArea";
+export { WheelArea } from "./web/WheelArea";
 export { FileDropArea } from "./web/FileDropArea";
 export { PopoverBubble } from "./web/PopoverBubble";
 export { showMenu } from "../menus";

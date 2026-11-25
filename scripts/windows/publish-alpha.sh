@@ -6,19 +6,18 @@
 # The build before this one keeps its files, so an update the app offered from the last feed can still be downloaded;
 # older builds' files go last.
 #
-#   scripts/windows/publish-alpha.sh [--dry-run] [--allow-local-publish] [--shell webui|rnw] [--out <dir>] [--key <pem>] [--public-key <pem>] [--verify-bin <bin>] <Windows workflow run id>
-#   scripts/windows/publish-alpha.sh [--dry-run] [--allow-local-publish] [--shell webui|rnw] [--out <dir>] [--key <pem>] [--public-key <pem>] [--verify-bin <bin>] [--commit <rev>] --installers <dir>
+#   scripts/windows/publish-alpha.sh [--dry-run] [--allow-local-publish] [--out <dir>] [--key <pem>] [--public-key <pem>] [--verify-bin <bin>] <Windows workflow run id>
+#   scripts/windows/publish-alpha.sh [--dry-run] [--allow-local-publish] [--out <dir>] [--key <pem>] [--public-key <pem>] [--verify-bin <bin>] [--commit <rev>] --installers <dir>
 #   scripts/windows/publish-alpha.sh -h | --help
 #
-# A run id publishes the Ardia-Setup-x64 and Ardia-Setup-arm64 artifacts of a green Windows workflow run, as an alpha
-# (Ardia-Setup-rnw-x64 and Ardia-Setup-rnw-arm64 with --shell rnw).
+# A run id publishes the Ardia-Setup-x64 and Ardia-Setup-arm64 artifacts of a green Windows workflow run, as an alpha.
 # --installers publishes a release's Windows files, as the Release workflow does after it publishes v<version>:
 # Ardia-<version>-windows-<cpu>-setup.exe for x64 and arm64, Ardia-<version>-windows-source.tar.xz, their .sha256
 # files and Ardia.build.json, as the Windows workflow leaves them in its windows-release-* artifacts when it runs with a
 # version. They were built at --commit (default HEAD). A run id's source is packed here by engine-source.sh, from the
 # engine its commit pins; a release's is the archive it already carries.
 # Only the WebUI shell's installers are published: Ardia.build.json must name "shell": "webui" (assemble-webui.ps1
-# stamps it). A build without a shell is the React Native shell's, published only with --shell rnw, to roll back.
+# stamps it); a build without it is a retired React Native one.
 # The version and build come from Ardia.build.json, the identity the build carries. The build is the number of
 # commits in the built commit's history, so a release outranks every build before it. A build below the live
 # feed's is refused, and a build equal to the live feed's is refused unless the live feed's windows-update.json.sig
@@ -42,13 +41,12 @@ tag="windows-alpha"
 published="https://github.com/$repo/releases/download/$tag"
 published_under="https://github.com/$repo/releases/download/"
 die() { echo "error: $*" >&2; exit 1; }
-dry=0 allow_local_publish=0 shell="webui" out="" run_id="" installers="" commit_rev="" key_file="${WINDOWS_UPDATE_KEY_FILE:-}" public_key="$root/scripts/windows/windows-update.pem" verify_bin=""
+dry=0 allow_local_publish=0 out="" run_id="" installers="" commit_rev="" key_file="${WINDOWS_UPDATE_KEY_FILE:-}" public_key="$root/scripts/windows/windows-update.pem" verify_bin=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
     --dry-run) dry=1 ;;
     --allow-local-publish) allow_local_publish=1 ;;
-    --shell) shell="${2:?--shell takes webui or rnw}"; shift ;;
     --out) out="${2:?--out takes a directory}"; shift ;;
     --installers) installers="${2:?--installers takes a directory}"; shift ;;
     --commit) commit_rev="${2:?--commit takes a revision}"; shift ;;
@@ -60,7 +58,6 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$shell" in webui | rnw) ;; *) die "--shell takes webui or rnw, not $shell" ;; esac
 [ -n "$run_id" ] || [ -n "$installers" ] || die "which Windows workflow run, or which --installers folder? (--help)"
 [ -z "$run_id" ] || [ -z "$installers" ] || die "a run id or --installers, not both"
 [ -z "$commit_rev" ] || [ -n "$installers" ] || die "--commit goes with --installers; a run names its own commit"
@@ -181,7 +178,6 @@ if [ -n "$run_id" ]; then
   echo "==> Download the installers of run $run_id ($commit)"
   for cpu in x64 arm64; do
     artifact="Ardia-Setup-$cpu"
-    [ "$shell" = webui ] || artifact="Ardia-Setup-$shell-$cpu"
     gh run download "$run_id" -R "$repo" -n "$artifact" -D "$stage/artifact-$cpu"
     [ -f "$stage/artifact-$cpu/Ardia-Setup-$cpu.exe" ] || die "the $artifact artifact holds no Ardia-Setup-$cpu.exe"
     [ -f "$stage/artifact-$cpu/Ardia.build.json" ] || die "the $artifact artifact holds no Ardia.build.json: run $run_id predates it, so publish a newer run"
@@ -190,7 +186,7 @@ if [ -n "$run_id" ]; then
   stamped="$(identity "$stage/artifact-x64/Ardia.build.json")"
   [ "$stamped" = "$(identity "$stage/artifact-arm64/Ardia.build.json")" ] || die "run $run_id's x64 and arm64 installers carry different builds"
   IFS=$'\t' read -r version build stamped_shell <<<"$stamped"
-  [ "$stamped_shell" = "$shell" ] || die "Ardia $version, build $build is the $stamped_shell shell's build, not the $shell shell's: only --shell $stamped_shell publishes it"
+  [ "$stamped_shell" = webui ] || die "Ardia $version, build $build is the $stamped_shell shell's build: only the WebUI shell's installers are published"
   about="Ardia for Windows, alpha build $build ($version, commit $commit). For testing: expect rough edges."
   status="What works and what is known not to: https://github.com/$repo/blob/main/docs/windows.md"
 else
@@ -199,7 +195,7 @@ else
   [ -f "$installers/Ardia.build.json" ] || die "$installers has no Ardia.build.json"
   stamped="$(identity "$installers/Ardia.build.json")"
   IFS=$'\t' read -r version build stamped_shell <<<"$stamped"
-  [ "$stamped_shell" = "$shell" ] || die "Ardia $version, build $build is the $stamped_shell shell's build, not the $shell shell's: only --shell $stamped_shell publishes it"
+  [ "$stamped_shell" = webui ] || die "Ardia $version, build $build is the $stamped_shell shell's build: only the WebUI shell's installers are published"
   echo "==> Take the installers of Ardia $version, build $build, from $installers"
   for cpu in x64 arm64; do
     name="Ardia-$version-windows-$cpu-setup.exe"

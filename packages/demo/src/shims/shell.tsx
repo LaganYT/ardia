@@ -21,6 +21,7 @@ export { FadeLabel } from "./web/FadeLabel";
 export { EdgeFadeMask } from "./web/EdgeFadeMask";
 export { FolderIcon } from "./web/FolderIcon";
 export { MouseArea } from "./web/MouseArea";
+export { WheelArea } from "./web/WheelArea";
 export { showMenu } from "./web/menus";
 
 const SYSTEM_INFO: SystemInfo = {

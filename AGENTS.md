@@ -147,14 +147,16 @@ cross-builds. Don't spin up Boat VMs.
   Each platform has its own engine key (`engine/engine-key.sh --platform macos|linux`): a change only Linux builds
   (`engine/ardiacore-linux`, a `linux` line of `engine/patches/series` and its patch) needs a new Linux engine and
   keeps the Mac's, and the reverse; a shared change needs both. CI: `.github/workflows/linux.yml` (`docs/linux-ci.md`); acceptance: `docs/linux-acceptance.md`.
-- **Windows** (`docs/windows.md`): `apps/browser/windows` (React Native Windows) and `packages/expo-windows` host
-  Chromium's `chrome.dll`, renamed Ardia, with each tab's page in its own window under the app's. The x64 engine is
+- **Windows** (`docs/windows.md`): Chromium's `chrome.exe`, renamed `Ardia.exe`, is the app and serves the shared
+  desktop UI (`apps/desktop`, its `--mode win` build) from `chrome://ardia/`, as on Linux; `scripts/windows/engine/src/ardia/win`
+  is its native layer. The React Native Windows app is gone (#4143); `ardia-webui-migrate.exe` still moves an old
+  install's data on its first WebUI start. The x64 engine is
   cross-built in `msi`'s WSL 2 Ubuntu in `~/chromium-build-win`, and the ARM64 engine
   is cross-built on `mini` in `~/chromium-build-win` (`docs/engine-build-windows.md`; never `~/chromium-build`), because
   x86_64 hosts hit V8's `mksnapshot` arm64 simulator crash. Its
   sources and patches live in `scripts/windows/engine/` (never under `engine/`, which would move the Mac's engine
   key), and `scripts/windows/engine/prebuilt.json` pins the release CI fetches. CI: `.github/workflows/windows.yml`
-  builds x64 and ARM64 on Windows runners, launches the app, tours pages with real input and installs the
+  builds the WebUI shell for x64 and ARM64 on Windows runners, tours it with real input and installs the
   installer. To run or test it yourself, use **`msi`** natively on Windows 11.
 
 ## Building features
@@ -276,8 +278,8 @@ cross-builds. Don't spin up Boat VMs.
 - Write simple, concise English. Pinned attention items are goals: show progress and the next step, not the original issue again.
 
 ## Repo map
-`apps/browser` is the React Native macOS app; `apps/browser/windows` and `packages/expo-windows` are the Windows
-app (`docs/windows.md`), and `apps/desktop` the Linux UI (and the Windows WebUI build, `--mode win`) with `scripts/linux` for its build, packaging and engine. `scripts/windows` holds
+`apps/browser` is the React Native macOS app; `apps/desktop` is the Linux UI and the Windows app (its `--mode win`
+WebUI build, `docs/windows.md`; `apps/browser/windows/Ardia` keeps only the icon and `EngineApi.h`, which the Windows engine reads, and `SyncWordlist.h`, which the sync vectors check) with `scripts/linux` for its build, packaging and engine. `scripts/windows` holds
 the Windows packaging, checks and engine build. The native Expo modules are in `packages/{ardiacore,shell,shaders,import,sync}`; `engine/chromium` is our Chrome-services code (the `ac_*` C calls) and `engine/ardiacore` ArdiaCore's window and tab layer
 (`engine/ardiacore-linux` on Linux),
 and `packages/core` holds the omnibox logic and its tests. `packages/demo` is the app on the web (the site's demo).

@@ -7,10 +7,8 @@ import { currentPlace, currentSectionIndex, goToSection, type OnboardingSection,
 import { noteOnboarding } from "../../state/telemetry/usage";
 import { publishedForward, SectionContext, useCanGoForward, useFlowSlots } from "./sectionContext";
 import { useSectionFades } from "./sectionFades";
-import { clampTo, rangeOf, type SectionRange } from "./sectionRange";
+import { clampTo, rangeOf, sectionFrames, type SectionRange } from "./sectionRange";
 import { onboardingFlow, onboardingMotion, sectionEase } from "./tokens";
-
-type Frame = { y: number; h: number };
 
 export type SectionScrollerHandle = { move(direction: 1 | -1, via: SectionMove): void };
 
@@ -43,10 +41,11 @@ export const SectionScroller = forwardRef<SectionScrollerHandle, { sections: Onb
     const slots = useFlowSlots();
     const scroll = useRef<ScrollView | null>(null);
     const [viewport, setViewport] = useState(0);
-    const [frames, setFrames] = useState<Record<string, Frame>>({});
+    const [heights, setHeights] = useState<Record<string, number>>({});
     const fades = useSectionFades(onboardingFlow.peekOpacity, sectionEase);
     const motion = useRef({ at: 0, placedKey: null as string | null, glidingUntil: 0, lastY: 0, afterGlide: null as ReturnType<typeof setTimeout> | null }).current;
     const keys = sections.map(sectionKey);
+    const frames = sectionFrames(keys, heights, viewport, onboardingFlow.gap);
     const ranges = keys.map((k) => rangeOf(frames[k], viewport, onboardingFlow.edge));
     const activeKey = keys[active] ?? null;
     const canForward = useCanGoForward(slots, activeKey);
@@ -140,8 +139,8 @@ export const SectionScroller = forwardRef<SectionScrollerHandle, { sections: Onb
     useEffect(() => () => void (motion.afterGlide !== null && clearTimeout(motion.afterGlide)), []);
 
     const measure = (key: string, e: LayoutChangeEvent) => {
-      const { y, height } = e.nativeEvent.layout;
-      setFrames((prev) => (prev[key]?.y === y && prev[key]?.h === height ? prev : { ...prev, [key]: { y, h: height } }));
+      const { height } = e.nativeEvent.layout;
+      setHeights((prev) => (prev[key] === height ? prev : { ...prev, [key]: height }));
     };
 
     const pick = (i: number) => {

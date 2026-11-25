@@ -13,7 +13,6 @@ on:
       - "apps/browser/official-plugins.json"
       - "apps/browser/official-plugins.d.json.ts"
       - "apps/browser/macos/Ardia.xcodeproj/project.pbxproj"
-      - "apps/browser/windows/Ardia/IntroMusic.wav"
       - "apps/site/src/scripts/meadow/**"
       - "apps/cli/install.sh"
       - "packages/core/src/**"

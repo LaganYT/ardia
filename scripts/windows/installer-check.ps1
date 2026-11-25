@@ -1,6 +1,5 @@
 param(
-  [Parameter(Mandatory = $true)][string]$Setup,
-  [ValidateSet("auto", "rnw", "webui")][string]$Shell = "auto"
+  [Parameter(Mandatory = $true)][string]$Setup
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,26 +62,19 @@ if ((Test-Path -LiteralPath $entry) -or (Test-Path -LiteralPath $folder)) { thro
 $before = Browser-Leftovers
 if ($before.Count) { throw "Ardia's browser registration is already here before the install: $($before -join ', ')" }
 
-$loginSeed = $null
-if ($Shell -ne "auto") {
-  $seededExe = Join-Path $folder "Ardia.exe"
-  $loginSeed = if ($Shell -eq "webui") {
-    @{ Retired = "Ardia"; RetiredCommand = "`"$seededExe`""; Item = "Ardia WebUI" }
-  } else {
-    @{ Retired = "Ardia WebUI"; RetiredCommand = "`"$seededExe`" --ardia-shell=webui"; Item = "Ardia" }
-  }
-  $loginSeed.ExtraName = "Ardia installer-check extra arguments"
-  $loginSeed.ExtraCommand = "`"$seededExe`" --start-maximized"
-  $loginSeed.UnrelatedCommand = "`"$(Join-Path $env:WINDIR "System32\notepad.exe")`" --ardia-shell=rnw"
-  $loginSeed.Approval = [byte[]](3, 0, 0, 0, 16, 32, 48, 64, 80, 96, 112, 128)
-  $loginSeed.OrphanApproval = [byte[]](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-  $loginSeed.Runs = @($loginSeed.Retired, $loginSeed.Item, $loginSeed.ExtraName, $unrelatedLoginItem)
-  $loginSeed.Approvals = @($loginSeed.Retired, $loginSeed.Item)
-  $loginSeed.SavedRuns = @{}
-  foreach ($name in $loginSeed.Runs) { $loginSeed.SavedRuns[$name] = Read-RegistryValue $loginItems $name }
-  $loginSeed.SavedApprovals = @{}
-  foreach ($name in $loginSeed.Approvals) { $loginSeed.SavedApprovals[$name] = Read-RegistryValue $loginApprovals $name }
-}
+$seededExe = Join-Path $folder "Ardia.exe"
+$loginSeed = @{ Retired = "Ardia"; RetiredCommand = "`"$seededExe`""; Item = "Ardia WebUI" }
+$loginSeed.ExtraName = "Ardia installer-check extra arguments"
+$loginSeed.ExtraCommand = "`"$seededExe`" --start-maximized"
+$loginSeed.UnrelatedCommand = "`"$(Join-Path $env:WINDIR "System32\notepad.exe")`" --ardia-shell=rnw"
+$loginSeed.Approval = [byte[]](3, 0, 0, 0, 16, 32, 48, 64, 80, 96, 112, 128)
+$loginSeed.OrphanApproval = [byte[]](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+$loginSeed.Runs = @($loginSeed.Retired, $loginSeed.Item, $loginSeed.ExtraName, $unrelatedLoginItem)
+$loginSeed.Approvals = @($loginSeed.Retired, $loginSeed.Item)
+$loginSeed.SavedRuns = @{}
+foreach ($name in $loginSeed.Runs) { $loginSeed.SavedRuns[$name] = Read-RegistryValue $loginItems $name }
+$loginSeed.SavedApprovals = @{}
+foreach ($name in $loginSeed.Approvals) { $loginSeed.SavedApprovals[$name] = Read-RegistryValue $loginApprovals $name }
 
 $installedByCheck = $false
 try {
@@ -96,7 +88,7 @@ try {
   }
   Invoke-Quietly (Resolve-Path -LiteralPath $Setup).Path "the installer"
   $installedByCheck = $true
-  $shellKind = Resolve-ShellLayout $folder $Shell
+  $shellKind = Resolve-ShellLayout $folder "webui"
   $shipped = Get-ShellInstalledFiles $shellKind
   $missing = @($shipped | Where-Object { -not (Test-Path -LiteralPath (Join-Path $folder $_) -PathType Leaf) })
   if ($missing.Count) { throw "the install in $folder lacks $($missing -join ', ')" }

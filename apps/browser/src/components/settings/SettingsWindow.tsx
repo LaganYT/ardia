@@ -1,5 +1,5 @@
 import { Button, ListRow, NativeFormContext, space, Symbol, Text, VisualEffect, WindowDragRegion } from "../ui";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useProfile } from "../../state/browser/hooks";
 import { usePluginTitle } from "../../state/plugins/hooks";
@@ -21,7 +21,7 @@ import { ShortcutsPane } from "./panes/Shortcuts";
 import { TabsPane } from "./panes/Tabs";
 import { useSettingsSheet } from "../../state/settings/sheet";
 import { SettingsConsentSheet } from "../plugins/SettingsConsentSheet";
-import { claimSettingsOpenAt, goToSettingsPane, SETTINGS_WINDOW_ID, settingsBack, settingsForward, useSettingsNav, type SettingsPane, type SettingsPlace } from "../../state/settings/settingsWindows";
+import { claimSettingsOpenAt, forgetSettingsScroll, goToSettingsPane, SETTINGS_WINDOW_ID, settingsScrollFor, settingsBack, settingsForward, settingsPageKey, settingsPlaceKey, useSettingsNav, type SettingsPane, type SettingsPlace } from "../../state/settings/settingsWindows";
 import { closeProfileIconPickerIn } from "../../state/profiles/iconPicker";
 import { ProfileIconPicker } from "../profiles/ProfileIconPicker";
 import { settingsProfileFor } from "../../state/extensions/store";
@@ -36,6 +36,9 @@ import { WindowControls } from "../window/WindowControls";
 import { LeadingWindowControls } from "../window/LeadingWindowControls";
 import { useWindowChrome } from "../../state/windows/windowButtons";
 import { noteSettingsScroll } from "../../state/settings/growingRows";
+import { revealScrollTarget, settingsLayoutKey, settingsScroller, type ScrollMove } from "../../state/settings/paneScroll";
+import { noteSettingsScrollRestore } from "../../state/telemetry/usage";
+import { consentToken } from "../../state/telemetry/choice";
 
 const SIDEBAR = settingsLayout.sidebarWidth;
 const TOOLBAR = pageToolbar.window.height;
@@ -44,18 +47,18 @@ const TITLE_LEFT = SIDEBAR + 96;
 const CONTROLS_ROOM = WINDOW_CONTROLS.edge + windowControlsWidth() + WINDOW_CONTROLS.gap;
 const HOLD_CAP_MS = 250;
 const PREFETCH_DELAY_MS = 150;
-const REVEAL_MARGIN = 16;
 
-const shownKey = (s: SettingsPlace) => `${s.pane}:${s.profileId ?? ""}:${s.detail ?? ""}`;
-const pageKey = (s: SettingsPlace) => (s.pane === "profiles" && !s.detail ? "profiles::" : shownKey(s));
+let layoutGenerations = 0;
 
-function useShownPane(openedAt: number | null): SettingsPlace | null {
+type ShownPane = SettingsPlace & { visit: number };
+
+function useShownPane(openedAt: number | null): ShownPane | null {
   const nav = useSettingsNav();
-  const target = { pane: nav.pane, profileId: nav.profileId, detail: nav.detail };
-  const key = shownKey(target);
+  const target = { pane: nav.pane, profileId: nav.profileId, detail: nav.detail, visit: nav.visit };
+  const key = settingsPlaceKey(target);
   const loaded = usePaneLoaded(nav.pane, nav.profileId);
   const [expired, setExpired] = useState<string | null>(null);
-  const [last, setLast] = useState<SettingsPlace | null>(null);
+  const [last, setLast] = useState<ShownPane | null>(null);
   const ready = loaded || expired === key;
   useEffect(() => {
     if (ready) return setLast(target);
@@ -64,7 +67,7 @@ function useShownPane(openedAt: number | null): SettingsPlace | null {
     const wait = since ? Math.max(0, HOLD_CAP_MS - (Date.now() - since)) : HOLD_CAP_MS;
     const timer = setTimeout(() => setExpired(key), wait);
     return () => clearTimeout(timer);
-  }, [key, ready]);
+  }, [key, nav.visit, ready]);
   return ready ? target : last;
 }
 
@@ -82,6 +85,63 @@ function usePrefetchAllPanes(shown: SettingsPane | null) {
       if (timer) clearTimeout(timer);
     };
   }, [!!shown]);
+}
+
+function PaneScrollView({
+  layout,
+  page,
+  shown,
+  visit,
+  scroller,
+  content,
+  viewport,
+  scrollMemory,
+  move,
+}: {
+  layout: string;
+  page: string;
+  shown: ShownPane | null;
+  visit: number;
+  scroller: RefObject<ScrollView | null>;
+  content: RefObject<View | null>;
+  viewport: { current: number };
+  scrollMemory: ReturnType<typeof settingsScroller>;
+  move: (to: ScrollMove | null) => void;
+}) {
+  const generation = useMemo(() => ++layoutGenerations, [layout]);
+  useLayoutEffect(() => {
+    if (shown) move(scrollMemory.begin(visit, settingsScrollFor(visit), shown, consentToken(), generation));
+  }, [visit]);
+
+  return (
+    <ScrollView
+      ref={scroller}
+      scrollEventThrottle={16}
+      onScroll={({ nativeEvent: { contentOffset, layoutMeasurement, contentSize } }) => {
+        scrollMemory.scrolled(contentOffset.y, contentSize.height - layoutMeasurement.height, contentSize.height, { layout, generation });
+        noteSettingsScroll(contentOffset.y, layoutMeasurement.height, contentSize.height);
+      }}
+      onLayout={(e) => {
+        viewport.current = e.nativeEvent.layout.height;
+        scrollMemory.resized(e.nativeEvent.layout.height);
+      }}
+      contentContainerStyle={PANE_SCROLL}>
+      <View
+        key={page}
+        ref={content}
+        collapsable={false}
+        style={PANE_COLUMN}>
+        {shown ? (
+          <NativeFormContext.Provider value>
+            <SettingsPaneContext.Provider value={shown.pane}>
+              <Pane {...shown} />
+            </SettingsPaneContext.Provider>
+          </NativeFormContext.Provider>
+        ) : null}
+        <View key={layout} onLayout={(e) => move(scrollMemory.laidOut(layout, e.nativeEvent.layout.y + settingsLayout.paneBottom, generation))} />
+      </View>
+    </ScrollView>
+  );
 }
 
 export function SettingsWindow() {
@@ -106,12 +166,17 @@ export function SettingsWindow() {
   useEffect(() => markCaptionRegions(SETTINGS_WINDOW_ID, [[TITLE_LEFT, 0, CONTROLS_ROOM, TOOLBAR]]), []);
   useEffect(() => void setTrafficLightsCenter(SETTINGS_WINDOW_ID, [LIGHTS_CENTER[0], TOOLBAR / 2]), []);
   const scroller = useRef<ScrollView>(null);
-  const key = shown ? shownKey(shown) : "";
-  const page = shown ? pageKey(shown) : "";
-  useLayoutEffect(() => scroller.current?.scrollTo({ y: 0, animated: false }), [page]);
+  const key = shown ? settingsPlaceKey(shown) : "";
+  const page = shown ? settingsPageKey(shown) : "";
+  const visit = shown?.visit ?? 0;
+  const layout = shown ? settingsLayoutKey(shown) : "";
+  const [scrollMemory] = useState(() => settingsScroller(noteSettingsScrollRestore));
+  const move = (to: ScrollMove | null) => {
+    if (to) scroller.current?.scrollTo({ y: to.y, animated: false });
+  };
+  useEffect(() => forgetSettingsScroll, []);
   useEffect(() => closeProfileIconPickerIn(SETTINGS_WINDOW_ID), [key]);
   const content = useRef<View>(null);
-  const scrollTop = useRef(0);
   const viewport = useRef(0);
   const query = useSettingsSearch((s) => s.query);
   const reveal = useSettingsSearch((s) => s.reveal);
@@ -135,9 +200,11 @@ export function SettingsWindow() {
     };
     const frame = requestAnimationFrame(() => {
       stop = runReveal(reveal, id, locate, (y, h) => {
-        const top = animated ? scrollTop.current : 0;
-        const inView = y >= top + REVEAL_MARGIN && y + h <= top + viewport.current - REVEAL_MARGIN;
-        if (!inView) scroller.current?.scrollTo({ y: Math.max(0, y - viewport.current / 3), animated });
+        const next = revealScrollTarget(y, h, scrollMemory.revealTop(), viewport.current);
+        if (next !== null) {
+          scrollMemory.moved();
+          scroller.current?.scrollTo({ y: next, animated });
+        }
       });
     });
     return () => {
@@ -175,25 +242,17 @@ export function SettingsWindow() {
             {title}
           </Text>
         </PageToolbar>
-        <ScrollView
-          ref={scroller}
-          scrollEventThrottle={16}
-          onScroll={({ nativeEvent: { contentOffset, layoutMeasurement, contentSize } }) => {
-            scrollTop.current = contentOffset.y;
-            noteSettingsScroll(contentOffset.y, layoutMeasurement.height, contentSize.height);
-          }}
-          onLayout={(e) => void (viewport.current = e.nativeEvent.layout.height)}
-          contentContainerStyle={PANE_SCROLL}>
-          <View key={page} ref={content} collapsable={false} style={PANE_COLUMN}>
-            {shown ? (
-              <NativeFormContext.Provider value>
-                <SettingsPaneContext.Provider value={shown.pane}>
-                  <Pane {...shown} />
-                </SettingsPaneContext.Provider>
-              </NativeFormContext.Provider>
-            ) : null}
-          </View>
-        </ScrollView>
+        <PaneScrollView
+          layout={layout}
+          page={page}
+          shown={shown}
+          visit={visit}
+          scroller={scroller}
+          content={content}
+          viewport={viewport}
+          scrollMemory={scrollMemory}
+          move={move}
+        />
       </View>
       <ProfileIconPicker windowId={SETTINGS_WINDOW_ID} />
       {sheet}

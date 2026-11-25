@@ -25,8 +25,8 @@ export const tabRows = {
         autoHideTabs: {
           title: "Auto-hide tabs",
           explained: true,
-          description: `Tabs slide away until you point at the edge. ${keyText("⌘S")} toggles.`,
-          keywords: ["hide tabs", "hide sidebar", "show sidebar", "toggle sidebar", "hide tab bar", "tab strip", "top tabs", "focus mode", "full screen", "zen", "window edge", "slide", "one window"],
+          description: "Tabs slide away until you point at the edge.",
+          keywords: ["hide tabs", "hide sidebar", "show sidebar", "toggle sidebar", "sidebar shortcut", "cmd s", "change shortcut", "hide tab bar", "tab strip", "top tabs", "focus mode", "full screen", "zen", "window edge", "slide", "one window"],
         },
         hideToolbarWhileScrolling: {
           title: "Hide toolbar while scrolling",

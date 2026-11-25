@@ -28,6 +28,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) BOOL warm;
 @property (nonatomic) BOOL neighbour;
 @property (nonatomic) BOOL autoPictureInPicture;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *pageMenuItems;
 @property (nonatomic, readonly) BOOL discarded;
 @property (nonatomic) BOOL frozen;
 @property (nonatomic, readonly) int browserId;

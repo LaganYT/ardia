@@ -8,6 +8,7 @@ type Picks = {
   commandBar: "field" | "centred";
   scrollToolbar: "keep" | "hide";
   afterClosingTab: "recent" | "above" | "below";
+  autoHideTabsKeys: "changed" | "cleared";
 };
 
 const ZERO = {
@@ -25,6 +26,9 @@ const ZERO = {
   after_closing_tab_picks_recent: 0,
   after_closing_tab_picks_above: 0,
   after_closing_tab_picks_below: 0,
+  auto_hide_tabs_keys_changed: 0,
+  auto_hide_tabs_keys_cleared: 0,
+  shortcuts_keyword_finds: 0,
 };
 
 type Field = keyof typeof ZERO;
@@ -36,6 +40,7 @@ const FIELD_PREFIX: { [P in keyof Picks]: string } = {
   commandBar: "command_bar_picks",
   scrollToolbar: "scroll_toolbar_picks",
   afterClosingTab: "after_closing_tab_picks",
+  autoHideTabsKeys: "auto_hide_tabs_keys",
 };
 
 let counts = { ...ZERO };
@@ -43,6 +48,10 @@ let counts = { ...ZERO };
 export function noteSettingsPick<P extends keyof Picks>(picker: P, option: Picks[P], consent?: ConsentToken | null) {
   const field = `${FIELD_PREFIX[picker]}_${option}` as Field;
   countFor(consentOrNow(consent), () => void counts[field]++);
+}
+
+export function noteShortcutsKeywordFind(consent?: ConsentToken | null) {
+  countFor(consentOrNow(consent), () => void counts.shortcuts_keyword_finds++);
 }
 
 export function takeSettingsPickerCounts() {

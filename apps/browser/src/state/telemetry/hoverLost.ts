@@ -44,7 +44,7 @@ const clickCount = (value: unknown) =>
 export function hoverLostProperties(e: HoverLostEpisode, sessionMin: number) {
   return {
     reason: oneOf(HOVER_REASONS, e.reason),
-    trigger: e.trigger === "click" ? "click" : "move",
+    trigger: e.trigger === "click" || e.trigger === "key" ? e.trigger : "move",
     key_window: oneOf(HOVER_WINDOW_KINDS, e.keyWindow),
     main_window: oneOf(HOVER_WINDOW_KINDS, e.mainWindow),
     prevent_key: e.preventKey === true,

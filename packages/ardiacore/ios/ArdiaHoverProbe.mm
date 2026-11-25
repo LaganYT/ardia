@@ -27,7 +27,7 @@ NSString *HolderName(FocusHolder holder) {
 }
 
 NSString *TriggerName(HoverTrigger trigger) {
-  return @[ @"move", @"click", @"recheck" ][(NSUInteger)trigger];
+  return @[ @"move", @"click", @"recheck", @"key" ][(NSUInteger)trigger];
 }
 
 bool gDevHalfActive = false;
@@ -247,7 +247,7 @@ bool SafeToHeal(NSWindow *window, const HoverCheck &check, HoverTrigger trigger,
   HealRefusal refusal = GuardRefusal(window, check, menuWindow);
   if (refusal == HealRefusal::none) {
     if (check.reason == HoverReason::halfActive) {
-      if (trigger != HoverTrigger::click) refusal = HealRefusal::notClick;
+      if (trigger != HoverTrigger::click && trigger != HoverTrigger::key) refusal = HealRefusal::notClick;
       else if (check.key == FocusWindowKind::popup) refusal = HealRefusal::keyPopup;
     } else if (check.reason == HoverReason::responderLost) {
       if (trigger != HoverTrigger::click) refusal = HealRefusal::notClick;
@@ -412,13 +412,19 @@ void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, Ard
     if (QuitWindowClosedPending()) return;
   }
   if (!window) return;
-  if (gEpisode.open && gEpisode.owner != window) {
+  if (gEpisode.open && gEpisode.owner != window && trigger != HoverTrigger::key) {
     if (trigger != HoverTrigger::click) return;
     gEpisode.otherWindowClicks++;
     if (gEpisode.first.reason != HoverReason::halfActive || gEpisode.healed) return;
     gEpisode.owner = window;
   }
   const HoverCheck check = Probe(window, point, trigger == HoverTrigger::click);
+  if (trigger == HoverTrigger::key && check.reason != HoverReason::halfActive) return;
+  if (trigger == HoverTrigger::key && gEpisode.open && gEpisode.owner != window) {
+    if (gEpisode.first.reason != HoverReason::halfActive) CloseEpisode(@"appInactive");
+    else if (gEpisode.healed) return;
+    else gEpisode.owner = window;
+  }
   if (trigger == HoverTrigger::move && !check.overPage) return;
   gLastHoverVerdict = DescribeCheck(check, trigger);
   if (!IsProblem(check, trigger)) {
@@ -493,6 +499,26 @@ NSWindow *BrowserWindowFor(NSEvent *event) {
   return IsBrowserWindow(event.window) ? event.window : nil;
 }
 
+NSWindow *BrowserWindowForKey(NSEvent *event) {
+  if (event.window) return IsBrowserWindow(event.window) ? event.window : nil;
+  if (IsBrowserWindow(NSApp.mainWindow)) return NSApp.mainWindow;
+  for (NSWindow *window in NSApp.orderedWindows)
+    if (window.isVisible && IsBrowserWindow(window) && !Invisible(window)) return window;
+  return nil;
+}
+
+bool CheckKeyInHalfActiveApp(NSEvent *event) {
+  if (event.type != NSEventTypeKeyDown) return false;
+  if (event.isARepeat || NSApp.isActive || !CurrentActivation().inFront()) return true;
+  NSWindow *window = BrowserWindowForKey(event);
+  if (!window) return true;
+  ArdiaConsentStamp *stamp = [ArdiaConsentStamp begin];
+  const NSPoint point = [window convertPointFromScreen:NSEvent.mouseLocation];
+  __weak NSWindow *weakWindow = window;
+  dispatch_async(dispatch_get_main_queue(), ^{ HandleHoverCheck(weakWindow, point, HoverTrigger::key, stamp); });
+  return true;
+}
+
 NSPoint PointIn(NSWindow *window, NSEvent *event) {
   if (event.window == window) return event.locationInWindow;
   return [window convertPointFromScreen:NSEvent.mouseLocation];
@@ -505,8 +531,9 @@ void StopHoverWatch() {
 
 void StartHoverWatch() {
   if (gHoverMonitor || (Background() && !gHoverWatchInBackground)) return;
-  gHoverMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskMouseMoved | NSEventMaskLeftMouseDown
+  gHoverMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskMouseMoved | NSEventMaskLeftMouseDown | NSEventMaskKeyDown
                                                         handler:^NSEvent *(NSEvent *event) {
+    if (CheckKeyInHalfActiveApp(event)) return event;
     const bool move = event.type == NSEventTypeMouseMoved;
     if (move && Uptime() - gLastMoveCheck < kMoveCheckEvery) return event;
     if (move) gLastMoveCheck = Uptime();

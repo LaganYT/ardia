@@ -140,6 +140,14 @@ function closePane(tabId: string, user: ByUser) {
 
 export const pressClosePane = (tabId: string) => closePane(tabId, { consent: consentToken() });
 
+export function movesIntoSplitPane(paneTabId: string, tabId: string): boolean {
+  const s = store();
+  const split = splitOf(s, paneTabId);
+  const pane = s.tabs[paneTabId];
+  const tab = s.tabs[tabId];
+  return !!split && !!pane && !!tab && !splitTabIds(split).includes(tabId) && tab.windowId === pane.windowId && tab.profileId === pane.profileId;
+}
+
 export function closeEmptySplitPaneOnEscape(tabId: string): boolean {
   const consent = consentToken();
   const windowId = store().tabs[tabId]?.windowId;

@@ -22,6 +22,7 @@ import { forgetVerificationCodes } from "../site/verificationCodes";
 import { useBrowser } from "../browser/store";
 import { siteOf } from "../engines/engines";
 import { navigationOf } from "./pageSession";
+export { deliverZapPicked } from "../boostUi/zap";
 
 export function leftPage(tabId: string, url: string, previousPage: string, engine: PageEngine) {
   if (pageOf(tabId).externalApp && hostOf(url) !== hostOf(previousPage)) answerExternalApp(tabId, false);
@@ -33,6 +34,7 @@ export function leftPage(tabId: string, url: string, previousPage: string, engin
   patchPage(tabId, { popups: [], passwordPrompt: null, crashed: null, status: "" });
   revealToolbar(tabId);
   followSiteChoice(tabId, engine, url, previousPage);
+  openBoostLink(tabId, url);
 }
 
 export function arrivedOnFirstPage(tabId: string, url: string, engine: PageEngine) {

@@ -135,7 +135,7 @@ test("SafeToHeal names the first guard that refuses, in the order the guards are
   assert.match(panel, /NSSavePanel\.class\]\) return HealRefusal::savePanel;/);
 
   const safe = body(probe, "bool SafeToHeal(");
-  assert.match(safe, /HoverReason::halfActive\) \{\s*if \(trigger != HoverTrigger::click\) refusal = HealRefusal::notClick;\s*else if \(check\.key == FocusWindowKind::popup\) refusal = HealRefusal::keyPopup;/);
+  assert.match(safe, /HoverReason::halfActive\) \{\s*if \(trigger != HoverTrigger::click && trigger != HoverTrigger::key\) refusal = HealRefusal::notClick;\s*else if \(check\.key == FocusWindowKind::popup\) refusal = HealRefusal::keyPopup;/);
   assert.match(safe, /HoverReason::notKeyOrMain && check\.activation\.appActive && Unseen\(check\.key\) && !OtherArdiaWindowActive\(window\)\)\) \{\s*refusal = HealRefusal::notEligible;/);
   assert.match(safe, /return refusal == HealRefusal::none;/);
 
@@ -178,7 +178,7 @@ test("a click in another browser window while an episode is open is counted, and
   const handle = body(probe, "void HandleHoverCheck(");
   assert.match(
     handle,
-    /if \(!window\) return;\s*if \(gEpisode\.open && gEpisode\.owner != window\) \{\s*if \(trigger != HoverTrigger::click\) return;\s*gEpisode\.otherWindowClicks\+\+;\s*if \(gEpisode\.first\.reason != HoverReason::halfActive \|\| gEpisode\.healed\) return;\s*gEpisode\.owner = window;\s*\}\s*const HoverCheck check = Probe\(window/,
+    /if \(!window\) return;\s*if \(gEpisode\.open && gEpisode\.owner != window && trigger != HoverTrigger::key\) \{\s*if \(trigger != HoverTrigger::click\) return;\s*gEpisode\.otherWindowClicks\+\+;\s*if \(gEpisode\.first\.reason != HoverReason::halfActive \|\| gEpisode\.healed\) return;\s*gEpisode\.owner = window;\s*\}\s*const HoverCheck check = Probe\(window/,
   );
 });
 
@@ -256,4 +256,21 @@ test("a quit report commits only on real termination past cancellation points, s
   const helper = body(quitCommit, "static func commit(", "\n  }\n");
   assert.ok(helper.indexOf("guard write(target, prepared.json) else { return false }") > 0);
   assert.ok(helper.indexOf("guard write(target, prepared.json) else { return false }") < helper.indexOf("list(prefix)"), "writes durably before listing or pruning committed records");
+});
+
+test("a key press in a half-active Ardia repairs it as a click does, and a key never opens any other episode", () => {
+  const check = body(probe, "bool CheckKeyInHalfActiveApp(NSEvent *event)");
+  assert.match(check, /if \(event\.type != NSEventTypeKeyDown\) return false;/);
+  assert.match(check, /if \(event\.isARepeat \|\| NSApp\.isActive \|\| !CurrentActivation\(\)\.inFront\(\)\) return true;/);
+  assert.match(check, /HandleHoverCheck\(weakWindow, point, HoverTrigger::key, stamp\)/);
+  assert.match(body(probe, "NSWindow *BrowserWindowForKey(NSEvent *event)"), /if \(event\.window\) return IsBrowserWindow\(event\.window\) \? event\.window : nil;/);
+  assert.match(probe, /NSEventMaskMouseMoved \| NSEventMaskLeftMouseDown \| NSEventMaskKeyDown[\s\S]*?if \(CheckKeyInHalfActiveApp\(event\)\) return event;/);
+  const handle = body(probe, "void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, ArdiaConsentStamp *stamp)");
+  const keyGuard = handle.indexOf("if (trigger == HoverTrigger::key && check.reason != HoverReason::halfActive) return;");
+  assert.ok(keyGuard >= 0 && handle.indexOf("OpenEpisode(") >= 0 && keyGuard < handle.indexOf("OpenEpisode("), "a key never opens any other kind of episode");
+  const keyMove = handle.indexOf("if (trigger == HoverTrigger::key && gEpisode.open && gEpisode.owner != window) {");
+  assert.ok(handle.indexOf("if (trigger == HoverTrigger::key && check.reason != HoverReason::halfActive) return;") < keyMove && keyMove > 0, "a key moves or ends another window's episode only once the probe confirms halfActive");
+  assert.match(handle.slice(keyMove), /^if \(trigger == HoverTrigger::key && gEpisode\.open && gEpisode\.owner != window\) \{\s*if \(gEpisode\.first\.reason != HoverReason::halfActive\) CloseEpisode\(@"appInactive"\);\s*else if \(gEpisode\.healed\) return;\s*else gEpisode\.owner = window;/);
+  assert.match(probeInternal, /enum class HoverTrigger \{ move, click, recheck, key \};/);
+  assert.match(probe, /@"move", @"click", @"recheck", @"key"/);
 });

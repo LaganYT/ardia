@@ -31,3 +31,6 @@ export const useSplitSuggestions = (tabId: string) =>
         .map((t) => t.id);
     }),
   );
+
+export const useSplitPaneIds = (tabId: string) =>
+  useBrowser(useShallow((s) => splitTabIdsOf(Object.values(s.splits).find((v) => splitTabIds(v).includes(tabId))) ?? [tabId]));

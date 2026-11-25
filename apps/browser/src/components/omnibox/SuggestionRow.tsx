@@ -35,7 +35,7 @@ export function SuggestionIcon({ suggestion: s, color }: { suggestion: Suggestio
   }
 }
 
-function labels(s: Suggestion): [string, string | null] {
+export function suggestionLabels(s: Suggestion): [string, string | null] {
   switch (s.kind) {
     case "page":
       if (s.tabId) return [s.title || displayUrl(s.url), "Switch to Tab"];
@@ -112,7 +112,7 @@ const SuggestionRow = memo(
   }) {
     const theme = useTheme();
     const { hovered, hoverProps } = useHover();
-    const [title, accessory] = labels(s);
+    const [title, accessory] = suggestionLabels(s);
     const hint = trailing ?? (s.kind === "action" ? s.hint : s.kind === "provider" ? s.provider : null);
     const onRemove = isRemovable(s) ? () => actions.remove(s.url) : undefined;
     const removable = !!onRemove && (hovered || selected);

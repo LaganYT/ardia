@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, View, type ViewProps, type ViewStyle } from "react-native";
 import { useBrowser } from "../../../../../apps/browser/src/state/browser/store";
+import { useScopedTheme } from "../../../../../apps/browser/src/components/ui/theme";
+import { materialFill } from "./materials";
 import type { MiddleClickEvent } from "./MouseArea";
 import { edgeGain, fallbackRadius, highlightMask, maskStyle, peakGain, shapeMask, type RimCurve, type RimProfile, type ShadeProfile } from "./glassRim";
 
@@ -88,19 +90,17 @@ export function Surface({ fill, fillColors, fillStops, fade, fadeStops, cornerRa
   );
 }
 
-const MATERIAL_FILL: Record<string, string> = {
-  popover: "rgba(246,246,246,0.72)",
-  menu: "rgba(246,246,246,0.72)",
-  hudWindow: "rgba(30,30,30,0.6)",
-  sidebar: "rgba(240,240,240,0.5)",
-  underWindowBackground: "rgba(240,240,240,0.4)",
-};
+export function useSurfaceDark(): boolean {
+  const appDark = useBrowser((s) => s.ui.appDark);
+  return useScopedTheme()?.dark ?? appDark;
+}
 
 export type VisualEffectProps = ViewProps & { material?: string; blendingMode?: "withinWindow" | "behindWindow"; cornerRadius?: number };
 
 export function VisualEffect({ material = "popover", cornerRadius, style, ...props }: VisualEffectProps) {
+  const fill = materialFill(material, useSurfaceDark());
   const glass: Style = {
-    backgroundColor: MATERIAL_FILL[material] ?? "rgba(246,246,246,0.6)",
+    backgroundColor: fill,
     backdropFilter: "blur(24px) saturate(180%)",
     WebkitBackdropFilter: "blur(24px) saturate(180%)",
     borderRadius: cornerRadius,
@@ -219,8 +219,8 @@ function scrolledGlassSurface(theme: "light" | "dark", clear: boolean, cornerRad
 }
 
 export function GlassEffect({ cornerRadius = 0, tint, glassStyle = "regular", dark, style, children, ...props }: GlassEffectProps) {
-  const appDark = useBrowser((s) => s.ui.appDark);
-  const theme = (dark ?? appDark) ? "dark" : "light";
+  const surfaceDark = useSurfaceDark();
+  const theme = (dark ?? surfaceDark) ? "dark" : "light";
   const g = GLASS[theme];
   const clear = glassStyle === "clear";
   const filter = clear ? glassFilter(1, (1 + g.slope) / 2, g.offset / 2) : glassFilter(g.saturate, g.slope, g.offset);

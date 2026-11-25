@@ -11,7 +11,7 @@ enum class FocusWindowKind { none, hidden, blockerPage, internal, ardiaPanel, po
 enum class PageCover { none, reactNative, chromium, other };
 enum class CoverView { none, rnView, rnText, rnImage, rnTextInput, rnScroll, rnOther, expo, pageHost, ardia, appKit, chromium, other };
 enum class CoverSize { none, small, large, full };
-enum class HoverTrigger { move, click, recheck };
+enum class HoverTrigger { move, click, recheck, key };
 enum class FocusHolder { none, window, otherWindow, page, control };
 
 enum class HealRefusal {

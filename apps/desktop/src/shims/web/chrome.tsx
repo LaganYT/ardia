@@ -2,7 +2,7 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNod
 import { View, type ViewProps, type ViewStyle } from "react-native";
 import { useBrowser } from "../../../../browser/src/state/browser/store";
 import { useScopedTheme } from "../../../../browser/src/components/ui/theme";
-import { popoverMenuMaterial } from "../../../../browser/src/components/ui/tokens";
+import { materialFill } from "./materials";
 import { ardiaHost, hostModuleMethod, hostSupports, reportHostError } from "../../host";
 import { shellOverPages, useInputRegion } from "../../shellAbove";
 import { GlassInside, GlassOptIn, useGlassSurface, useVisualEffectMark } from "../../shellGlass";
@@ -108,17 +108,6 @@ export function Surface({ fill, fillColors, fillStops, fade, fadeStops, cornerRa
   );
 }
 
-type MaterialFill = { light: string; dark: string };
-
-const MATERIAL_FILL: Record<string, MaterialFill> = {
-  popover: popoverMenuMaterial,
-  menu: popoverMenuMaterial,
-  hudWindow: { light: "rgba(246,246,246,0.6)", dark: "rgba(30,30,30,0.6)" },
-  sidebar: { light: "rgba(240,240,240,0.5)", dark: "rgba(46,46,48,0.5)" },
-  underWindowBackground: { light: "rgba(240,240,240,0.4)", dark: "rgba(30,30,30,0.4)" },
-};
-const PLAIN_MATERIAL: MaterialFill = { light: "rgba(246,246,246,0.6)", dark: "rgba(40,40,42,0.6)" };
-
 export function useSurfaceDark(): boolean {
   const appDark = useBrowser((s) => s.ui.appDark);
   return useScopedTheme()?.dark ?? appDark;
@@ -129,7 +118,7 @@ export type VisualEffectProps = ViewProps & { material?: string; blendingMode?: 
 export function VisualEffect({ material = "popover", cornerRadius, style, ...props }: VisualEffectProps) {
   const mark = useRef<View & Element>(null);
   useVisualEffectMark(mark);
-  const fill = (MATERIAL_FILL[material] ?? PLAIN_MATERIAL)[useSurfaceDark() ? "dark" : "light"];
+  const fill = materialFill(material, useSurfaceDark());
   const opaque = shellOverPages();
   const glass: Style = {
     backgroundColor: opaque ? opaqueColor(fill) : fill,

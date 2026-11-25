@@ -264,6 +264,8 @@ ARDIACORE_EXPORT
 - (void)tab:(ArdiaCoreTab*)tab didBlockRequests:(int)count lastURL:(NSString*)url;
 - (NSArray<NSDictionary<NSString*, NSString*>*>*)tab:(ArdiaCoreTab*)tab
                          contextMenuItemsForSelection:(NSString*)text;
+- (NSArray<NSDictionary<NSString*, NSString*>*>*)tab:(ArdiaCoreTab*)tab
+                              contextMenuItemsForPage:(NSString*)url;
 - (void)tab:(ArdiaCoreTab*)tab
     contextMenuCommand:(NSString*)itemId
                   text:(NSString*)selection

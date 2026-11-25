@@ -73,7 +73,7 @@ export type CursorRestore = { hidden: boolean; epoch: string };
 
 export type HoverLostEpisode = {
   reason: "halfActive" | "staleMenu" | "notKeyOrMain" | "coveredByView" | "responderLost" | "coveredByWindow";
-  trigger: "move" | "click";
+  trigger: "move" | "click" | "key";
   keyWindow: string;
   mainWindow: string;
   preventKey: boolean;

@@ -15,7 +15,7 @@ export { cancelShortcutRecording, recordShortcut, type MenuShortcut } from "../.
 
 type MenuModifier = NonNullable<Extract<MenuItem, { id: string }>["modifiers"]>[number];
 type MenuKey = { key?: string; modifiers?: MenuModifier[] };
-type ShortcutState = { settings: { shortcuts: ShortcutOverrides; mouseShortcuts?: ShortcutOverrides }; profileOrder: readonly string[] };
+export type ShortcutState = { settings: { shortcuts: ShortcutOverrides; mouseShortcuts?: ShortcutOverrides }; profileOrder: readonly string[] };
 type MenuBar = { listed: ReadonlySet<string>; fixed: readonly ShortcutSource[] };
 
 const useMenuBar = create<{ bar: MenuBar | undefined; revision: number }>()(() => ({ bar: undefined, revision: 0 }));

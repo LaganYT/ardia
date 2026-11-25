@@ -1,0 +1,79 @@
+assert(is_mac)
+
+if (is_official_build) {
+  source_set("mac") {
+    sources = [
+      "ac_mac_hooks.h",
+      "ac_mac_webui.h",
+      "ac_mac_webui_release.mm",
+    ]
+  }
+} else {
+  config("webui_dev") {
+    defines = [ "ARDIA_MAC_WEBUI_DEV" ]
+  }
+
+  action("bootstrap") {
+    script = "generate_bootstrap.py"
+    sources = [ "bootstrap.js" ]
+    outputs = [ "$target_gen_dir/host_bootstrap.h" ]
+    args = [
+      "--input",
+      rebase_path(sources[0], root_build_dir),
+      "--output",
+      rebase_path(outputs[0], root_build_dir),
+    ]
+  }
+
+  source_set("mac") {
+    sources = [
+      "ac_mac_glass.h",
+      "ac_mac_glass.mm",
+      "ac_mac_glass_layout.h",
+      "ac_mac_hooks.h",
+      "ac_mac_menu.h",
+      "ac_mac_menu.mm",
+      "ac_mac_menu_model.h",
+      "ac_mac_popover.h",
+      "ac_mac_popover.mm",
+      "ac_mac_popover_policy.h",
+      "ac_mac_shell_bridge.cc",
+      "ac_mac_shell_bridge.h",
+      "ac_mac_shell_calls.mm",
+      "ac_mac_shell_host.h",
+      "ac_mac_shell_host.mm",
+      "ac_mac_shell_policy.h",
+      "ac_mac_webui.h",
+      "ac_mac_webui.mm",
+      "ac_mac_webui_policy.h",
+      "ac_mac_window.h",
+      "ac_mac_window.mm",
+      "ac_mac_window_layout.h",
+      "generated/ac_desktop_routes.h",
+    ]
+    sources += get_target_outputs(":bootstrap")
+    configs += [ ":webui_dev" ]
+    deps = [
+      ":bootstrap",
+      "//base",
+      "//chrome/browser",
+      "//chrome/browser/profiles:profile",
+      "//components/sessions",
+      "//components/version_info",
+      "//components/zoom",
+      "//content/public/browser",
+      "//services/network/public/mojom",
+      "//skia",
+      "//third_party/blink/public/common",
+      "//ui/base",
+      "//ui/compositor",
+      "//ui/gfx",
+      "//ui/views",
+      "//url",
+    ]
+    frameworks = [
+      "AppKit.framework",
+      "QuartzCore.framework",
+    ]
+  }
+}

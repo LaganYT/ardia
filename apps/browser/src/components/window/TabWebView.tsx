@@ -34,13 +34,12 @@ import { isIncognitoProfile, navigationTo } from "../../state/browser/model";
 import type { Tab } from "../../state/browser/types";
 import { zoomChangedByUser } from "../../state/site/zoomBubble";
 import { markTabReady, patchPage, pageOf } from "../../state/tabs/pageState";
-import { deliverZapPicked } from "../../state/boostUi/zap";
 import { popupBlocked, showAutofillPrompt, showExternalApp, showPasswordPrompt } from "../../state/site/prompts";
 import { fieldProviderHint, fieldProviderOpened, verificationCodeFound, type FieldProviderHint, type FieldProviderOpened, type VerificationCodeFound } from "../../state/site/passwordManager";
 import { verificationCodeDocument, verificationCodeTabGone } from "../../state/site/verificationCodes";
 import { hoverStatus } from "../../state/tabs/hoverStatus";
 import { endPageDocument, forgetPageDocument, notePageDocument } from "../../state/plugins/pageBarDocuments";
-import { arrivedOnFirstPage, leftPage, openBoostLink, pageAskedToClose, pageEnded } from "../../state/tabs/pageEvents";
+import { arrivedOnFirstPage, deliverZapPicked, leftPage, pageAskedToClose, pageEnded } from "../../state/tabs/pageEvents";
 import { copyLinkToSelection, searchSelection, setPageSelection } from "../../state/site/selection";
 import { shareFromPage } from "../../state/site/share";
 import { useAutoPictureInPicture } from "../../state/media/pip";
@@ -55,7 +54,8 @@ import { noteCommit } from "../../state/automation/automationEvents";
 import { notePluginStateCommit } from "../../state/plugins/stateCommits";
 import { forgetUnreadIfGone, noteAppBadge, noteUnreadFavicon, noteUnreadLoading, noteUnreadPageEnded } from "../../state/tabs/unread";
 import { trackPageProcessGone } from "../../state/telemetry/diagnostics";
-import { releaseTranslation, translateCrashContext } from "../../state/site/translate";
+import { defaultTarget, languageName, releaseTranslation, revertPage, translateCrashContext, translatePage, translation, useTranslateState } from "../../state/site/translate";
+import { translatePageMenuItems } from "../../state/site/translateMenu";
 import { notePagePress, notePagePressRefused } from "../../state/telemetry/tabPresses";
 import { noteWebKitFocusRestore } from "../../state/telemetry/pageFocusReturns";
 import { noteAutoPictureInPictureKept, notePageOverlay, noteReopenedPage, noteSiteControls, noteWebKitPageKeptHidden } from "../../state/telemetry/usage";
@@ -104,13 +104,14 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine, 
     return (handle: Parameters<typeof register>[0]) => (handle && peekOf !== undefined && promotedFromPeek(tabId) ? undefined : register(handle));
   }, [tabId]);
   const autoPictureInPicture = useAutoPictureInPicture(tabId, visible);
+  const translateState = useTranslateState(tabId);
+  const pageMenuItems = useMemo(() => (translation ? translatePageMenuItems(translateState, languageName(defaultTarget())) : []), [translateState]);
   useEffect(() => (visible ? presentTab(tabId) : noteTabHidden(tabId)), [tabId, visible]);
   const pageColor = useProfilesValue(profileId, (profiles) => (isIncognitoProfile(profileId) ? "incognito" : (profiles[profileId]?.color ?? "plum")));
   const theme = useProfileTheme(profileId);
   const backdrop = useMemo(() => opaqueCard(theme), [theme.card, theme.windowTint[0], theme.windowTint[1]]);
 
   const lastPage = useRef<string | null>(null);
-  const lastUrl = useRef<string | null>(null);
   const restore = useRef<string | null>(null);
   const reopening = useRef(engine === "chromium" && isAdoptKind(adoptId, "restore"));
   const pending = useRef<string | null>(navigation?.url ?? (adoptId ? (tab()?.url ?? null) : null));
@@ -209,6 +210,7 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine, 
       warm={warm}
       neighbour={neighbour}
       autoPictureInPicture={autoPictureInPicture}
+      pageMenuItems={pageMenuItems}
       pageColor={pageColor}
       contentsBackgroundColor={backdrop}
       shownUrl={shownUrl}
@@ -272,8 +274,6 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine, 
         if (engine === "webkit") noteWebKitPage(tabId, { url, title, isLoading, committedUrl: committedUrl ?? "" });
         if (lastPage.current !== null && withoutFragment(url) !== lastPage.current) leftPage(tabId, url, lastPage.current, engine);
         else if (lastPage.current === null) arrivedOnFirstPage(tabId, url, engine);
-        if (lastUrl.current !== null && url !== lastUrl.current) openBoostLink(tabId, url);
-        lastUrl.current = url;
         lastPage.current = withoutFragment(url);
         patchPage(tabId, { themeColorSource: themeColorSource ?? null });
       }}
@@ -362,6 +362,8 @@ function EngineWebView({ tabId, visible, selected = true, warm, peekOf, engine, 
         else if (command === "copyLinkToHighlight") void copyLinkToSelection(tabId);
         else if (command === "escape") escapePressed(tabId, "page");
         else if (command === "hideElement" && point) void startHidingElement(tabId, point);
+        else if (command === "translatePage") void translatePage(tabId, defaultTarget(), "page_menu");
+        else if (command === "showOriginal") void revertPage(tabId);
       }}
       onSelection={(selection) => setPageSelection(tabId, selection)}
       onScroll={(state) => noteScroll(tabId, state)}

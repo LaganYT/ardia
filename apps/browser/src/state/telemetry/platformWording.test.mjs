@@ -66,6 +66,17 @@ test("Windows, which has no freeze watch, says nothing about freezes; the Mac sa
   assert.equal(windowsFeatures.freezeWatch, false);
 });
 
+test("Windows, whose crash reader sends none of the Mac's crash report details, doesn't say it does; the Mac does", () => {
+  const [details] = [PHRASES_ONLY_WITH.crashReportDetails].flat();
+  assert.match(details, /near address zero/);
+  assert.ok(live.some((text) => text.includes(details)), "the Mac's What's Sent lists the crash report details");
+  const windows = live.map(windowsWords).join("\n");
+  for (const said of ["near address zero", "which kind of thread crashed", "whether it was the main queue"]) assert.ok(!windows.includes(said), `Windows says ${said}`);
+  assert.ok(windows.includes("how the system ended it (its termination reason, like a signal or a code-signing kill)"), "Windows keeps the sentence around the details");
+  assert.equal(windowsFeatures.crashReportDetails, false);
+  assert.equal(macFeatures.crashReportDetails, true);
+});
+
 test("a feature phrase is removed even when a shorter feature phrase sits inside it or it spans quotes", () => {
   const words = platformWording(windowsTerms, windowsFeatures, windowsKeyText);
   const phrase = [PHRASES_ONLY_WITH.freezeWatch].flat()[0];

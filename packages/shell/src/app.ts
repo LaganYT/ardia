@@ -3,7 +3,7 @@ import type { AppNative } from "./generated/native";
 
 export type { CleanedTitle, CleanedUrl };
 
-export type AppIcon = { id: string; name: string; preview: string | null };
+export type AppIcon = { id: string; name: string; flat?: boolean; preview: string | null };
 
 export type LaunchConfig = {
   dataDirectory: string | null;

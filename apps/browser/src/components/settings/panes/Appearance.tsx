@@ -328,8 +328,9 @@ const ICON_GRID = { flexDirection: "row", flexWrap: "wrap", columnGap: space.s, 
 const ICON_IMAGE = { width: APP_ICON_SIZE, height: APP_ICON_SIZE } as const;
 
 function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: boolean; onPress: () => void }) {
+  const label = icon.flat ? `${icon.name}, flat` : icon.name;
   return (
-    <PictureChoice title={icon.name} selected={selected} onPress={onPress} tooltip={icon.name} size="icon">
+    <PictureChoice title={icon.name} accessibilityLabel={label} selected={selected} onPress={onPress} tooltip={label} size="icon">
       {icon.preview ? <Image source={{ uri: icon.preview }} style={ICON_IMAGE} /> : null}
     </PictureChoice>
   );

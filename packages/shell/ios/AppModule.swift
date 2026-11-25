@@ -27,7 +27,7 @@ public class AppModule: Module, AppNative {
 
   static func addToDock() -> Bool { DockTile.add() }
 
-  static func appIcons(_ size: Double) -> [[String: Any]] { AppIcons.variants.map { ["id": $0.id, "name": $0.name, "preview": AppIcons.preview($0.id, size: size) as Any] } }
+  static func appIcons(_ size: Double) -> [[String: Any]] { AppIcons.variants.map { ["id": $0.id, "name": $0.name, "flat": $0.flat, "preview": AppIcons.preview($0.id, size: size) as Any] } }
 
   static func appIcon() -> String { AppIcons.current }
 

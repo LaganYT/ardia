@@ -3,10 +3,12 @@ import { hostSupports, INPUT_REGIONS_METHOD, invokeHost, reportHostError, type A
 import { createInputRegions, type InputRegionsRegistry, type RegionDeps, type RegionShape } from "./inputRegions.ts";
 import { clippedRectOf } from "./hostViewport.ts";
 import { createPageHoles, type PageHoles } from "./pageHoles.ts";
+import { PEEK_MOVING_ATTRIBUTE } from "./peekStageMotion.ts";
 import { startShellGlass } from "./shellGlass.ts";
 import { currentWindowCorners, onWindowCornersChanged } from "./windowDecorations.ts";
 
 const SHELL_ABOVE_CLASS = "ardia-shell-above";
+const MOVING_STAGE = `[${PEEK_MOVING_ATTRIBUTE}]`;
 const MOTION_EVENTS = ["transitionrun", "transitionend", "transitioncancel", "animationstart", "animationend", "animationcancel"] as const;
 
 let regions: InputRegionsRegistry | null = null;
@@ -64,11 +66,13 @@ function conceal(element: Element, hidden: boolean) {
 
 export function startShellAbove(host: ArdiaHost, root: HTMLElement = document.body) {
   document.documentElement.classList.add(SHELL_ABOVE_CLASS);
-  const painter = createPageHoles(root, () => host.bootstrap.shellZoom ?? 1, currentWindowCorners);
+  const inMovingStage = (element: Element) => !!element.closest?.(MOVING_STAGE);
+  const painter = createPageHoles(root, () => host.bootstrap.shellZoom ?? 1, currentWindowCorners, inMovingStage);
   const stopCorners = onWindowCornersChanged(() => painter.windowChanged());
   const glass = startShellGlass(host);
   const registry = createInputRegions({
     ...domRegionDeps(host),
+    pageFrozen: inMovingStage,
     conceal,
     pagesChanged: (areas) => {
       painter.pagesChanged(areas);
@@ -82,9 +86,12 @@ export function startShellAbove(host: ArdiaHost, root: HTMLElement = document.bo
     registry.refresh();
     painter.windowChanged();
   };
+  const stagesMoving = new MutationObserver(resized);
+  stagesMoving.observe(root, { subtree: true, attributes: true, attributeFilter: [PEEK_MOVING_ATTRIBUTE] });
   window.addEventListener("resize", resized);
   window.addEventListener("scroll", refresh, true);
   return () => {
+    stagesMoving.disconnect();
     window.removeEventListener("resize", resized);
     window.removeEventListener("scroll", refresh, true);
     document.documentElement.classList.remove(SHELL_ABOVE_CLASS);

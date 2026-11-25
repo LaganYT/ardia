@@ -17,6 +17,9 @@ type NativeLink = Omit<SystemLink, "query"> & { query?: string };
 
 type SystemNative = {
   labLog?: (line: string) => void;
+  labFrameMark?: (label: string) => void;
+  labSlice?: (label: string) => void;
+  hardwareKeyboardShown?: () => boolean;
   addListener(eventName: "onSystemLink", listener: (link: NativeLink) => void): Subscription;
   initialLink(): Promise<NativeLink | null>;
   setHidesFromRecents?(hidden: boolean): Promise<boolean>;
@@ -81,6 +84,16 @@ export const restorableState = {
     native?.setRestorableValue?.(key, value);
   },
 };
+
+export function labSlice(label: string) {
+  native?.labSlice?.(label);
+}
+
+export const hardwareKeyboardShown = () => native?.hardwareKeyboardShown?.() ?? false;
+
+export function labFrameMark(label: string) {
+  native?.labFrameMark?.(label);
+}
 
 export function labLog(line: string) {
   if (native?.labLog) native.labLog(line);

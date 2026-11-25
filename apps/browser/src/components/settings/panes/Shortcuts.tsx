@@ -1,11 +1,11 @@
-import { cancelShortcutRecording, recordShortcut, type MenuShortcut, resolvedShortcuts, useCtrlTabChoice, useMenuBarRevision } from "../../../state/commands/commandShortcuts";
-import type { CtrlTabChoice } from "../../../state/commands/ctrlTabKeys";
+import { cancelShortcutRecording, recordShortcut, type MenuShortcut, resolvedShortcuts, useCtrlTabKeys, useMenuBarRevision } from "../../../state/commands/commandShortcuts";
 import { Box, Button, EmptyState, KeyCap, PopUp, SearchField, space, Symbol, Text, useHover, type Option } from "../../ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useTheme } from "../../ui/theme";
 import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { useSettings } from "../../../state/browser/hooks";
+import type { Settings } from "../../../state/settings/settings";
 import { useProfileOrder } from "../../../state/profiles/hooks";
 import { setMouseShortcut, setShortcutOverride, updateSettings } from "../../../state/settings/actions";
 import { openUrls } from "../../../state/browser/actions";
@@ -203,16 +203,16 @@ function KeyboardSection() {
   );
 }
 
-const CTRL_TAB_NOW: Record<CtrlTabChoice, string> = {
-  step: "Steps through your tabs in order.",
-  switcher: "Opens the recent tabs switcher.",
-  custom: "Set to your own shortcuts below.",
-};
+const ORDER_NOW: Record<Settings["tabSwitcherOrder"], string> = { recent: "Goes to your recent tabs", inOrder: "Steps through your tabs in order" };
+const VIEW_NOW: Record<Settings["tabSwitcherView"], string> = { thumbnails: ", with page previews.", compactList: ", with a compact list.", none: "." };
 
 function CtrlTabRow() {
-  const choice = useCtrlTabChoice();
+  const keys = useCtrlTabKeys();
+  const order = useSettings((s) => s.tabSwitcherOrder);
+  const view = useSettings((s) => s.tabSwitcherView);
+  const description = keys === "custom" ? "Set to your own shortcuts below." : `${ORDER_NOW[order]}${VIEW_NOW[view]}`;
   return (
-    <Row title={setting("appearance.ctrlTab").title} description={CTRL_TAB_NOW[choice]}>
+    <Row title={setting("appearance.ctrlTab").title} description={description}>
       <Button title="Choose…" onPress={() => jumpToSetting(setting("appearance.ctrlTab"))} />
     </Row>
   );

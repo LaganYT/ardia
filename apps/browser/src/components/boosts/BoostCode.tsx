@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
 import { useSettings } from "../../state/browser/hooks";
 import { updateSettings } from "../../state/settings/actions";
-import { Box, Button, font, hairline, radius, space, Text, useTheme } from "../ui";
+import { Box, Button, caretColor, font, hairline, radius, space, Text, useTheme } from "../ui";
 import { BOOST_PANEL, CODE_FONT } from "./tokens";
 
 type Pane = "css" | "js";
@@ -39,6 +39,7 @@ function CodeField({ value, placeholder, onPreview, onCommit }: { value: string;
       placeholder={placeholder}
       placeholderTextColor={theme.textTertiary}
       selectionColor={theme.selection}
+      cursorColor={caretColor(theme, "field")}
       enableFocusRing={false}
       autoCorrect={false}
       spellCheck={false}

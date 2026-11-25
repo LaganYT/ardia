@@ -22,6 +22,12 @@ textarea:focus,
   outline: none;
 }
 
+input[data-ardia-selection]::selection,
+textarea[data-ardia-selection]::selection {
+  background-color: var(--ardia-selection-bg);
+  color: var(--ardia-selection-fg);
+}
+
 .ardia-desktop {
   position: fixed;
   inset: 0;

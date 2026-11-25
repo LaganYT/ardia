@@ -133,7 +133,7 @@ test("advertised Calendar capabilities route ArdiaCalendar.requestAccess to the 
   await resolveHostModule(advertised.host, "ArdiaCalendar", "requestAccess")();
   assert.equal(
     advertised.requests.some((request) => request.method === "ArdiaCalendar.requestAccess"),
-    process.env.ARDIA_DESKTOP_MODE !== "win",
+    (process.env.ARDIA_DESKTOP_MODE ?? "linux") === "linux",
   );
 });
 

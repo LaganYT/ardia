@@ -21,6 +21,9 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   transcript activity, a pending tool call, `/tmp/ac-*.holder`, its processes). A stuck agent means a root
   cause to fix (a lock, a wait, a hang), not just a restart. Send new feedback to the agent that owns
   that area (SendMessage) instead of starting a new one, and batch finished fixes into the next release.
+- **Say when an instruction caused it.** When the owner asks for a change to something you did and it came out
+  that way because you followed an instruction (this file, a doc, a skill), say so at once and name the
+  instruction, so it can be fixed where it is written.
 - **Ask Codex for a second opinion** on risky logic (races, lifetimes, security, migrations, sync) and reviews,
   before and after the change. Ask a Codex subagent, not the CLI: T3's `delegate_task` with
   `target: {providerInstanceId: "codex", model: "gpt-6.2-sol", options: {reasoningEffort: "high", serviceTier: "priority"}}`,
@@ -105,9 +108,12 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   (`@ts-expect-error`, `eslint-disable`, `#pragma`, `swiftlint:`, `# noqa`), and the header a script prints as its
   `--help`.
 - **The Chromium build cache is sacred.** Never touch `~/chromium-build/chromium_git/chromium/src/out`,
-  and never run `gclient sync` or `gn clean`: a full rebuild costs about 5 hours. Engine changes are
-  incremental builds only, holding the chromium lock (`scripts/agent/locked chromium`,
-  `docs/engine-build.md`). When freeing disk space, stay out of `~/chromium-build`.
+  and never run `gclient sync` or `gn clean`: a full rebuild costs about 5 hours. `engine/` itself is
+  not off-limits: when a fix or feature belongs in the engine, make the change, run an incremental
+  build under the chromium lock (`scripts/agent/engine-build` on a plugged-in Mac, `scripts/linux/build.sh --apply`
+  on `msi` WSL 2, or the Windows engine cross-build in `docs/engine-build-windows.md`), and publish
+  the updated prebuilt engine (`scripts/publish-engine.sh`, `docs/engine-build.md`) rather than working
+  around it in JS or parking the PR. When freeing disk space, stay out of `~/chromium-build`.
 - **Never steal focus.** Run builds only as hidden instances:
   `open -g -n --env ARDIA_BACKGROUND=1 --env ARDIA_DATA_DIR=<throwaway dir> --env ARDIA_REMOTE_DEBUGGING_PORT=<port> <app>`.
   Never use plain `open`. Background mode logs context menus and file panels instead of showing them.

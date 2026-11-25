@@ -218,8 +218,13 @@ enum MainMenu {
       ]),
       sub("Split View", [
         cmd(.openSplitPane),
+        cmd(.openSplitPaneBelow),
         cmd(.focusNextPane),
         cmd(.focusPreviousPane),
+        cmd(.moveSplitPaneLeft),
+        cmd(.moveSplitPaneRight),
+        cmd(.moveSplitPaneUp),
+        cmd(.moveSplitPaneDown),
       ]),
       .separator(),
       cmd(.cast),

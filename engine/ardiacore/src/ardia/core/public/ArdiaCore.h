@@ -316,6 +316,8 @@ ARDIACORE_EXPORT
 @property(readonly) BOOL committedInitial;
 - (nullable id)suppressInput;
 - (void)closeNow;
+@property(readonly) BOOL asksBeforeLeaving;
+- (void)askBeforeLeaving:(void (^)(BOOL leave))answer;
 @property(nonatomic) BOOL temporary;
 - (void)setTemporarySource:(nullable ArdiaCoreTab*)source;
 - (void)deliverHeldPageMessages;

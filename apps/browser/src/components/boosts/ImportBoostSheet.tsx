@@ -3,7 +3,7 @@ import { TextInput, View } from "react-native";
 import { boostChanges, siteLine } from "../../state/boostUi/describe";
 import { installBoost, previewImport } from "../../state/boostUi/importCode";
 import { closeSettingsSheet } from "../../state/settings/sheet";
-import { Box, Button, DialogActions, DialogTitle, font, hairline, radius, Sheet, space, Text, useTheme } from "../ui";
+import { Box, Button, caretColor, DialogActions, DialogTitle, font, hairline, radius, Sheet, space, Text, useTheme } from "../ui";
 import { CODE_FONT, IMPORT_SHEET } from "./tokens";
 
 export function ImportBoostSheet({ profileId, initialCode = "" }: { profileId: string; initialCode?: string }) {
@@ -27,6 +27,7 @@ export function ImportBoostSheet({ profileId, initialCode = "" }: { profileId: s
         placeholder="ardia-boost:1:…"
         placeholderTextColor={theme.textTertiary}
         selectionColor={theme.selection}
+        cursorColor={caretColor(theme, "field")}
         enableFocusRing={false}
         autoCorrect={false}
         spellCheck={false}

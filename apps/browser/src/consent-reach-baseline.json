@@ -166,6 +166,7 @@
     "apps/browser/src/state/tabs/pendingAddress.ts": 1,
     "apps/browser/src/state/tabs/tabLifecycle.ts": 1,
     "apps/browser/src/state/telemetry/dockCounts.ts": 1,
+    "apps/browser/src/state/telemetry/hoverLostAtQuit.ts": 1,
     "apps/browser/src/state/telemetry/inlineCompletionCounts.ts": 1,
     "apps/browser/src/state/telemetry/journeys.ts": 1,
     "apps/browser/src/state/telemetry/popupProtectedMedia.ts": 1,

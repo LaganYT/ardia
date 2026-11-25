@@ -161,9 +161,10 @@ export function settingsBrowserWindow(): string | null {
   return s.ui.focusOrder.find((id) => s.windows[id] && s.windows[id]!.kind !== "private") ?? s.windowOrder.find((id) => s.windows[id]!.kind !== "private") ?? null;
 }
 
-export function openUrlFromSettings(url: string) {
+export function openUrlFromSettings(url: string): boolean {
   const windowId = settingsBrowserWindow();
-  if (!windowId) return;
+  if (!windowId) return false;
   useBrowser.getState().newTab(windowId, { url });
   void focusWindow(windowId);
+  return true;
 }

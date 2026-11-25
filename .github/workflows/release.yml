@@ -358,7 +358,7 @@ jobs:
   linux:
     needs: preflight
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 60
+    timeout-minutes: 100
     env:
       TREE: ${{ needs.preflight.outputs.linux_tree }}
       ARDIACORE_PREBUILT_REPO: ${{ vars.ARDIACORE_PREBUILT_REPO || 'ardia-browser/ardia' }}
@@ -373,6 +373,9 @@ jobs:
             libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 libxkbcommon0
             libgbm1 libdrm2 libexpat1 libcairo2 libpango-1.0-0 libudev1 libasound2t64 libglib2.0-0t64
             libgtk-3-0t64 libsecret-1-0
+      - name: Packaging tools
+        continue-on-error: true
+        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rpm cpio flatpak flatpak-builder
       - uses: ./.github/actions/linux-update-verify
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -401,6 +404,46 @@ jobs:
           echo "deb dropped: it failed scripts/linux/deb-install-test.sh in run $GITHUB_RUN_ID" >> "$RUNNER_TEMP/linux/provenance.txt"
           echo "::warning::Ardia-$VERSION-linux-x64.deb failed its install test (above), so the release ships without it; the tarball, AppImage, Arch source package and CLI still ship"
           echo "- Linux: the .deb failed its install test and is left out" >> "$GITHUB_STEP_SUMMARY"
+      - name: RPM package installs
+        id: rpm-install
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.rpm" ]; then
+            echo "::warning::release.sh left the .rpm out ($(grep -m1 '^rpm dropped' "$RUNNER_TEMP/linux/provenance.txt" || echo 'see its log')), so the release ships without it"
+            echo "- Linux: the .rpm didn't build or failed the smoke gate and is left out" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          scripts/linux/rpm-install-test.sh "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.rpm"
+      - name: Drop the .rpm that failed its install test
+        if: steps.rpm-install.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.rpm" "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.rpm.sha256"
+          echo "rpm dropped: it failed scripts/linux/rpm-install-test.sh in run $GITHUB_RUN_ID" >> "$RUNNER_TEMP/linux/provenance.txt"
+          echo "::warning::Ardia-$VERSION-linux-x64.rpm failed its install test (above), so the release ships without it; the other Linux assets still ship"
+          echo "- Linux: the .rpm failed its install test and is left out" >> "$GITHUB_STEP_SUMMARY"
+      - name: Flatpak installs
+        id: flatpak-install
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.flatpak" ]; then
+            echo "::warning::release.sh couldn't build the Flatpak ($(grep -m1 '^flatpak dropped' "$RUNNER_TEMP/linux/provenance.txt" || echo 'see its log')), so the release ships without it"
+            echo "- Linux: the Flatpak didn't build and is left out" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          scripts/linux/flatpak-install-test.sh "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.flatpak"
+      - name: Drop the Flatpak that failed its install test
+        if: steps.flatpak-install.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.flatpak" "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.flatpak.sha256"
+          echo "flatpak dropped: it failed scripts/linux/flatpak-install-test.sh in run $GITHUB_RUN_ID" >> "$RUNNER_TEMP/linux/provenance.txt"
+          echo "::warning::Ardia-$VERSION-linux-x64.flatpak failed its install test (above), so the release ships without it; the other Linux assets still ship"
+          echo "- Linux: the Flatpak failed its install test and is left out" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: linux
@@ -409,8 +452,12 @@ jobs:
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.tar.xz.sha256
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.deb
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.deb.sha256
+            ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.rpm
+            ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.rpm.sha256
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.AppImage
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.AppImage.sha256
+            ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.flatpak
+            ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.flatpak.sha256
             ${{ runner.temp }}/linux/ardia-bin-${{ inputs.version }}.src.tar.gz
             ${{ runner.temp }}/linux/ardia-bin-${{ inputs.version }}.src.tar.gz.sha256
             ${{ runner.temp }}/linux/ardia-cli-${{ inputs.version }}-linux-x64.tar.gz
@@ -427,6 +474,7 @@ jobs:
             ${{ runner.temp }}/linux/*.log
             ${{ runner.temp }}/linux/smoke
             ${{ runner.temp }}/linux/smoke-deb
+            ${{ runner.temp }}/linux/smoke-rpm
             ${{ runner.temp }}/linux/smoke-appimage
           if-no-files-found: ignore
           retention-days: 14

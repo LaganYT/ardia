@@ -44,8 +44,8 @@ For each fix:
    ```
    - Version: `<next stable>-nightly.<n>`, where the next stable is `$stable` with the patch bumped and `<n>` counts up
      from 1 since `$stable` (`git tag -l "v<next stable>-nightly.*"`). The build number goes up by one, as always.
-   - Notes: `docs/release-notes/<version>.md` with the usual frontmatter, the headline and one to three
-     bullets (`docs/release-notes/README.md` › Nightlies). Source: `git log $prev..HEAD -- apps/browser packages engine`.
+   - Notes: `docs/release-notes/<version>.md` with the usual frontmatter and headline
+     (`docs/release-notes/README.md` › Nightlies). Source: `git log $prev..HEAD -- apps/browser packages engine`.
    - Bump and build: step 3 below, with `scripts/release.sh <version>` (the `-nightly.<n>` version makes it a nightly).
    - Smoke test: `.claude/skills/release/scripts/smoke.sh <version> ${prev#v}`. Its update test runs the nightly's own
      appcast item twice: a copy of the previous build on Stable must not be offered it, one on Nightly must install it.
@@ -486,10 +486,13 @@ writes `/Applications/Ardia.app`): `brew audit --cask --online ardia-browser/tap
 ### 5d. Linux package
 
 The Release workflow builds it in its `linux` job (`scripts/linux/release.sh <version> --engine exact`, smoke gate
-included, then the `.deb` installed and purged on Debian 13 and Ubuntu 24.04), and `publish.sh` attaches
-`Ardia-<version>-linux-x64.tar.xz`, `.deb` and `.AppImage`, `ardia-bin-<version>.src.tar.gz` (the Arch PKGBUILD),
-`ardia-cli-<version>-linux-x64.tar.gz` (the pinned `ardia` command, renamed for this version) and their `.sha256` files to the release, nightly or stable. A `.deb` that
-fails the install test is dropped (`deb dropped` in `provenance.txt`) and the rest still ships. That needs the Linux engine for the release commit's engine
+included, then the `.deb` installed and purged on Debian 13 and Ubuntu 24.04, the `.rpm` installed, upgraded and
+removed on Fedora 43, AlmaLinux 9 and openSUSE Tumbleweed, and the Flatpak installed and run on Ubuntu 24.04 and Fedora 43), and
+`publish.sh` attaches `Ardia-<version>-linux-x64.tar.xz`, `.deb`, `.rpm`, `.AppImage` and `.flatpak`,
+`ardia-bin-<version>.src.tar.gz` (the Arch PKGBUILD), `ardia-cli-<version>-linux-x64.tar.gz` (the pinned `ardia`
+command, renamed for this version) and their `.sha256` files to the release, nightly or stable. A `.deb`, `.rpm` or
+Flatpak that fails its install test (or, for the `.rpm`, its build or smoke gate, and for the Flatpak, its build) is dropped (`deb dropped`, `rpm dropped`,
+`flatpak dropped` in `provenance.txt`) and the rest still ships. That needs the Linux engine for the release commit's engine
 key (`engine/engine-key.sh --platform linux`) published in ardia-browser/ardia. Without it the `linux` job fails, the Mac release
 still ships, and `publish` warns that Linux was skipped. After a stable release the `aur` job moves the AUR package
 `ardia-bin` to it (`scripts/linux/arch/publish-aur.sh`) when the `AUR_SSH_PRIVATE_KEY` secret is set; a dry run, or a

@@ -9,7 +9,7 @@ import { useSplitSuggestions } from "../../state/splits/hooks";
 import { tabLabel } from "../../state/browser/model";
 import { noteSplit } from "../../state/telemetry/usage";
 import { Panel, SearchField, shadow, space, Symbol, Text, useHover } from "../ui";
-import { EMPTY_STATE_WIDTH, emptyStateRadius, SPLIT_ROW_HEIGHT, splitColors, splitRowRadius } from "./tokens";
+import { EMPTY_STATE_WIDTH, emptyPaneFieldSurface, emptyStateRadius, SPLIT_ROW_HEIGHT, splitColors, splitRowRadius } from "./tokens";
 import { Favicon } from "../favicon/Favicon";
 
 export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: boolean }) {
@@ -58,6 +58,7 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
           <View style={{ height: SPLIT_ROW_HEIGHT, marginHorizontal: space.s, paddingHorizontal: space.ml, borderRadius: splitRowRadius(), justifyContent: "center", backgroundColor: theme.rowHover }}>
             <SearchField
               look="bare"
+              surface={emptyPaneFieldSurface}
               autoFocus
               inputRef={input}
               value={text}

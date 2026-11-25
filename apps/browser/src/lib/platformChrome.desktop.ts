@@ -1,9 +1,9 @@
 import type { PopUpChrome, WindowButtonStyle, WindowChrome } from "./platformChrome";
-import { WINDOW_CHROME as WINDOWS_CHROME } from "./platformChrome.windows";
+import { CAPTION_WINDOW_CHROME as WINDOWS_CHROME } from "./captionChrome";
 import { BROWSER_BUTTON_LAYOUT, TRAFFIC_LIGHTS_WIDTH, WINDOW_CONTROLS, windowControlsWidth, type WindowButtonLayout } from "./windowButtonLayout";
 import { sameList } from "./lists";
 
-export { ADVANCED_PANE_SYMBOL, PANEL_FIELD_LIFT } from "./platformChrome.windows";
+export { ADVANCED_PANE_SYMBOL, PANEL_FIELD_LIFT } from "./captionChrome";
 
 const WINDOWS_CAPTION_SPARE = WINDOWS_CHROME.trailingWidth - windowControlsWidth(WINDOWS_CHROME.trailingButtons.length);
 

@@ -67,6 +67,7 @@ public class AppModule: Module, AppNative {
       "processStart": Self.processStart as Any,
       "bootTime": Self.bootTime as Any,
       "launchMarks": ArdiaHost.launchMarks,
+      "launchUsage": ArdiaHost.launchUsage,
       "launchedHidden": ArdiaHost.launchedHidden as Any,
       "launchSource": ArdiaHost.launchSource as Any,
       "loadAverage1m": Self.loadAverage1m as Any,

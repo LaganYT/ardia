@@ -2,8 +2,8 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import { activeTabId, familyKeyOf, inPinnedContainer, isIncognitoProfile, pinSection, viewTabIds, without } from "../browser/model";
 import { hasPage, isAsleep } from "../tabs/pageSession";
-import { isSleeping } from "../tabs/sleepingTabs";
-import { holderOf, isPageUnloaded } from "./pinShare";
+import { isSwitchableTab } from "../tabs/switchOrder";
+import { holderOf } from "./pinShare";
 import { splitTabIds } from "../splits/splits";
 import { lastUsedOf, restoredAtOf, sharedLastUsed, sharedRestoredAt } from "../tabs/tabShare";
 import type { ClosedTab, Tab } from "../browser/types";
@@ -195,10 +195,9 @@ export function recentTabIds(s: BrowserState, windowId: string, now = Date.now()
 }
 
 export function sessionTabIds(s: BrowserState, windowId: string, sessionStart: number): string[] {
-  const visible = (ids: string[]) => ids.filter((id) => !isAsleep(s.tabs[id]) && !isSleeping(id) && !isPageUnloaded(s, id));
-  const now = Date.now();
-  const recent = visible(recentTabIds(s, windowId, now, Infinity));
   const active = activeTabId(s, windowId);
+  const now = Date.now();
+  const recent = recentTabIds(s, windowId, now, Infinity).filter((id) => id === active || isSwitchableTab(s, id));
   const fromSession = recent.filter((id) => id === active || s.tabs[id]!.lastActiveAt >= sessionStart || s.tabs[id]!.createdAt >= sessionStart);
   const fallback = recent.filter((id, index) => index < 2 || now - s.tabs[id]!.lastActiveAt < CLEAN_UP_AFTER_MS);
   return fromSession.length >= 2 ? fromSession : fallback;

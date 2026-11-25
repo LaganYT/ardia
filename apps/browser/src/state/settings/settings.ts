@@ -16,9 +16,8 @@ import type { JsonSchema } from "../../lib/jsonSchema";
 import { PROVIDERS_SCHEMA } from "../omnibox/providerSchema";
 import { COMMAND_BAR_START_SCHEMA, isCommandBarStart, type CommandBarStart } from "../omnibox/commandBarStart";
 import { PRESS_MOTIONS } from "../../lib/pressMotion";
-import { noteAutoHideTabsChosen } from "../telemetry/autoHideTabsChoices";
 import { READER_FONTS, READER_SIZE_NAMES } from "../reader/tokens";
-import { noteMinimalismToggled } from "../telemetry/minimalismCounts";
+import { noteSettingChoices } from "../telemetry/settingChoices";
 import { checkedSettingsPatch, keptSettingsPatch } from "./settingsPatch";
 
 export const DEFAULT_PROFILE_ID = "default";
@@ -75,6 +74,7 @@ export const SETTING_SPECS = {
   newTabUrl: text("", SYNCED),
   warnBeforeClosingLastTab: flag(true, SYNCED),
   afterClosingTab: oneOf(["previouslyActive", "tabAbove", "tabBelow"], "previouslyActive", SYNCED),
+  tabSwitcherOrder: oneOf(["recent", "inOrder"], "recent", SYNCED), tabSwitcherView: oneOf(["thumbnails", "compactList", "none"], "thumbnails", SYNCED),
   keepTopAppsRunning: flag(false, SYNCED),
   tabReorderHaptics: flag(true, SYNCED),
   swipeBetweenTabs: flag(true, SYNCED),
@@ -151,6 +151,7 @@ export const SETTING_SPECS = {
   borderlessMode: flag(false, SYNCED),
   tabCornerRadius: shaped<number | null>(null, validTabCorners, { type: ["integer", "null"], minimum: TAB_CORNERS.min, maximum: TAB_CORNERS.max }, SYNCED),
   minimalismMode: flag(false, SYNCED),
+  minimalismPinnedIcons: oneOf(["letters", "logos"], "letters", SYNCED),
   pageFrameZeroInFullScreen: flag(false, SYNCED),
   pageFrameZeroWhenTabsHidden: flag(false, SYNCED),
   commandBarPlacement: oneOf(["field", "centred", "centredOnClick"], "field", SYNCED),
@@ -284,8 +285,7 @@ function settledPatch(settings: Settings, raw: Partial<Settings>): Partial<Setti
 export function choose(s: Pick<BrowserState, "settings" | "settingsMeta">, patch: Partial<Settings>, { inferring = false } = {}): Pick<BrowserState, "settings" | "settingsMeta"> {
   const { chosen, inferred } = s.settingsMeta;
   patch = settledPatch(s.settings, patch);
-  if (patch.autoHideTabs !== undefined && patch.autoHideTabs !== s.settings.autoHideTabs) noteAutoHideTabsChosen();
-  if (patch.minimalismMode !== undefined && patch.minimalismMode !== s.settings.minimalismMode) noteMinimalismToggled(patch.minimalismMode);
+  noteSettingChoices(s.settings, patch, inferring);
   const next = { ...s.settings, ...patch };
   const added = Object.keys(patch).filter((k) => !chosen.includes(k));
   const left = inferring ? [...new Set([...inferred, ...Object.keys(patch)])] : inferred.filter((k) => !(k in patch));

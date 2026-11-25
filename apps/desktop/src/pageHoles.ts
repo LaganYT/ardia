@@ -203,7 +203,12 @@ const overlapping = (a: Element, b: Element) => {
   return !!intersection({ x: one.x, y: one.y, width: one.width, height: one.height }, { x: two.x, y: two.y, width: two.width, height: two.height });
 };
 
-export function createPageHoles(root: HTMLElement, zoom: () => number = () => 1, frame: () => CornerRadii = () => SQUARE_WINDOW) {
+export function pagesPaintedThrough(painter: Element, pages: readonly PageArea[], moving: (element: Element) => boolean): PageArea[] {
+  if (!moving(painter)) return [...pages];
+  return pages.filter((page) => !moving(page.slot));
+}
+
+export function createPageHoles(root: HTMLElement, zoom: () => number = () => 1, frame: () => CornerRadii = () => SQUARE_WINDOW, moving: (element: Element) => boolean = () => false) {
   const layers = new Set<HTMLElement>();
   const hosts = new Map<HTMLElement, string>();
   let pages: readonly PageArea[] = [];
@@ -216,7 +221,7 @@ export function createPageHoles(root: HTMLElement, zoom: () => number = () => 1,
     if (element.style.getPropertyValue(name) !== value) element.style.setProperty(name, value);
   };
 
-  const holesUnder = (element: HTMLElement) => holesOf(pagesAbove(element, pages, stackDom), shellViewport(root), zoom(), frame());
+  const holesUnder = (element: HTMLElement) => holesOf(pagesPaintedThrough(element, pagesAbove(element, pages, stackDom), moving), shellViewport(root), zoom(), frame());
 
   const paintLayer = (layer: HTMLElement) => {
     const clip = clipFor(layer, holesUnder(layer), pieces());

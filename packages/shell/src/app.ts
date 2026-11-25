@@ -16,6 +16,7 @@ export type LaunchConfig = {
   trace: string[];
   test: Record<string, string>;
   feedbackURL?: string | null;
+  webUIShell?: boolean;
 };
 
 export type SystemInfo = {
@@ -49,6 +50,7 @@ export type SystemInfo = {
     earlyWindowShown?: number;
     reactNativeStarted?: number;
   } | null;
+  launchUsage?: Partial<Record<"main" | "engineStarted", { pageIns?: number; blockReads?: number; cpuMs?: number }>> | null;
   launchedHidden?: boolean | null;
   launchSource?: "login_item" | "documents" | "user" | null;
   loadAverage1m?: number | null;

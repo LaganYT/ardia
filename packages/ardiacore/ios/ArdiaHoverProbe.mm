@@ -132,23 +132,6 @@ NSView *HitAt(NSWindow *window, NSPoint point) {
   return [content hitTest:[content.superview convertPoint:point fromView:nil]];
 }
 
-PageCover CoverOf(NSView *hit) {
-  if (!hit) return PageCover::none;
-  NSBundle *chromium = PageClass() ? [NSBundle bundleForClass:PageClass()] : nil;
-  for (NSView *v = hit; v; v = v.superview) {
-    NSBundle *bundle = [NSBundle bundleForClass:v.class];
-    if (bundle == chromium) return PageCover::chromium;
-    if (bundle == NSBundle.mainBundle) return PageCover::reactNative;
-  }
-  return PageCover::other;
-}
-
-bool SeeThrough(NSView *hit) {
-  for (NSView *v = hit; v; v = v.superview)
-    if (v.alphaValue < 0.01 || (v.layer && v.layer.opacity < 0.01)) return true;
-  return false;
-}
-
 FocusHolder HolderOf(NSWindow *window) {
   NSResponder *responder = window.firstResponder;
   if (!responder) return FocusHolder::none;
@@ -173,7 +156,11 @@ HoverReason PageReason(HoverCheck &check, NSWindow *window, NSPoint point, NSVie
     NSView *hit = HitAt(window, point);
     if (EnclosingPage(hit)) return HoverReason::fine;
     check.cover = CoverOf(hit);
-    check.coverClear = SeeThrough(hit);
+    check.coverView = CoverViewOf(hit);
+    NSView *clear = SeeThroughView(hit);
+    check.coverClear = clear != nil;
+    check.coverClearView = CoverViewOf(clear);
+    check.coverSize = CoverSizeOver(clear ?: hit, page);
     return HoverReason::coveredByView;
   }
   if (check.windowKey && ResponderLost(check.holder, click && page)) return HoverReason::responderLost;
@@ -284,7 +271,6 @@ bool gHoverWatchInBackground = false;
 NSMutableArray<NSDictionary *> *gDevHoverEvents;
 constexpr double kMoveCheckEvery = 2;
 constexpr double kHealRecheckAfter = 0.3;
-constexpr NSUInteger kDevHoverEventsKept = 16;
 
 double Uptime() {
   return NSProcessInfo.processInfo.systemUptime;
@@ -312,48 +298,26 @@ NSString *DescribeCheck(const HoverCheck &check, HoverTrigger trigger) {
   if (check.cover != PageCover::none) [facts addObject:[@"cover=" stringByAppendingString:CoverName(check.cover)]];
   if (check.coverWindow != FocusWindowKind::none) [facts addObject:[@"coverWindow=" stringByAppendingString:KindName(check.coverWindow)]];
   if (check.coverClear) [facts addObject:@"coverClear"];
+  if (check.coverView != CoverView::none) [facts addObject:[@"coverView=" stringByAppendingString:CoverViewName(check.coverView)]];
+  if (check.coverClearView != CoverView::none) [facts addObject:[@"coverClearView=" stringByAppendingString:CoverViewName(check.coverClearView)]];
+  if (check.coverSize != CoverSize::none) [facts addObject:[@"coverSize=" stringByAppendingString:CoverSizeName(check.coverSize)]];
   return [NSString stringWithFormat:@"%@ at %@", [facts componentsJoinedByString:@" "], [clock stringFromDate:NSDate.date]];
 }
 
 void CloseEpisode(NSString *endedBy) {
   if (!gEpisode.open) return;
-  const HoverCheck &first = gEpisode.first;
-  NSDictionary *payload = @{
-    @"reason" : ReasonName(first.reason),
-    @"trigger" : TriggerName(gEpisode.trigger),
-    @"keyWindow" : KindName(first.key),
-    @"mainWindow" : KindName(first.main),
-    @"preventKey" : @(first.preventKey),
-    @"canKey" : @(first.canKey),
-    @"windowMain" : @(first.windowMain),
-    @"halfActive" : @(first.activation.half()),
-    @"appActive" : @(first.activation.appActive),
-    @"runningActive" : @(first.activation.runningActive),
-    @"frontmost" : @(first.activation.frontmost),
-    @"menuActive" : @(first.menuActive),
-    @"overPage" : @(first.overPage),
-    @"cover" : CoverName(first.cover),
-    @"coverClear" : @(first.coverClear),
-    @"responder" : HolderName(first.holder),
-    @"coverWindow" : KindName(first.coverWindow),
-    @"healed" : @(gEpisode.healed),
-    @"healWorked" : gEpisode.healWorked < 0 ? NSNull.null : @(gEpisode.healWorked == 1),
-    @"healRefused" : HealRefusalName(gEpisode.firstRefusal),
-    @"healRefusedLast" : HealRefusalName(gEpisode.lastRefusal),
-    @"healRefusedWindow" : MenuWindowName(gEpisode.refusedWindow),
-    @"otherWindowClicks" : @(gEpisode.otherWindowClicks),
-    @"endedBy" : endedBy,
-    @"seconds" : @(lround(MAX(0, Uptime() - gEpisode.startedAt))),
-    @"episode" : @(gEpisodeCount),
-  };
+  NSDictionary *payload = EpisodePayload(endedBy);
   ArdiaConsentStamp *stamp = gEpisode.stamp;
   gEpisode = HoverEpisode{};
   gPendingReason = HoverReason::fine;
+  ClearQuitReport();
   NoteFocusChange([@"hover episode ended by " stringByAppendingString:endedBy], nil);
-  if (!gDevHoverEvents) gDevHoverEvents = [NSMutableArray array];
-  [gDevHoverEvents addObject:payload];
-  if (gDevHoverEvents.count > kDevHoverEventsKept) [gDevHoverEvents removeObjectAtIndex:0];
-  [ArdiaEvents emit:@"engine.hoverLost" data:[stamp onto:payload]];
+  EmitEpisode(payload, stamp);
+}
+
+void CloseOwnerWindow() {
+  if (!gEpisode.open || DeferWindowCloseForQuit()) return;
+  CloseEpisode(@"windowClosed");
 }
 
 bool Recovered(const HoverCheck &check, HoverReason healed) {
@@ -397,7 +361,7 @@ void Heal(NSWindow *window, NSPoint point, HoverReason reason) {
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kHealRecheckAfter * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
     NSWindow *healedWindow = weakWindow;
     if (!gEpisode.open || gEpisode.serial != serial) return;
-    if (!healedWindow) return CloseEpisode(@"windowClosed");
+    if (!healedWindow) return CloseOwnerWindow();
     const HoverCheck after = Probe(healedWindow, point, false);
     gLastHoverVerdict = DescribeCheck(after, HoverTrigger::recheck);
     gEpisode.healWorked = Recovered(after, reason) ? 1 : 0;
@@ -425,6 +389,7 @@ bool EndsEpisode(const HoverCheck &check) {
 
 void OpenEpisode(NSWindow *window, const HoverCheck &check, HoverTrigger trigger, ArdiaConsentStamp *stamp) {
   gEpisode = HoverEpisode{};
+  ClearQuitReport();
   gEpisode.open = true;
   gEpisode.owner = window;
   gEpisode.serial = ++gEpisodeCount;
@@ -442,7 +407,10 @@ void NoteHealRefusal(HealRefusal refusal, const MenuWindowInfo &menuWindow) {
 }
 
 void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, ArdiaConsentStamp *stamp) {
-  if (gEpisode.open && !gEpisode.owner) CloseEpisode(@"windowClosed");
+  if (gEpisode.open && !gEpisode.owner) {
+    CloseOwnerWindow();
+    if (QuitWindowClosedPending()) return;
+  }
   if (!window) return;
   if (gEpisode.open && gEpisode.owner != window) {
     if (trigger != HoverTrigger::click) return;
@@ -474,7 +442,10 @@ void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, Ard
 }
 
 void HandleCoveredClick(NSWindow *browser, NSWindow *cover, NSPoint point, ArdiaConsentStamp *stamp) {
-  if (gEpisode.open && !gEpisode.owner) CloseEpisode(@"windowClosed");
+  if (gEpisode.open && !gEpisode.owner) {
+    CloseOwnerWindow();
+    if (QuitWindowClosedPending()) return;
+  }
   if (!browser || !cover || !Invisible(cover) || !cover.isVisible) return;
   if (gEpisode.open) {
     if (gEpisode.owner != browser || gEpisode.first.reason != HoverReason::coveredByWindow || gInvisibleCover != cover) return;
@@ -561,6 +532,7 @@ void StartHoverWatch() {
 }
 
 void EndEpisodeIfInactive() {
+  if (QuitWindowClosedPending()) return;
   if (!CurrentActivation().inFront()) CloseEpisode(@"appInactive");
 }
 
@@ -582,7 +554,7 @@ void WatchHover() {
     EndEpisodeIfInactive();
   }];
   [center addObserverForName:NSWindowWillCloseNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-    if (gEpisode.open && note.object == gEpisode.owner) CloseEpisode(@"windowClosed");
+    if (gEpisode.open && note.object == gEpisode.owner) CloseOwnerWindow();
   }];
   for (NSNotificationName name in @[ NSWindowWillEnterFullScreenNotification, NSWindowWillExitFullScreenNotification ])
     [center addObserverForName:name object:nil queue:nil usingBlock:^(NSNotification *note) {

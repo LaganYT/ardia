@@ -98,6 +98,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) BOOL showsPaintedFrame;
 @end
 
+@interface ArdiaWebView (LeavePrompt)
+@property (nonatomic, readonly) BOOL asksBeforeLeaving;
+- (void)askBeforeLeaving:(void (^)(BOOL leave))answer NS_SWIFT_NAME(askBeforeLeaving(_:));
+@end
+
 @interface ArdiaWebView (NeighbourPages)
 + (void)wakeNeighbourPagesIn:(NSWindow *)window NS_SWIFT_NAME(wakeNeighbourPages(in:));
 + (void)wakeNeighbourPagesIn:(NSWindow *)window seconds:(CFTimeInterval)seconds committed:(BOOL)committed

@@ -8,7 +8,7 @@ import { recentlyClosedIn } from "../windows/recentlyClosedList";
 import { awayFromPin, selectedTabIds } from "../pins/organize";
 import { groupOf } from "../pins/tabGrouping";
 import { newGroupWithSelection, openIconPicker, startRename } from "./actions";
-import { cleanUpWithUndo, closeAllTabs } from "./clearTabs";
+import { cleanUpWithUndo, closeAllTabs, closeDuplicateTabs } from "./clearTabs";
 import { toggleNewTabBar } from "../omnibox/newTabBar";
 import { hiddenEmptyCard, newTabOpensBar } from "../omnibox/newTabBarPolicy";
 import { movePinnedTitle, togglePinnedRows } from "./movePinned";
@@ -53,6 +53,9 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
       return true;
     case "closeAllTabs":
       closeAllTabs(windowId, user);
+      return true;
+    case "closeDuplicateTabs":
+      closeDuplicateTabs(windowId, user);
       return true;
     case "tidyPins":
       tidy(windowId, "pins");

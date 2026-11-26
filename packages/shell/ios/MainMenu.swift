@@ -110,6 +110,7 @@ enum MainMenu {
       closeWindow,
       cmd(.closeTab),
       cmd(.closeAllTabs),
+      cmd(.closeDuplicateTabs),
       cmd(.cleanUpTabs),
       .separator(),
       cmd(.savePage),

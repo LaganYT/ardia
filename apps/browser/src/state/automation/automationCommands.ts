@@ -20,6 +20,7 @@ export const AUTOMATION: Readonly<Record<BrowserCommand, AutomationDecision>> = 
   focusCommandBar: "run",
   closeTab: "run",
   closeAllTabs: "run",
+  closeDuplicateTabs: "run",
   print: "needsPerson",
   copyUrl: "run",
   copyUrlAsMarkdown: "run",

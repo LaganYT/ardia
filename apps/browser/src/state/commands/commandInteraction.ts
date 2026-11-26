@@ -15,6 +15,7 @@ export const COMMAND_INTERACTION: Readonly<Record<BrowserCommand, CommandInterac
   focusCommandBar: "quiet",
   closeTab: "asksWhen",
   closeAllTabs: "quiet",
+  closeDuplicateTabs: "quiet",
   print: "interactive",
   copyUrl: "quiet",
   copyUrlAsMarkdown: "quiet",

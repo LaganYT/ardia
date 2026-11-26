@@ -14,6 +14,7 @@ enum CommandTable {
     case focusCommandBar
     case closeTab
     case closeAllTabs
+    case closeDuplicateTabs
     case print
     case copyUrl
     case copyUrlAsMarkdown
@@ -141,6 +142,7 @@ enum CommandTable {
     "focusCommandBar": "Open Command Bar",
     "closeTab": "Close Tab",
     "closeAllTabs": "Close All Tabs",
+    "closeDuplicateTabs": "Close Duplicate Tabs",
     "print": "Print…",
     "copyUrl": "Copy URL",
     "copyUrlAsMarkdown": "Copy URL as Markdown",

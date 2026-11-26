@@ -305,7 +305,7 @@ test("Move to Window › New Window moves the tab to a new window", async () => 
   assert.equal(S().windowOrder.length >= 2, true);
 });
 
-test("the sidebar background menu: new things, Browser Layout, Close All Tabs last; no setup-only rows", () => {
+test("the sidebar background menu: new things, Browser Layout, then Close Duplicate Tabs and Close All Tabs last; no setup-only rows", () => {
   const { w, ids } = windowWith("a", "b");
   assert.deepEqual(deep(sidebarMenuItems(S(), w)), [
     "New Tab [plus.app] ⌘T",
@@ -334,8 +334,12 @@ test("the sidebar background menu: new things, Browser Layout, Close All Tabs la
     "  Minimalism Mode [rectangle.leftthird.inset.filled] ⌃⌘M",
     "  Bookmarks Bar [bookmark] ⇧⌘B",
     "---",
+    "Close Duplicate Tabs [square.on.square] (off)",
     "Close All Tabs [xmark] ⇧⌘K",
   ]);
+  S().newTab(w, { url: "https://a.com/#again", background: true });
+  assert.ok(top(sidebarMenuItems(S(), w)).includes("Close Duplicate Tabs [square.on.square]"), "on once two tabs show the same page");
+  S().closeTabs([S().windows[w].tabIds.at(-1)]);
   S().updateSettings({ sidebarSide: "right" });
   assert.ok(sub(sidebarMenuItems(S(), w), "browserLayout").includes("Sidebar on Right [sidebar.right] ✓"));
   S().updateSettings({ sidebarSide: "left" });

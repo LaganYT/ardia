@@ -11,6 +11,7 @@ export type BrowserCommand =
   | "focusCommandBar"
   | "closeTab"
   | "closeAllTabs"
+  | "closeDuplicateTabs"
   | "print"
   | "copyUrl"
   | "copyUrlAsMarkdown"

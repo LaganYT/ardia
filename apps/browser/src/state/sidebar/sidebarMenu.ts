@@ -7,7 +7,8 @@ import { toggleNewTabBar } from "../omnibox/newTabBar";
 import { openNewTabInSplit } from "../splits/actions";
 import { splitViewAvailable } from "../splits/splits";
 import { newGroupWithSelection } from "./actions";
-import { closeAllTabs } from "./clearTabs";
+import { closeAllTabs, closeDuplicateTabs } from "./clearTabs";
+import { hasDuplicateTabs } from "../pins/duplicateTabs";
 import { lastClosedEntry } from "../windows/reopenClosed";
 import { consentToken } from "../telemetry/client";
 import type { ConsentToken } from "../telemetry/choice";
@@ -94,7 +95,10 @@ export function sidebarMenuItems(s: BrowserState, windowId: string): MenuItem[] 
       sortTabsMenuItem(s, { windowId }, true),
     ],
     [browserLayoutMenuItem(s, windowId)],
-    [{ id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...menuShortcut("closeAllTabs", s) }],
+    [
+      { id: "closeDuplicates", title: "Close Duplicate Tabs", symbol: "square.on.square", enabled: hasDuplicateTabs(s, windowId), ...menuShortcut("closeDuplicateTabs", s) },
+      { id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...menuShortcut("closeAllTabs", s) },
+    ],
   );
 }
 
@@ -113,5 +117,6 @@ export async function openSidebarMenu(windowId: string) {
     const id = s.newTab(windowId);
     if (id) newGroupWithSelection(windowId, [id]);
   } else if (choice === "addShared") void addSharedFolder(windowId);
+  else if (choice === "closeDuplicates") closeDuplicateTabs(windowId, { consent });
   else if (choice === "closeAll") closeAllTabs(windowId, { consent });
 }

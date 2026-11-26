@@ -40,6 +40,7 @@ export const COMMANDS = {
   focusCommandBar: { title: "Open Command Bar", keys: ["⌘L", "⌃F5"], ...inWindow },
   closeTab: { title: "Close Tab", symbol: "xmark", keys: ["⌘W"], ...inWindow },
   closeAllTabs: { title: "Close All Tabs", symbol: "xmark.square", keys: ["⇧⌘K"], ...windowOffInLittleArdia },
+  closeDuplicateTabs: { title: "Close Duplicate Tabs", symbol: "square.on.square", ...windowOffInLittleArdia },
   print: { title: "Print…", symbol: "printer", keys: ["⌘P"], ...pageInLittleArdia },
   copyUrl: { title: "Copy URL", symbol: "link", keys: ["⇧⌘C"], ...pageInLittleArdia, onInternalPages: true },
   copyUrlAsMarkdown: { title: "Copy URL as Markdown", symbol: "link", keys: ["⌥⇧⌘C"], ...pageInLittleArdia, onInternalPages: true },

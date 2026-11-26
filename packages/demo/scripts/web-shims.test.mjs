@@ -8,7 +8,9 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import { backdropFragment, haloFragment, powerUpFragment } from "../src/shims/web/gl/sources.ts";
 import { frameSubscription, measuredSize, MIN_FRAME_INTERVAL, stepAnimation, wantsFrames } from "../src/shims/web/gl/viewClock.ts";
-import { baseStops, GRAIN_SIDE, grainAlpha, overlayStops, padLayers, srgbFromOklab, SWATCH_SAMPLES, swatchColors } from "../src/shims/web/gl/themeSwatch.ts";
+import { baseStops, FILM_GRAIN_POINTS, FILM_GRAIN_SIDE, filmGrainAlpha, filmGrainHash, filmGrainOpacity, filmGrainSize, GRAIN_SIDE, grainAlpha, overlayStops, padLayers, srgbFromOklab, SWATCH_SAMPLES, swatchColors } from "../src/shims/web/gl/themeSwatch.ts";
+import { readFileSync } from "node:fs";
+import { MENU_MARGIN, placeMenu } from "../src/shims/web/menuPlacement.ts";
 import { oklab } from "../src/shims/web/gl/colors.ts";
 
 test("web shims survive ticker failures, reject inherited palettes and enter a view under a still pointer", { timeout: 30_000 }, async (t) => {
@@ -29,6 +31,40 @@ test("web shims survive ticker failures, reject inherited palettes and enter a v
   await page.getByRole("button", { name: "Run checks" }).click();
   await page.waitForFunction(() => document.getElementById("results")?.textContent);
   const results = JSON.parse(await page.locator("#results").textContent());
+  const cornerPixel = async (selector) => {
+    const card = await page.locator(selector).boundingBox();
+    const shot = await page.screenshot({ clip: { x: card.x, y: card.y, width: 12, height: 12 } });
+    return page.evaluate(async (png) => {
+      const image = await createImageBitmap(await (await fetch(`data:image/png;base64,${png}`)).blob());
+      const canvas = new OffscreenCanvas(image.width, image.height);
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0);
+      return [...context.getImageData(4, 4, 1, 1).data];
+    }, shot.toString("base64"));
+  };
+  const ringCorner = await cornerPixel("#ring > div");
+  const coveredCorner = await cornerPixel("#ring-under > div");
+  results.checks.siblingOverlayAboveRing = coveredCorner[0] > 200 && coveredCorner[1] < 60 && coveredCorner[2] < 60;
+  results.checks.selectedRingCorner = ringCorner[2] > 200 && ringCorner[0] < 60;
+  const dragAcross = async (id) => {
+    const handle = page.locator(`#${id} [style*='height: 20px']`).first();
+    await handle.scrollIntoViewIfNeeded();
+    const track = await handle.boundingBox();
+    const middle = track.y + track.height / 2;
+    await page.mouse.move(track.x + track.width * 0.3, middle);
+    await page.mouse.down();
+    for (let step = 1; step <= 10; step++) await page.mouse.move(track.x + track.width * (0.3 + step * 0.05), middle);
+    await page.mouse.up();
+    const dragged = await page.evaluate((key) => window.sliderValues[key], id);
+    t.diagnostic(`slider drag ${id} ${JSON.stringify(dragged)}`);
+    const live = dragged.filter((entry) => !entry.endsWith("!")).map(Number);
+    return live.length === 11 && Math.abs(live[0] - 0.3) < 0.01 && Math.abs(live.at(-1) - 0.8) < 0.01 &&
+      live.every((value, i) => i === 0 || value > live[i - 1]) && dragged.at(-1) === `${live.at(-1).toFixed(3)}!`;
+  };
+  results.checks.sliderFollowsDrag = await dragAcross("drag");
+  const followsScrolled = await dragAcross("drag-far");
+  const scrolled = await page.evaluate(() => [window.scrollX, window.scrollY]);
+  results.checks.sliderFollowsDragScrolled = followsScrolled && scrolled[0] > 0 && scrolled[1] > 0;
   t.diagnostic(JSON.stringify(results));
   assert.deepEqual(results.checks, {
     pointerBeforeSubscriber: true,
@@ -47,6 +83,13 @@ test("web shims survive ticker failures, reject inherited palettes and enter a v
     hudCloseOnDarkHud: true,
     breathe: true,
     holdKeyLookQuiet: true,
+    retinaStripeTile: true,
+    retinaIconSharp: true,
+    retinaMarkLogical: true,
+    selectedRingCorner: true,
+    siblingOverlayAboveRing: true,
+    sliderFollowsDrag: true,
+    sliderFollowsDragScrolled: true,
   });
 });
 
@@ -158,4 +201,45 @@ test("an onscreen GL view with no size holds no frame subscription, and takes on
   clock.done = true;
   sync(true);
   assert.deepEqual([frames.active(), subscribed, unsubscribed], [false, 2, 2]);
+});
+
+test("the demo's preset vibrancy carries the app's crisp film grain", () => {
+  const fract = (v) => v - Math.floor(v);
+  const metal = (x, y) => {
+    const p = [fract(x * 0.1031), fract(y * 0.1031), fract(x * 0.1031)];
+    const d = p[0] * (p[1] + 33.33) + p[1] * (p[2] + 33.33) + p[2] * (p[0] + 33.33);
+    return fract((p[0] + d + p[1] + d) * (p[2] + d));
+  };
+  for (const [x, y] of [[0, 0], [5, 9], [127, 64]]) assert.equal(filmGrainHash(x, y), metal(x, y));
+  const bytes = filmGrainAlpha();
+  assert.equal(bytes.length, FILM_GRAIN_SIDE * FILM_GRAIN_SIDE * 4);
+  assert.equal(bytes[3], Math.round((1 - metal(0, 0)) * 255));
+  assert.equal(filmGrainOpacity(0.09), 0.09);
+  assert.equal(filmGrainSize(1), FILM_GRAIN_POINTS);
+  const vibrancy = readFileSync(new URL("../src/shims/web/gl/Vibrancy.tsx", import.meta.url), "utf8");
+  assert.match(vibrancy, /<FilmGrain grainOpacity=\{grainOpacity\} grainScale=\{grainScale\} \/>/);
+  assert.match(vibrancy, /imageRendering: "pixelated"/);
+  const shaders = readFileSync(new URL("../src/shims/shaders.tsx", import.meta.url), "utf8");
+  assert.match(shaders, /<Vibrancy [^>]*grainOpacity=\{grainOpacity\} grainScale=\{grainScale\}/);
+});
+
+test("demo submenus open beside their row at any depth, flip left at the right edge and stay on screen", () => {
+  const viewport = { width: 1000, height: 700 };
+  const size = { width: 240, height: 300 };
+  assert.deepEqual(placeMenu(size, { x: 100, y: 120 }, viewport), { left: 100, top: 120 });
+  assert.deepEqual(placeMenu(size, { x: 900, y: 650 }, viewport), { left: viewport.width - size.width - MENU_MARGIN, top: viewport.height - size.height - MENU_MARGIN });
+  const first = { left: 100, top: 100, right: 340, width: 240 };
+  const second = placeMenu(size, { row: { top: 160 }, parent: first }, viewport);
+  assert.deepEqual(second, { left: 336, top: 155 });
+  const secondBox = { left: second.left, top: second.top, right: second.left + size.width, width: size.width };
+  const third = placeMenu(size, { row: { top: 200 }, parent: secondBox }, viewport);
+  assert.deepEqual(third, { left: 572, top: 195 });
+  const thirdBox = { left: third.left, top: third.top, right: third.left + size.width, width: size.width };
+  const fourth = placeMenu(size, { row: { top: 600 }, parent: thirdBox }, viewport);
+  assert.equal(fourth.left, thirdBox.left - size.width + 4, "a submenu at the right edge flips to the left of its parent");
+  assert.equal(fourth.top, viewport.height - size.height - MENU_MARGIN);
+  const menus = readFileSync(new URL("../src/shims/web/menus.tsx", import.meta.url), "utf8");
+  assert.match(menus, /createPortal\(/);
+  assert.match(menus, /document\.body/);
+  assert.match(menus, /anchor=\{\{ row: sub\.row \}\}/);
 });

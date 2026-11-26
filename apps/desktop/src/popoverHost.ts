@@ -7,6 +7,7 @@ export const POPOVER_UPDATE_METHOD = "shell.popover.update";
 export const POPOVER_CLOSE_METHOD = "shell.popover.close";
 export const POPOVER_BEYOND_WINDOW = "shell.popover.beyondWindow";
 export const POPOVER_DISMISSED_EVENT = "shell.popoverDismissed";
+export const POPOVER_MESSAGE_EVENT = "shell.popoverMessage";
 export const POPOVER_CHILD_PANEL_METHODS = [POPOVER_OPEN_METHOD, POPOVER_UPDATE_METHOD, POPOVER_CLOSE_METHOD] as const;
 
 export type PopoverMode = "native" | "dom";
@@ -27,6 +28,7 @@ export type PopoverSpec = {
   nested?: boolean;
   ignorePress?: (target: EventTarget | null) => boolean;
   onDismiss?: (reason: PopoverDismissReason) => void;
+  onMessage?: (message: unknown) => void;
 };
 
 export type PopoverOpenRequest = {
@@ -41,11 +43,12 @@ export type PopoverOpenRequest = {
   takesFocus: boolean;
   content: PopoverContent;
 };
-export type PopoverUpdateRequest = Omit<PopoverOpenRequest, "content" | "takesFocus" | "beyondWindow">;
+export type PopoverUpdateRequest = Omit<PopoverOpenRequest, "content" | "takesFocus" | "beyondWindow"> & { content?: Pick<PopoverContent, "props"> };
+export type PopoverMessageEvent = { id: string; windowId: string; message?: unknown };
 export type PopoverCloseRequest = { id: string; windowId: string; reason: PopoverDismissReason };
 export type PopoverDismissedEvent = { id: string; windowId: string; reason?: PopoverDismissReason };
 
-export type DomPopover = { element: Element; place(placement: Placement): void; unmount(): void };
+export type DomPopover = { element: Element; place(placement: Placement): void; update?(props: Record<string, unknown>): void; unmount(): void };
 type Focusable = { focus(options?: { preventScroll?: boolean }): void; isConnected?: boolean };
 type Target = Pick<EventTarget, "addEventListener" | "removeEventListener">;
 
@@ -74,7 +77,7 @@ export type PopoverHandle = {
   mode(): PopoverMode;
   placement(): Placement;
   ready: Promise<PopoverMode>;
-  update(next: Partial<Pick<PopoverSpec, "anchor" | "size" | "side" | "align">>): void;
+  update(next: Partial<Pick<PopoverSpec, "anchor" | "size" | "side" | "align">> & { props?: Record<string, unknown> }): void;
   close(reason?: PopoverDismissReason): void;
   closed(): boolean;
 };
@@ -97,6 +100,7 @@ type Entry = {
   state: Lifecycle;
   panelOpen: boolean;
   updateQueued: boolean;
+  propsQueued: boolean;
   closeReason: PopoverDismissReason;
   hostDismissed: boolean;
 };
@@ -201,6 +205,13 @@ export function createPopoverHost(deps: PopoverHostDeps) {
     const pageFocused = () => closeFrom(0, "page");
     const stopPageFocus = deps.watchPageFocus?.(pageFocused) ?? (() => {});
     const stopEvents = deps.onShellEvent((name, data) => {
+      if (name === POPOVER_MESSAGE_EVENT) {
+        const event = data as Partial<PopoverMessageEvent> | null;
+        if (!event || event.windowId !== deps.windowId || typeof event.id !== "string") return;
+        const entry = stack.find((candidate) => candidate.id === event.id && candidate.mode === "native");
+        if (entry) safely(() => entry.spec.onMessage?.(event.message), undefined);
+        return;
+      }
       if (name !== POPOVER_DISMISSED_EVENT) return;
       const event = data as Partial<PopoverDismissedEvent> | null;
       if (!event || event.windowId !== deps.windowId || typeof event.id !== "string") return;
@@ -251,7 +262,8 @@ export function createPopoverHost(deps: PopoverHostDeps) {
         entry.state = "open";
         if (entry.updateQueued) {
           entry.updateQueued = false;
-          quietly(POPOVER_UPDATE_METHOD, geometry(entry));
+          quietly(POPOVER_UPDATE_METHOD, { ...geometry(entry), ...(entry.propsQueued ? { content: { props: entry.spec.content.props ?? {} } } : {}) });
+          entry.propsQueued = false;
         }
         return "native";
       },
@@ -292,6 +304,7 @@ export function createPopoverHost(deps: PopoverHostDeps) {
         state: native ? "opening" : "open",
         panelOpen: false,
         updateQueued: false,
+        propsQueued: false,
         closeReason: "closed",
         hostDismissed: false,
       };
@@ -322,13 +335,17 @@ export function createPopoverHost(deps: PopoverHostDeps) {
           const index = stack.indexOf(entry);
           if (index >= 0) closeFrom(index, reason);
         },
-        update(next) {
+        update({ props, ...next }) {
           if (entry.state === "closed") return;
-          entry.spec = { ...entry.spec, ...next };
+          entry.spec = { ...entry.spec, ...next, ...(props ? { content: { ...entry.spec.content, props } } : {}) };
           entry.placement = place(entry);
-          if (entry.mode === "dom") entry.dom?.place(entry.placement);
-          else if (entry.state === "opening") entry.updateQueued = true;
-          else quietly(POPOVER_UPDATE_METHOD, geometry(entry));
+          if (entry.mode === "dom") {
+            if (props) entry.dom?.update?.(props);
+            entry.dom?.place(entry.placement);
+          } else if (entry.state === "opening") {
+            entry.updateQueued = true;
+            entry.propsQueued ||= !!props;
+          } else quietly(POPOVER_UPDATE_METHOD, { ...geometry(entry), ...(props ? { content: { props } } : {}) });
         },
       };
     },

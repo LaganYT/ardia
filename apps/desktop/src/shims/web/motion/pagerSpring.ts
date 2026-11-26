@@ -12,6 +12,8 @@ export const MIN_PAGE_WIDTH = 1;
 export const MAX_RELEASE_VELOCITY = 40;
 export const MAX_SETTLE_SECONDS = 2;
 export const FIRST_FRAME_LEAD = 1 / 60;
+export const REVERSE_NUDGE = 0.07;
+export const MID_TRANSITION = 0.1;
 
 export type PagerInput = "prepare" | "abandon" | "began" | "changed" | "ended" | "cancelled";
 export type PagerPhase = "idle" | "tracking" | "holding" | "settling";
@@ -59,7 +61,7 @@ export function sequenceSource(start = 0): SequenceSource {
   };
 }
 
-type Drag = { start: number; width: number; lo: number; hi: number; home: number; detent: number };
+type Drag = { start: number; width: number; lo: number; hi: number; home: number; detent: number; interrupted: boolean };
 type Sample = { time: number; position: number };
 type Spring = { from: number; target: number; velocity: number; start: number | null };
 
@@ -82,7 +84,7 @@ export class PagerSpring {
   private selectionSequenceValue = 0;
   private propSelected = 0;
   private propAck = 0;
-  private drag: Drag = { start: 0, width: 0, lo: 0, hi: 0, home: 0, detent: 0 };
+  private drag: Drag = { start: 0, width: 0, lo: 0, hi: 0, home: 0, detent: 0, interrupted: false };
   private history: Sample[] = [];
   private spring: Spring | null = null;
   private lastFrame: number | null = null;
@@ -344,7 +346,8 @@ export class PagerSpring {
     const x = this.positionValue;
     const lo = Math.max(0, Math.min(home - 1, Math.floor(x)));
     const hi = Math.min(this.countValue - 1, Math.max(home + 1, Math.ceil(x)));
-    this.drag = { start: x, width: 0, lo, hi, home, detent: clampToIndex(Math.round(x), lo, hi) };
+    const interrupted = (this.phaseValue === "settling" || this.phaseValue === "holding") && x !== home;
+    this.drag = { start: x, width: 0, lo, hi, home, detent: clampToIndex(Math.round(x), lo, hi), interrupted };
     this.history = [];
     this.velocityValue = 0;
     this.phaseValue = "tracking";
@@ -399,12 +402,28 @@ export class PagerSpring {
     if (!cancelled) {
       const flick = Math.abs(v * this.drag.width) >= FLICK_VELOCITY;
       const x = this.positionValue;
-      const aim = !flick ? Math.round(x) : v > 0 ? Math.floor(x) + 1 : Math.ceil(x) - 1;
+      const from = Math.abs(x - home) <= MID_TRANSITION ? home : x;
+      const aim = flick ? (v > 0 ? Math.floor(from) + 1 : Math.ceil(from) - 1) : this.slowAim(x, home);
       const lo = Math.max(0, home - 1);
       const hi = Math.max(lo, Math.min(this.countValue - 1, home + 1));
       target = clampToIndex(aim, lo, hi);
+      if (target !== home && this.reverseNudge(x, home, target)) target = home;
     }
     this.settle(target, this.towards(target, v));
+  }
+
+  private reverseNudge(x: number, home: number, target: number) {
+    const from = this.drag.start - home;
+    if (!this.drag.interrupted || Math.abs(from) <= MID_TRANSITION) return false;
+    const reversing = (target - home > 0) === (from > 0);
+    return reversing && Math.abs(x - this.drag.start) < REVERSE_NUDGE;
+  }
+
+  private slowAim(x: number, home: number) {
+    const fromHome = x - home;
+    const travelled = x - this.drag.start;
+    const leftHome = Math.abs(fromHome) >= 0.5 && travelled !== 0 && fromHome > 0 === travelled > 0;
+    return leftHome ? Math.round(x) : home;
   }
 
   private towards(target: number, v: number) {

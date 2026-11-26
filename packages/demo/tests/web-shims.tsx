@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { subscribeFrames } from "../src/shims/web/gl/clock";
@@ -13,6 +13,12 @@ import { useBrowser } from "../../../apps/browser/src/state/browser/store";
 import { ThemeContext, themeFor } from "../../../apps/browser/src/components/ui/theme";
 import { Panel } from "../../../apps/browser/src/components/ui/Panel";
 import { Button } from "../../../apps/browser/src/components/ui/Button";
+import { SelectableCard } from "../../../apps/browser/src/components/settings/SelectableCard";
+import { Slider } from "../../../apps/browser/src/components/settings/ThemeControls";
+import { Image, View, type ImageSourcePropType } from "react-native";
+import stripesSource from "../../../apps/browser/assets/dev-stripes-dark-ink.png";
+import broomSource from "../../../apps/browser/assets/tidy-broom.png";
+import markSource from "../../../apps/browser/assets/ntp-mark-sun.png";
 
 document.body.style.cssText = "margin:40px;background:#f6f5f2;color:#202020;font:18px system-ui";
 document.getElementById("root")!.innerHTML = `
@@ -25,9 +31,24 @@ document.getElementById("root")!.innerHTML = `
   <p id="animation">Healthy animation frames: 0. Reported ticker errors: 0.</p>
   <div id="labels" style="width:200px"></div>
   <div id="swatches" style="position:relative;width:240px;height:120px"></div>
+  <div id="images" style="position:relative"></div>
+  <div id="ring" style="display:inline-block;padding:8px;background:#1e1e1e"></div>
+  <div id="ring-under" style="display:inline-block;padding:8px;background:#1e1e1e"></div>
+  <div class="ardia-window" style="position:relative;margin-left:120px;width:360px"><div id="drag"></div></div>
+  <div style="position:relative;width:2400px;height:1800px"><div class="ardia-window" style="position:absolute;left:1700px;top:1500px;width:360px"><div id="drag-far"></div></div></div>
   <div id="checks"></div>
   <pre id="results" style="font:16px ui-monospace;white-space:pre-wrap"></pre>
 `;
+
+const sliderValues: Record<string, string[]> = { drag: [], "drag-far": [] };
+(window as unknown as { sliderValues: Record<string, string[]> }).sliderValues = sliderValues;
+function DragHarness({ log }: { log: string[] }) {
+  const [value, setValue] = useState(0.2);
+  return createElement(Slider, { label: "Intensity", value, onChange: (next: number, settle: boolean) => { log.push(`${next.toFixed(3)}${settle ? "!" : ""}`); setValue(next); } });
+}
+for (const id of Object.keys(sliderValues)) {
+  createRoot(document.getElementById(id)!).render(createElement(ThemeContext.Provider, { value: themeFor("plum:light") }, createElement(DragHarness, { log: sliderValues[id]! })));
+}
 
 document.getElementById("run")!.addEventListener("click", async (event) => {
   const checks: Record<string, boolean> = {};
@@ -95,6 +116,38 @@ document.getElementById("run")!.addEventListener("click", async (event) => {
   checks.holdKeyLookQuiet = !warnings.some((args) => args.some((arg) => /ArdiaThemeSwatch|ArdiaWindowBackdrop|ArdiaBreathe|native/i.test(String(arg))));
   flushSync(() => swatches.render(null));
   useBrowser.setState((s) => ({ ui: { ...s.ui, appDark: false } }));
+
+  const images = createRoot(document.getElementById("images")!);
+  const source = (value: unknown) => value as ImageSourcePropType;
+  flushSync(() => images.render([
+    createElement("div", { key: "stripes", id: "stripes" }, createElement(View, { style: { width: 200, height: 34 } },
+      createElement(Image, { source: source(stripesSource), resizeMode: "repeat", style: { flex: 1, width: undefined, height: undefined } }))),
+    createElement("div", { key: "broom", id: "broom" }, createElement(Image, { source: source(broomSource), style: { width: 11, height: 11, tintColor: "#202020" } })),
+    createElement("div", { key: "mark", id: "mark", style: { display: "flex", alignItems: "flex-start" } }, createElement(Image, { source: source(markSource) })),
+  ]));
+  const loaded = async (id: string) => {
+    const deadline = performance.now() + 3000;
+    while (performance.now() < deadline) {
+      const img = document.querySelector<HTMLImageElement>(`#${id} img`);
+      if (img?.complete && img.naturalWidth) return img;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return null;
+  };
+  const [broomImg, markImg] = await Promise.all([loaded("broom"), loaded("mark")]);
+  const tile = document.querySelector<HTMLElement>("#stripes > div > div");
+  checks.retinaStripeTile = !!tile && tile.style.backgroundSize === "28px 28px" && tile.style.backgroundImage.includes("dev-stripes-dark-ink@2x.png") && tile.getBoundingClientRect().height === 34;
+  checks.retinaIconSharp = broomImg?.naturalWidth === 33 && broomImg.src.includes("tidy-broom@3x.png") && document.querySelector("#broom > div")!.getBoundingClientRect().width === 11;
+  checks.retinaMarkLogical = markImg?.naturalWidth === 200 && document.querySelector("#mark > div")!.getBoundingClientRect().width === 100;
+  flushSync(() => images.render(null));
+  const ring = createRoot(document.getElementById("ring")!);
+  flushSync(() => ring.render(createElement(ThemeContext.Provider, { value: themeFor("plum:dark") },
+    createElement(SelectableCard, { selected: true, fill: false, style: { width: 120, height: 104, flexDirection: "row" }, children: createElement(View, { style: { flex: 1, backgroundColor: "#2A2A2C" } }) }))));
+  const ringUnder = createRoot(document.getElementById("ring-under")!);
+  flushSync(() => ringUnder.render(createElement(ThemeContext.Provider, { value: themeFor("plum:dark") },
+    createElement(View, { style: { width: 120, height: 104 } },
+      createElement(SelectableCard, { selected: true, fill: false, style: { width: 120, height: 104, flexDirection: "row" }, children: createElement(View, { style: { flex: 1, backgroundColor: "#2A2A2C" } }) }),
+      createElement(View, { style: { position: "absolute", left: 0, top: 0, width: 30, height: 30, zIndex: 1, backgroundColor: "#FF0000" } })))));
 
   let enters = 0;
   const mount = document.getElementById("hover")!;

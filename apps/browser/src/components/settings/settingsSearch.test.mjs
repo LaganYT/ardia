@@ -36,6 +36,7 @@ const TOP = [
   ["sidebar", ["tabs.sidebarSide"]],
   ["right sidebar", ["tabs.sidebarSide"]],
   ["vertical tabs", ["tabs.layout"]],
+  ["tab menu button", ["tabs.showTabMenuButton"]],
   ["pinned", ["profiles.shareTopApps", "tabs.balancedTopApps", "tabs.sleepingTabs"]],
   ["strikethrough", ["tabs.sleepingTabs"]],
   ["sleeping tabs", ["tabs.sleepingTabs"]],

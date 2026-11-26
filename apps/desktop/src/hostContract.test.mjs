@@ -289,3 +289,22 @@ test("current shared domain wrappers use the production Linux Expo adapter", () 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /production domain wrappers, bootstrap adapter, errors and events passed/);
 });
+
+test("a Mac host answers ArdiaSharedFolders.location from its bootstrap and sends the folder calls to the host with their arguments", async () => {
+  const requests = [];
+  const location = { path: "/Users/me/Library/Mobile Documents/com~apple~CloudDocs/Ardia Shared", iCloudAvailable: true, iCloudPath: "/Users/me/Library/Mobile Documents/com~apple~CloudDocs" };
+  const mac = {
+    bootstrap: { capabilities: ["ArdiaSharedFolders.location", "ArdiaSharedFolders.read", "ArdiaSharedFolders.watch"], nativeModules: { ArdiaSharedFolders: { location } } },
+    invoke: async (method, args) => (requests.push({ method, args }), { exists: false }),
+  };
+  assert.deepEqual(resolveHostModule(mac, "ArdiaSharedFolders", "location")(), location);
+  const bare = { ...mac, bootstrap: { ...mac.bootstrap, nativeModules: {} } };
+  assert.deepEqual(resolveHostModule(bare, "ArdiaSharedFolders", "location")(), { path: "", iCloudAvailable: false, iCloudPath: "" });
+  assert.deepEqual(await resolveHostModule(mac, "ArdiaSharedFolders", "read")("/Shared/Team", { device: 1, inode: 2 }), { exists: false });
+  resolveHostModule(mac, "ArdiaSharedFolders", "watch")(["/Shared/Team"]);
+  await Promise.resolve();
+  assert.deepEqual(requests, [
+    { method: "ArdiaSharedFolders.read", args: { args: ["/Shared/Team", { device: 1, inode: 2 }] } },
+    { method: "ArdiaSharedFolders.watch", args: { args: [["/Shared/Team"]] } },
+  ]);
+});

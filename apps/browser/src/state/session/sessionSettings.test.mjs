@@ -64,3 +64,22 @@ test("settings and their bookkeeping save apart, read back the same, and a chang
   assert.deepEqual(S().settingsMeta, { chosen: ["tabLayout", "appearance"], inferred: MARKERS });
   assert.equal(S().settings.appearance, "light");
 });
+
+test("the tab menu button defaults to shown for older sessions and keeps a saved choice to hide it", async () => {
+  stub.docs.clear();
+  stub.docs.set("session.json", JSON.stringify(doc(7, {})));
+  const stop = startPersistence();
+  try {
+    assert.equal(S().settings.showTabMenuButton, true);
+    S().updateSettings({ showTabMenuButton: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    flushPersistence();
+    const saved = JSON.parse(stub.docs.get("session.json"));
+    assert.equal(saved.settings.showTabMenuButton, false);
+    assert.ok(saved.settingsMeta.chosen.includes("showTabMenuButton"));
+    S().hydrate(loadSession());
+    assert.equal(S().settings.showTabMenuButton, false);
+  } finally {
+    stop();
+  }
+});

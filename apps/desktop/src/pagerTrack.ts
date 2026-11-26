@@ -55,21 +55,36 @@ export function trackProgress(position: number, span: number) {
   return clamp((position + TRACK_GUTTER) / (span + 2 * TRACK_GUTTER - 1), 0, 1);
 }
 
-export function tintOpacity(position: number, slot: number) {
-  if (slot <= 0) return 1;
-  return clamp(position - (slot - 1), 0, 1);
+export type TintBlend = { crossfade: boolean; last: number };
+
+export const LADDER: TintBlend = { crossfade: false, last: Infinity };
+
+export function tintOpacity(position: number, slot: number, blend: TintBlend = LADDER) {
+  if (!blend.crossfade) {
+    if (slot <= 0) return 1;
+    return clamp(position - (slot - 1), 0, 1);
+  }
+  const away = position - slot;
+  if ((slot <= 0 && away <= 0) || (slot >= blend.last && away >= 0)) return 1;
+  return clamp(1 - Math.abs(away), 0, 1);
 }
 
 export type TintKeyframe = { opacity: number; offset: number };
 
-export function tintKeyframes(slot: number, span: number): TintKeyframe[] {
+export function tintKeyframes(slot: number, span: number, blend: TintBlend = LADDER): TintKeyframe[] {
+  if (blend.crossfade) {
+    const first = -TRACK_GUTTER;
+    const final = span + TRACK_GUTTER - 1;
+    const inside = [slot - 1, slot, slot + 1].filter((position) => position > first && position < final);
+    return [first, ...inside, final].map((position) => ({ opacity: tintOpacity(position, slot, blend), offset: trackProgress(position, span) }));
+  }
   if (slot <= 0) return [{ opacity: 1, offset: 0 }, { opacity: 1, offset: 1 }];
   const from = trackProgress(slot - 1, span);
   const to = trackProgress(slot, span);
-  const frames: TintKeyframe[] = [{ opacity: tintOpacity(-TRACK_GUTTER, slot), offset: 0 }];
+  const frames: TintKeyframe[] = [{ opacity: tintOpacity(-TRACK_GUTTER, slot, blend), offset: 0 }];
   if (from > 0 && from < 1) frames.push({ opacity: 0, offset: from });
   if (to > 0 && to < 1) frames.push({ opacity: 1, offset: to });
-  frames.push({ opacity: tintOpacity(span + TRACK_GUTTER - 1, slot), offset: 1 });
+  frames.push({ opacity: tintOpacity(span + TRACK_GUTTER - 1, slot, blend), offset: 1 });
   return frames;
 }
 
@@ -86,7 +101,15 @@ export function seededPosition(read: (() => number) | undefined, fallback: numbe
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-export const tintFallbackOpacity = (slot: number, variable: string) => (slot <= 0 ? "1" : `clamp(0, calc(var(${variable}) - ${slot - 1}), 1)`);
+export function tintFallbackOpacity(slot: number, variable: string, blend: TintBlend = LADDER) {
+  if (!blend.crossfade) return slot <= 0 ? "1" : `clamp(0, calc(var(${variable}) - ${slot - 1}), 1)`;
+  const rising = `calc(1 + var(${variable}) - ${slot})`;
+  const falling = `calc(1 - var(${variable}) + ${slot})`;
+  if (slot <= 0 && slot >= blend.last) return "1";
+  if (slot <= 0) return `clamp(0, ${falling}, 1)`;
+  if (slot >= blend.last) return `clamp(0, ${rising}, 1)`;
+  return `clamp(0, min(${rising}, ${falling}), 1)`;
+}
 
 export type RevealSpot = { listTop: number; rowTop: number; rowHeight: number; viewport: number; scrollY: number };
 

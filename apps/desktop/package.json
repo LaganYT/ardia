@@ -14,7 +14,7 @@
     "typecheck": "tsrs -p . && tsrs -p tsconfig.win.json && tsrs -p tsconfig.mac.json",
     "test:host": "node scripts/host-tests.mjs linux win mac",
     "test:symbols": "node --experimental-strip-types --test src/shims/web/symbols/render.test.mjs",
-    "test:graph": "node --test scripts/module-graph.test.mjs scripts/windowsPaths.test.mjs",
+    "test:graph": "node --test scripts/module-graph.test.mjs scripts/windowsPaths.test.mjs scripts/scaledAssets.test.mjs",
     "fixture:csp": "node scripts/host-csp-fixture.mjs",
     "fixture:csp:check": "node scripts/host-csp-check.mjs",
     "acceptance": "node scripts/acceptance/run.mjs",

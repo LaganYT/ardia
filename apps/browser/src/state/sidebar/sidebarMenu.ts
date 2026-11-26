@@ -18,6 +18,7 @@ import { addSharedFolder } from "../sharedFolders/actions";
 import { canAddSharedFolder } from "../sharedFolders/removal";
 import { chooseSidebarSide, switchTabLayout } from "../settings/actions";
 import { minimalismIn } from "../windows/layout";
+import { sortKeyOfChoice, sortTabs, sortTabsMenuItem } from "./sortTabsUi";
 
 const store = () => useBrowser.getState();
 
@@ -90,6 +91,7 @@ export function sidebarMenuItems(s: BrowserState, windowId: string): MenuItem[] 
       { id: "newGroup", title: "New Group", symbol: "folder.badge.plus" },
       newLiveFolderMenuItem(),
       ...(canAddSharedFolder(w?.profileId) ? [{ id: "addShared", title: "Add Shared Folder…", symbol: "person.2" }] : []),
+      sortTabsMenuItem(s, { windowId }, true),
     ],
     [browserLayoutMenuItem(s, windowId)],
     [{ id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...menuShortcut("closeAllTabs", s) }],
@@ -100,6 +102,8 @@ export async function openSidebarMenu(windowId: string) {
   const consent = consentToken();
   const choice = await showMenu(sidebarMenuItems(store(), windowId));
   if (!choice || runNewLiveFolder(windowId, choice) || runBrowserLayoutChoice(windowId, choice, consent)) return;
+  const sortKey = sortKeyOfChoice(choice);
+  if (sortKey) return void sortTabs({ windowId }, sortKey);
   const s = store();
   if (choice === "newTab") {
     if (!toggleNewTabBar(windowId)) s.newTab(windowId, { newTabCommand: true });

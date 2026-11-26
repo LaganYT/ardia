@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,6 +50,7 @@ const ADAPTER_REPLACEMENTS = [
   ["components/settings/Form.tsx", "settingsForm.tsx", ["Anchor", "Group", "Row", "SectionHeader", "SettingsPaneContext"]],
   ["state/engines/engines.ts", "hostEngines.ts", ["canSwitchEngine", "chosenEngine", "defaultEngine", "offersEngineChoice", "tabEngine", "siteOf"]],
   ["state/import/apply.ts", "importApply.ts", ["applyResult", "applySafari", "emptyCounts", "importBookmarks"]],
+  ["platform/sharedFolders.ts", "hostSharedFolders.ts", ["revealSharedFolder", "sharedFoldersAvailable", "readSharedFolder", "watchSharedFolders"]],
 ];
 
 function assertAdapterReplacements(graph, ids) {
@@ -142,7 +144,7 @@ test("production graph uses current Linux adapters and one canonical shared stat
     assert.ok(graph.get(`${browser}${host}`).importedIds.includes(`${desktop}LeadingWindowControls.tsx`), `${host} draws the desktop's left buttons`);
   }
   assert.ok(graph.get(`${desktop}LeadingWindowControls.tsx`).importedIds.includes(`${desktop}WindowControls.tsx`), "the left group goes through the same Linux wrapper as the right one");
-  assert.ok(graph.get(`${desktop}main.tsx`).importedIds.includes(`${desktop}platform/buttonLayout.linux.ts`), "every window follows the desktop's button layout");
+  assert.ok(graph.get(`${desktop}shellEntry.tsx`).importedIds.includes(`${desktop}platform/buttonLayout.linux.ts`), "every window follows the desktop's button layout");
   assert.ok(graph.get(`${desktop}platform/buttonLayout.linux.ts`).importedIds.includes(`${desktop}platform/linux/desktopButtonLayout.ts`), "the button layout comes from GTK's setting on Linux");
   const controls = graph.get(`${browser}components/window/BrowserWindowControls.tsx`).importedIds;
   assert.ok(controls.includes(`${desktop}clusterAppMenu.ts`) && !controls.includes(`${browser}state/app/appMenu.ts`), "the … beside the window buttons opens Linux's full app menu");
@@ -150,7 +152,7 @@ test("production graph uses current Linux adapters and one canonical shared stat
     const imported = graph.get(`${browser}${importer}`).importedIds;
     assert.ok(imported.includes(`${desktop}sidebarHeaderLayout.ts`) && !imported.includes(`${browser}state/windows/layout.ts`), `${importer} keeps the header, and its menu, whenever the window buttons are hidden`);
   }
-  assert.ok(graph.get(`${desktop}main.tsx`).importedIds.includes(`${desktop}TrafficLights.tsx`), "Linux draws its own traffic lights when they are chosen");
+  assert.ok(graph.get(`${desktop}shellEntry.tsx`).importedIds.includes(`${desktop}TrafficLights.tsx`), "Linux draws its own traffic lights when they are chosen");
   assert.ok(graph.get(`${desktop}TrafficLights.tsx`).importedIds.includes(`${desktop}captionControls.ts`), "the traffic lights close, minimize and maximize through the same adapters as the native buttons");
 
   for (const [twin, suffix] of [["lib/platformFeatures", "linux"], ["lib/platformTerms", "linux"], ["lib/platformChrome", "desktop"], ["state/commands/comboWords", "desktop"], ["state/tabs/engineKeptCodes", "desktop"], ["lib/pageStacking", "desktop"]]) {
@@ -234,8 +236,8 @@ test("production graph uses current Linux adapters and one canonical shared stat
   assert.ok(!passwordsPane.importedIds.includes(`${browser}state/site/passwords.ts`));
 
   for (const id of singletons) assert.equal(chunks.filter((chunk) => id in chunk.modules).length, 1, id);
-  assert.ok(graph.get(`${desktop}main.tsx`).importedIds.includes(`${browser}state/browser/store.ts`));
-  assert.ok(graph.get(`${desktop}main.tsx`).importedIds.includes(`${browser}state/tabs/prewarm.ts`));
+  assert.ok(graph.get(`${desktop}shellEntry.tsx`).importedIds.includes(`${browser}state/browser/store.ts`));
+  assert.ok(graph.get(`${desktop}shellEntry.tsx`).importedIds.includes(`${browser}state/tabs/prewarm.ts`));
 });
 
 test("production graph selects canonical Live persistence and one shared Live store", { timeout: 120000 }, async () => {
@@ -329,6 +331,17 @@ test("Linux shell exports and shared package Expo dialogs use one adapter", () =
   assert.match(result.stdout, /share the production adapter/);
 });
 
+const LIQUID_GLASS = ["engine.ts", "dom-snapshot.ts"].map((file) => `${repo}third_party/liquid-glass/${file}`);
+
+test("every desktop build draws glass with the one vendored Liquid Glass engine, through the layer the demo shares byte for byte", { timeout: 120000 }, async () => {
+  for (const file of ["liquidGlass.tsx", "liquidGlassOptics.ts", "liquidGlassPlace.ts"]) assert.equal(readFileSync(`${desktop}shims/web/${file}`, "utf8"), readFileSync(`${repo}packages/demo/src/shims/web/${file}`, "utf8"), `the desktop and demo ${file} drifted apart`);
+  for (const mode of ["linux", "win", "mac"]) {
+    const { graph, ids } = await productionGraph(mode);
+    for (const id of LIQUID_GLASS) assert.deepEqual(only(ids, id), [id], `${mode}: ${id}`);
+    assert.ok(graph.get(`${desktop}shims/web/chrome.tsx`)?.importedIds.includes(`${desktop}shims/web/liquidGlass.tsx`), `${mode}: GlassEffect draws through the shared layer`);
+  }
+});
+
 const WIN_TWINS = [
   ["lib/platformTerms", "win"],
   ["lib/platformFeatures", "win"],
@@ -355,9 +368,9 @@ test("the win build shares every desktop adapter, takes Windows terms, and leave
   assert.deepEqual(ids.filter(linuxOnly), [], "no Linux-only module reaches the win bundle");
   assert.deepEqual(ids.filter((id) => /\.windows\.tsx?$/.test(id) && !WINDOWS_WORDING.has(id)), [], "only Windows wording comes from the React Native Windows twins");
   const seams = [
-    ["main.tsx", "platform/buttonLayout.win.ts"],
-    ["main.tsx", "platform/launchNotice.desktop.ts"],
-    ["main.tsx", "platform/updater.win.ts"],
+    ["shellEntry.tsx", "platform/buttonLayout.win.ts"],
+    ["shellEntry.tsx", "platform/launchNotice.desktop.ts"],
+    ["shellEntry.tsx", "platform/updater.win.ts"],
     ["AppMenuButton.tsx", "platform/updater.win.ts"],
     ["hostModules.ts", "platform/calendar.desktop.ts"],
     ["hostSystem.ts", "platform/updates.win.ts"],
@@ -365,6 +378,7 @@ test("the win build shares every desktop adapter, takes Windows terms, and leave
     ["shortcutFormat.ts", "platform/keyNames.win.ts"],
     ["credentialNotices.ts", "platform/secretWording.win.ts"],
     ["syncKeyStore.ts", "platform/secretWording.win.ts"],
+    ["appMenuPlacement.ts", "platform/appMenuButton.desktop.ts"],
   ];
   for (const [importer, seam] of seams) assert.ok(graph.get(`${desktop}${importer}`)?.importedIds.includes(`${desktop}${seam}`), `${importer} imports ${seam}`);
   assert.ok(graph.get(`${desktop}platform/win/hostUpdates.ts`)?.importedIds.includes(`${browser}platform/windowsUpdateCounts.win.ts`), "the Windows updater counts manifest checks in the same twin the hourly telemetry takes them from");
@@ -384,7 +398,7 @@ const MAC_TWINS = [
   ["lib/platformFeatures", ""],
   ["state/commands/keyText", ""],
   ["state/telemetry/copyWords", ""],
-  ["lib/platformChrome", ".desktop"],
+  ["lib/platformChrome", ".mac"],
   ["state/commands/comboWords", ".desktop"],
   ["state/tabs/engineKeptCodes", ".desktop"],
 ];
@@ -405,9 +419,9 @@ test("the mac build shares every desktop adapter, takes the Mac's own terms, and
   assert.ok(graph.has(`${browser}lib/captionChrome.ts`), "the desktop chrome takes its caption sizes from the shared module, not the Windows twin");
   assert.deepEqual(ids.filter(reactNativeNative), [], "React Native and Expo's native modules stay out of the mac WebUI bundle");
   const seams = [
-    ["main.tsx", "platform/buttonLayout.mac.ts"],
-    ["main.tsx", "platform/launchNotice.desktop.ts"],
-    ["main.tsx", "platform/updater.desktop.ts"],
+    ["shellEntry.tsx", "platform/buttonLayout.mac.ts"],
+    ["shellEntry.tsx", "platform/launchNotice.desktop.ts"],
+    ["shellEntry.tsx", "platform/updater.desktop.ts"],
     ["hostModules.ts", "platform/calendar.desktop.ts"],
     ["hostSystem.ts", "platform/updates.desktop.ts"],
     ["shortcutFormat.ts", "platform/keyNames.mac.ts"],
@@ -415,12 +429,25 @@ test("the mac build shares every desktop adapter, takes the Mac's own terms, and
     ["syncKeyStore.ts", "platform/secretWording.mac.ts"],
     ["hostImport.ts", "platform/importWording.mac.ts"],
     ["shims/shaders.tsx", "platform/windowGlass.mac.ts"],
+    ["appMenuPlacement.ts", "platform/appMenuButton.mac.ts"],
   ];
   for (const [importer, seam] of seams) assert.ok(graph.get(`${desktop}${importer}`)?.importedIds.includes(`${desktop}${seam}`), `${importer} imports ${seam}`);
   assert.ok(graph.get(`${desktop}platform/windowGlass.mac.ts`).importedIds.includes(`${desktop}platform/mac/macGlass.ts`), "vibrancy backdrops ask the Mac host for glass behind the window");
+  const staticClosure = (start) => {
+    const seen = new Set([start]);
+    for (const id of seen) for (const next of graph.get(id)?.importedIds ?? []) seen.add(next);
+    return seen;
+  };
+  const entry = graph.get(`${desktop}main.tsx`);
+  assert.ok(entry.dynamicallyImportedIds.includes(`${desktop}popoverEntry.tsx`) && entry.dynamicallyImportedIds.includes(`${desktop}shellEntry.tsx`), "the entry picks the popover renderer or the browser shell before loading either");
+  const shellModules = [`${browser}state/browser/store.ts`, `${desktop}shellEntry.tsx`, `${desktop}shims/expo-modules-core.ts`, `${desktop}shims/shellBase.tsx`, `${browser}App.tsx`];
+  for (const start of [`${desktop}main.tsx`, `${desktop}popoverEntry.tsx`]) {
+    const closure = staticClosure(start);
+    for (const shell of shellModules) assert.ok(!closure.has(shell), `${start} statically pulls in ${shell}`);
+  }
   const code = chunks.map((chunk) => chunk.code).join("\n");
   for (const other of ["Evolution Data Server", "yay -Syu", "(polkit)", "Super+", "File Explorer", "Windows Hello"]) assert.ok(!code.includes(other), `the mac bundle says ${other}`);
-  for (const mac of ["shell.backdropRegions", "Finder", "Touch ID or your login password"]) assert.ok(code.includes(mac), `the mac bundle lacks ${mac}`);
+  for (const mac of ["shell.backdropRegions", "Finder", "Touch ID or your login password", "ArdiaShell.setMainMenu", "shell.glassBehindWindow"]) assert.ok(code.includes(mac), `the mac bundle lacks ${mac}`);
 });
 
 test("the linux and win builds keep the Mac twins and Mac glass out", { timeout: 120000 }, async () => {

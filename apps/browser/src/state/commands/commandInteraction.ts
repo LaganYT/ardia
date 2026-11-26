@@ -97,6 +97,7 @@ export const COMMAND_INTERACTION: Readonly<Record<BrowserCommand, CommandInterac
   newGroupWithTabs: "quiet",
   cleanUpTabs: "quiet",
   tidyPins: "quiet",
+  sortTabs: "quiet",
   searchTabs: "quiet",
   renameTab: "quiet",
   changeTabIcon: "interactive",

@@ -77,6 +77,15 @@ export function windowCornerRadii(rect: Rect, window: WindowSize, radius: number
   };
 }
 
+export function engineEnclosedRect({ x, y, width, height }: Rect, zoom = 1): Rect {
+  const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const left = Math.floor(x * scale + 1e-6) / scale;
+  const top = Math.floor(y * scale + 1e-6) / scale;
+  const right = Math.ceil((x + width) * scale - 1e-6) / scale;
+  const bottom = Math.ceil((y + height) * scale - 1e-6) / scale;
+  return { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+}
+
 export function holeClipPath(box: { width: number; height: number }, holes: readonly Hole[], radius = PAGE_CORNER_RADIUS, pieces: readonly HolePiece[] = []) {
   if (!holes.length && !pieces.length) return "";
   const outer = `M0 0H${n(box.width)}V${n(box.height)}H0Z`;
@@ -211,6 +220,8 @@ export function pagesPaintedThrough(painter: Element, pages: readonly PageArea[]
 export function createPageHoles(root: HTMLElement, zoom: () => number = () => 1, frame: () => CornerRadii = () => SQUARE_WINDOW, moving: (element: Element) => boolean = () => false) {
   const layers = new Set<HTMLElement>();
   const hosts = new Map<HTMLElement, string>();
+  let pageAreas: readonly PageArea[] = [];
+  let glassAreas: readonly PageArea[] = [];
   let pages: readonly PageArea[] = [];
   let floating: FloatingHole | null = null;
   let floatingHosts: readonly HTMLElement[] = [];
@@ -286,7 +297,14 @@ export function createPageHoles(root: HTMLElement, zoom: () => number = () => 1,
 
   return {
     pagesChanged(next: readonly PageArea[]) {
-      pages = next;
+      pageAreas = next.map((area) => ({ ...area, rect: engineEnclosedRect(area.rect, zoom()) }));
+      pages = [...pageAreas, ...glassAreas];
+      for (const layer of layers) paintLayer(layer);
+      syncHosts();
+    },
+    glassChanged(next: readonly { slot: Element; rect: Rect; radii: CornerRadii }[]) {
+      glassAreas = next.map(({ slot, rect, radii }) => ({ slot, rect, radii }));
+      pages = [...pageAreas, ...glassAreas];
       for (const layer of layers) paintLayer(layer);
       syncHosts();
     },

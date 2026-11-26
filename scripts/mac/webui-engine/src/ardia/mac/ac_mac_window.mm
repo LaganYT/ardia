@@ -1,5 +1,9 @@
 #include "ardia/mac/ac_mac_window.h"
 
+#include <algorithm>
+
+#include "ardia/mac/ac_mac_window_policy.h"
+
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 
@@ -46,6 +50,72 @@ void Override(Class frame_class, SEL selector, CGFloat (^pick)(ArdiaMacTitlebarM
   if (!class_addMethod(frame_class, selector, replacement, method_getTypeEncoding(method))) {
     method_setImplementation(method, replacement);
   }
+}
+
+const void* const kObservedKey = &kObservedKey;
+
+void LayOutLights(NSWindow* ns_window) {
+  ArdiaMacTitlebarMetrics* metrics = objc_getAssociatedObject(ns_window, kMetricsKey);
+  if (!metrics || (ns_window.styleMask & NSWindowStyleMaskFullScreen)) {
+    return;
+  }
+  NSButton* close = [ns_window standardWindowButton:NSWindowCloseButton];
+  NSButton* mini = [ns_window standardWindowButton:NSWindowMiniaturizeButton];
+  NSButton* zoom = [ns_window standardWindowButton:NSWindowZoomButton];
+  NSView* container = close.superview.superview;
+  NSView* frame = container.superview;
+  if (!close || !mini || !zoom || !container || !frame) {
+    return;
+  }
+  const window::TitlebarLayout layout = window::TitlebarLayoutFor(
+      window::TitlebarMetrics{metrics.minXInset, metrics.height},
+      window::Size{NSWidth(close.frame), NSHeight(close.frame)},
+      NSMinX(mini.frame) - NSMinX(close.frame), NSHeight(frame.bounds));
+  NSRect bar = container.frame;
+  bar.size.height = layout.container_height;
+  bar.origin.y = frame.isFlipped ? 0 : layout.container_y;
+  container.frame = bar;
+  NSButton* const buttons[] = {close, mini, zoom};
+  for (int index = 0; index < 3; ++index) {
+    [buttons[index] setFrameOrigin:NSMakePoint(layout.button_x[index], layout.button_y)];
+  }
+}
+
+void FollowWindowLayout(NSWindow* ns_window) {
+  if (objc_getAssociatedObject(ns_window, kObservedKey)) {
+    return;
+  }
+  NSMutableArray* observers = [NSMutableArray array];
+  __weak NSWindow* weak_window = ns_window;
+  for (NSNotificationName name in @[
+         NSWindowDidResizeNotification, NSWindowDidExitFullScreenNotification,
+         NSWindowDidBecomeKeyNotification, NSWindowDidResignKeyNotification
+       ]) {
+    [observers addObject:[NSNotificationCenter.defaultCenter
+                             addObserverForName:name
+                                         object:ns_window
+                                          queue:NSOperationQueue.mainQueue
+                                     usingBlock:^(NSNotification*) {
+                                       if (NSWindow* strong = weak_window) {
+                                         LayOutLights(strong);
+                                       }
+                                     }]];
+  }
+  __weak NSMutableArray* weak_observers = observers;
+  [observers addObject:[NSNotificationCenter.defaultCenter
+                           addObserverForName:NSWindowWillCloseNotification
+                                       object:ns_window
+                                        queue:NSOperationQueue.mainQueue
+                                   usingBlock:^(NSNotification*) {
+                                     NSMutableArray* tokens = weak_observers;
+                                     for (id token in tokens) {
+                                       [NSNotificationCenter.defaultCenter removeObserver:token];
+                                     }
+                                     if (NSWindow* strong = weak_window) {
+                                       objc_setAssociatedObject(strong, kObservedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                                     }
+                                   }]];
+  objc_setAssociatedObject(ns_window, kObservedKey, observers, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 void InstallMetricsOverrides(Class frame_class) {
@@ -98,6 +168,20 @@ void ApplyShellWindowStyle(views::Widget* widget) {
   content.layer.opaque = NO;
   ns_window.hasShadow = YES;
   [ns_window invalidateShadow];
+  KeepMinimumSize(widget);
+}
+
+void KeepMinimumSize(views::Widget* widget) {
+  NSWindow* ns_window = widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
+  if (!ns_window) {
+    return;
+  }
+  const NSSize content = ns_window.contentMinSize;
+  ns_window.contentMinSize = NSMakeSize(std::max<CGFloat>(content.width, window_policy::kMinWidth),
+                                        std::max<CGFloat>(content.height, window_policy::kMinHeight));
+  const NSSize frame = ns_window.minSize;
+  ns_window.minSize = NSMakeSize(std::max<CGFloat>(frame.width, window_policy::kMinWidth),
+                                 std::max<CGFloat>(frame.height, window_policy::kMinHeight));
 }
 
 void SetTrafficLights(views::Widget* widget, const window::Lights& lights) {
@@ -120,6 +204,20 @@ void SetTrafficLights(views::Widget* widget, const window::Lights& lights) {
   }
   frame.needsLayout = YES;
   [frame layoutSubtreeIfNeeded];
+  LayOutLights(ns_window);
+  FollowWindowLayout(ns_window);
+}
+
+void ShowWithoutActivating(views::Widget* widget, views::Widget* behind) {
+  if (!widget) {
+    return;
+  }
+  widget->ShowInactive();
+  NSWindow* ns_window = widget->GetNativeWindow().GetNativeNSWindow();
+  NSWindow* behind_window = behind ? behind->GetNativeWindow().GetNativeNSWindow() : nil;
+  if (ns_window && behind_window) {
+    [ns_window orderWindow:NSWindowBelow relativeTo:behind_window.windowNumber];
+  }
 }
 
 }

@@ -2,8 +2,10 @@
 #define ARDIA_MAC_AC_MAC_GLASS_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
+#include "ardia/mac/ac_mac_backdrop_theme.h"
 #include "ardia/mac/ac_mac_glass_layout.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -12,6 +14,7 @@
 #include "ui/gfx/native_ui_types.h"
 
 namespace views {
+class View;
 class Widget;
 }
 
@@ -23,12 +26,13 @@ struct GlassPage {
 };
 
 bool LiquidGlassAvailable();
+bool GlassGroupsAvailable();
 
 class GlassRegions {
  public:
   using Presented = base::RepeatingCallback<void(int generation)>;
 
-  GlassRegions(views::Widget* widget, Presented presented);
+  GlassRegions(views::Widget* widget, views::View* under_shell, Presented presented);
   GlassRegions(const GlassRegions&) = delete;
   GlassRegions& operator=(const GlassRegions&) = delete;
   ~GlassRegions();
@@ -43,12 +47,16 @@ class GlassRegions {
   struct Views;
 
   glass::Layout Relayout();
+  void LayOutThemes(const glass::Layout& layout);
+  bool MountUnderShell(const glass::Placement& placement, const glass::Rect& page);
   void EmitPresented(glass::PresentedGate::Ticket ticket);
 
   raw_ptr<views::Widget> widget_;
+  raw_ptr<views::View> under_shell_;
   std::unique_ptr<Views> views_;
   std::vector<glass::Region> regions_;
   std::vector<glass::Region> backdrops_;
+  std::vector<std::optional<backdrop_theme::Theme>> themes_;
   std::vector<glass::Placement> placed_;
   std::vector<GlassPage> pages_;
   glass::Rect shell_;

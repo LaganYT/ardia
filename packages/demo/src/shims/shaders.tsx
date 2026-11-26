@@ -63,7 +63,7 @@ export function WindowBackdrop({
       {themed ? (
         <ThemedVibrancy colors={themeColors!} opacity={themeOpacity ?? 1} underlayAlpha={themeBaseAlpha ?? 0} grain={themeGrain} texture={themeTexture} angle={themeAngle} dark={dark} />
       ) : vibrancy ? (
-        <Vibrancy dark={dark} tintColor={tintColor} tintAlpha={tintAlpha} tintLightness={tintLightness} />
+        <Vibrancy dark={dark} tintColor={tintColor} tintAlpha={tintAlpha} tintLightness={tintLightness} grainOpacity={grainOpacity} grainScale={grainScale} />
       ) : webgl2Supported() ? (
         <GLView fragment={backdropFragment} uniformsAt={uniformsAt} version={key} />
       ) : (

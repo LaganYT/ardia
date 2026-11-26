@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPopoverHost, focusableForRestore, nextPopoverId, popoverCapabilities, POPOVER_BEYOND_WINDOW, POPOVER_CHILD_PANEL_METHODS, POPOVER_CLOSE_METHOD, POPOVER_DISMISSED_EVENT, POPOVER_OPEN_METHOD, POPOVER_UPDATE_METHOD } from "./popoverHost.ts";
+import { createPopoverHost, focusableForRestore, nextPopoverId, popoverCapabilities, POPOVER_BEYOND_WINDOW, POPOVER_CHILD_PANEL_METHODS, POPOVER_CLOSE_METHOD, POPOVER_DISMISSED_EVENT, POPOVER_MESSAGE_EVENT, POPOVER_OPEN_METHOD, POPOVER_UPDATE_METHOD } from "./popoverHost.ts";
 
 const hostWith = (capabilities) => ({ bootstrap: { windowId: "w", profileId: "p", capabilities }, call: async () => "null", invoke: async () => null, onEvent: () => () => {} });
 
@@ -482,4 +482,51 @@ test("Escape is heard in the bubble phase, so a control inside the popover that 
   h.key();
   assert.equal(handle.closed(), true);
   assert.deepEqual(h.dismissed, ["escape"]);
+});
+
+test("a native panel's messages reach only its own popover, and a thrown handler is contained", async () => {
+  const h = harness({ childPanels: true });
+  const messages = [];
+  const panel = h.host.open(h.spec({ onMessage: (message) => messages.push(message) }));
+  await panel.ready;
+  h.shell(POPOVER_MESSAGE_EVENT, { id: panel.id, windowId: "w1", message: { type: "pick", id: "a" } });
+  h.shell(POPOVER_MESSAGE_EVENT, { id: panel.id, windowId: "other", message: "wrong window" });
+  h.shell(POPOVER_MESSAGE_EVENT, { id: "stale", windowId: "w1", message: "stale" });
+  h.shell(POPOVER_MESSAGE_EVENT, null);
+  assert.deepEqual(messages, [{ type: "pick", id: "a" }]);
+  const throwing = h.host.open(h.spec({ onMessage: () => { throw new Error("handler"); } }));
+  await throwing.ready;
+  assert.doesNotThrow(() => h.shell(POPOVER_MESSAGE_EVENT, { id: throwing.id, windowId: "w1", message: 1 }));
+  assert.equal(throwing.closed(), false);
+});
+
+test("props updates reach an open panel with its geometry, and wait for an opening one", async () => {
+  const h = harness({ childPanels: true, holdOpen: true });
+  const panel = h.host.open(h.spec({ content: { route: "list", props: { items: [] } } }));
+  panel.update({ props: { items: [{ id: "a", title: "A" }] } });
+  panel.update({ anchor: { x: 410, y: 600, width: 40, height: 20 } });
+  await new Promise(setImmediate);
+  assert.equal(h.calls.filter((call) => call.method === POPOVER_UPDATE_METHOD).length, 0);
+  h.pendingOpens[0].resolve(null);
+  await panel.ready;
+  await new Promise(setImmediate);
+  const queued = h.calls.filter((call) => call.method === POPOVER_UPDATE_METHOD);
+  assert.equal(queued.length, 1);
+  assert.deepEqual(queued[0].args.content, { props: { items: [{ id: "a", title: "A" }] } });
+  assert.equal(queued[0].args.anchor.x, 410);
+  panel.update({ anchor: { x: 420, y: 600, width: 40, height: 20 } });
+  panel.update({ props: { items: [] } });
+  await new Promise(setImmediate);
+  const sent = h.calls.filter((call) => call.method === POPOVER_UPDATE_METHOD);
+  assert.equal(sent.length, 3);
+  assert.equal(sent[1].args.content, undefined);
+  assert.deepEqual(sent[2].args.content, { props: { items: [] } });
+});
+
+test("a DOM popover takes props updates in place", () => {
+  const h = harness();
+  const panel = h.host.open(h.spec());
+  panel.update({ props: { count: 2 } });
+  assert.equal(h.mounted.length, 1);
+  assert.equal(h.mounted[0].placements.length, 2);
 });

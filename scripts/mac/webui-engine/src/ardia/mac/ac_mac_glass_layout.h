@@ -57,6 +57,7 @@ enum class Material {
   kHud,
   kWindow,
   kUnderWindow,
+  kWindowTreatment,
 };
 
 enum class Plane { kBehindWindow, kOverPage };
@@ -64,6 +65,16 @@ enum class Plane { kBehindWindow, kOverPage };
 enum class Effect { kLiquidGlass, kVibrancy };
 
 enum class Source { kGlass, kBackdrop };
+
+enum class Appearance { kAuto, kLight, kDark };
+
+struct Color {
+  double red = 0;
+  double green = 0;
+  double blue = 0;
+  double alpha = 1;
+  bool operator==(const Color&) const = default;
+};
 
 struct Region {
   std::string id;
@@ -74,6 +85,9 @@ struct Region {
   Layer layer = Layer::kAuto;
   Material material = Material::kLiquid;
   Source source = Source::kGlass;
+  std::optional<Color> tint;
+  std::string group;
+  Appearance appearance = Appearance::kAuto;
 };
 
 struct Page {
@@ -94,6 +108,12 @@ struct Placement {
   std::size_t order = 0;
   Source source = Source::kGlass;
   Radii radii;
+  std::optional<Color> tint;
+  std::string group;
+  Appearance appearance = Appearance::kAuto;
+  int slice = 0;
+  Rect outline;
+  bool seamed = false;
   bool operator==(const Placement&) const = default;
 };
 
@@ -106,6 +126,7 @@ struct Layout {
   std::vector<Placement> placements;
   std::vector<std::string> accepted;
   std::vector<Rejection> rejected;
+  std::set<std::string> partial;
 };
 
 struct SlotKey {
@@ -113,8 +134,13 @@ struct SlotKey {
   int page = 0;
   Source source = Source::kGlass;
   std::string id;
+  int slice = 0;
   auto operator<=>(const SlotKey&) const = default;
 };
+
+inline SlotKey KeyOf(const Placement& placement) {
+  return SlotKey{placement.plane, placement.page, placement.source, placement.id, placement.slice};
+}
 
 struct Diff {
   std::vector<Placement> create;
@@ -149,7 +175,96 @@ inline std::optional<Material> MaterialNamed(std::string_view name) {
   if (name == "hud") return Material::kHud;
   if (name == "window") return Material::kWindow;
   if (name == "under" || name == "underWindow") return Material::kUnderWindow;
+  if (name == "windowTreatment") return Material::kWindowTreatment;
   return std::nullopt;
+}
+
+inline std::optional<Appearance> AppearanceNamed(std::string_view name) {
+  if (name.empty() || name == "auto") return Appearance::kAuto;
+  if (name == "light") return Appearance::kLight;
+  if (name == "dark") return Appearance::kDark;
+  return std::nullopt;
+}
+
+inline std::optional<double> ColorNumber(std::string_view text) {
+  while (!text.empty() && text.front() == ' ') text.remove_prefix(1);
+  while (!text.empty() && text.back() == ' ') text.remove_suffix(1);
+  if (text.empty() || text.size() > 16) return std::nullopt;
+  double whole = 0;
+  double fraction = 0;
+  double scale = 1;
+  bool dot = false;
+  bool digits = false;
+  for (const char c : text) {
+    if (c == '.' && !dot) {
+      dot = true;
+      continue;
+    }
+    if (c < '0' || c > '9') return std::nullopt;
+    digits = true;
+    if (dot) {
+      scale /= 10;
+      fraction += (c - '0') * scale;
+    } else {
+      whole = whole * 10 + (c - '0');
+    }
+  }
+  if (!digits) return std::nullopt;
+  return whole + fraction;
+}
+
+inline std::optional<int> HexDigit(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return std::nullopt;
+}
+
+inline std::optional<Color> ColorFrom(std::string_view text) {
+  if (text.empty() || text.size() > 64) return std::nullopt;
+  if (text.front() == '#') {
+    const std::string_view hex = text.substr(1);
+    if (hex.size() != 3 && hex.size() != 6 && hex.size() != 8) return std::nullopt;
+    double channels[4] = {0, 0, 0, 1};
+    const bool short_form = hex.size() == 3;
+    const std::size_t count = short_form ? 3 : hex.size() / 2;
+    for (std::size_t index = 0; index < count; ++index) {
+      const std::optional<int> high = HexDigit(hex[short_form ? index : index * 2]);
+      const std::optional<int> low = HexDigit(hex[short_form ? index : index * 2 + 1]);
+      if (!high || !low) return std::nullopt;
+      channels[index] = (*high * 16 + *low) / 255.0;
+    }
+    return Color{channels[0], channels[1], channels[2], channels[3]};
+  }
+  const bool alpha = text.starts_with("rgba(");
+  if ((!alpha && !text.starts_with("rgb(")) || text.back() != ')') return std::nullopt;
+  std::string_view inner = text.substr(alpha ? 5 : 4);
+  inner.remove_suffix(1);
+  double channels[4] = {0, 0, 0, 1};
+  std::size_t count = 0;
+  while (true) {
+    const std::size_t comma = inner.find(',');
+    if (count >= 4) return std::nullopt;
+    const std::optional<double> value = ColorNumber(inner.substr(0, comma));
+    if (!value) return std::nullopt;
+    channels[count++] = *value;
+    if (comma == std::string_view::npos) break;
+    inner.remove_prefix(comma + 1);
+  }
+  if (count != (alpha ? 4u : 3u)) return std::nullopt;
+  for (std::size_t index = 0; index < 3; ++index) {
+    if (channels[index] > 255) return std::nullopt;
+    channels[index] /= 255.0;
+  }
+  if (channels[3] > 1) return std::nullopt;
+  return Color{channels[0], channels[1], channels[2], channels[3]};
+}
+
+constexpr int kTreatmentMaterialDark = 29;
+constexpr int kTreatmentMaterialLight = 13;
+
+inline int TreatmentMaterial(bool dark) {
+  return dark ? kTreatmentMaterialDark : kTreatmentMaterialLight;
 }
 
 inline Effect EffectFor(Material material, bool liquid_glass_available) {
@@ -163,6 +278,10 @@ inline bool ValidId(std::string_view id) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
            c == '_' || c == ':' || c == '.';
   });
+}
+
+inline bool ValidGroup(std::string_view group) {
+  return group.empty() || ValidId(group);
 }
 
 inline bool ValidRect(const Rect& rect) {
@@ -241,12 +360,54 @@ inline double NativeCornerRadius(const CornerShape& shape) {
   return shape.uniform ? shape.radii.upper_left : 0;
 }
 
+inline constexpr float kUnderShellFill = 0.01f;
+
+inline bool MountsUnderShell(Plane plane) {
+  return plane == Plane::kOverPage;
+}
+
+inline double UnderShellBlur(double css_blur, double shell_scale) {
+  const double scale = Finite(shell_scale) && shell_scale > 0.05 && shell_scale < 20 ? shell_scale : 1;
+  const double blur = Finite(css_blur) ? std::clamp(css_blur, 0.0, kMaxBlur) : 0;
+  return blur * scale;
+}
+
 inline int GlassStyle(Material material) {
   return material == Material::kLiquidClear ? 1 : 0;
 }
 
 inline double SanitizedScale(double scale) {
   return Finite(scale) && scale > 0.05 && scale < 20 ? scale : 1;
+}
+
+inline void Subtract(std::vector<Rect>& region, const Rect& cut) {
+  if (cut.empty()) return;
+  std::vector<Rect> remaining;
+  for (const Rect& piece : region) {
+    const Rect overlap = Intersect(piece, cut);
+    if (overlap.empty()) {
+      remaining.push_back(piece);
+      continue;
+    }
+    if (overlap.y > piece.y) remaining.push_back(Rect{piece.x, piece.y, piece.width, overlap.y - piece.y});
+    if (overlap.bottom() < piece.bottom())
+      remaining.push_back(Rect{piece.x, overlap.bottom(), piece.width, piece.bottom() - overlap.bottom()});
+    if (overlap.x > piece.x) remaining.push_back(Rect{piece.x, overlap.y, overlap.x - piece.x, overlap.height});
+    if (overlap.right() < piece.right())
+      remaining.push_back(Rect{overlap.right(), overlap.y, piece.right() - overlap.right(), overlap.height});
+  }
+  region = std::move(remaining);
+}
+
+struct SliceMask {
+  bool active = false;
+  Rect outline;
+  Radii radii;
+};
+
+inline SliceMask MaskFor(const Placement& placement) {
+  if (placement.slice <= 0 && !placement.seamed) return SliceMask{};
+  return SliceMask{true, Offset(placement.outline, placement.frame.x, placement.frame.y), placement.radii};
 }
 
 inline Layout Lay(const std::vector<Region>& regions,
@@ -280,6 +441,10 @@ inline Layout Lay(const std::vector<Region>& regions,
       reject("style");
       continue;
     }
+    if (!ValidGroup(region.group)) {
+      reject("group");
+      continue;
+    }
     const Rect rect = Scaled(region.rect, scale);
     const std::optional<Radii> radii = SanitizedRadii(region.radii, rect.width, rect.height, scale);
     if (!radii) {
@@ -296,10 +461,17 @@ inline Layout Lay(const std::vector<Region>& regions,
       layout.placements.push_back(Placement{region.id, plane, page, Offset(rect, origin.x, origin.y),
                                             Offset(visible, origin.x, origin.y), UniformRadius(*radii),
                                             CornerMask(*radii), opacity, region.material, order,
-                                            region.source, *radii});
+                                            region.source, *radii, region.tint, region.group,
+                                            region.appearance, 0, Rect{}});
       return true;
     };
     bool on_page = false;
+    const std::size_t first_placement = layout.placements.size();
+    std::vector<Rect> uncovered;
+    if (ValidRect(window)) {
+      const Rect shown = Intersect(rect, window);
+      if (!shown.empty()) uncovered.push_back(shown);
+    }
     if (region.layer != Layer::kBehind) {
       for (std::size_t index = 0; index < pages.size(); ++index) {
         const Page& page = pages[index];
@@ -307,11 +479,27 @@ inline Layout Lay(const std::vector<Region>& regions,
         if (place(Plane::kOverPage, page.id, page.rect, page.rect, page_order[index])) {
           ++page_order[index];
           on_page = true;
+          Subtract(uncovered, page.rect);
         }
       }
     }
     if (!on_page && ValidRect(window) && place(Plane::kBehindWindow, 0, Rect{}, window, behind_order)) {
       ++behind_order;
+    } else if (on_page) {
+      int slice = 0;
+      for (const Rect& piece : uncovered) {
+        if (piece.empty()) continue;
+        layout.placements.push_back(Placement{region.id, Plane::kBehindWindow, 0, piece, piece, UniformRadius(*radii),
+                                              CornerMask(*radii), opacity, region.material, behind_order++,
+                                              region.source, *radii, region.tint, region.group, region.appearance,
+                                              ++slice, rect});
+      }
+      for (std::size_t index = first_placement; slice > 0 && index < layout.placements.size(); ++index) {
+        Placement& placement = layout.placements[index];
+        if (placement.plane != Plane::kOverPage) continue;
+        placement.seamed = true;
+        placement.outline = placement.frame;
+      }
     }
   }
   return layout;
@@ -350,8 +538,11 @@ inline std::vector<Page> MountablePages(const std::vector<Page>& pages, const st
 }
 
 inline Layout KeepAttached(Layout layout, const std::set<SlotKey>& attached) {
-  std::erase_if(layout.placements,
-                [&attached](const Placement& placement) { return !attached.contains(SlotKey{placement.plane, placement.page, placement.source, placement.id}); });
+  std::erase_if(layout.placements, [&attached, &layout](const Placement& placement) {
+    const bool kept = attached.contains(KeyOf(placement));
+    if (!kept) layout.partial.insert(placement.id);
+    return !kept;
+  });
   return layout;
 }
 
@@ -362,6 +553,12 @@ inline std::vector<std::string> MountedGlass(const std::vector<Placement>& place
     if (placement.source == Source::kGlass && seen.insert(placement.id).second) mounted.push_back(placement.id);
   }
   return mounted;
+}
+
+inline std::vector<std::string> MountedGlass(const Layout& mounted) {
+  std::vector<std::string> whole = MountedGlass(mounted.placements);
+  std::erase_if(whole, [&mounted](const std::string& id) { return mounted.partial.contains(id); });
+  return whole;
 }
 
 class PresentedGate {
@@ -379,9 +576,30 @@ class PresentedGate {
   std::uint64_t epoch_ = 0;
 };
 
-inline SlotKey KeyOf(const Placement& placement) {
-  return SlotKey{placement.plane, placement.page, placement.source, placement.id};
+struct GroupKey {
+  Plane plane = Plane::kBehindWindow;
+  int page = 0;
+  std::string group;
+  auto operator<=>(const GroupKey&) const = default;
+};
+
+inline bool Grouped(const Placement& placement, bool groups_glass) {
+  return groups_glass && !placement.group.empty() && placement.source == Source::kGlass &&
+         EffectFor(placement.material, true) == Effect::kLiquidGlass;
 }
+
+inline GroupKey GroupOf(const Placement& placement) {
+  return GroupKey{placement.plane, placement.page, placement.group};
+}
+
+inline std::set<GroupKey> LiveGroups(const std::vector<Placement>& placements, bool groups_glass) {
+  std::set<GroupKey> live;
+  for (const Placement& placement : placements) {
+    if (Grouped(placement, groups_glass)) live.insert(GroupOf(placement));
+  }
+  return live;
+}
+
 
 inline Diff DiffPlacements(const std::vector<Placement>& before,
                            const std::vector<Placement>& after,
@@ -414,25 +632,6 @@ inline Diff DiffPlacements(const std::vector<Placement>& before,
     if (!still) diff.remove.push_back(key);
   }
   return diff;
-}
-
-inline void Subtract(std::vector<Rect>& region, const Rect& cut) {
-  if (cut.empty()) return;
-  std::vector<Rect> remaining;
-  for (const Rect& piece : region) {
-    const Rect overlap = Intersect(piece, cut);
-    if (overlap.empty()) {
-      remaining.push_back(piece);
-      continue;
-    }
-    if (overlap.y > piece.y) remaining.push_back(Rect{piece.x, piece.y, piece.width, overlap.y - piece.y});
-    if (overlap.bottom() < piece.bottom())
-      remaining.push_back(Rect{piece.x, overlap.bottom(), piece.width, piece.bottom() - overlap.bottom()});
-    if (overlap.x > piece.x) remaining.push_back(Rect{piece.x, overlap.y, overlap.x - piece.x, overlap.height});
-    if (overlap.right() < piece.right())
-      remaining.push_back(Rect{overlap.right(), overlap.y, piece.right() - overlap.right(), overlap.height});
-  }
-  region = std::move(remaining);
 }
 
 inline std::vector<Rect> PassThrough(const std::vector<Rect>& pages, const std::vector<Rect>& overlays) {

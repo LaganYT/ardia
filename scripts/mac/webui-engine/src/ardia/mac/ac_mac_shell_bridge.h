@@ -57,9 +57,11 @@ class PopoverBridge : public content::WebUIMessageHandler {
   bool Trusted();
   void Request(const base::ListValue& arguments);
   void Reply(const std::string& id, bool success, base::Value response);
+  void Deliver(std::string_view event, const base::Value& payload);
 
   raw_ptr<content::WebContents> contents_;
   base::WeakPtr<ShellHostView> host_;
+  base::WeakPtrFactory<PopoverBridge> weak_factory_{this};
 };
 
 }

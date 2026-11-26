@@ -107,6 +107,15 @@ std::string Text(const base::DictValue& dict, std::string_view key) {
   return found ? *found : std::string();
 }
 
+std::optional<std::size_t> SerializedSize(const base::Value& value) {
+  const std::optional<std::string> json = base::WriteJson(value);
+  return json ? std::optional<std::size_t>(json->size()) : std::nullopt;
+}
+
+bool PropsAccepted(const base::Value& props) {
+  return props.is_dict() && popover::PropsFit(SerializedSize(props));
+}
+
 NSView* MakeBackground() {
   if (LiquidGlassAvailable()) {
     NSView* view = [[NSClassFromString(@"NSGlassEffectView") alloc] initWithFrame:NSZeroRect];
@@ -128,6 +137,10 @@ NSView* MakeBackground() {
 
 void Embed(NSView* background, NSView* content) {
   content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  content.wantsLayer = YES;
+  content.layer.cornerRadius = kPanelRadius;
+  content.layer.cornerCurve = kCACornerCurveContinuous;
+  content.layer.masksToBounds = YES;
   if ([background respondsToSelector:NSSelectorFromString(@"setContentView:")]) {
     [background setValue:content forKey:@"contentView"];
     return;
@@ -207,6 +220,7 @@ struct PopoverHost::Panel : public content::WebContentsDelegate,
   popover::Rect frame;
   std::string route;
   base::Value props;
+  Sink sink;
   std::unique_ptr<content::WebContents> contents;
   ArdiaMacPopoverPanel* panel = nil;
   NSMutableArray* observers = [NSMutableArray array];
@@ -255,12 +269,29 @@ std::optional<std::string> PopoverHost::BootstrapJson(
   bootstrap.Set("startup", false);
   bootstrap.Set("capabilities", base::ListValue()
                                     .Append("shell.popover.close")
-                                    .Append("shell.popover.message"));
+                                    .Append("shell.popover.message")
+                                    .Append("shell.popover.props"));
   bootstrap.Set("popover", base::DictValue()
                                .Set("id", panel.key)
                                .Set("route", panel.route)
                                .Set("props", panel.props.Clone()));
   return base::WriteJson(bootstrap);
+}
+
+std::optional<base::Value> PopoverHost::PropsFor(
+    const content::WebContents* contents) const {
+  const std::optional<std::string> key = IdFor(contents);
+  if (!key) {
+    return std::nullopt;
+  }
+  return panels_.at(*key)->props.Clone();
+}
+
+void PopoverHost::Connect(const content::WebContents* contents, Sink sink) {
+  const std::optional<std::string> key = IdFor(contents);
+  if (key) {
+    panels_.at(*key)->sink = std::move(sink);
+  }
 }
 
 std::optional<std::string> PopoverHost::Place(Panel& panel,
@@ -310,6 +341,9 @@ std::optional<std::string> PopoverHost::Place(Panel& panel,
   const popover::Rect cocoa = popover::FlipVertical(panel.frame, PrimaryHeight());
   [panel.panel setFrame:NSMakeRect(cocoa.x, cocoa.y, cocoa.width, cocoa.height)
                 display:!background_];
+  if (panel.panel.hasShadow) {
+    [panel.panel invalidateShadow];
+  }
   return std::nullopt;
 }
 
@@ -401,7 +435,10 @@ std::optional<std::string> PopoverHost::Open(const base::DictValue& args,
   auto panel = std::make_unique<Panel>(this, key);
   panel->route = route;
   const base::Value* props = content->Find("props");
-  panel->props = props && props->is_dict() ? props->Clone() : base::Value(base::DictValue());
+  if (props && !PropsAccepted(*props)) {
+    return "Popover props must be an object of at most 256 KiB";
+  }
+  panel->props = props ? props->Clone() : base::Value(base::DictValue());
   panel->options.takes_focus = args.FindBool("takesFocus").value_or(true);
   panel->panel = [[ArdiaMacPopoverPanel alloc]
       initWithContentRect:NSMakeRect(0, 0, 10, 10)
@@ -416,7 +453,7 @@ std::optional<std::string> PopoverHost::Open(const base::DictValue& args,
   window.releasedWhenClosed = NO;
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
-  window.hasShadow = YES;
+  window.hasShadow = !LiquidGlassAvailable();
   window.animationBehavior = NSWindowAnimationBehaviorNone;
   window.collectionBehavior = NSWindowCollectionBehaviorFullScreenAuxiliary |
                               NSWindowCollectionBehaviorTransient |
@@ -461,6 +498,21 @@ std::optional<std::string> PopoverHost::Update(const base::DictValue& args,
   const popover::Transition transition =
       popover::Step(panel.state, popover::Event::kUpdate, panel.options);
   if (!transition.reposition) {
+    return std::nullopt;
+  }
+  const base::DictValue* content = args.FindDict("content");
+  if (const base::Value* props = content ? content->Find("props") : nullptr) {
+    if (!PropsAccepted(*props)) {
+      return "Popover props must be an object of at most 256 KiB";
+    }
+    panel.props = props->Clone();
+    if (panel.sink) {
+      panel.sink.Run("props", base::Value(base::DictValue()
+                                              .Set("id", panel.key)
+                                              .Set("props", panel.props.Clone())));
+    }
+  }
+  if (!args.FindDict("rect") && !args.FindDict("anchor")) {
     return std::nullopt;
   }
   return Place(panel, args, shell_view, shell_zoom);

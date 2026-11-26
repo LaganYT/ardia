@@ -269,6 +269,14 @@ TEST(hostile_sinks) {
   CHECK(popover::ClampToScreen({10, 10, 100, 100}, {10, 10, 5, 5}, kOneScreen, true, {}).has_value());
 }
 
+TEST(popover_renderer_ships_with_bounded_messages_and_props) {
+  CHECK(popover::kPopoverRendererShipped);
+  CHECK(popover::MessageFits(0) && popover::MessageFits(popover::kMaxMessageBytes));
+  CHECK(!popover::MessageFits(popover::kMaxMessageBytes + 1));
+  CHECK(popover::PropsFit(popover::kMaxPropsBytes) && !popover::PropsFit(popover::kMaxPropsBytes + 1));
+  CHECK(!popover::MessageFits(std::nullopt) && !popover::PropsFit(std::nullopt));
+}
+
 int main(int argc, char** argv) {
   return ardia_mac_test::RunAll(argc, argv);
 }

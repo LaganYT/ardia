@@ -640,6 +640,88 @@ test("ScrollTimeline tint keyframes reproduce the position-driven tint at every 
   assert.equal(track.tintFallbackOpacity(2, "--p"), "clamp(0, calc(var(--p) - 1), 1)");
 });
 
+test("over behind-window glass a settled profile draws only its own translucent tint, so every profile reads alike", () => {
+  const alpha = 0.508;
+  const shown = (position, span) => {
+    const blend = { crossfade: true, last: span - 1 };
+    return 1 - Array.from({ length: span }, (_, slot) => 1 - alpha * track.tintOpacity(position, slot, blend)).reduce((a, b) => a * b, 1);
+  };
+  for (const span of [3, 5]) {
+    for (let slot = 0; slot < span; slot++) assert.ok(Math.abs(shown(slot, span) - alpha) < 1e-12, `span ${span} settled at ${slot}`);
+    for (let position = 0; position <= span - 1; position += 0.05) {
+      const blend = { crossfade: true, last: span - 1 };
+      const visible = Array.from({ length: span }, (_, slot) => track.tintOpacity(position, slot, blend)).filter((value) => value > 1e-9);
+      assert.ok(visible.length <= 2, `only the two neighbours show at ${position}`);
+      const total = Array.from({ length: span }, (_, slot) => track.tintOpacity(position, slot, blend)).reduce((a, b) => a + b, 0);
+      assert.ok(Math.abs(total - 1) < 1e-9, `the neighbours' weights sum to one at ${position}, so the additive blend never dips or stacks`);
+    }
+  }
+  const ladder = (position) => 1 - [0, 1, 2].map((slot) => 1 - alpha * track.tintOpacity(position, slot)).reduce((a, b) => a * b, 1);
+  assert.ok(ladder(2) > alpha + 0.3, "the opaque ladder would stack translucent tints");
+  const edges = { crossfade: true, last: 2 };
+  assert.equal(track.tintOpacity(-0.6, 0, edges), 1, "overscroll before the first profile keeps its tint");
+  assert.equal(track.tintOpacity(2.6, 2, edges), 1, "overscroll past the last profile keeps its tint");
+  for (const span of [1, 2, 3, 7]) {
+    const blend = { crossfade: true, last: span - 1 };
+    for (let slot = 0; slot < span; slot++) {
+      const frames = track.tintKeyframes(slot, span, blend);
+      assert.equal(frames[0].offset, 0);
+      assert.equal(frames.at(-1).offset, 1);
+      for (let position = -1; position <= span; position += 0.05) {
+        assert.ok(Math.abs(sample(frames, track.trackProgress(position, span)) - track.tintOpacity(position, slot, blend)) < 1e-9, `span ${span} slot ${slot} at ${position}`);
+      }
+    }
+  }
+  assert.equal(track.tintFallbackOpacity(1, "--p", { crossfade: true, last: 2 }), "clamp(0, min(calc(1 + var(--p) - 1), calc(1 - var(--p) + 1)), 1)");
+  assert.equal(track.tintFallbackOpacity(0, "--p", { crossfade: true, last: 2 }), "clamp(0, calc(1 - var(--p) + 0), 1)");
+  assert.equal(track.tintFallbackOpacity(2, "--p", { crossfade: true, last: 2 }), "clamp(0, calc(1 + var(--p) - 2), 1)");
+  assert.equal(track.tintFallbackOpacity(0, "--p", { crossfade: true, last: 0 }), "1");
+});
+
+test("swiping between two identical profiles over glass keeps the tint's exact colour and alpha at every fraction", () => {
+  const blend = { crossfade: true, last: 1 };
+  const additive = (position, tints) => {
+    const sum = [0, 0, 0, 0];
+    tints.forEach(([r, g, b, a], slot) => {
+      const weight = track.tintOpacity(position, slot, blend);
+      [r * a, g * a, b * a, a].forEach((value, i) => (sum[i] += weight * value));
+    });
+    const alpha = Math.min(1, sum[3]);
+    return [sum[0] / alpha, sum[1] / alpha, sum[2] / alpha, alpha];
+  };
+  for (const alpha of [0.854, 0.508]) {
+    const tint = [0.36, 0.7, 0.57, alpha];
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      const [r, g, b, a] = additive(t, [tint, tint]);
+      assert.ok(Math.abs(a - alpha) < 1e-12, `alpha ${alpha} holds at ${t}`);
+      assert.ok([r, g, b].every((value, i) => Math.abs(value - tint[i]) < 1e-12), `colour holds at ${t}`);
+    }
+    const sourceOver = 1 - (1 - 0.5 * alpha) ** 2;
+    assert.ok(sourceOver < alpha - 0.05, "plain stacking would dip mid-swipe");
+  }
+  const half = additive(0.5, [[1, 0, 0, 0.5], [0, 0, 1, 0.5]]);
+  assert.deepEqual(half.map((v) => +v.toFixed(6)), [0.5, 0, 0.5, 0.5], "different neighbours blend linearly");
+});
+
+test("over glass the tint layers add inside one isolated group, and a window with one profile runs no timeline", async () => {
+  const { readFileSync } = await import("node:fs");
+  const tint = readFileSync(new URL("./ProfileTintTimeline.tsx", import.meta.url), "utf8");
+  assert.match(tint, /export const ISOLATED = \{ isolation: "isolate" \} as const;/);
+  assert.match(tint, /export const ADDITIVE = \{ mixBlendMode: "plus-lighter" \} as const;/);
+  assert.match(tint, /style=\{\[StyleSheet\.absoluteFill, crossfade \? \(ISOLATED as object\) : null\]\}/);
+  assert.match(tint, /\{ willChange: "opacity" \} as object, crossfade \? \(ADDITIVE as object\) : null\]/);
+  assert.match(tint, /if \(last <= 0 \|\| \(!crossfade && slot <= 0\)\) \{\n\s*element\.style\.opacity = "1";\n\s*return;/);
+});
+
+test("the window tint cross-fades only where native glass sits behind it, and keeps the opaque ladder elsewhere", async () => {
+  const { readFileSync } = await import("node:fs");
+  const tint = readFileSync(new URL("./ProfileTintTimeline.tsx", import.meta.url), "utf8");
+  assert.match(tint, /const \[crossfade\] = useState\(behindWindowGlassAvailable\);/);
+  assert.match(tint, /const last = trackSpan\(pages\) - 1;/);
+  assert.match(tint, /tintKeyframes\(slot, track\.span, blend\)/);
+  assert.match(tint, /tintFallbackOpacity\(slot, PAGER_POSITION_VARIABLE, blend\)/);
+});
+
 test("a neighbour pre-scrolls so its selected row arrives centred, and stays put when already there", () => {
   const spot = { listTop: 12, rowTop: 130 * 32, rowHeight: 32, viewport: 600, scrollY: 0 };
   const target = track.revealOffset(spot);
@@ -977,7 +1059,7 @@ test("tint layers are set before paint and the track's live ref is written in a 
   const tint = readFileSync(new URL("./ProfileTintTimeline.tsx", import.meta.url), "utf8");
   const trackSource = readFileSync(new URL("./SidebarPagerTrack.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(tint, /\buseEffect\b/);
-  assert.match(tint, /element\.style\.opacity = String\(tintOpacity\(selectedSlot\(windowId\), slot\)\)/);
+  assert.match(tint, /element\.style\.opacity = String\(tintOpacity\(selectedSlot\(windowId\), slot, blend\)\)/);
   assert.match(trackSource, /useLayoutEffect\(\(\) => \{\n\s*live\.current = \{ home, mounted, travel: renderTravel \};\n\s*\}\);/);
   assert.equal(trackSource.match(/live\.current = /g)?.length, 1);
   assert.ok(trackSource.indexOf("live.current = {") < trackSource.indexOf("const place = "));
@@ -1008,5 +1090,5 @@ test("a JS hold followed by a native settle doesn't count the hold as a frame ga
 test("a tint layer that moves to the first slot is made fully opaque", async () => {
   const { readFileSync } = await import("node:fs");
   const tint = readFileSync(new URL("./ProfileTintTimeline.tsx", import.meta.url), "utf8");
-  assert.match(tint, /if \(slot <= 0\) \{\n\s*element\.style\.opacity = "1";\n\s*return;\n\s*\}/);
+  assert.match(tint, /if \(last <= 0 \|\| \(!crossfade && slot <= 0\)\) \{\n\s*element\.style\.opacity = "1";\n\s*return;\n\s*\}/);
 });

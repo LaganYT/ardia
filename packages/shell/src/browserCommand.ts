@@ -90,6 +90,7 @@ export type BrowserCommand =
   | "newGroupWithTabs"
   | "cleanUpTabs"
   | "tidyPins"
+  | "sortTabs"
   | "searchTabs"
   | "renameTab"
   | "changeTabIcon"

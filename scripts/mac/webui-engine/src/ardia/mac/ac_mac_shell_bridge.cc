@@ -1,11 +1,13 @@
 #include "ardia/mac/ac_mac_shell_bridge.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "ardia/mac/ac_mac_popover.h"
 #include "ardia/mac/ac_mac_shell_host.h"
 #include "base/functional/bind.h"
+#include "base/json/json_writer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
@@ -140,6 +142,20 @@ void PopoverBridge::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "ardiaRequest",
       base::BindRepeating(&PopoverBridge::Request, base::Unretained(this)));
+  if (host_ && host_->popovers()) {
+    host_->popovers()->Connect(
+        contents_, base::BindRepeating(&PopoverBridge::Deliver,
+                                       weak_factory_.GetWeakPtr()));
+  }
+}
+
+void PopoverBridge::Deliver(std::string_view event, const base::Value& payload) {
+  if (!Trusted()) {
+    return;
+  }
+  AllowJavascript();
+  CallJavascriptFunction("__ardiaEvent", base::Value("ArdiaPopover"),
+                         base::Value(event), payload);
 }
 
 bool PopoverBridge::Trusted() {
@@ -197,13 +213,23 @@ void PopoverBridge::Request(const base::ListValue& arguments) {
     host->EmitShellEvent("shell.popoverDismissed", base::Value(std::move(data)));
     return;
   }
+  if (method == "shell.popover.props") {
+    std::optional<base::Value> props = host->popovers()->PropsFor(contents_);
+    return Reply(id, true, props ? std::move(*props) : base::Value());
+  }
   if (method == "shell.popover.message") {
     const base::Value* message = payload->Find("message");
+    const std::optional<std::string> serialized =
+        message ? base::WriteJson(*message) : std::optional<std::string>("null");
+    if (!popover::MessageFits(serialized ? std::optional<std::size_t>(serialized->size())
+                                         : std::nullopt)) {
+      return Reply(id, false, base::Value("The popover message must serialize within 64 KiB"));
+    }
     data.Set("message", message ? message->Clone() : base::Value());
     host->EmitShellEvent("shell.popoverMessage", base::Value(std::move(data)));
     return Reply(id, true, base::Value());
   }
-  Reply(id, false, base::Value("Popovers may only close or message the shell"));
+  Reply(id, false, base::Value("Popovers may only close, read their props or message the shell"));
 }
 
 }

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace ardia_mac::window {
 
@@ -29,19 +30,28 @@ struct Lights {
   bool hidden = false;
 };
 
+inline constexpr double kLightsEdgeMargin = 7;
+inline constexpr double kMinLightsCenter = kLightsEdgeMargin + kButtonSide / 2;
+
+inline double SafeScale(double scale) {
+  return std::isfinite(scale) && scale > 0.05 && scale < 20 ? scale : 1;
+}
+
 inline std::optional<Lights> LightsFrom(std::optional<double> x,
                                         std::optional<double> y,
                                         bool hidden,
-                                        Size window) {
+                                        Size window,
+                                        double css_scale = 1) {
   Lights lights;
   lights.hidden = hidden;
   if (!x && !y) return lights;
-  const double cx = x.value_or(lights.center.x);
-  const double cy = y.value_or(lights.center.y);
+  const double scale = SafeScale(css_scale);
+  const double cx = x ? *x * scale : lights.center.x;
+  const double cy = y ? *y * scale : lights.center.y;
   if (!std::isfinite(cx) || !std::isfinite(cy)) return std::nullopt;
-  const double max_x = std::max(kButtonSide / 2, window.width - kButtonSide * 2.5 - kTrafficLightSpacing * 2);
-  const double max_y = std::max(kButtonSide, window.height - kButtonSide);
-  lights.center = Point{std::clamp(cx, kButtonSide / 2, max_x), std::clamp(cy, kButtonSide / 2, max_y)};
+  const double max_x = std::max(kMinLightsCenter, window.width - kButtonSide * 2.5 - kTrafficLightSpacing * 2 - kLightsEdgeMargin);
+  const double max_y = std::max(kMinLightsCenter, window.height - kMinLightsCenter);
+  lights.center = Point{std::clamp(cx, kMinLightsCenter, max_x), std::clamp(cy, kMinLightsCenter, max_y)};
   return lights;
 }
 
@@ -67,6 +77,26 @@ inline TitlebarMetrics TitlebarFor(const Lights& lights, Size button) {
   const double width = button.width > 0 ? button.width : kButtonSide;
   return TitlebarMetrics{std::max(0.0, std::round(lights.center.x - width / 2)),
                          std::max(1.0, std::round(lights.center.y * 2))};
+}
+
+struct TitlebarLayout {
+  double container_y = 0;
+  double container_height = 0;
+  double button_y = 0;
+  double button_x[3] = {0, 0, 0};
+};
+
+inline TitlebarLayout TitlebarLayoutFor(const TitlebarMetrics& metrics, Size button, double measured_spacing,
+                                        double frame_height) {
+  const double width = button.width > 0 ? button.width : kButtonSide;
+  const double height = button.height > 0 ? button.height : kButtonSide;
+  const double spacing = std::isfinite(measured_spacing) && measured_spacing > width ? measured_spacing : width + kTrafficLightSpacing;
+  TitlebarLayout layout;
+  layout.container_height = std::max(height, metrics.height);
+  layout.container_y = std::isfinite(frame_height) ? frame_height - layout.container_height : 0;
+  layout.button_y = std::round((layout.container_height - height) / 2);
+  for (int index = 0; index < 3; ++index) layout.button_x[index] = metrics.min_x_inset + index * spacing;
+  return layout;
 }
 
 enum class CaptionAction { kZoom, kMinimize, kNone };
@@ -133,6 +163,65 @@ struct Translucency {
   bool transparent_titlebar = false;
   bool hide_title = false;
 };
+
+struct Frame {
+  double x = 0;
+  double y = 0;
+  double width = 0;
+  double height = 0;
+  bool operator==(const Frame&) const = default;
+};
+
+inline constexpr double kCascadeStep = 22;
+inline constexpr double kSettingsWidth = 820;
+inline constexpr double kSettingsHeight = 640;
+inline constexpr double kImportWidth = 640;
+inline constexpr double kImportHeight = 600;
+
+inline Frame CascadedFrom(const Frame& opener) {
+  return Frame{opener.x + kCascadeStep, opener.y + kCascadeStep, std::max(1.0, opener.width),
+               std::max(1.0, opener.height)};
+}
+
+inline Frame UtilityFrameOver(const Frame& opener, std::string_view kind) {
+  const bool settings = kind == "settings";
+  const double width = settings ? kSettingsWidth : kImportWidth;
+  const double height = settings ? kSettingsHeight : kImportHeight;
+  return Frame{std::round(opener.x + (opener.width - width) / 2), std::round(opener.y + (opener.height - height) / 2),
+               width, height};
+}
+
+inline std::optional<Frame> PlacedOnScreens(const Frame& wanted, const std::vector<Frame>& screens) {
+  const Frame* best = nullptr;
+  double best_overlap = 0;
+  for (const Frame& screen : screens) {
+    const double overlap_x = std::min(wanted.x + wanted.width, screen.x + screen.width) - std::max(wanted.x, screen.x);
+    const double overlap_y = std::min(wanted.y + wanted.height, screen.y + screen.height) - std::max(wanted.y, screen.y);
+    const double overlap = overlap_x > 0 && overlap_y > 0 ? overlap_x * overlap_y : 0;
+    if (overlap > best_overlap) {
+      best_overlap = overlap;
+      best = &screen;
+    }
+  }
+  if (!best) return std::nullopt;
+  const double width = std::min(wanted.width, best->width);
+  const double height = std::min(wanted.height, best->height);
+  return Frame{std::clamp(wanted.x, best->x, best->x + best->width - width),
+               std::clamp(wanted.y, best->y, best->y + best->height - height), width, height};
+}
+
+struct OpenPresentation {
+  bool show = false;
+  bool activate = false;
+  bool order_behind = false;
+  bool maximize = false;
+  bool operator==(const OpenPresentation&) const = default;
+};
+
+inline OpenPresentation PresentationForOpen(bool background_instance, bool focus, bool behind, bool maximized) {
+  if (background_instance) return OpenPresentation{};
+  return OpenPresentation{true, focus && !behind, behind, maximized};
+}
 
 inline Translucency TranslucencyFor(bool webui_shell) {
   if (!webui_shell) return Translucency{};

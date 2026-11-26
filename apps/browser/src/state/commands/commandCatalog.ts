@@ -141,6 +141,14 @@ export const COMMANDS = {
   newGroupWithTabs: { title: "New Group with Tab", symbol: "folder.badge.plus", keys: ["⌃⌘N", "⌃⌘P"], ...windowOffInLittleArdia },
   cleanUpTabs: { title: "Clean Up Tabs", symbol: "sparkles", keys: ["⌥⌘K"], ...windowOffInLittleArdia },
   tidyPins: { title: "Tidy Pins", symbol: "sparkles" },
+  sortTabs: {
+    symbol: "arrow.up.arrow.down",
+    ...windowOffInLittleArdia,
+    variants: {
+      site: { title: "Sort Tabs by Site" },
+      title: { title: "Sort Tabs by Title" },
+    },
+  },
   searchTabs: { title: "Search Tabs…", symbol: "magnifyingglass", keys: ["⇧⌘A"], ...windowOffInLittleArdia },
   renameTab: { title: "Rename…", barTitle: "Rename Tab", symbol: "pencil", ...windowOffInLittleArdia },
   changeTabIcon: { title: "Change Icon…", ...windowOffInLittleArdia },

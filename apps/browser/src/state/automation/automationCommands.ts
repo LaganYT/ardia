@@ -99,6 +99,7 @@ export const AUTOMATION: Readonly<Record<BrowserCommand, AutomationDecision>> = 
   newGroupWithTabs: "run",
   cleanUpTabs: "run",
   tidyPins: "run",
+  sortTabs: "run",
   searchTabs: "run",
   renameTab: "needsPerson",
   changeTabIcon: "needsPerson",

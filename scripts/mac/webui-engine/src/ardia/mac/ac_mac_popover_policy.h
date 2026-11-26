@@ -14,7 +14,9 @@ namespace ardia_mac::popover {
 inline constexpr double kMaxExtent = 1e5;
 inline constexpr double kMinSide = 1;
 inline constexpr std::size_t kMaxOpen = 8;
-inline constexpr bool kPopoverRendererShipped = false;
+inline constexpr bool kPopoverRendererShipped = true;
+inline constexpr std::size_t kMaxMessageBytes = 64 * 1024;
+inline constexpr std::size_t kMaxPropsBytes = 256 * 1024;
 
 struct Rect {
   double x = 0;
@@ -450,6 +452,14 @@ inline bool ValidId(std::string_view id) {
   return std::all_of(id.begin(), id.end(), [](char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
   });
+}
+
+inline bool MessageFits(std::optional<std::size_t> serialized_bytes) {
+  return serialized_bytes && *serialized_bytes <= kMaxMessageBytes;
+}
+
+inline bool PropsFit(std::optional<std::size_t> serialized_bytes) {
+  return serialized_bytes && *serialized_bytes <= kMaxPropsBytes;
 }
 
 inline bool ValidRoute(std::string_view route) {

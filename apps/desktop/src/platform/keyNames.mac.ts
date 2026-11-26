@@ -1,1 +1,1 @@
-export const CONTROL_KEY_NAME = "⌘";
+export const CONTROL_KEY_NAME = "⌃";

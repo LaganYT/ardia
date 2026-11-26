@@ -25,10 +25,12 @@ TEST(document_names_keep_their_charset) {
 }
 
 TEST(oversized_sessions_are_refused_before_writing) {
-  CHECK(policy::SessionFits(0));
-  CHECK(policy::SessionFits(policy::kSessionLimit));
-  CHECK(!policy::SessionFits(policy::kSessionLimit + 1));
-  CHECK(policy::kSessionLimit == 64u * 1024u * 1024u);
+  CHECK(policy::SessionFitsOnDisk(0));
+  CHECK(policy::SessionFitsOnDisk(policy::kMergeableSessionBytes));
+  CHECK(!policy::SessionFitsOnDisk(policy::kMergeableSessionBytes + 1));
+  CHECK(policy::kMergeableSessionBytes == 8u * 1024u * 1024u);
+  CHECK(policy::SessionFileFor(true, policy::kMergeableSessionBytes, true, true) == policy::SessionFile::kUse);
+  CHECK(policy::SessionFileFor(true, policy::kMergeableSessionBytes + 2, true, true) == policy::SessionFile::kSetAside);
 }
 
 TEST(default_profile_offers_use_the_empty_engine_name) {
@@ -139,6 +141,143 @@ TEST(only_an_offered_unbound_tab_of_the_same_profile_is_adopted) {
   CHECK(policy::CheckAdoption(true, true, false, true, false) == AdoptRefusal::kOtherProfile);
   CHECK(policy::CheckAdoption(true, true, true, false, false) == AdoptRefusal::kGone);
   CHECK(policy::CheckAdoption(true, true, true, true, true) == AdoptRefusal::kAlreadyClaimed);
+}
+
+TEST(quit_waits_for_the_shell_that_painted_in_this_renderer) {
+  CHECK(policy::ShellTakesQuit(true, 3, 3));
+  CHECK(!policy::ShellTakesQuit(true, 0, 0));
+  CHECK(!policy::ShellTakesQuit(true, 2, 3));
+  CHECK(!policy::ShellTakesQuit(false, 3, 3));
+}
+
+TEST(shortcuts_take_only_chromium_key_modifiers) {
+  CHECK(policy::kCommandDown == 16 && policy::kControlDown == 4 && policy::kAltDown == 8 && policy::kShiftDown == 2);
+  CHECK(policy::ShortcutAccepted(84, policy::kCommandDown, true, false));
+  CHECK(policy::ShortcutAccepted(9, policy::kControlDown | policy::kShiftDown, true, false));
+  CHECK(policy::ShortcutAccepted(83, policy::kCommandDown | policy::kAltDown | policy::kControlDown | policy::kShiftDown, true, false));
+  CHECK(!policy::ShortcutAccepted(84, 1 << 5, true, false));
+  CHECK(!policy::ShortcutAccepted(84, policy::kCommandDown | 1, true, false));
+  CHECK(!policy::ShortcutAccepted(84, -1, true, false));
+  CHECK(!policy::ShortcutAccepted(0, policy::kCommandDown, true, false));
+  CHECK(!policy::ShortcutAccepted(256, policy::kCommandDown, true, false));
+  CHECK(!policy::ShortcutAccepted(84, policy::kCommandDown, false, false));
+  CHECK(policy::ShortcutAccepted(84, policy::kCommandDown, false, true));
+}
+
+TEST(shortcuts_run_before_the_page_unless_a_text_field_may_take_them) {
+  CHECK(policy::ShortcutTimingFor(false) == policy::ShortcutTiming::kBeforePage);
+  CHECK(policy::ShortcutTimingFor(true) == policy::ShortcutTiming::kAfterPage);
+}
+
+TEST(window_requests_keep_utility_ids_to_their_kind) {
+  using policy::WindowRefusal;
+  CHECK(policy::CheckWindowRequest({"settings", "settings", "", false, false}) == WindowRefusal::kNone);
+  CHECK(policy::CheckWindowRequest({"import", "import", "", false, false}) == WindowRefusal::kNone);
+  CHECK(policy::CheckWindowRequest({"w-1f2e", "", "", false, false}) == WindowRefusal::kNone);
+  CHECK(policy::CheckWindowRequest({"w-1f2e", "small", "work", false, false}) == WindowRefusal::kNone);
+  CHECK(policy::CheckWindowRequest({"w-1f2e", "browser", "default", false, false}) == WindowRefusal::kNone);
+  CHECK(policy::CheckWindowRequest({"other", "settings", "", false, false}) == WindowRefusal::kInvalid);
+  CHECK(policy::CheckWindowRequest({"settings", "browser", "", false, false}) == WindowRefusal::kInvalid);
+  CHECK(policy::CheckWindowRequest({"import", "", "", false, false}) == WindowRefusal::kInvalid);
+  CHECK(policy::CheckWindowRequest({"", "", "", false, false}) == WindowRefusal::kInvalid);
+  CHECK(policy::CheckWindowRequest({std::string(257, 'a'), "", "", false, false}) == WindowRefusal::kInvalid);
+  CHECK(policy::CheckWindowRequest({std::string(256, 'a'), "", "", false, false}) == WindowRefusal::kNone);
+  for (const char* hostile : {"../main", "a b", "w\n", "w/1", "<script>", "w%"}) {
+    CHECK(policy::CheckWindowRequest({hostile, "", "", false, false}) == WindowRefusal::kInvalid);
+  }
+}
+
+TEST(private_windows_and_bad_profiles_are_refused_before_a_window_opens) {
+  using policy::WindowRefusal;
+  CHECK(policy::CheckWindowRequest({"p-1", "", "", true, false}) == WindowRefusal::kPrivateUnavailable);
+  CHECK(policy::CheckWindowRequest({"p-1", "", "", false, true}) == WindowRefusal::kPrivateUnavailable);
+  CHECK(policy::CheckWindowRequest({"w-1", "", "../Default", false, false}) == WindowRefusal::kProfile);
+  CHECK(policy::CheckWindowRequest({"w-1", "", "1work", false, false}) == WindowRefusal::kProfile);
+  CHECK(policy::CheckWindowRequest({"w-1", "", "incognito:w@default", false, false}) == WindowRefusal::kProfile);
+  CHECK(policy::ValidProfileId("work_2-b"));
+  CHECK(!policy::ValidProfileId(""));
+  CHECK(!policy::ValidProfileId(std::string(129, 'a')));
+}
+
+TEST(windows_open_as_their_kind_with_the_page_profile_they_name) {
+  CHECK(policy::WindowKindFor("settings") == "settings");
+  CHECK(policy::WindowKindFor("import") == "import");
+  CHECK(policy::WindowKindFor("small") == "small");
+  CHECK(policy::WindowKindFor("") == "browser");
+  CHECK(policy::WindowKindFor("popup") == "browser");
+  CHECK(policy::PageProfileFor("browser", "work") == "work");
+  CHECK(policy::PageProfileFor("browser", "default").empty());
+  CHECK(policy::PageProfileFor("settings", "work").empty());
+  CHECK(policy::PageProfileFor("", "").empty());
+}
+
+TEST(recording_a_shortcut_lets_every_key_reach_the_recorder) {
+  CHECK(policy::AcceleratorsLive(true, true, false));
+  CHECK(!policy::AcceleratorsLive(true, true, true));
+  CHECK(!policy::AcceleratorsLive(false, true, false));
+  CHECK(!policy::AcceleratorsLive(true, false, false));
+}
+
+TEST(recording_sends_this_windows_key_equivalents_to_the_shell) {
+  using policy::RecordingRoute;
+  CHECK(policy::RecordingRouteFor(true, true, true) == RecordingRoute::kToShell);
+  CHECK(policy::RecordingRouteFor(false, true, true) == RecordingRoute::kNormal);
+  CHECK(policy::RecordingRouteFor(true, false, true) == RecordingRoute::kNormal);
+  CHECK(policy::RecordingRouteFor(true, true, false) == RecordingRoute::kNormal);
+}
+
+TEST(a_session_on_disk_the_merge_cannot_take_is_set_aside_not_wedged) {
+  using policy::SessionFile;
+  CHECK(policy::SessionFileFor(false, 0, false, false) == SessionFile::kAbsent);
+  CHECK(policy::SessionFileFor(true, 1024, true, true) == SessionFile::kUse);
+  CHECK(policy::SessionFileFor(true, policy::kMergeableSessionBytes, true, true) == SessionFile::kUse);
+  CHECK(policy::SessionFileFor(true, policy::kMergeableSessionBytes + 1, false, false) == SessionFile::kSetAside);
+  CHECK(policy::SessionFileFor(true, 64u * 1024u * 1024u + 1, false, false) == SessionFile::kSetAside);
+  CHECK(policy::SessionFileFor(true, 4096, true, false) == SessionFile::kSetAside);
+  CHECK(policy::SessionFileFor(true, 4096, false, false) == SessionFile::kSetAside);
+}
+
+TEST(set_aside_sessions_never_overwrite_an_earlier_backup) {
+  CHECK(policy::SetAsideSessionName(1795642159057u, 0) == "session-backup-oversized-1795642159057-0.json");
+  CHECK(policy::SetAsideSessionName(1795642159057u, 1) != policy::SetAsideSessionName(1795642159057u, 0));
+  CHECK(policy::SetAsideSessionName(1795642159058u, 0) != policy::SetAsideSessionName(1795642159057u, 0));
+  for (int attempt = 0; attempt < policy::kSetAsideAttempts; ++attempt) {
+    const std::string name = policy::SetAsideSessionName(1u, attempt);
+    CHECK(policy::ValidDocumentName(name) && name.starts_with("session-backup"));
+    for (int other = 0; other < attempt; ++other) {
+      CHECK(name != policy::SetAsideSessionName(1u, other));
+    }
+  }
+}
+
+TEST(a_backup_that_cannot_be_moved_blocks_saves_instead_of_looking_absent) {
+  using policy::SessionFile;
+  using policy::SessionLoad;
+  CHECK(policy::SessionLoadFor(SessionFile::kSetAside, false) == SessionLoad::kBlocked);
+  CHECK(!policy::SessionWritable(SessionLoad::kBlocked));
+  CHECK(policy::SessionLoadFor(SessionFile::kSetAside, true) == SessionLoad::kQuarantined);
+  CHECK(policy::SessionWritable(SessionLoad::kQuarantined));
+  CHECK(policy::SessionLoadFor(SessionFile::kAbsent, false) == SessionLoad::kAbsent);
+  CHECK(policy::SessionLoadFor(SessionFile::kUse, false) == SessionLoad::kUse);
+  CHECK(policy::SessionWritable(SessionLoad::kAbsent) && policy::SessionWritable(SessionLoad::kUse));
+}
+
+TEST(a_departure_is_saved_only_once_the_window_really_closes) {
+  using policy::DepartureStep;
+  CHECK(policy::DepartureStepFor(false, true, true) == DepartureStep::kNone);
+  CHECK(policy::DepartureStepFor(true, true, true) == DepartureStep::kCommit);
+  CHECK(policy::DepartureStepFor(true, false, true) == DepartureStep::kDiscard);
+  CHECK(policy::DepartureStepFor(true, true, false) == DepartureStep::kDiscard);
+  CHECK(policy::DepartureStepFor(true, false, false) == DepartureStep::kDiscard);
+}
+
+TEST(live_documents_are_reserved_in_any_case) {
+  for (const char* name : {"live.json", "LIVE.JSON", "Live.Json", "live.canonical.json", "LIVE.Canonical.JSON"}) {
+    CHECK(policy::ReservedLiveDocument(name));
+  }
+  for (const char* name : {"", "live", "live.json.bak", "notes.json", "xlive.json", "live.canonical.json "}) {
+    CHECK(!policy::ReservedLiveDocument(name));
+  }
 }
 
 int main(int argc, char** argv) {

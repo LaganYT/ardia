@@ -41,6 +41,9 @@ enum class Role {
   kBringAllToFront,
   kWindowMenu,
   kHelpMenu,
+  kBookmarksMenu,
+  kClose,
+  kShareServices,
 };
 
 inline constexpr std::uint32_t kShift = 1;
@@ -50,13 +53,16 @@ inline constexpr std::uint32_t kCommand = 8;
 
 struct Item {
   std::string title;
+  std::string default_title;
   std::string command;
   std::string argument;
   std::string key;
+  std::string state_id;
   std::uint32_t modifiers = 0;
   Role role = Role::kNone;
   bool enabled = true;
   bool checked = false;
+  bool fixed_check = false;
   std::vector<Item> children;
 };
 
@@ -70,7 +76,7 @@ struct RoleName {
   Role role;
 };
 
-inline constexpr std::array<RoleName, 21> kRoles = {{
+inline constexpr std::array<RoleName, 24> kRoles = {{
     {"separator", Role::kSeparator},
     {"about", Role::kAbout},
     {"services", Role::kServices},
@@ -92,6 +98,9 @@ inline constexpr std::array<RoleName, 21> kRoles = {{
     {"front", Role::kBringAllToFront},
     {"windowMenu", Role::kWindowMenu},
     {"helpMenu", Role::kHelpMenu},
+    {"bookmarksMenu", Role::kBookmarksMenu},
+    {"close", Role::kClose},
+    {"shareServices", Role::kShareServices},
 }};
 
 inline std::optional<Role> RoleNamed(std::string_view name) {
@@ -132,6 +141,8 @@ inline std::string_view SelectorFor(Role role) {
       return "selectAll:";
     case Role::kMinimize:
       return "performMiniaturize:";
+    case Role::kClose:
+      return "performClose:";
     case Role::kZoom:
       return "performZoom:";
     case Role::kFullScreen:
@@ -143,9 +154,23 @@ inline std::string_view SelectorFor(Role role) {
     case Role::kServices:
     case Role::kWindowMenu:
     case Role::kHelpMenu:
+    case Role::kBookmarksMenu:
+    case Role::kShareServices:
       return {};
   }
   return {};
+}
+
+inline constexpr std::string_view kShareCommand = "share";
+inline constexpr std::string_view kShareViaPrefix = "via:";
+inline constexpr std::string_view kShareMoreService = "ardia.more";
+
+inline bool FillsShareServices(Role role, bool main_menu) {
+  return main_menu && role == Role::kShareServices;
+}
+
+inline std::string ShareArgument(std::string_view service) {
+  return std::string(kShareViaPrefix) + std::string(service);
 }
 
 inline bool InstallsAppMenu(Role role, bool main_menu) {
@@ -157,6 +182,11 @@ inline bool ContextMenuLive(bool host_alive,
                             std::uint64_t live_generation,
                             bool document_current) {
   return host_alive && requested_generation != 0 && requested_generation == live_generation && document_current;
+}
+
+inline bool HoldsSubmenu(Role role) {
+  return role == Role::kServices || role == Role::kWindowMenu || role == Role::kHelpMenu || role == Role::kBookmarksMenu ||
+         role == Role::kShareServices;
 }
 
 inline bool ValidCommand(std::string_view command) {
@@ -210,16 +240,24 @@ inline void Check(const Item& item,
     problems.push_back({path, "too deep"});
     return;
   }
-  if (!ValidTitle(item.title)) problems.push_back({path, "title"});
+  if (!ValidTitle(item.title) || !ValidTitle(item.default_title)) problems.push_back({path, "title"});
   if (!ValidCommand(item.command)) problems.push_back({path, "command"});
   if (item.argument.size() > kMaxArgument) problems.push_back({path, "argument"});
+  if (!item.state_id.empty() &&
+      (item.state_id.size() > kMaxCommand + 1 + kMaxArgument ||
+       std::any_of(item.state_id.begin(), item.state_id.end(), [](char c) {
+         const auto byte = static_cast<unsigned char>(c);
+         return byte < 0x20 || byte == 0x7f;
+       })))
+    problems.push_back({path, "id"});
   if (!ValidKey(item.key)) problems.push_back({path, "key"});
   if (item.modifiers & ~(kShift | kControl | kOption | kCommand)) problems.push_back({path, "modifiers"});
   if (item.role == Role::kSeparator && (!item.children.empty() || !item.command.empty()))
     problems.push_back({path, "separator"});
   if (item.role != Role::kSeparator && item.role != Role::kServices && item.title.empty() && depth > 0)
     problems.push_back({path, "untitled"});
-  if (!item.children.empty() && !item.command.empty()) problems.push_back({path, "submenu with command"});
+  if ((!item.children.empty() || item.role == Role::kBookmarksMenu) && !item.command.empty())
+    problems.push_back({path, "submenu with command"});
   for (std::size_t index = 0; index < item.children.size(); ++index) {
     Check(item.children[index], depth + 1, path + "/" + std::to_string(index), count, problems);
     if (count > kMaxItems) return;
@@ -229,7 +267,10 @@ inline void Check(const Item& item,
 inline std::vector<Problem> Validate(const Item& root) {
   std::vector<Problem> problems;
   std::size_t count = 0;
-  Check(root, 0, "", count, problems);
+  for (std::size_t index = 0; index < root.children.size(); ++index) {
+    Check(root.children[index], 1, "/" + std::to_string(index), count, problems);
+    if (count > kMaxItems) break;
+  }
   return problems;
 }
 
@@ -255,7 +296,7 @@ inline std::vector<std::string> Describe(const Item& item, std::size_t depth = 0
   return lines;
 }
 
-inline Item DefaultMainMenu(std::string_view app_name) {
+inline Item MinimalMainMenu(std::string_view app_name) {
   const std::string app(app_name);
   const auto role = [](std::string title, Role role, std::string key = {}, std::uint32_t modifiers = 0) {
     Item item;
@@ -288,16 +329,75 @@ inline Item DefaultMainMenu(std::string_view app_name) {
   Item root;
   root.children = {
       submenu(app,
+              {role("About " + app, Role::kAbout), separator(), submenu("Services", {}, Role::kServices), separator(),
+               role("Hide " + app, Role::kHide, "h", kCommand),
+               role("Hide Others", Role::kHideOthers, "h", kCommand | kOption), role("Show All", Role::kShowAll),
+               separator(), command("Quit " + app, "quit", "q", kCommand)}),
+      submenu("Edit",
+              {role("Undo", Role::kUndo, "z", kCommand), role("Redo", Role::kRedo, "z", kCommand | kShift),
+               separator(), role("Cut", Role::kCut, "x", kCommand), role("Copy", Role::kCopy, "c", kCommand),
+               role("Paste", Role::kPaste, "v", kCommand), role("Select All", Role::kSelectAll, "a", kCommand)}),
+      submenu("Window",
+              {role("Minimize", Role::kMinimize, "m", kCommand), role("Zoom", Role::kZoom),
+               role("Close Window", Role::kClose, "w", kCommand | kShift), separator(),
+               role("Bring All to Front", Role::kBringAllToFront)},
+              Role::kWindowMenu),
+      submenu("Help", {}, Role::kHelpMenu),
+  };
+  return root;
+}
+
+inline Item DefaultMainMenu(std::string_view app_name) {
+  const std::string app(app_name);
+  const auto role = [](std::string title, Role role, std::string key = {}, std::uint32_t modifiers = 0) {
+    Item item;
+    item.title = std::move(title);
+    item.role = role;
+    item.key = std::move(key);
+    item.modifiers = modifiers;
+    return item;
+  };
+  const auto command = [](std::string title, std::string name, std::string key, std::uint32_t modifiers) {
+    Item item;
+    item.title = std::move(title);
+    item.command = std::move(name);
+    item.key = std::move(key);
+    item.modifiers = modifiers;
+    return item;
+  };
+  const auto share = [](std::string title, std::string_view service) {
+    Item item;
+    item.title = std::move(title);
+    item.command = std::string(kShareCommand);
+    item.argument = ShareArgument(service);
+    return item;
+  };
+  const auto separator = []() {
+    Item item;
+    item.role = Role::kSeparator;
+    return item;
+  };
+  const auto submenu = [](std::string title, std::vector<Item> children, Role role = Role::kNone) {
+    Item item;
+    item.title = std::move(title);
+    item.role = role;
+    item.children = std::move(children);
+    return item;
+  };
+  Item root;
+  root.children = {
+      submenu(app,
               {role("About " + app, Role::kAbout), separator(),
                command("Settings…", "openSettings", ",", kCommand), separator(),
                submenu("Services", {}, Role::kServices), separator(),
                role("Hide " + app, Role::kHide, "h", kCommand),
                role("Hide Others", Role::kHideOthers, "h", kCommand | kOption),
                role("Show All", Role::kShowAll), separator(),
-               role("Quit " + app, Role::kQuit, "q", kCommand)}),
+               command("Quit " + app, "quit", "q", kCommand)}),
       submenu("File",
               {command("New Tab", "newTab", "t", kCommand), command("New Window", "newWindow", "n", kCommand),
-               separator(), command("Close Tab", "closeTab", "w", kCommand)}),
+               separator(), command("Close Tab", "closeTab", "w", kCommand), separator(),
+               submenu("Share", {share("Copy Link", "copy"), share("Email Link", "email")}, Role::kShareServices)}),
       submenu("Edit",
               {role("Undo", Role::kUndo, "z", kCommand), role("Redo", Role::kRedo, "z", kCommand | kShift),
                separator(), role("Cut", Role::kCut, "x", kCommand), role("Copy", Role::kCopy, "c", kCommand),
@@ -311,7 +411,7 @@ inline Item DefaultMainMenu(std::string_view app_name) {
               {role("Minimize", Role::kMinimize, "m", kCommand), role("Zoom", Role::kZoom), separator(),
                role("Bring All to Front", Role::kBringAllToFront)},
               Role::kWindowMenu),
-      submenu("Help", {}, Role::kHelpMenu),
+      submenu("Help", {command("Show Onboarding", "showOnboarding", "", 0)}, Role::kHelpMenu),
   };
   return root;
 }

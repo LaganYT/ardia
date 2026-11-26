@@ -28,6 +28,12 @@ constexpr Build CompiledBuild() {
 #endif
 }
 
+inline constexpr std::string_view kBootstrapAsset = "host-bootstrap.js";
+
+constexpr bool ReadsSession(std::string_view asset) {
+  return asset == kBootstrapAsset;
+}
+
 constexpr bool AsksForWebUI(std::optional<std::string_view> value) {
   return value.has_value() && *value == kWebUIValue;
 }

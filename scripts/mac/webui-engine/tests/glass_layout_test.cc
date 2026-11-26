@@ -248,6 +248,11 @@ TEST(names_parse) {
   CHECK(glass::MaterialNamed("clear") == Material::kLiquidClear);
   CHECK(glass::MaterialNamed("hud") == Material::kHud);
   CHECK(glass::MaterialNamed("underWindow") == Material::kUnderWindow);
+  CHECK(glass::MaterialNamed("windowTreatment") == Material::kWindowTreatment);
+  CHECK(glass::EffectFor(Material::kWindowTreatment, true) == glass::Effect::kVibrancy);
+  CHECK(glass::EffectFor(Material::kWindowTreatment, false) == glass::Effect::kVibrancy);
+  CHECK(glass::TreatmentMaterial(true) == 29);
+  CHECK(glass::TreatmentMaterial(false) == 13);
   CHECK(!glass::MaterialNamed("glitter"));
 }
 
@@ -388,7 +393,8 @@ TEST(a_page_without_a_native_view_mounts_nothing_on_it) {
 TEST(mounted_glass_names_a_region_on_two_pages_once) {
   const std::vector<Page> pages{{1, {0, 0, 600, 800}}, {2, {610, 0, 670, 800}}};
   const auto split = glass::Lay(glass::Mounted({}, {Make("peek", {500, 100, 300, 200}, Layer::kOverPage)}), pages, kWindow, 1);
-  CHECK(split.placements.size() == 2);
+  CHECK(split.placements.size() == 3);
+  CHECK(Find(split, "peek", 0) && Find(split, "peek", 0)->frame == (Rect{600, 100, 10, 200}));
   CHECK(glass::MountedGlass(split.placements) == (std::vector<std::string>{"peek"}));
 }
 
@@ -467,6 +473,137 @@ TEST(unequal_positive_radii_are_a_layout_change) {
   CHECK(diff.update.size() == 1 && diff.create.empty() && diff.remove.empty());
   const auto shape = glass::ShapeFor(diff.update[0].radii);
   CHECK(!shape.uniform && shape.radii == (glass::Radii{4, 12, 12, 12}));
+}
+
+TEST(tints_parse_from_hex_and_rgba) {
+  CHECK(glass::ColorFrom("#ff0000") == (glass::Color{1, 0, 0, 1}));
+  CHECK(glass::ColorFrom("#00ff0080") == (glass::Color{0, 1, 0, 128 / 255.0}));
+  CHECK(glass::ColorFrom("#fff") == (glass::Color{1, 1, 1, 1}));
+  CHECK(glass::ColorFrom("rgba(255, 0, 0, 0.5)") == (glass::Color{1, 0, 0, 0.5}));
+  CHECK(glass::ColorFrom("rgb(0,0,255)") == (glass::Color{0, 0, 1, 1}));
+  for (const char* bad : {"", "red", "#ff", "#gg0000", "rgba(1,2,3)", "rgb(1,2,3,4)", "rgba(256,0,0,1)",
+                          "rgba(0,0,0,2)", "rgba(-1,0,0,1)", "rgba(1e3,0,0,1)", "rgba(0,0,0,1", "rgba(,,,)"}) {
+    CHECK(!glass::ColorFrom(bad));
+  }
+}
+
+TEST(groups_and_appearance_reach_the_placement) {
+  Region region = Make("pin", {10, 10, 30, 30});
+  region.group = "pins";
+  region.tint = glass::Color{1, 1, 1, 0.2};
+  region.appearance = glass::Appearance::kDark;
+  const auto layout = glass::Lay({region}, {}, kWindow, 1);
+  CHECK(layout.placements.size() == 1);
+  CHECK(layout.placements[0].group == "pins" && layout.placements[0].tint == region.tint);
+  CHECK(layout.placements[0].appearance == glass::Appearance::kDark);
+  CHECK(glass::Grouped(layout.placements[0], true));
+  CHECK(!glass::Grouped(layout.placements[0], false));
+  CHECK(glass::LiveGroups(layout.placements, true).size() == 1);
+  CHECK(glass::LiveGroups(layout.placements, false).empty());
+  Region vibrant = region;
+  vibrant.material = Material::kSidebar;
+  CHECK(!glass::Grouped(glass::Lay({vibrant}, {}, kWindow, 1).placements[0], true));
+  Region bad = region;
+  bad.group = "no spaces";
+  const auto refused = glass::Lay({bad}, {}, kWindow, 1);
+  CHECK(refused.placements.empty() && refused.rejected.size() == 1 && refused.rejected[0].reason == "group");
+  CHECK(glass::AppearanceNamed("dark") == glass::Appearance::kDark && !glass::AppearanceNamed("sepia"));
+}
+
+TEST(tint_and_group_changes_update_the_same_view) {
+  Region region = Make("pin", {10, 10, 30, 30});
+  const auto before = glass::Lay({region}, {}, kWindow, 1);
+  region.tint = glass::Color{0, 0, 0, 0.1};
+  region.group = "pins";
+  const auto after = glass::Lay({region}, {}, kWindow, 1);
+  const auto diff = glass::DiffPlacements(before.placements, after.placements, true);
+  CHECK(diff.update.size() == 1 && diff.create.empty() && diff.remove.empty());
+}
+
+TEST(a_region_straddling_the_sidebar_and_a_page_is_glass_on_both_sides) {
+  const std::vector<Page> pages{{1, {300, 0, 980, 800}}};
+  const auto layout = glass::Lay({Make("menu", {200, 100, 300, 200})}, pages, kWindow, 1);
+  CHECK(layout.placements.size() == 2);
+  const Placement* page = Find(layout, "menu", 1);
+  const Placement* behind = Find(layout, "menu", 0);
+  CHECK(page && page->plane == Plane::kOverPage && page->visible == (Rect{0, 100, 200, 200}));
+  CHECK(behind && behind->plane == Plane::kBehindWindow && behind->slice == 1);
+  CHECK(behind && behind->frame == (Rect{200, 100, 100, 200}) && behind->visible == (Rect{200, 100, 100, 200}));
+  const auto rounded = glass::Lay({Make("menu", {200, 100, 300, 200}, Layer::kAuto, 12)}, pages, kWindow, 1);
+  const Placement* left = Find(rounded, "menu", 0);
+  CHECK(left && left->outline == (Rect{200, 100, 300, 200}) && left->radii == (glass::Radii{12, 12, 12, 12}));
+  const glass::SliceMask mask = left ? glass::MaskFor(*left) : glass::SliceMask{};
+  CHECK(mask.active && mask.outline == (Rect{0, 0, 300, 200}) && mask.radii == (glass::Radii{12, 12, 12, 12}));
+  const auto framed = glass::Lay({Make("ring", {250, 100, 200, 200})}, {{1, {300, 150, 100, 100}}}, kWindow, 1);
+  int slices = 0;
+  double area = 0;
+  for (const Placement& placement : framed.placements) {
+    if (placement.plane != Plane::kBehindWindow) continue;
+    ++slices;
+    area += placement.frame.width * placement.frame.height;
+    CHECK(placement.frame == placement.visible);
+  }
+  CHECK(slices == 4 && area == 200 * 200 - 100 * 100);
+  const auto inside = glass::Lay({Make("inside", {400, 100, 300, 200})}, pages, kWindow, 1);
+  CHECK(inside.placements.size() == 1 && inside.placements[0].plane == Plane::kOverPage);
+  const auto page_only = glass::KeepAttached(layout, {glass::KeyOf(*page)});
+  CHECK(glass::MountedGlass(page_only).empty());
+  CHECK(glass::MountedGlass(page_only.placements) == (std::vector<std::string>{"menu"}));
+  const auto both = glass::KeepAttached(layout, {glass::KeyOf(*page), glass::KeyOf(*behind)});
+  CHECK(glass::MountedGlass(both) == (std::vector<std::string>{"menu"}));
+  const auto off_window = glass::Lay({Make("edge", {900, 700, 600, 300})}, {{1, {0, 0, 1280, 800}}}, kWindow, 1);
+  CHECK(off_window.placements.size() == 1 && off_window.placements[0].plane == Plane::kOverPage);
+}
+
+TEST(a_slice_narrower_than_the_corner_radius_traces_the_whole_region_outline) {
+  const auto layout = glass::Lay({Make("menu", {200, 100, 300, 200}, Layer::kAuto, 12)}, {{1, {205, 0, 1075, 800}}}, kWindow, 1);
+  const Placement* sliver = Find(layout, "menu", 0);
+  CHECK(sliver && sliver->slice == 1 && sliver->frame == (Rect{200, 100, 5, 200}));
+  if (!sliver) return;
+  const glass::SliceMask mask = glass::MaskFor(*sliver);
+  CHECK(mask.active);
+  CHECK(mask.outline == (Rect{0, 0, 300, 200}));
+  CHECK(mask.outline.right() > sliver->frame.width && mask.radii.upper_left == 12);
+  const Placement* page = Find(layout, "menu", 1);
+  CHECK(page && page->seamed && glass::MaskFor(*page).outline == (Rect{0, 0, 300, 200}));
+  const auto whole = glass::Lay({Make("free", {20, 20, 100, 100}, Layer::kAuto, 12)}, {}, kWindow, 1);
+  CHECK(whole.placements.size() == 1 && !glass::MaskFor(whole.placements[0]).active);
+}
+
+TEST(both_sides_of_a_page_seam_trace_the_same_corner_outline) {
+  const Rect page_rect{300, 0, 980, 800};
+  const auto layout = glass::Lay({Make("menu", {200, 100, 300, 200}, Layer::kAuto, 12)}, {{1, page_rect}}, kWindow, 1);
+  const Placement* page = Find(layout, "menu", 1);
+  const Placement* sliver = Find(layout, "menu", 0);
+  CHECK(page && sliver && page->seamed && !sliver->seamed && sliver->slice == 1);
+  if (!page || !sliver) return;
+  const glass::SliceMask over = glass::MaskFor(*page);
+  const glass::SliceMask behind = glass::MaskFor(*sliver);
+  CHECK(over.active && behind.active && over.radii == behind.radii);
+  const Rect over_in_window{page_rect.x + page->frame.x + over.outline.x, page_rect.y + page->frame.y + over.outline.y,
+                            over.outline.width, over.outline.height};
+  const Rect behind_in_window{sliver->frame.x + behind.outline.x, sliver->frame.y + behind.outline.y, behind.outline.width,
+                              behind.outline.height};
+  CHECK(over_in_window == (Rect{200, 100, 300, 200}) && behind_in_window == over_in_window);
+  const auto inside = glass::Lay({Make("inside", {400, 100, 300, 200}, Layer::kAuto, 12)}, {{1, page_rect}}, kWindow, 1);
+  CHECK(inside.placements.size() == 1 && !inside.placements[0].seamed && !glass::MaskFor(inside.placements[0]).active);
+}
+
+TEST(glass_over_a_page_mounts_under_the_shell_in_the_compositor) {
+  CHECK(glass::MountsUnderShell(Plane::kOverPage));
+  CHECK(!glass::MountsUnderShell(Plane::kBehindWindow));
+  CHECK(ardia_mac_test::Near(glass::UnderShellBlur(24, 1), 24));
+  CHECK(ardia_mac_test::Near(glass::UnderShellBlur(24, 2), 48));
+  CHECK(ardia_mac_test::Near(glass::UnderShellBlur(1e9, 1), glass::kMaxBlur));
+  CHECK(ardia_mac_test::Near(glass::UnderShellBlur(-5, 1), 0));
+  CHECK(ardia_mac_test::Near(glass::UnderShellBlur(std::numeric_limits<double>::quiet_NaN(), 1), 0));
+  CHECK(ardia_mac_test::Near(glass::UnderShellBlur(24, std::numeric_limits<double>::infinity()), 24));
+  CHECK(glass::kUnderShellFill > 0 && glass::kUnderShellFill < 0.05f);
+  const std::vector<Page> pages{{7, {300, 60, 900, 700}}};
+  const auto layout = glass::Lay({Make("sidebar", {280, 40, 260, 600}, Layer::kAuto, 12)}, pages, kWindow, 1);
+  const Placement* over = Find(layout, "sidebar", 7);
+  CHECK(over && glass::MountsUnderShell(over->plane));
+  CHECK(over && ardia_mac_test::Near(over->frame.x, -20) && ardia_mac_test::Near(over->frame.y, -20));
 }
 
 int main(int argc, char** argv) {

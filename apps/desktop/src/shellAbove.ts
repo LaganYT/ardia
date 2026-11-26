@@ -5,6 +5,7 @@ import { clippedRectOf } from "./hostViewport.ts";
 import { createPageHoles, type PageHoles } from "./pageHoles.ts";
 import { PEEK_MOVING_ATTRIBUTE } from "./peekStageMotion.ts";
 import { startShellGlass } from "./shellGlass.ts";
+import { GLASS_BEHIND_WINDOW } from "./glassRegions.ts";
 import { currentWindowCorners, onWindowCornersChanged } from "./windowDecorations.ts";
 
 const SHELL_ABOVE_CLASS = "ardia-shell-above";
@@ -69,7 +70,7 @@ export function startShellAbove(host: ArdiaHost, root: HTMLElement = document.bo
   const inMovingStage = (element: Element) => !!element.closest?.(MOVING_STAGE);
   const painter = createPageHoles(root, () => host.bootstrap.shellZoom ?? 1, currentWindowCorners, inMovingStage);
   const stopCorners = onWindowCornersChanged(() => painter.windowChanged());
-  const glass = startShellGlass(host);
+  const glass = startShellGlass(host, (next) => painter.glassChanged(next));
   const registry = createInputRegions({
     ...domRegionDeps(host),
     pageFrozen: inMovingStage,
@@ -102,6 +103,29 @@ export function startShellAbove(host: ArdiaHost, root: HTMLElement = document.bo
   };
 }
 
+const UTILITY_GLASS_CLASS = "ardia-utility-glass";
+
+export function startUtilityShellGlass(host: ArdiaHost, root: HTMLElement = document.body) {
+  const transparent = hostSupports(GLASS_BEHIND_WINDOW, host);
+  if (transparent) document.documentElement.classList.add(UTILITY_GLASS_CLASS);
+  const painter = createPageHoles(root, () => host.bootstrap.shellZoom ?? 1, currentWindowCorners);
+  const stopCorners = onWindowCornersChanged(() => painter.windowChanged());
+  const glass = startShellGlass(host, (next) => painter.glassChanged(next));
+  holes = painter;
+  const resized = () => {
+    glass.glass.refresh();
+    painter.windowChanged();
+  };
+  window.addEventListener("resize", resized);
+  return () => {
+    window.removeEventListener("resize", resized);
+    document.documentElement.classList.remove(UTILITY_GLASS_CLASS);
+    glass.stop();
+    stopCorners();
+    if (holes === painter) holes = null;
+  };
+}
+
 export function useInputRegion(ref: RefObject<Element | null>, shape: RegionShape = "box", gated = true, capturing = true) {
   useLayoutEffect(() => {
     const element = ref.current;
@@ -110,6 +134,8 @@ export function useInputRegion(ref: RefObject<Element | null>, shape: RegionShap
 }
 
 export const AbovePages = createContext(false);
+export const NativeBackdropRoot = createContext(false);
+export const useNativeBackdropRoot = () => useContext(NativeBackdropRoot);
 
 export function usePageHoleLayer(ref: RefObject<HTMLElement | null>) {
   const abovePages = useContext(AbovePages);

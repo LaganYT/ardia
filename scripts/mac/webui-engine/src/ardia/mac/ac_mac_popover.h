@@ -30,6 +30,7 @@ class PopoverHost {
  public:
   using Dismissed =
       base::RepeatingCallback<void(const std::string& key, std::string_view reason)>;
+  using Sink = base::RepeatingCallback<void(std::string_view event, const base::Value& payload)>;
 
   PopoverHost(views::Widget* parent,
               Profile* profile,
@@ -52,6 +53,8 @@ class PopoverHost {
   bool Owns(const content::WebContents* contents) const;
   std::optional<std::string> BootstrapJson(const content::WebContents* contents) const;
   std::optional<std::string> IdFor(const content::WebContents* contents) const;
+  std::optional<base::Value> PropsFor(const content::WebContents* contents) const;
+  void Connect(const content::WebContents* contents, Sink sink);
   void Dismiss(const std::string& key, popover::Event event);
   std::size_t open_count() const { return panels_.size(); }
 

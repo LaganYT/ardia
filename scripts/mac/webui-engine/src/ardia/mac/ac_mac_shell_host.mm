@@ -8,16 +8,36 @@
 #include <set>
 #include <utility>
 
+#include "ardia/mac/ac_mac_dialog.h"
+#include "ardia/linux/ac_linux_session.h"
+#include "ardia/mac/ac_mac_extension_view.h"
 #include "ardia/mac/ac_mac_glass.h"
+#include "ardia/mac/ac_mac_link_gesture.h"
 #include "ardia/mac/ac_mac_menu.h"
+#include "ardia/mac/ac_mac_page_commands.h"
+#include "ardia/mac/ac_mac_page_delegate.h"
+#include "ardia/mac/ac_mac_page_events.h"
+#include "ardia/mac/ac_mac_page_policy.h"
+#include "ardia/mac/ac_mac_pip.h"
 #include "ardia/mac/ac_mac_popover.h"
+#include "ardia/mac/ac_mac_share.h"
+#include "ardia/mac/ac_mac_shared_folders.h"
+#include "ardia/mac/ac_mac_swipe.h"
+#include "ardia/mac/ac_mac_system.h"
 #include "ardia/mac/ac_mac_window.h"
+#include "ardia/mac/ac_mac_window_policy.h"
+#include "ardia/mac/ac_mac_window_events.h"
 #include "ardia/mac/ac_mac_shell_bridge.h"
 #include "ardia/mac/ac_mac_shell_policy.h"
 #include "ardia/mac/ac_mac_webui_policy.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "ui/compositor/layer.h"
+#include "content/public/browser/render_widget_host.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "base/apple/owned_objc.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
@@ -204,20 +224,11 @@ void Trace(const std::string& line) {
   LOG(WARNING) << "Ardia Mac WebUI: " << line;
 }
 
-bool ValidProfileId(std::string_view name) {
-  if (name.empty() || name.size() > 128 || !base::IsAsciiAlpha(name[0])) {
-    return false;
-  }
-  return std::ranges::all_of(name, [](char c) {
-    return base::IsAsciiAlpha(c) || base::IsAsciiDigit(c) || c == '_' || c == '-';
-  });
-}
-
 void WithProfile(std::string_view name,
                  base::OnceCallback<void(Profile*)> callback) {
   ProfileManager* manager = g_browser_process->profile_manager();
   const bool app_profile = name.empty() || name == "default";
-  if (!app_profile && !ValidProfileId(name)) {
+  if (!app_profile && !shell_policy::ValidProfileId(name)) {
     std::move(callback).Run(nullptr);
     return;
   }
@@ -261,6 +272,15 @@ std::vector<ShellHostView*>& Hosts() {
   return *hosts;
 }
 
+ShellHostView* HostForWindow(std::string_view id) {
+  for (ShellHostView* host : Hosts()) {
+    if (host->window_id() == id) {
+      return host;
+    }
+  }
+  return nullptr;
+}
+
 ShellHostView* HostForShell(content::WebContents* contents) {
   for (ShellHostView* host : Hosts()) {
     if (contents && host->shell_contents() == contents) {
@@ -272,21 +292,35 @@ ShellHostView* HostForShell(content::WebContents* contents) {
 
 MenuCommandHandler MainMenuHandler() {
   return base::BindRepeating([](const MenuChoice& choice) {
-    NSWindow* key = NSApp.keyWindow ?: NSApp.mainWindow;
+    const std::optional<std::string> key = KeyMenuWindowId();
     ShellHostView* target = nullptr;
     for (ShellHostView* host : Hosts()) {
-      views::Widget* widget = host->GetWidget();
       if (!target) {
         target = host;
       }
-      if (widget && widget->GetNativeWindow().GetNativeNSWindow() == key) {
+      if (key && host->window_id() == *key) {
         target = host;
         break;
       }
     }
     if (target) {
       target->OnMenuCommand(choice.command, choice.argument);
+    } else if (choice.command == "quit") {
+      QuitWithoutShell();
     }
+  });
+}
+
+MenuWindowResolver ShellMenuWindows() {
+  return base::BindRepeating([](gfx::NativeWindow window) -> std::optional<std::string> {
+    NSWindow* wanted = window.GetNativeNSWindow();
+    for (ShellHostView* host : Hosts()) {
+      views::Widget* widget = host->GetWidget();
+      if (wanted && widget && widget->GetNativeWindow().GetNativeNSWindow() == wanted) {
+        return host->window_id();
+      }
+    }
+    return std::nullopt;
   });
 }
 
@@ -307,9 +341,20 @@ PageBinding::PageBinding(ShellHostView* owner,
       owner_(owner),
       id_(TabId(contents)),
       key_(std::move(key)),
-      profile_(std::move(profile)) {}
+      profile_(std::move(profile)) {
+  events_ = std::make_unique<PageEvents>(
+      contents, base::BindRepeating(&PageBinding::Report, base::Unretained(this)));
+  commands_ = std::make_unique<PageCommands>(this);
+  links_ = std::make_unique<PageLinks>(this, contents);
+}
 
 PageBinding::~PageBinding() {
+  links_.reset();
+  if (owner_) {
+    share::RetireBinding(owner_->window_id(), id_);
+  }
+  commands_.reset();
+  events_.reset();
   if (viewport && owner_) {
     viewport->SetWebContents(nullptr);
     owner_->RemoveChildViewT(viewport.get());
@@ -328,8 +373,9 @@ base::DictValue PageBinding::NavigationEvent() const {
     data.Set("isLoading", contents->IsLoading());
     data.Set("committedUrl", contents->GetLastCommittedURL().spec());
   }
-  data.Set("themeColor", base::Value());
-  data.Set("themeColorSource", base::Value());
+  const std::optional<std::string> theme = PageThemeColor(contents);
+  data.Set("themeColor", theme ? base::Value(*theme) : base::Value());
+  data.Set("themeColorSource", theme ? base::Value("meta") : base::Value());
   return base::DictValue().Set("name", "navigation").Set("data", std::move(data));
 }
 
@@ -338,9 +384,40 @@ base::DictValue PageBinding::Envelope(std::string_view type) {
       .Set("type", type)
       .Set("claim", claim)
       .Set("rendererGeneration", base::NumberToString(renderer_generation))
-      .Set("bindingGeneration", "1")
+      .Set("bindingGeneration", base::NumberToString(binding_generation))
       .Set("documentEpoch", "1")
       .Set("sequence", static_cast<double>(++sequence));
+}
+
+base::DictValue PageBinding::CreationState() {
+  base::DictValue lease;
+  lease.Set("claim", claim);
+  lease.Set("rendererGeneration", base::NumberToString(renderer_generation));
+  lease.Set("bindingGeneration", base::NumberToString(binding_generation));
+  lease.Set("documentEpoch", "1");
+  base::ListValue events = base::ListValue().Append(NavigationEvent());
+  if (events_) {
+    events_->AppendSnapshot(events);
+  }
+  base::DictValue snapshot;
+  snapshot.Set("watermark", static_cast<double>(sequence));
+  snapshot.Set("events", std::move(events));
+  return base::DictValue()
+      .Set("browserId", id_)
+      .Set("chromeTabId", id_)
+      .Set("lease", std::move(lease))
+      .Set("snapshot", std::move(snapshot));
+}
+
+void PageBinding::Rebind(content::WebContents* contents) {
+  commands_->Reset();
+  links_.reset();
+  events_.reset();
+  Observe(contents);
+  id_ = TabId(contents);
+  events_ = std::make_unique<PageEvents>(
+      contents, base::BindRepeating(&PageBinding::Report, base::Unretained(this)));
+  links_ = std::make_unique<PageLinks>(this, contents);
 }
 
 void PageBinding::ReportNavigation() {
@@ -349,6 +426,16 @@ void PageBinding::ReportNavigation() {
   }
   base::DictValue delivery = Envelope("pageEvent");
   delivery.Set("event", NavigationEvent());
+  owner_->Emit("ArdiaWebView", base::NumberToString(id_),
+               base::Value(std::move(delivery)));
+}
+
+void PageBinding::Report(std::string_view name, base::Value data) {
+  if (!owner_ || claim.empty() || !web_contents()) {
+    return;
+  }
+  base::DictValue delivery = Envelope("pageEvent");
+  delivery.Set("event", PageEvent(name, std::move(data)));
   owner_->Emit("ArdiaWebView", base::NumberToString(id_),
                base::Value(std::move(delivery)));
 }
@@ -383,8 +470,14 @@ void PageBinding::DidStopLoading() {
   ReportNavigation();
 }
 
+void PageBinding::DidChangeThemeColor() {
+  ReportNavigation();
+}
+
 void PageBinding::WebContentsDestroyed() {
   ReportClosed();
+  commands_->Reset();
+  events_->Reset();
   if (viewport) {
     viewport->SetWebContents(nullptr);
   }
@@ -393,6 +486,15 @@ void PageBinding::WebContentsDestroyed() {
     owner_->BindingGone(this);
   }
 }
+
+struct ShellHostView::RecordingKeys {
+  id monitor = nil;
+  ~RecordingKeys() {
+    if (monitor) {
+      [NSEvent removeMonitor:monitor];
+    }
+  }
+};
 
 struct ShellHostView::WindowDrag {
   NSEvent* mouse_down = nil;
@@ -403,11 +505,16 @@ struct ShellHostView::WindowDrag {
 ShellHostView::ShellHostView(BrowserWindowInterface* browser,
                              BrowserView* browser_view,
                              Profile* app_profile,
-                             std::string window_id)
+                             WindowSpec spec)
     : browser_(browser),
       browser_view_(browser_view),
       app_profile_(app_profile),
-      window_id_(std::move(window_id)) {
+      window_id_(std::move(spec.id)),
+      kind_(std::move(spec.kind)),
+      title_(std::move(spec.title)),
+      page_profile_(std::move(spec.page_profile)),
+      startup_(spec.startup),
+      utility_(std::move(spec.utility)) {
   Hosts().push_back(this);
 }
 
@@ -417,14 +524,29 @@ ShellHostView::~ShellHostView() {
 }
 
 void ShellHostView::Initialize() {
+  documents_ = std::make_unique<DocumentSession>(
+      window_id_, base::BindRepeating(
+                      [](base::WeakPtr<ShellHostView> host, base::Value payload) {
+                        if (host) {
+                          host->Emit("ArdiaDocuments", "documents",
+                                     base::Value(base::DictValue()
+                                                     .Set("name", "documents.changed")
+                                                     .Set("data", std::move(payload))));
+                        }
+                      },
+                      GetWeakPtr()));
   view_observation_.Observe(browser_view_.get());
   focus_manager_ = GetFocusManager();
+  under_shell_ = AddChildView(std::make_unique<views::View>());
+  under_shell_->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
+  under_shell_->layer()->SetFillsBoundsOpaquely(false);
+  under_shell_->SetCanProcessEventsWithinSubtree(false);
   shell_ = AddChildView(std::make_unique<views::WebView>(app_profile_.get()));
   content::WebContents* shell = shell_->GetWebContents();
   shell->SetDelegate(this);
   Transparencies()[shell] = std::make_unique<ShellTransparency>(shell);
   glass_ = std::make_unique<GlassRegions>(
-      browser_view_->GetWidget(),
+      browser_view_->GetWidget(), under_shell_.get(),
       base::BindRepeating(
           [](base::WeakPtr<ShellHostView> host, int generation) {
             if (host) {
@@ -450,6 +572,10 @@ void ShellHostView::Initialize() {
                                  base::Value(std::move(data)));
           },
           GetWeakPtr()));
+  system_ = std::make_unique<SystemServices>(this);
+  extension_views_ = std::make_unique<ExtensionViews>(this);
+  pip_ = std::make_unique<PipPresenter>(this);
+  StartLifecycle();
   browser_->GetTabStripModel()->AddObserver(this);
   WatchWindowDrag();
   LayoutOverlay();
@@ -461,10 +587,16 @@ void ShellHostView::DetachBrowser() {
   if (!browser_) {
     return;
   }
+  CommitHeldDeparture();
   closing_ = true;
+  recording_keys_.reset();
   RetireRenderer();
+  ForgetWindowMenu(window_id_);
   TabStripModelObserver::StopObservingAll(this);
   CloseCompanions();
+  pip_.reset();
+  extension_views_.reset();
+  system_.reset();
   for (auto& [id, binding] : bindings_) {
     if (binding->viewport) {
       binding->viewport->SetWebContents(nullptr);
@@ -472,6 +604,9 @@ void ShellHostView::DetachBrowser() {
   }
   bindings_.clear();
   StopWatchingWindowDrag();
+  shared_folder_watcher_.reset();
+  share::Retire(window_id_);
+  StopLifecycle();
   popovers_.reset();
   glass_.reset();
   if (focus_manager_) {
@@ -554,6 +689,9 @@ BrowserWindowInterface* ShellHostView::EnsureMember(Profile* profile) {
   }
   companions_.push_back(created->GetWeakPtr());
   created->GetTabStripModel()->AddObserver(this);
+  if (system_) {
+    system_->SyncWatches();
+  }
   Note("companion window joined " + window_id_);
   return created;
 }
@@ -599,6 +737,12 @@ PageBinding* ShellHostView::BindingForContents(
 
 void ShellHostView::BindingGone(PageBinding* binding) {
   const int id = binding->id();
+  if (pip_) {
+    pip_->CheckSource();
+  }
+  if (scroll_gestures_) {
+    scroll_gestures_->Revalidate();
+  }
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
                      [](base::WeakPtr<ShellHostView> host, int id) {
@@ -617,6 +761,34 @@ void ShellHostView::BindingGone(PageBinding* binding) {
 bool ShellHostView::OwnsShellNativeView(gfx::NativeView view) const {
   content::WebContents* shell = shell_contents();
   return shell && view && shell->GetNativeView() == view;
+}
+
+std::optional<gfx::PointF> ShellHostView::ShellPointFor(const PageBinding* binding,
+                                                        gfx::PointF page_point) const {
+  if (!binding || binding->host() != this || !binding->viewport || !binding->visible) {
+    return std::nullopt;
+  }
+  const gfx::Rect bounds = binding->viewport->bounds();
+  const double zoom = ShellZoom();
+  const double x = std::clamp<double>(page_point.x(), 0, bounds.width()) + bounds.x();
+  const double y = std::clamp<double>(page_point.y(), 0, bounds.height()) + bounds.y();
+  return gfx::PointF(static_cast<float>(x / zoom), static_cast<float>(y / zoom));
+}
+
+PageBinding* ShellHostView::BindingHit(gfx::NativeView hit) const {
+  NSView* view = hit.GetNativeNSView();
+  if (!view || closing_) {
+    return nullptr;
+  }
+  for (const auto& [id, binding] : bindings_) {
+    content::WebContents* contents = binding->contents();
+    NSView* page = contents ? contents->GetNativeView().GetNativeNSView() : nil;
+    if (page && binding->visible && binding->viewport && binding->viewport->GetVisible() &&
+        [view isDescendantOf:page]) {
+      return binding.get();
+    }
+  }
+  return nullptr;
 }
 
 bool ShellHostView::PassesShellPoint(double x, double y) const {
@@ -685,11 +857,17 @@ void ShellHostView::LayoutOverlay() {
   if (shell_) {
     shell_->SetBoundsRect(GetLocalBounds());
   }
+  if (under_shell_) {
+    under_shell_->SetBoundsRect(GetLocalBounds());
+  }
   if (views::WebView* chrome_view = browser_view_->GetActiveContentsWebView()) {
     chrome_view->SetVisible(false);
   }
   Restack();
   UpdateGlassSurface();
+  if (extension_views_) {
+    extension_views_->Relayout();
+  }
 }
 
 void ShellHostView::Restack() {
@@ -697,10 +875,19 @@ void ShellHostView::Restack() {
     return;
   }
   browser_view_->ReorderChildView(this, browser_view_->children().size());
+  if (under_shell_) {
+    ReorderChildView(under_shell_, children().size());
+  }
   ReorderChildView(shell_, children().size());
+  if (extension_views_) {
+    extension_views_->RaisePopups();
+  }
 }
 
 void ShellHostView::ReattachViewports() {
+  if (scroll_gestures_) {
+    scroll_gestures_->Revalidate();
+  }
   std::set<content::WebContents*> taken;
   for (BrowserWindowInterface* member : Members()) {
     BrowserView* view = BrowserView::GetBrowserViewForBrowser(member);
@@ -804,11 +991,18 @@ void ShellHostView::RetireRenderer() {
   handler_ = nullptr;
   renderer_document_ = content::WeakDocumentPtr();
   ++renderer_generation_;
+  if (documents_) {
+    documents_->RendererRetired();
+  }
+  shared_folder_watcher_.reset();
+  share::Retire(window_id_);
+  SetMenuKeysSuppressed(window_id_, false);
   if (!had_document) {
     return;
   }
   for (auto& [id, binding] : bindings_) {
     binding->claim.clear();
+    binding->commands()->CancelEvaluations();
     binding->renderer_generation = 0;
     binding->visible = false;
     if (binding->viewport) {
@@ -816,8 +1010,20 @@ void ShellHostView::RetireRenderer() {
       binding->viewport->SetWebContents(nullptr);
     }
   }
+  if (scroll_gestures_) {
+    scroll_gestures_->Revalidate();
+  }
   pass_.clear();
   unclaimed_listener_.reset();
+  if (extension_views_) {
+    extension_views_->RetireOlderThan(renderer_generation_);
+  }
+  if (pip_) {
+    pip_->RendererRetired();
+  }
+  if (system_) {
+    system_->RendererRetired();
+  }
   if (popovers_) {
     popovers_->CloseAll(popover::Event::kShellReloaded);
   }
@@ -828,6 +1034,8 @@ void ShellHostView::RetireRenderer() {
     focus_manager_->UnregisterAccelerators(this);
   }
   shortcuts_.clear();
+  RetireLifecycle();
+  recording_keys_.reset();
 }
 
 void ShellHostView::DeliverReply(base::WeakPtr<ShellBridge> handler,
@@ -875,20 +1083,51 @@ PageBinding* ShellHostView::ClaimedBinding(const base::DictValue& args) const {
 }
 
 base::DictValue ShellHostView::Identity(PageBinding* binding) const {
-  base::DictValue lease;
-  lease.Set("claim", binding->claim);
-  lease.Set("rendererGeneration",
-            base::NumberToString(binding->renderer_generation));
-  lease.Set("bindingGeneration", "1");
-  lease.Set("documentEpoch", "1");
-  base::DictValue snapshot;
-  snapshot.Set("watermark", static_cast<double>(binding->sequence));
-  snapshot.Set("events", base::ListValue().Append(binding->NavigationEvent()));
-  return base::DictValue()
-      .Set("browserId", binding->id())
-      .Set("chromeTabId", binding->id())
-      .Set("lease", std::move(lease))
-      .Set("snapshot", std::move(snapshot));
+  return binding->CreationState();
+}
+
+void ShellHostView::ReplaceBinding(content::WebContents* old_contents,
+                                   content::WebContents* contents) {
+  PageBinding* binding = BindingForContents(old_contents);
+  const int old_id = binding ? binding->id() : 0;
+  const int id = TabId(contents);
+  if (!binding || !contents ||
+      !page_policy::RebindAllowed(old_id, id, id != old_id && bindings_.contains(id))) {
+    return;
+  }
+  const std::optional<uint64_t> generation =
+      page_policy::NextBindingGeneration(binding->binding_generation);
+  if (!generation) {
+    return;
+  }
+  base::DictValue delivery = binding->Envelope("pageLifecycle");
+  share::RetireBinding(window_id_, old_id);
+  binding->Rebind(contents);
+  binding->binding_generation = *generation;
+  if (id != old_id) {
+    std::unique_ptr<PageBinding> owned = std::move(bindings_[old_id]);
+    bindings_.erase(old_id);
+    bindings_[id] = std::move(owned);
+  }
+  if (binding->claim.empty()) {
+    return;
+  }
+  delivery.Set("action", "rebind");
+  delivery.Set("creation", binding->CreationState());
+  Emit("ArdiaWebView", base::NumberToString(old_id), base::Value(std::move(delivery)));
+}
+
+void ShellHostView::DropDetachedBinding(int id,
+                                        base::WeakPtr<content::WebContents> contents) {
+  const auto found = bindings_.find(id);
+  if (!contents || found == bindings_.end() ||
+      found->second->contents() != contents.get() ||
+      page_policy::StripExitFor(false, OwnerOf(contents.get()) != nullptr) !=
+          page_policy::StripExit::kDrop) {
+    return;
+  }
+  bindings_.erase(found);
+  ReattachViewports();
 }
 
 void ShellHostView::CreateTab(const base::DictValue& args, Done done) {
@@ -920,6 +1159,7 @@ void ShellHostView::CreateTabIn(base::DictValue args,
     return std::move(done).Run(
         false, base::Value("The shell document that asked for this tab is gone"));
   }
+  AssertPageHooks();
   if (!profile || !browser_) {
     return std::move(done).Run(
         false, Failure("ERR_PROFILE_UNAVAILABLE", "The tab's profile did not load"));
@@ -966,6 +1206,8 @@ void ShellHostView::CreateTabIn(base::DictValue args,
                                : "This tab can't be adopted"));
   }
   if (plan == shell_policy::CreatePlan::kReclaim) {
+    existing->commands()->CancelEvaluations();
+    share::RetireBinding(window_id_, existing->id());
     existing->claim = claim;
     existing->renderer_generation = renderer_generation_;
     ReattachViewports();
@@ -1074,12 +1316,21 @@ void ShellHostView::SetPresentations(const base::DictValue& args, Done done) {
 
 void ShellHostView::TabCommand(const base::DictValue& args, Done done) {
   PageBinding* binding = ClaimedBinding(args);
+  const std::string command = Text(args, "command");
   if (!binding) {
+    if (PageCommands::Handles(command)) {
+      return std::move(done).Run(
+          false, Failure("ERR_PAGE_STALE_TARGET", "No such live tab"));
+    }
     return std::move(done).Run(false, base::Value("No owned live tab"));
   }
   content::WebContents* contents = binding->contents();
-  const std::string command = Text(args, "command");
   const base::ListValue* values = Arguments(args);
+  if (PageCommands::Handles(command)) {
+    static const base::NoDestructor<base::ListValue> kNoArguments;
+    return binding->commands()->Run(command, values ? *values : *kNoArguments,
+                                    std::move(done));
+  }
   content::NavigationController& controller = contents->GetController();
   if (command == "loadUrl") {
     const std::optional<GURL> url =
@@ -1116,6 +1367,8 @@ void ShellHostView::TabCommand(const base::DictValue& args, Done done) {
   } else if (command == "close") {
     std::move(done).Run(true, base::Value());
     return CloseContents(contents);
+  } else if (command == extension_policy::kExecuteAction) {
+    return std::move(done).Run(true, base::Value(ExtensionViews::ExecuteAction(contents, values)));
   } else if (command == "navigationEntries") {
     base::ListValue entries;
     const int current = controller.GetCurrentEntryIndex();
@@ -1145,12 +1398,18 @@ void ShellHostView::ReleaseTab(const base::DictValue& args, Done done) {
     return std::move(done).Run(false, base::Value("No owned live tab"));
   }
   binding->claim.clear();
+  binding->commands()->CancelEvaluations();
+  share::RetireBinding(window_id_, binding->id());
   binding->visible = false;
   binding->presented = false;
   if (binding->viewport) {
     binding->viewport->SetVisible(false);
     binding->viewport->SetWebContents(nullptr);
   }
+  if (scroll_gestures_) {
+    scroll_gestures_->Revalidate();
+  }
+  UpdateGlassSurface();
   std::move(done).Run(true, base::Value());
 }
 
@@ -1256,8 +1515,11 @@ std::optional<std::string> ShellHostView::PopoverBootstrapJson(
 
 void ShellHostView::OnMenuCommand(const std::string& command,
                                   const std::string& argument) {
-  if (command.empty()) {
+  if (command.empty() || shortcut_recording_) {
     return;
+  }
+  if (command == "quit" && !shell_policy::ShellTakesQuit(RendererLive(), shell_ready_generation_, renderer_generation_)) {
+    return QuitWithoutShell();
   }
   if (command == "focusCommandBar" || command == "newTab") {
     FocusShell();
@@ -1281,7 +1543,7 @@ void ShellHostView::SetMainMenu(const base::DictValue& args, Done done) {
         false, base::Value("Invalid menu at " + parsed.problems[0].path + ": " +
                            parsed.problems[0].reason));
   }
-  InstallMainMenu(parsed.root, MainMenuHandler());
+  SetWindowMainMenu(window_id_, std::move(parsed.root), MainMenuHandler());
   std::move(done).Run(true, base::Value());
 }
 
@@ -1336,13 +1598,200 @@ void ShellHostView::SetTrafficLights(const base::DictValue& args, Done done) {
       center ? center->FindDouble("y") : std::nullopt,
       args.FindBool("hidden").value_or(false),
       window::Size{static_cast<double>(size.width()),
-                   static_cast<double>(size.height())});
+                   static_cast<double>(size.height())},
+      ShellZoom());
   if (!lights) {
     return std::move(done).Run(false,
                                base::Value("Traffic light centers must be finite"));
   }
   ardia_mac::SetTrafficLights(widget, *lights);
   std::move(done).Run(true, base::Value());
+}
+
+void ShellHostView::NavigateUtility(base::DictValue utility) {
+  utility_ = std::move(utility);
+  if (utility_ready_) {
+    Emit("ArdiaShell", "onUtilityNavigation", base::Value(utility_.Clone()));
+  }
+}
+
+void ShellHostView::ActivateWindow() {
+  if (browser_ && !BackgroundInstance()) {
+    browser_->GetWindow()->Activate();
+  }
+}
+
+void ShellHostView::OpenWindow(const base::ListValue* values, Done done) {
+  const std::string id = values && !values->empty() && (*values)[0].is_string()
+                             ? (*values)[0].GetString()
+                             : std::string();
+  const base::DictValue* options =
+      values && values->size() > 1 ? (*values)[1].GetIfDict() : nullptr;
+  const std::string kind = options ? Text(*options, "kind") : std::string();
+  const std::string profile = options ? Text(*options, "profile") : std::string();
+  const shell_policy::WindowRefusal refusal = shell_policy::CheckWindowRequest(
+      {id, kind, profile,
+       options && options->FindBool("incognito").value_or(false),
+       options && options->FindDict("privateWindow")});
+  if (refusal == shell_policy::WindowRefusal::kInvalid) {
+    return std::move(done).Run(
+        false, Failure("ERR_WINDOW_REQUEST", "Invalid native window request"));
+  }
+  if (refusal == shell_policy::WindowRefusal::kPrivateUnavailable) {
+    return std::move(done).Run(
+        false, Failure("ERR_PROFILE_UNAVAILABLE",
+                       "Private windows are not in the Mac WebUI shell yet"));
+  }
+  if (refusal == shell_policy::WindowRefusal::kProfile) {
+    return std::move(done).Run(
+        false, Failure("ERR_PROFILE_INVALID", "Invalid profile"));
+  }
+  const bool utility = shell_policy::UtilityKind(kind);
+  base::DictValue place;
+  if (utility && options) {
+    if (const base::DictValue* settings = options->FindDict("settings")) {
+      place = settings->Clone();
+    }
+    if (const std::string* source = options->FindString("importSource")) {
+      place.Set("importSource", *source);
+    }
+  }
+  if (ShellHostView* existing = HostForWindow(id)) {
+    if (existing->is_utility() && !place.empty()) {
+      existing->NavigateUtility(std::move(place));
+    }
+    if (!options || options->FindBool("focus").value_or(true)) {
+      existing->ActivateWindow();
+    }
+    return std::move(done).Run(true, base::Value());
+  }
+  if (!app_profile_ || !browser_ || closing_) {
+    return std::move(done).Run(
+        false, Failure("ERR_PROFILE_UNAVAILABLE", "No window to open from"));
+  }
+  const gfx::Rect bounds = browser_->GetWindow()->GetBounds();
+  const window::Frame opener{static_cast<double>(bounds.x()),
+                             static_cast<double>(bounds.y()),
+                             static_cast<double>(bounds.width()),
+                             static_cast<double>(bounds.height())};
+  std::optional<window::Frame> requested;
+  const base::ListValue* wanted = options ? options->FindList("frame") : nullptr;
+  if (!utility && wanted && wanted->size() == 4 &&
+      std::ranges::all_of(*wanted, [](const base::Value& value) {
+        return value.is_int() || value.is_double();
+      })) {
+    if (const std::optional<window_policy::Frame> parsed = window_policy::FrameFrom(
+            (*wanted)[0].GetDouble(), (*wanted)[1].GetDouble(), (*wanted)[2].GetDouble(),
+            (*wanted)[3].GetDouble())) {
+      std::vector<window::Frame> screens;
+      if (window_events_) {
+        for (const window_policy::Frame& screen : window_events_->Screens()) {
+          screens.push_back(window::Frame{screen.x, screen.y, screen.width, screen.height});
+        }
+      }
+      requested = window::PlacedOnScreens(
+          window::Frame{parsed->x, parsed->y, parsed->width, parsed->height}, screens);
+    }
+  }
+  const window::Frame frame =
+      utility ? window::UtilityFrameOver(opener, kind)
+              : requested.value_or(window::CascadedFrom(opener));
+  OpenPlacement placement;
+  placement.focus = !options || options->FindBool("focus").value_or(true);
+  placement.maximized = !utility && options && options->FindBool("maximized").value_or(false);
+  if (const std::string* behind = options ? options->FindString("behind") : nullptr) {
+    placement.behind = *behind;
+  }
+  WindowSpec spec;
+  spec.id = id;
+  spec.kind = std::string(shell_policy::WindowKindFor(kind));
+  spec.title = options ? Text(*options, "title") : std::string();
+  spec.page_profile = std::string(shell_policy::PageProfileFor(kind, profile));
+  spec.startup = false;
+  spec.utility = std::move(place);
+  if (!OpenShellWindow(app_profile_, std::move(spec),
+                       gfx::Rect(glass::ClampToInt(frame.x, 1e5),
+                                 glass::ClampToInt(frame.y, 1e5),
+                                 std::max(1, glass::ClampToInt(frame.width, 1e5)),
+                                 std::max(1, glass::ClampToInt(frame.height, 1e5))),
+                       placement)) {
+    return std::move(done).Run(
+        false, Failure("ERR_WINDOW_OPEN", "The window could not open"));
+  }
+  std::move(done).Run(true, base::Value());
+}
+
+void ShellHostView::WriteSession(const base::DictValue& args, Done done) {
+  const base::DictValue* base = args.FindDict("base");
+  const base::DictValue* local = args.FindDict("session");
+  if (!base || !local || !ardia::ValidLinuxSession(*base) ||
+      !ardia::ValidLinuxSession(*local)) {
+    return std::move(done).Run(
+        false, base::Value("session.write requires bounded base and session objects"));
+  }
+  if (close_.phase() == window_policy::ClosePhase::kAcknowledged ||
+      close_.phase() == window_policy::ClosePhase::kClosing) {
+    return std::move(done).Run(
+        false, Failure("ERR_DOCUMENT_CLOSING", "Window is closing"));
+  }
+  SessionFiles()->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&MergeAndWriteSession, base->Clone(), local->Clone()),
+      base::BindOnce(
+          [](std::string window, base::DictValue source, Done done,
+             MergedSession merged) {
+            if (!merged.ok) {
+              return std::move(done).Run(
+                  false, base::Value("Could not merge and persist the session"));
+            }
+            std::move(done).Run(true, base::Value(merged.session.Clone()));
+            BroadcastSession(merged, window, &source);
+          },
+          window_id_, local->Clone(), std::move(done)));
+}
+
+void ShellHostView::ForwardRecordedKey(const input::NativeWebKeyboardEvent& event) {
+  content::WebContents* shell = shell_contents();
+  content::RenderWidgetHostView* view = shell ? shell->GetRenderWidgetHostView() : nullptr;
+  if (view && view->GetRenderWidgetHost()) {
+    view->GetRenderWidgetHost()->ForwardKeyboardEvent(event);
+  }
+}
+
+void ShellHostView::WatchRecordedKeys(bool recording) {
+  if (!recording) {
+    recording_keys_.reset();
+    return;
+  }
+  if (recording_keys_) {
+    return;
+  }
+  views::Widget* widget = browser_view_ ? browser_view_->GetWidget() : nullptr;
+  NSWindow* ns_window = widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
+  if (!ns_window) {
+    return;
+  }
+  recording_keys_ = std::make_unique<RecordingKeys>();
+  base::WeakPtr<ShellHostView> weak = GetWeakPtr();
+  NSWindow* __weak watched = ns_window;
+  recording_keys_->monitor = [NSEvent
+      addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                   handler:^NSEvent*(NSEvent* event) {
+                                     ShellHostView* host = weak.get();
+                                     const NSEventModifierFlags flags = event.modifierFlags;
+                                     if (!host ||
+                                         shell_policy::RecordingRouteFor(
+                                             host->shortcut_recording_,
+                                             watched && event.window == watched,
+                                             (flags & (NSEventModifierFlagCommand |
+                                                       NSEventModifierFlagControl)) != 0) !=
+                                             shell_policy::RecordingRoute::kToShell) {
+                                       return event;
+                                     }
+                                     host->ForwardRecordedKey(input::NativeWebKeyboardEvent(
+                                         gfx::NativeEvent(base::apple::OwnedNSEvent(event))));
+                                     return nil;
+                                   }];
 }
 
 void ShellHostView::CaptionDoubleClick(Done done) {
@@ -1441,7 +1890,20 @@ void ShellHostView::OnTabStripModelChanged(
       const int id = TabId(removed.contents);
       offered_.Forget(id);
       unclaimed_.erase(id);
+      const bool deleted =
+          removed.remove_reason == TabRemovedReason::kDeleted ||
+          removed.remove_reason == TabRemovedReason::kDeletedAndExpandSidePanel;
+      if (page_policy::StripExitFor(deleted, true) != page_policy::StripExit::kDestroyed &&
+          BindsContents(removed.contents)) {
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE, base::BindOnce(&ShellHostView::DropDetachedBinding, GetWeakPtr(),
+                                      id, removed.contents->GetWeakPtr()));
+      }
     }
+  }
+  if (change.type() == TabStripModelChange::kReplaced) {
+    const TabStripModelChange::Replace* replace = change.GetReplace();
+    ReplaceBinding(replace->old_contents, replace->new_contents);
   }
   if (change.type() == TabStripModelChange::kInserted && !closing_) {
     for (const auto& inserted : change.GetInsert()->contents) {
@@ -1451,6 +1913,10 @@ void ShellHostView::OnTabStripModelChanged(
     }
   }
   ReattachViewports();
+  if (system_ && (change.type() == TabStripModelChange::kRemoved ||
+                  change.type() == TabStripModelChange::kInserted)) {
+    system_->SyncWatchesSoon();
+  }
 }
 
 bool ShellHostView::BindsContents(const content::WebContents* contents) const {
@@ -1562,6 +2028,9 @@ content::WebContents* ShellHostView::MemberTab(int id, Profile* profile) const {
 bool ShellHostView::HandleKeyboardEvent(
     content::WebContents* source,
     const input::NativeWebKeyboardEvent& event) {
+  if (shortcut_recording_ && source == shell_contents()) {
+    return true;
+  }
   if (!focus_manager_) {
     return false;
   }
@@ -1569,6 +2038,9 @@ bool ShellHostView::HandleKeyboardEvent(
 }
 
 bool ShellHostView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  if (!CanHandleAccelerators()) {
+    return false;
+  }
   auto found = shortcuts_.find(accelerator);
   if (found == shortcuts_.end()) {
     return false;
@@ -1579,7 +2051,10 @@ bool ShellHostView::AcceleratorPressed(const ui::Accelerator& accelerator) {
     return true;
   }
   const std::string command = Text(found->second, "command");
-  if (command == "focusCommandBar" || command == "newTab") {
+  if (command == "tabSwitcher" && !switcher_capture_) {
+    NoteSwitcherSource();
+  }
+  if (command == "focusCommandBar" || command == "newTab" || command == "tabSwitcher") {
     FocusShell();
   }
   base::DictValue payload;
@@ -1596,7 +2071,8 @@ bool ShellHostView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 }
 
 bool ShellHostView::CanHandleAccelerators() const {
-  return browser_ && handler_;
+  return shell_policy::AcceleratorsLive(browser_ != nullptr, handler_ != nullptr,
+                                        shortcut_recording_);
 }
 
 void ShellHostView::SetKeyboardShortcuts(const base::ListValue* values,
@@ -1626,7 +2102,13 @@ void ShellHostView::SetKeyboardShortcuts(const base::ListValue* values,
   shortcuts_ = std::move(shortcuts);
   for (const auto& [accelerator, binding] : shortcuts_) {
     focus_manager_->RegisterAccelerator(
-        accelerator, ui::AcceleratorManager::kNormalPriority, this);
+        accelerator,
+        shell_policy::ShortcutTimingFor(
+            binding.FindBool("notInText").value_or(false)) ==
+                shell_policy::ShortcutTiming::kBeforePage
+            ? ui::AcceleratorManager::kHighPriority
+            : ui::AcceleratorManager::kNormalPriority,
+        this);
   }
   std::move(done).Run(true, base::Value());
 }

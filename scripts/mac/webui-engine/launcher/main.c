@@ -2,12 +2,23 @@
 #include <libgen.h>
 #include <limits.h>
 #include <mach-o/dyld.h>
+#include <pwd.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "launch_args.h"
+
+static const char* ArdiaHomeDirectory(void) {
+  const char* home = getenv("HOME");
+  if (home && *home) {
+    return home;
+  }
+  const struct passwd* account = getpwuid(getuid());
+  return account ? account->pw_dir : NULL;
+}
 
 int main(int argc, const char* argv[]) {
   char executable[PATH_MAX];
@@ -35,7 +46,7 @@ int main(int argc, const char* argv[]) {
   if (!args) {
     return 1;
   }
-  const int count = ArdiaBuildLaunchArgs(argc, argv, getenv("ARDIA_DATA_DIR"),
+  const int count = ArdiaBuildLaunchArgs(argc, argv, getenv("ARDIA_DATA_DIR"), ArdiaHomeDirectory(),
                                          getenv("ARDIA_BACKGROUND"), &storage, args);
   return chrome_main(count, args);
 }

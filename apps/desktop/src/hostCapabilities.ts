@@ -1,4 +1,5 @@
 import { ardiaHost, hostSupports, type ArdiaHost } from "./host.ts";
+import { PLATFORM_TERMS } from "../../browser/src/lib/platformTerms";
 
 export type LinuxCapabilities = {
   defaultBrowser: boolean;
@@ -123,4 +124,4 @@ export const unavailableCommands = (capabilities: LinuxCapabilities): Set<string
   ]);
 
 
-export const unavailableError = (feature: string) => Object.assign(new Error(`${feature} is unavailable on Linux`), { code: "ERR_UNAVAILABLE" });
+export const unavailableError = (feature: string) => Object.assign(new Error(`${feature} is unavailable on ${PLATFORM_TERMS.os}`), { code: "ERR_UNAVAILABLE" });

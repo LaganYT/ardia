@@ -401,6 +401,23 @@ index bbee6d1e1865359b350da78b745c6c0061a2dc5d..c645bfead1814173bef35608504aa5ec
  };
  
  function convertPointerEventToMouseEvent(input: PointerEvent): MouseEvent {
+diff --git a/Libraries/Text/Text/RCTTextShadowView.mm b/Libraries/Text/Text/RCTTextShadowView.mm
+index 8c1c394..8f54306 100644
+--- a/Libraries/Text/Text/RCTTextShadowView.mm
++++ b/Libraries/Text/Text/RCTTextShadowView.mm
+@@ -114,8 +114,10 @@ - (void)uiManagerWillPerformMounting
+         }];
+ 
+     // Removing all references to Shadow Views to avoid unnecessary retaining.
+-    [textStorage removeAttribute:RCTBaseTextShadowViewEmbeddedShadowViewAttributeName
+-                           range:NSMakeRange(0, textStorage.length)];
++    if (descendantViewTags.count > 0) {
++      [textStorage removeAttribute:RCTBaseTextShadowViewEmbeddedShadowViewAttributeName
++                             range:NSMakeRange(0, textStorage.length)];
++    }
+ 
+     [textView setTextStorage:textStorage contentFrame:contentFrame descendantViews:descendantViews];
+   }];
 diff --git a/Libraries/Text/Text/RCTTextView.h b/Libraries/Text/Text/RCTTextView.h
 index 3de368b73b6bbad86f1b27dd0ba56abb516f89e8..84d3218318dc1771ca52ed445f9cd0f82e931b27 100644
 --- a/Libraries/Text/Text/RCTTextView.h
@@ -425,10 +442,10 @@ index 3de368b73b6bbad86f1b27dd0ba56abb516f89e8..84d3218318dc1771ca52ed445f9cd0f8
  - (void)setTextStorage:(NSTextStorage *)textStorage
            contentFrame:(CGRect)contentFrame
 diff --git a/Libraries/Text/Text/RCTTextView.mm b/Libraries/Text/Text/RCTTextView.mm
-index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf6d6cb257 100644
+index abff88e..3077405 100644
 --- a/Libraries/Text/Text/RCTTextView.mm
 +++ b/Libraries/Text/Text/RCTTextView.mm
-@@ -37,6 +37,108 @@ - (BOOL)canBecomeKeyView
+@@ -37,6 +37,165 @@ - (BOOL)canBecomeKeyView
  
  @end
  
@@ -442,28 +459,76 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf
 +  return MAX(0, round((font.capHeight - font.xHeight) * 0.375 * scale)) / scale;
 +}
 +
++static BOOL RCTTextGlyphGroupHasHidden(NSLayoutManager *layoutManager, NSRange actualGlyphs)
++{
++  if (actualGlyphs.length <= 1) {
++    return NO;
++  }
++  if ([layoutManager notShownAttributeForGlyphAtIndex:actualGlyphs.location] ||
++      [layoutManager notShownAttributeForGlyphAtIndex:NSMaxRange(actualGlyphs) - 1]) {
++    return YES;
++  }
++  NSUInteger limit = MIN(NSMaxRange(actualGlyphs), actualGlyphs.location + 32);
++  for (NSUInteger glyph = actualGlyphs.location + 1; glyph < limit; glyph++) {
++    if ([layoutManager notShownAttributeForGlyphAtIndex:glyph]) {
++      return YES;
++    }
++  }
++  return NO;
++}
++
 +static NSArray<NSValue *> *RCTTextShownCharacters(NSAttributedString *text, NSLayoutManager *_Nullable layoutManager, NSTextContainer *_Nullable textContainer)
 +{
++  static const NSUInteger kMaxSampleGlyphs = 512;
++  static const NSUInteger kMaxInspectGlyphs = 2048;
 +  if (layoutManager == nil || textContainer == nil) {
-+    return @[ [NSValue valueWithRange:NSMakeRange(0, text.length)] ];
++    return @[ [NSValue valueWithRange:NSMakeRange(0, MIN(text.length, kMaxSampleGlyphs))] ];
++  }
++  NSRange glyphs = [layoutManager glyphRangeForTextContainer:textContainer];
++  if (glyphs.length == 0) {
++    return @[];
 +  }
 +  NSMutableIndexSet *shownCharacters = [NSMutableIndexSet indexSet];
 +  NSMutableIndexSet *hiddenCharacters = [NSMutableIndexSet indexSet];
-+  NSRange glyphs = [layoutManager glyphRangeForTextContainer:textContainer];
-+  for (NSUInteger glyph = glyphs.location; glyph < NSMaxRange(glyphs); glyph++) {
-+    if ([layoutManager notShownAttributeForGlyphAtIndex:glyph]) {
-+      [hiddenCharacters addIndex:[layoutManager characterIndexForGlyphAtIndex:glyph]];
-+    }
-+  }
-+  for (NSUInteger glyph = glyphs.location; glyph < NSMaxRange(glyphs); glyph++) {
-+    if ([layoutManager notShownAttributeForGlyphAtIndex:glyph]) {
-+      continue;
-+    }
-+    NSRange characters = [layoutManager characterRangeForGlyphRange:NSMakeRange(glyph, 1) actualGlyphRange:NULL];
-+    if (![hiddenCharacters intersectsIndexesInRange:characters]) {
++  __block NSUInteger sampledGlyphs = 0;
++  __block NSUInteger inspectedGlyphs = 0;
++  [layoutManager enumerateLineFragmentsForGlyphRange:glyphs
++                                          usingBlock:^(__unused NSRect rect, __unused NSRect usedRect, __unused NSTextContainer *container, NSRange lineGlyphRange, BOOL *stop) {
++    NSRange truncated = [layoutManager truncatedGlyphRangeInLineFragmentForGlyphAtIndex:lineGlyphRange.location];
++    NSUInteger lineEnd = NSMaxRange(lineGlyphRange);
++    for (NSUInteger glyph = lineGlyphRange.location; glyph < lineEnd && sampledGlyphs < kMaxSampleGlyphs && inspectedGlyphs < kMaxInspectGlyphs; ) {
++      inspectedGlyphs++;
++      if (truncated.location != NSNotFound && truncated.length > 0 && glyph >= truncated.location && glyph < NSMaxRange(truncated)) {
++        NSUInteger skipEnd = MIN(NSMaxRange(truncated), lineEnd);
++        [hiddenCharacters addIndex:[layoutManager characterIndexForGlyphAtIndex:glyph]];
++        if (skipEnd > glyph + 1) {
++          [hiddenCharacters addIndex:[layoutManager characterIndexForGlyphAtIndex:skipEnd - 1]];
++        }
++        glyph = skipEnd;
++        continue;
++      }
++      if ([layoutManager notShownAttributeForGlyphAtIndex:glyph]) {
++        [hiddenCharacters addIndex:[layoutManager characterIndexForGlyphAtIndex:glyph]];
++        glyph++;
++        continue;
++      }
++      NSRange actualGlyphs = NSMakeRange(NSNotFound, 0);
++      NSRange characters = [layoutManager characterRangeForGlyphRange:NSMakeRange(glyph, 1) actualGlyphRange:&actualGlyphs];
++      if (actualGlyphs.location != NSNotFound && actualGlyphs.length > 1 && RCTTextGlyphGroupHasHidden(layoutManager, actualGlyphs)) {
++        [hiddenCharacters addIndexesInRange:characters];
++        NSUInteger nextGlyph = NSMaxRange(actualGlyphs);
++        glyph = nextGlyph > glyph ? nextGlyph : glyph + 1;
++        continue;
++      }
++      sampledGlyphs++;
 +      [shownCharacters addIndexesInRange:characters];
++      glyph++;
 +    }
-+  }
++    if (sampledGlyphs >= kMaxSampleGlyphs || inspectedGlyphs >= kMaxInspectGlyphs) {
++      *stop = YES;
++    }
++  }];
++  [shownCharacters removeIndexes:hiddenCharacters];
 +  NSMutableArray<NSValue *> *shown = [NSMutableArray array];
 +  [shownCharacters enumerateRangesUsingBlock:^(NSRange range, __unused BOOL *stop) {
 +    [shown addObject:[NSValue valueWithRange:range]];
@@ -532,33 +597,46 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf
 +  }
 +  return NO;
 +}
++
++static NSFont *_Nullable RCTTextOpticalFont(NSAttributedString *text, NSLayoutManager *_Nullable layoutManager, NSTextContainer *_Nullable textContainer, NSUInteger descendantCount)
++{
++  if (descendantCount > 0 || text.length == 0 || RCTTextHasAttachments(text)) {
++    return nil;
++  }
++  NSArray<NSValue *> *shown = RCTTextShownCharacters(text, layoutManager, textContainer);
++  return RCTTextShowsLowercase(text.string, shown) ? RCTTextDominantFont(text, shown) : nil;
++}
 +// Ardia]
 +
  #endif // macOS]
  
  #if !TARGET_OS_OSX // [macOS]
-@@ -62,6 +164,9 @@ @implementation RCTTextView {
+@@ -62,6 +221,10 @@ @implementation RCTTextView {
    NSArray<RCTUIView *> *_Nullable _descendantViews; // [macOS]
    NSTextStorage *_Nullable _textStorage;
    CGRect _contentFrame;
 +#if TARGET_OS_OSX // [Ardia
 +  NSFont *_Nullable _opticalFont;
++  BOOL _opticalFontNeedsUpdate;
 +#endif // Ardia]
  }
  
  // [macOS
-@@ -171,6 +276,10 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
+@@ -171,6 +334,13 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
  #if TARGET_OS_OSX // [macOS
    NSLayoutManager *layoutManager = textStorage.layoutManagers.firstObject;
    NSTextContainer *textContainer = layoutManager.textContainers.firstObject;
-+  NSArray<NSValue *> *shown = descendantViews.count > 0 || RCTTextHasAttachments(textStorage) // [Ardia: inline views and attachments are placed apart from the glyphs, and text with no lowercase has no x-height to centre, so neither is lifted
-+      ? nil
-+      : RCTTextShownCharacters(textStorage, layoutManager, textContainer);
-+  _opticalFont = shown != nil && RCTTextShowsLowercase(textStorage.string, shown) ? RCTTextDominantFont(textStorage, shown) : nil; // Ardia]
++  if (_ardiaCentersCapitals) {
++    _opticalFont = nil;
++    _opticalFontNeedsUpdate = YES;
++  } else {
++    _opticalFont = RCTTextOpticalFont(textStorage, layoutManager, textContainer, descendantViews.count);
++    _opticalFontNeedsUpdate = NO;
++  }
  
    [_textView replaceTextContainer:textContainer];
  
-@@ -187,7 +296,7 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
+@@ -187,7 +357,7 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
  
    _textView.minSize = contentFrame.size;
    _textView.maxSize = contentFrame.size;
@@ -567,7 +645,7 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf
    _textView.textStorage.attributedString = textStorage;
  #endif // macOS]
  
-@@ -205,6 +314,39 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
+@@ -205,6 +375,46 @@ - (void)setTextStorage:(NSTextStorage *)textStorage
    [self setNeedsDisplay];
  }
  
@@ -580,7 +658,14 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf
 +
 +- (void)setArdiaCentersCapitals:(BOOL)ardiaCentersCapitals
 +{
++  if (_ardiaCentersCapitals == ardiaCentersCapitals) {
++    return;
++  }
 +  _ardiaCentersCapitals = ardiaCentersCapitals;
++  if (!_ardiaCentersCapitals && _opticalFontNeedsUpdate) {
++    _opticalFont = RCTTextOpticalFont(_textView.textStorage, _textView.layoutManager, _textView.textContainer, _descendantViews.count);
++    _opticalFontNeedsUpdate = NO;
++  }
 +  [self ardia_applyOpticalLift];
 +}
 +
@@ -607,7 +692,7 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf
  - (void)drawRect:(CGRect)rect
  {
    [super drawRect:rect];
-@@ -293,6 +435,11 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
+@@ -293,6 +503,11 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
    CGFloat fraction;
    NSLayoutManager *layoutManager = _textStorage.layoutManagers.firstObject;
    NSTextContainer *textContainer = layoutManager.textContainers.firstObject;
@@ -619,7 +704,7 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf
    NSUInteger characterIndex = [layoutManager characterIndexForPoint:point
                                                      inTextContainer:textContainer
                             fractionOfDistanceBetweenInsertionPoints:&fraction];
-@@ -310,6 +457,12 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
+@@ -310,6 +525,12 @@ - (NSNumber *)reactTagAtPoint:(CGPoint)point
  - (void)didMoveToWindow
  {
    [super didMoveToWindow];
@@ -632,7 +717,7 @@ index abff88e692bd8ec88f4e5b292234b23133962d46..3638b57b4d2567b1476ccd6828f118bf
  
    if (!self.window) {
      self.layer.contents = nil;
-@@ -318,6 +471,9 @@ - (void)didMoveToWindow
+@@ -318,6 +539,9 @@ - (void)didMoveToWindow
        _highlightLayer = nil;
      }
    } else if (_textStorage) {

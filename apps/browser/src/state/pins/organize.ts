@@ -10,6 +10,8 @@ import { pinnedGroupMembers } from "../browser/structure";
 import { sameAddress, samePage } from "../../lib/url";
 import { pinHome } from "./pinHomes";
 import { sameList } from "../../lib/lists";
+import { unpinsMirrors } from "../groups/sharedUngroupSplits";
+import { noteSharedGroupUnpin } from "../telemetry/sharedGroupCounts";
 
 export type OrganizeSlice = {
   selection: Record<string, string[]>;
@@ -126,6 +128,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     const next = dropping(s, ids, drop);
     if (next === s) return false;
     set(next);
+    if (drop.type === "group" && unpinsMirrors(s, next, drop.groupId)) noteSharedGroupUnpin();
     return true;
   },
 

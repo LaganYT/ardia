@@ -73,7 +73,6 @@ import { consumedCallbackUrl } from "../../state/tabs/callbackUrls";
 const webViewTab = (t: Tab | undefined) => ({ navigation: navigationOf(t), adoptId: adoptOf(t), profileId: t?.profileId ?? "", shownUrl: t?.url ?? "" });
 
 type TabWebViewProps = { tabId: string; visible: boolean; selected?: boolean; warm: boolean; peekOf?: string };
-
 const ARRIVING = [StyleSheet.absoluteFill, { opacity: 0 }];
 
 export const TabWebView = memo(function TabWebView(props: TabWebViewProps) {

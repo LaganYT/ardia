@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+# Claude Code PreToolUse hook: refuses Bash commands that kill processes by name or pattern
+# (pkill, killall, pgrep … | xargs kill, kill $(pgrep …)), which have hit other agents' and the owner's apps.
+# Kill the pids you started instead: kill <pid>, or pkill -P <your pid> for your own children.
+import json, re, sys
+
+if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+    with open(__file__) as source:
+        for line in source.read().splitlines()[1:4]:
+            print(line[2:])
+    sys.exit(0)
+
+try:
+    command = json.load(sys.stdin).get("tool_input", {}).get("command", "")
+except Exception:
+    sys.exit(0)
+
+QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
+START = r"(?:^|[;&|(`\n]|\$\(|\b(?:sudo|exec|xargs|timeout\s+\S+|nohup|env(?:\s+\S+=\S+)*)\s+)\s*"
+PKILL = re.compile(START + r"(?:/usr/bin/)?pkill\b((?:\s+[^;&|\n)]*)?)")
+KILLALL = re.compile(START + r"(?:/usr/bin/)?killall\b")
+PGREP_TO_KILL = re.compile(r"\bpgrep\b[^;&\n]*\|\s*(?:xargs\s+(?:-\S+\s+)*)?kill\b")
+KILL_OF_PGREP = re.compile(r"\bkill\b[^;&|\n]*\$\(\s*pgrep\b|\bkill\b[^;&|\n]*`\s*pgrep\b")
+
+text = QUOTED.sub(" ", command)
+
+
+def pkill_by_parent_only(arguments):
+    words = arguments.split()
+    return bool(words) and words[0] == "-P" and all(word.isdigit() or word.startswith("$") for word in words[1:2]) and len(words) == 2
+
+
+reasons = []
+for match in PKILL.finditer(text):
+    if not pkill_by_parent_only(match.group(1) or ""):
+        reasons.append("pkill")
+if KILLALL.search(text):
+    reasons.append("killall")
+if PGREP_TO_KILL.search(text) or KILL_OF_PGREP.search(text):
+    reasons.append("kill of pgrep matches")
+
+if reasons:
+    sys.stderr.write(
+        "Blocked by scripts/agent/guard-kill (" + ", ".join(sorted(set(reasons))) + "): killing by name or pattern can hit "
+        "other agents' processes or the owner's running apps. Kill the exact pids you started (kill <pid>), "
+        "or your own children with pkill -P <pid>. Look a pid up with pgrep first, check it is yours, then kill that pid.\n"
+    )
+    sys.exit(2)
+sys.exit(0)

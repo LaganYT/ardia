@@ -11,12 +11,19 @@ const downloading = new Set();
 const failing = { writes: 0, stateSeals: false, onWrite: null, onRead: null };
 const forgotten = [];
 const keyEvents = [];
+const createHold = { next: null };
 let ids = 0;
 globalThis.acTestNativeModules = {
   ArdiaSync: {
     newDeviceId: () => `id${++ids}`,
     deviceName: () => "Test Mac",
-    createPhrase: async (account) => (keyEvents.push(`create:${account}`), true),
+    createPhrase: async (account) => {
+      keyEvents.push(`create:${account}`);
+      const hold = createHold.next;
+      createHold.next = null;
+      if (hold) await hold;
+      return true;
+    },
     createChain: async () => {},
     enterPhrase: async () => ({ ok: true }),
     unlock: async () => true,
@@ -1080,4 +1087,31 @@ test("#4759: a second Turn On waits for the first to finish saving before it mak
     assert.ok("ok" in (await second));
     assert.equal(engineA1.useSync.getState().folder, "/two");
   });
+});
+
+test("#4759: a Turn On that overlaps one still making its key runs after it, and never clears the setup the other saved", async () => {
+  folder.clear();
+  downloading.clear();
+  const a = new Mac();
+  const engineA1 = await import("./engine.ts?onOverlapA1");
+  await a.with(async () => {
+    engineA1.startSync();
+    pin(["https://one.example/"]);
+    let release;
+    createHold.next = new Promise((resolve) => (release = resolve));
+    const first = engineA1.turnOnSync("/one");
+    await settle();
+    const second = engineA1.turnOnSync("/two");
+    await settle();
+    release();
+    assert.ok("ok" in (await first));
+    assert.ok("ok" in (await second));
+    await engineA1.syncNow();
+    await engineA1.syncNow();
+    assert.equal(engineA1.useSync.getState().folder, "/two", "the later Turn On is the one that stays");
+  });
+  const onDisk = JSON.parse(a.docs.get("sync.json"));
+  assert.equal(onDisk.folder, "/two");
+  assert.equal(onDisk.enabled, true);
+  assert.ok([...a.docs.keys()].some((name) => /^sync-journal-\d+\.nns$/.test(name)), "the setup that stays keeps what it recorded");
 });

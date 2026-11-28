@@ -22,6 +22,7 @@ import { freezeRemovals, settleRemovals } from "./profileRemoval";
 import { profileScope } from "./records";
 import { queueSend, sendTargetsIn } from "./sentTabs";
 import { errorText } from "../../lib/errors";
+import { oneAtATime } from "../../lib/oneAtATime";
 import { isQuitting, saveBeforeQuit } from "../app/quit";
 import { onProfilesOpened, profileOpened } from "../profiles/profileLoading";
 import { onProfileDeleted } from "../profiles/profiles";
@@ -74,7 +75,6 @@ const watchExtensions = () => watchSyncedExtensions(doc);
 const scheduleSync = (delay = AFTER_EDIT_MS) => void (doc.enabled && (clearTimeout(timer), (timer = setTimeout(() => void runCycle(), delay))));
 
 let stopping = false, settingUp: SyncDoc | null = null;
-let retiring: Promise<unknown> = Promise.resolve();
 let folderOp: Promise<unknown> | null = null;
 const folderOpSettled = async () => { while (folderOp) await folderOp.catch(() => {}); };
 
@@ -275,12 +275,12 @@ async function begin(native: NonNullable<typeof SyncNative>, folder: string, dev
 
 const notSavedText = (error: unknown) => `Sync couldn’t save its settings on this ${PLATFORM_TERMS.computer}: ${errorText(error)}`;
 
-async function priorStopSaved(consent: ConsentToken | null): Promise<string | null> {
-  await retiring;
-  return settleOwedReset(consent).then(() => null, (error: unknown) => (warnFor(consent, "[sync] couldn't finish stopping sync before starting again", error), notSavedText(error)));
-}
+const priorStopSaved = (consent: ConsentToken | null): Promise<string | null> => settleOwedReset(consent).then(() => null, (error: unknown) => (warnFor(consent, "[sync] couldn't finish stopping sync before starting again", error), notSavedText(error)));
+const oneSetupChangeAtATime = oneAtATime();
 
-export async function turnOnSync(folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> {
+export const turnOnSync = (folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> => oneSetupChangeAtATime(() => turnOn(folder, how));
+
+async function turnOn(folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> {
   const native = SyncNative, consent = consentToken();
   if (!native) return { error: "Sync isn’t available in this build." };
   await folderOpSettled();
@@ -313,13 +313,15 @@ export async function enterRecoveryPhrase(folder: string, phrase: Secret<"syncPh
     }
     return result;
   }
-  const unsaved = await priorStopSaved(consent);
-  if (unsaved) return { error: "notSaved", message: unsaved };
-  const deviceId = native.newDeviceId();
-  const result = await native.enterPhrase(deviceId, reveal(phrase), folder);
-  if (!("ok" in result)) return result;
-  const notSaved = await begin(native, folder, deviceId, true, consent);
-  return notSaved ? { error: "notSaved", message: notSaved } : result;
+  return oneSetupChangeAtATime(async () => {
+    const unsaved = await priorStopSaved(consent);
+    if (unsaved) return { error: "notSaved", message: unsaved };
+    const deviceId = native.newDeviceId();
+    const result = await native.enterPhrase(deviceId, reveal(phrase), folder);
+    if (!("ok" in result)) return result;
+    const notSaved = await begin(native, folder, deviceId, true, consent);
+    return notSaved ? { error: "notSaved", message: notSaved } : result;
+  });
 }
 
 export async function stopSync({ deleteData = false } = {}) {
@@ -327,9 +329,7 @@ export async function stopSync({ deleteData = false } = {}) {
   await folderOpSettled();
   if (!native || !doc.enabled || stopping) return;
   stopping = true;
-  const run = retire(native, deleteData ? [...new Set([doc.folder, shown])] : [], consent).finally(() => (stopping = false));
-  retiring = run.catch(() => {});
-  await run;
+  await oneSetupChangeAtATime(() => retire(native, deleteData ? [...new Set([doc.folder, shown])] : [], consent).finally(() => (stopping = false)));
 }
 
 async function retire(native: NonNullable<typeof SyncNative>, deleteIn: (string | null)[], consent: ConsentToken | null) {

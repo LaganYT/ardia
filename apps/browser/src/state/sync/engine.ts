@@ -53,6 +53,7 @@ const { read, loadState, persistJournal, persistApplying, watchScope, save, save
 const load = () => { const loaded = read(); if (loaded) doc = loaded; };
 
 function publishUi(patch: Partial<SyncUi> = {}) {
+  if (doc === settingUp) return;
   if (!doc.enabled || !typeSyncedFor(doc.types, "settings", true)) settleRetiredDefaultsWithoutSync();
   useSync.setState({
     enabled: doc.enabled,
@@ -72,7 +73,7 @@ const watchExtensions = () => watchSyncedExtensions(doc);
 
 const scheduleSync = (delay = AFTER_EDIT_MS) => void (doc.enabled && (clearTimeout(timer), (timer = setTimeout(() => void runCycle(), delay))));
 
-let stopping = false;
+let stopping = false, settingUp: SyncDoc | null = null;
 let retiring: Promise<unknown> = Promise.resolve();
 let folderOp: Promise<unknown> | null = null;
 const folderOpSettled = async () => { while (folderOp) await folderOp.catch(() => {}); };
@@ -90,7 +91,7 @@ export async function syncNow(stillWanted: () => void = () => {}): Promise<boole
 type CycleOptions = { retiring?: boolean; forcePasswords?: boolean };
 
 async function runCycle({ retiring = false, forcePasswords = false }: CycleOptions = {}) {
-  if (!SyncNative || !doc.enabled || folderOp || !doc.folder || !doc.deviceId || useSync.getState().status === "locked") return;
+  if (!SyncNative || !doc.enabled || doc === settingUp || folderOp || !doc.folder || !doc.deviceId || useSync.getState().status === "locked") return;
   if (cycle) {
     again = true;
     forcePasswordsNext ||= forcePasswords;
@@ -260,9 +261,10 @@ export const recreateSyncFolder = (): Promise<FolderRecreateResult> => {
 async function begin(native: NonNullable<typeof SyncNative>, folder: string, deviceId: string, joining: boolean, consent: ConsentToken | null): Promise<string | null> {
   const before = doc;
   const begun: SyncDoc = (doc = { ...emptyDoc(), types: doc.types, enabled: true, folder, deviceId, setupAt: Date.now(), joining, deviceCheckpoints: true });
-  markNewSync(begun);
+  markNewSync((settingUp = begun));
   const failed = await startOver(consent).then(() => null, (error: unknown) => (warnFor(consent, "[sync] couldn't save sync.json to start syncing", error), { error }));
-  if (doc !== begun) return null;
+  if (settingUp === begun) settingUp = null;
+  if (doc !== begun) return failed ? notSavedText(failed.error) : null;
   if (!failed) return (publishUi({ status: "starting", error: null }), scheduleSync(0), null);
   doc = before;
   const forgetKey = async () => void (await native.forget(deviceId).catch((error: unknown) => warnFor(consent, "[sync] couldn't forget a sync key that never saved", error)));

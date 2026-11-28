@@ -1020,3 +1020,64 @@ test("#4759: a Turn On whose settings can't save puts sync back off and says so,
   }
   assert.equal(a.docs.has("sync.json") && JSON.parse(a.docs.get("sync.json")).enabled, false, "nothing on disk says sync is on");
 });
+
+test("#4759: while a Turn On's settings are still saving, nothing shows sync as on, even a cycle that runs then", async () => {
+  folder.clear();
+  downloading.clear();
+  const a = new Mac();
+  const engineA1 = await import("./engine.ts?onHeldA1");
+  await a.with(async () => {
+    engineA1.startSync();
+    const shown = [];
+    const unwatch = engineA1.useSync.subscribe((ui) => shown.push(ui.enabled));
+    shell.heldSaves.on = true;
+    let turning;
+    try {
+      turning = engineA1.turnOnSync("/sync");
+      await settle();
+      globalThis.acTestNativeModules.ArdiaSync.chainStatus = async () => "missing";
+      await engineA1.syncNow();
+      await settle();
+      assert.equal(shown.includes(true), false, "nothing shows the setup before it saves");
+    } finally {
+      globalThis.acTestNativeModules.ArdiaSync.chainStatus = async () => "ok";
+      shell.heldSaves.on = false;
+      while (shell.heldSaves.queue.length) {
+        shell.heldSaves.queue.shift()();
+        await settle();
+      }
+    }
+    assert.ok("ok" in (await turning));
+    unwatch();
+    assert.equal(engineA1.useSync.getState().enabled, true, "and it shows once it has");
+  });
+});
+
+test("#4759: a second Turn On waits for the first to finish saving before it makes its own key", async () => {
+  folder.clear();
+  downloading.clear();
+  const a = new Mac();
+  const engineA1 = await import("./engine.ts?onTwiceA1");
+  await a.with(async () => {
+    engineA1.startSync();
+    keyEvents.length = 0;
+    shell.heldSaves.on = true;
+    let first, second;
+    try {
+      first = engineA1.turnOnSync("/one");
+      await settle();
+      second = engineA1.turnOnSync("/two");
+      await settle();
+      assert.equal(keyEvents.filter((event) => event.startsWith("create:")).length, 1, "the second waits");
+    } finally {
+      shell.heldSaves.on = false;
+      while (shell.heldSaves.queue.length) {
+        shell.heldSaves.queue.shift()();
+        await settle();
+      }
+    }
+    assert.ok("ok" in (await first));
+    assert.ok("ok" in (await second));
+    assert.equal(engineA1.useSync.getState().folder, "/two");
+  });
+});

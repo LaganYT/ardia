@@ -39,6 +39,7 @@ public final class PageViewModule: Module {
     OnCreate {
       onMain {
         PhonePages.shared.pageSink = { [weak self] event in self?.sendEvent("onPageEngineEvent", event) }
+        FullPageScreenshots.shared.install()
       }
     }
 
@@ -251,6 +252,10 @@ public final class PageViewModule: Module {
 
     AsyncFunction("evaluate") { (pageID: String, script: String, promise: Promise) in
       Self.main(promise) { try await PhonePages.shared.evaluate(pageID, script: script) }
+    }.runOnQueue(.main)
+
+    AsyncFunction("setShownPage") { (pageID: String?) in
+      MainActor.assumeIsolated { PhonePages.shared.setShownPage(pageID) }
     }.runOnQueue(.main)
 
     AsyncFunction("discardBackgroundPages") { (keeping: String?) in

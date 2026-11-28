@@ -11,6 +11,7 @@ import com.ardia.browser.DevelopmentWebViewEngine
 import com.ardia.browser.DownloadFailure
 import com.ardia.browser.DownloadOutcome
 import com.ardia.browser.DownloadProgress
+import com.ardia.browser.DownloadStart
 import com.ardia.browser.Page
 import com.ardia.browser.PageEvent
 import com.ardia.browser.PageSetup
@@ -107,6 +108,7 @@ object PhonePages {
             }
         }
         shared = made
+        made.show(shownPageId)
         downloads = SystemDownloads(context, made)
         host?.get()?.let { activity -> actAsOldWebView(made, activity) }
         host?.get()?.let(made::attach)
@@ -125,6 +127,7 @@ object PhonePages {
         val attached = engine(activity)
         actAsOldWebView(attached, activity)
         attached.attach(activity)
+        attached.enterFront()
         blocking.refreshIfDue()
     }
 
@@ -132,8 +135,15 @@ object PhonePages {
         if (LaunchExtras.allowedInThisBuild && activity.intent?.getBooleanExtra(WITHOUT_PRIVATE_PAGES_EXTRA, false) == true) engine.multiProfileSupported = false
     }
 
+    fun leftForeground() {
+        shared?.leaveFront()
+    }
+
     fun detach(activity: Activity) {
-        if (host?.get() === activity) host = null
+        if (host?.get() === activity) {
+            host = null
+            shared?.leaveFront()
+        }
         if (drawWatched?.get() === activity.window.decorView) watchDraws(null)
         shared?.detach(activity)
         if (fullscreen.isShowing) fullscreen.hide("the activity detached")
@@ -184,6 +194,20 @@ object PhonePages {
     }
 
     fun require(pageId: String): Page = page(pageId) ?: throw CodedException("ERR_NO_PAGE", "No page is open with id $pageId", null)
+
+    private var shownPageId: String? = null
+
+    fun setShownPage(pageId: String?) {
+        shownPageId = pageId
+        val engine = shared ?: return
+        engine.show(pageId)
+        if (pageId != null && hostIsResumed()) engine.enterFront()
+    }
+
+    private fun hostIsResumed(): Boolean {
+        val activity = host?.get() as? androidx.lifecycle.LifecycleOwner ?: return false
+        return activity.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+    }
 
     fun activate(pageId: String) {
         val engine = shared ?: return
@@ -461,11 +485,12 @@ object PhonePages {
             }
             is PageEvent.Download -> {
                 val download = event.download
-                val downloadId = downloads.enqueue(download)
+                val started = downloads.start(download)
                 send(
                     id,
                     "page.download",
-                    "downloadId" to downloadId?.toString(),
+                    "downloadId" to (started as? DownloadStart.Started)?.id?.toString(),
+                    "failure" to (started as? DownloadStart.Refused)?.failure?.let(::downloadFailure),
                     "url" to download.url,
                     "fileName" to download.fileName,
                     "mimeType" to download.mimeType,
@@ -478,6 +503,7 @@ object PhonePages {
                 send(id, "page.longPress", "target" to PagePayloads.pressTarget(event.target), "x" to (event.x / density).toDouble(), "y" to (event.y / density).toDouble())
             }
             PageEvent.CloseRequested -> send(id, "page.closeRequested")
+            is PageEvent.ProcessEnded -> send(id, "page.processEnded", "outcome" to event.outcome.wire)
             is PageEvent.ExternalAppMissing -> send(id, "page.externalAppMissing", "url" to event.url)
         }
     }
@@ -504,8 +530,8 @@ object PhonePages {
     )
 
     private fun finished(outcome: DownloadOutcome): Map<String, Any?> = when (outcome) {
-        is DownloadOutcome.Finished -> mapOf("name" to "downloads.finished", "fileName" to outcome.fileName, "uri" to outcome.uri?.toString(), "failure" to null)
-        is DownloadOutcome.Failed -> mapOf("name" to "downloads.finished", "fileName" to outcome.fileName, "uri" to null, "failure" to downloadFailure(outcome.reason))
+        is DownloadOutcome.Finished -> mapOf("name" to "downloads.finished", "fileName" to outcome.fileName, "uri" to outcome.uri?.toString(), "failure" to null, "isPrivate" to outcome.isPrivate)
+        is DownloadOutcome.Failed -> mapOf("name" to "downloads.finished", "fileName" to outcome.fileName, "uri" to null, "failure" to downloadFailure(outcome.reason), "isPrivate" to outcome.isPrivate)
     }
 
     private fun downloadFailure(failure: DownloadFailure): String = when (failure) {

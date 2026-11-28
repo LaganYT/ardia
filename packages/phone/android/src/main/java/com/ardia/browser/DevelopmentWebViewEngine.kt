@@ -123,6 +123,26 @@ class DevelopmentWebViewEngine(
 
     override val livePageIds: List<String> get() = roster.liveIds
 
+    private val shownPage = ShownPage()
+
+    fun isShown(id: String): Boolean = shownPage.isShown(id)
+
+    fun show(id: String?) {
+        shownPage.show(id)?.let(::recoverIfWaiting)
+    }
+
+    fun enterFront() {
+        shownPage.enterFront()?.let(::recoverIfWaiting)
+    }
+
+    fun leaveFront() {
+        shownPage.leaveFront()
+    }
+
+    private fun recoverIfWaiting(id: String) {
+        if (roster.page(id)?.revivesWhenShown == true) roster.activate(id)
+    }
+
     init {
         Executors.newSingleThreadExecutor().also { executor ->
             executor.execute { runCatching { scripts.preload() } }
@@ -381,8 +401,8 @@ class DevelopmentWebViewEngine(
         val name = privateProfileName
         privateProfileName = null
         val endedSession = privateJar?.session
-        privateJar = null
         endedSession?.let { session -> sessionEndListeners.forEach { listener -> runCatching { listener(session) } } }
+        privateJar = null
         onPrivateBrowsingEnded?.invoke()
         if (name == null || !multiProfileFeature) return
         clearPrivateProfile(name)

@@ -10,6 +10,8 @@ export const shape = { control: 12, field: 12, row: 12, card: 16, panel: 22 } as
 
 export const smoothCorners = { borderCurve: "continuous" } as const;
 
+export const concentricRadius = (outer: number, inset: number) => Math.max(0, outer - inset);
+
 export const controlSize = { bar: FLOATING_BAR_PLACE.control, hitTarget: targetMinimum } as const;
 
 export const stroke = { chrome: 0.5, hairline: StyleSheet.hairlineWidth, field: 1 } as const;
@@ -762,6 +764,14 @@ export const browseLayout = {
   hostPillHeight: 40,
   accessory: { width: 32, height: 40 },
   traySurfaceInset: 8,
+} as const;
+
+export const loadWashLayout = {
+  feather: 28,
+  accentAlpha: { light: 0.16, dark: 0.24 },
+  privateAlpha: { light: 0.08, dark: 0.12 },
+  materialAlpha: 0.16,
+  materialPrivateAlpha: 0.1,
 } as const;
 
 export const logoInk = {

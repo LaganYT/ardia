@@ -92,7 +92,7 @@ INSTRUMENTED
   echo "tests took $(( $(date +%s) - started )) s"
   exit "$status"
 fi
-branch="${ARDIA_BUILD_BRANCH:-t3/unify-expo-architecture}"
+branch="${ARDIA_BUILD_BRANCH:-main}"
 gib=$((1024 * 1024 * 1024))
 
 [ "$(uname)" = "Linux" ] || { echo "corex-test runs on corex" >&2; exit 64; }

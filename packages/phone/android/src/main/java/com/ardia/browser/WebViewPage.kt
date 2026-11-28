@@ -17,6 +17,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -72,7 +73,7 @@ internal class WebViewPage(
     private var pendingUrl: String? = null
     private var desktopSite = savedBundle?.getBoolean(DESKTOP_SITE_KEY, false) ?: false
     private var desktopHost: String? = setup.url?.takeIf { savedBundle?.containsKey(DESKTOP_SITE_KEY) == true }?.let(BrowserUrl::host)
-    private var crashReloads = 0
+    private val processRecovery = PageProcessRecovery()
     private var released = false
     private var systemUserAgent = ""
     private var filterHandler: ScriptHandler? = null
@@ -94,6 +95,7 @@ internal class WebViewPage(
     private var scrollSource: String? = ROOT_SCROLLER
     private var isNavigatingHistory = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val blobs = PageBlobs({ mainHandler.post(it) })
     private val clearHistoryNavigationRunnable = Runnable {
         isNavigatingHistory = false
         webView?.let {
@@ -143,6 +145,7 @@ internal class WebViewPage(
 
     override fun makeLive() {
         if (webView != null || released) return
+        if (!processRecovery.loadsWhenMadeLive(isShownNow())) return
         val web = engine.createWebView(isPrivate)
         configure(web)
         webView = web
@@ -151,6 +154,7 @@ internal class WebViewPage(
         val zoom = engine.sitePreferences.pageZoom(mutableState.value.host, isPrivate) ?: 1.0
         web.settings.textZoom = (zoom * 100).roundToInt()
         update { it.copy(isLive = true, pageZoom = zoom, isDesktopSite = desktopSite) }
+        processRecovery.reloadStarted()
         val popup = popup
         this.popup = null
         val saved = savedBundle
@@ -165,7 +169,10 @@ internal class WebViewPage(
                 transport?.webView = web
                 popup.transport.sendToTarget()
             }
-            pending != null -> navigate(web, pending, VisitKind.Typed)
+            pending != null -> {
+                if (saved != null) restore(web, saved, url)
+                navigate(web, pending, VisitKind.Typed)
+            }
             saved != null && restore(web, saved, url) -> {
                 restoringScroll = scrollAtDiscard
                 Log.i(LOG_TAG, "recreate $id from saved state, scroll at discard ${scrollAtDiscard ?: "unknown"}")
@@ -193,24 +200,26 @@ internal class WebViewPage(
     override fun close() = engine.close(id)
 
     override fun load(url: String) {
+        processRecovery.personOpened()
         failedUrl = null
         update { it.copy(failure = null) }
         val web = webView
         if (web == null) {
             pendingUrl = url
             update { it.copy(url = url) }
+            if (isShownNow()) makeLive()
             return
         }
         navigate(web, url, VisitKind.Typed)
     }
 
     override fun reload() {
+        processRecovery.personReloaded()
         failedUrl = null
-        crashReloads = 0
         update { it.copy(failure = null) }
         val web = webView
         if (web == null) {
-            makeLive()
+            revivedForNavigation()
             return
         }
         val current = web.url
@@ -232,8 +241,21 @@ internal class WebViewPage(
 
     override fun goForward(): Boolean = goBy(1)
 
+    internal val awaitsProcessReload: Boolean get() = processRecovery.awaitsReload
+
+    internal val revivesWhenShown: Boolean get() = processRecovery.revivesWhenShown(pendingUrl != null)
+
+    private fun isShownNow(): Boolean = engine.isShown(id)
+
+    private fun revivedForNavigation(): WebView? {
+        processRecovery.reloadStarted()
+        makeLive()
+        return webView
+    }
+
     private fun goBy(step: Int): Boolean {
-        val web = webView ?: return false
+        processRecovery.personReloaded()
+        val web = webView ?: revivedForNavigation() ?: return false
         if (!web.canGoBackOrForward(step)) return false
         failedUrl = null
         isNavigatingHistory = true
@@ -506,11 +528,13 @@ internal class WebViewPage(
         installNightShade(web, mutableState.value.url)
         if (engine.supportsDocumentStartScripts && engine.supportsMessageListener) {
             WebViewCompat.addDocumentStartJavaScript(web, TouchScrollers.script, setOf("*"))
+            WebViewCompat.addDocumentStartJavaScript(web, PageBlobs.script, setOf("*"))
         }
         if (engine.supportsMessageListener) {
             WebViewCompat.addWebMessageListener(web, PageScripts.BRIDGE_NAME, setOf("*")) { _, message, origin, isMainFrame, reply ->
                 val data = message.data
                 when {
+                    blobs.heard(data, origin.toString(), isMainFrame, reply) { reply.postMessage(it) } -> Unit
                     data == PageScripts.NIGHT_SHADE_MESSAGE -> {
                         val host = BrowserUrl.host(origin.toString())
                         val sites = engine.sitePreferences
@@ -601,6 +625,7 @@ internal class WebViewPage(
         nightShadeHandler = null
         nightShadeSource = null
         nightShadeUrl = null
+        blobs.reset()
         installedStart = null
         installedEnd = null
         installedBundle = null
@@ -728,7 +753,7 @@ internal class WebViewPage(
 
     internal fun pageFinished(web: WebView, url: String) {
         if (web !== webView) return
-        crashReloads = 0
+        processRecovery.loadFinished(SystemClock.elapsedRealtime())?.let { mutableEvents.tryEmit(PageEvent.ProcessEnded(it)) }
         progressThrottle.reset()
         answeredSignIns.clear()
         if (isNavigatingHistory) {
@@ -762,6 +787,7 @@ internal class WebViewPage(
 
     internal fun historyUpdated(web: WebView, url: String, isReload: Boolean) {
         if (web !== webView) return
+        processRecovery.pageCommitted(PageHost.key(url))
         viewMoved()
         val previous = lastCommittedUrl
         lastCommittedUrl = url
@@ -819,6 +845,7 @@ internal class WebViewPage(
 
     internal fun failed(web: WebView, url: String, reason: NetworkFailure) {
         if (web !== webView) return
+        processRecovery.loadFailed()
         failedUrl = url
         update {
             it.copy(
@@ -836,13 +863,24 @@ internal class WebViewPage(
             web.destroy()
             return
         }
+        val shown = isShownNow()
+        val history = runCatching {
+            if (web.copyBackForwardList().size == 0) null else Triple(Bundle().also { saveInto(web, it) }, web.canGoBack(), web.canGoForward())
+        }.getOrNull()
         tearDown(web)
-        if (!didCrash || released) return
-        if (crashReloads == 0) {
-            crashReloads += 1
-            engine.mainHandler.post { makeLive() }
-        } else {
-            update { it.copy(failure = PageLoadFailure.Crashed) }
+        if (released) return
+        savedBundle = history?.first
+        scrollAtDiscard = null
+        update { it.copy(canGoBack = history?.second ?: false, canGoForward = history?.third ?: false) }
+        Log.i(LOG_TAG, "renderer gone for $id, crashed $didCrash, shown $shown")
+        mutableEvents.tryEmit(PageEvent.ProcessEnded(PageProcessOutcome.Gone))
+        when (processRecovery.processEnded(shown, SystemClock.elapsedRealtime())) {
+            PageProcessRecovery.Step.Reload -> engine.mainHandler.post { if (isShownNow()) makeLive() }
+            PageProcessRecovery.Step.ShowFailure -> {
+                update { it.copy(failure = PageLoadFailure.Crashed) }
+                mutableEvents.tryEmit(PageEvent.ProcessEnded(PageProcessOutcome.Failed))
+            }
+            PageProcessRecovery.Step.Wait -> Unit
         }
     }
 
@@ -942,13 +980,23 @@ internal class WebViewPage(
     }
 
     private fun emitDownload(url: String, userAgent: String?, contentDisposition: String?, mimeType: String?, contentLength: Long) {
-        val linkName = if (mimeType == null && contentDisposition == null) DownloadRules.linkName(url, null, null) { null } else null
-        val fileName = (linkName ?: URLUtil.guessFileName(url, contentDisposition, mimeType))
+        val isBlob = PageMadeDownloads.isBlob(url)
+        val isData = DataUrls.isData(url)
+        val pageMade = isBlob || isData
+        val fallbackName = engine.appContext.getString(R.string.download_fallback_name)
+        val linkName = if (!pageMade && mimeType == null && contentDisposition == null) DownloadRules.linkName(url, null, null) { null } else null
+        val guessedName = (if (isData) fallbackName else linkName ?: URLUtil.guessFileName(url, contentDisposition, mimeType))
             .replace('/', '-')
             .replace(':', '-')
             .trim()
             .trim('.')
-            .ifEmpty { engine.appContext.getString(R.string.download_fallback_name) }
+            .ifEmpty { fallbackName }
+        val announcedName = if (pageMade) blobs.announcedName(url) else null
+        val fileName = if (pageMade) {
+            DownloadRules.pageMadeName(announcedName, guessedName, mimeType, fallbackName) { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        } else {
+            guessedName
+        }
         mutableEvents.tryEmit(
             PageEvent.Download(
                 PageDownload(
@@ -957,7 +1005,8 @@ internal class WebViewPage(
                     mimeType = mimeType?.ifBlank { null },
                     contentLength = contentLength,
                     userAgent = userAgent,
-                    contentDisposition = contentDisposition,
+                    contentDisposition = announcedName?.let(PageMadeDownloads::dispositionFor) ?: contentDisposition,
+                    source = if (isBlob) blobs.sourceFor(url) else null,
                     referer = mutableState.value.url?.takeIf(BrowserUrl::isWeb),
                     isPrivate = isPrivate,
                     privateSession = if (isPrivate) engine.currentPrivateSession() else null,

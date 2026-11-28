@@ -3,8 +3,6 @@ import { StyleSheet, View } from "react-native";
 import { BottomSheet, Host, NavigationDestination, NavigationStack, RNHostView, VStack } from "@expo/ui/swift-ui";
 import { accessibilityHidden, ignoreSafeArea, navigationBarTitleDisplayMode, navigationTitle } from "@expo/ui/swift-ui/modifiers";
 import { refreshSettings } from "../../state/settings/actions";
-import { settingsInMenu } from "../../state/page/actions";
-import { usePageUi } from "../../state/page/store";
 import { useSettingsNav } from "../../state/settings/hooks";
 import { closeSettingsFrom, followSettingsPath, settingsDestinationKeys, settingsPath, settingsRouteFromKey, type SettingsRoute } from "../../state/settings/nav";
 import { nativeLookColors } from "../../lib/profileLook";
@@ -28,6 +26,7 @@ import { ExpoExperimentalPane, ExpoGeneralPane, ExpoSearchPane, ExpoTabsPane } f
 import { ExpoSettingsDone } from "./ExpoSettingsDone";
 import { SettingsHostedContext } from "./SettingsKit";
 import { SettingsPageFor } from "./SettingsView";
+import { SettingsPageOpenedContext } from "./settingsOpened";
 
 const CONVERTED: Partial<Record<SettingsRoute["page"], (props: { route: SettingsRoute }) => React.JSX.Element>> = {
   general: ExpoGeneralPane,
@@ -96,13 +95,11 @@ export function ExpoSettingsStack() {
 export function ExpoSettingsSheet() {
   const open = useSettingsNav((s) => s.open);
   const generation = useSettingsNav((s) => s.generation);
-  const inPageMenu = usePageUi((ui) => settingsInMenu(ui, generation));
-  const presented = open && !inPageMenu;
   useRefreshWhileOpen(open);
   usePublishNativeChromeLook();
   return (
     <Host testID="expoSettingsSheet" style={styles.anchor} pointerEvents="none">
-      <BottomSheet isPresented={presented} presentationToken={generation} onIsPresentedChange={presentationIgnored} onPresentation={settingsSheetPresentation}>
+      <BottomSheet isPresented={open} presentationToken={generation} onIsPresentedChange={presentationIgnored} onPresentation={settingsSheetPresentation}>
         <SettingsNavigation />
       </BottomSheet>
     </Host>
@@ -133,6 +130,7 @@ export function SettingsNavigation() {
   const shown = open ? stack : kept.current.stack;
   const shownGeneration = open ? generation : kept.current.generation;
   const path = settingsPath(shown);
+  const onPath = new Set(path);
   const seen = useRef<{ open: boolean; keys: Set<string> }>({ open, keys: new Set() });
   if (open && !seen.current.open) seen.current = { open, keys: new Set() };
   else seen.current.open = open;
@@ -143,7 +141,7 @@ export function SettingsNavigation() {
       <StackRoot route={shown[0]} />
       {destinations.map((key) => (
         <NavigationDestination key={key} value={key}>
-          <Destination routeKey={key} pushed={seen.current.keys.has(key)} />
+          <Destination routeKey={key} pushed={seen.current.keys.has(key)} opened={onPath.has(key)} showing={open && onPath.has(key)} />
         </NavigationDestination>
       ))}
     </NavigationStack>
@@ -167,18 +165,30 @@ export const HERO_TITLED = new Set<SettingsRoute["page"]>(["sync", "syncConnect"
 
 export const placeholderTitle = (page: SettingsRoute["page"]) => (HERO_TITLED.has(page) ? "" : TITLES[page]);
 
-function Destination({ routeKey, pushed }: { routeKey: string; pushed: boolean }) {
+const HELD_UNTIL_PUSHED = new Set<SettingsRoute["page"]>(["sync", "syncConnect", "syncWords", "clearData", "trustedSites", "myFilters"]);
+
+export const drawnBeforePush = (page: SettingsRoute["page"]) => CONVERTED[page] !== undefined && !HELD_UNTIL_PUSHED.has(page);
+
+function Destination({ routeKey, pushed, opened, showing }: { routeKey: string; pushed: boolean; opened: boolean; showing: boolean }) {
   const route = settingsRouteFromKey(routeKey);
   if (!route) return null;
-  if (!pushed) return <VStack modifiers={modifierList(navigationTitle(placeholderTitle(route.page)), navigationBarTitleDisplayMode("inline"), settingsChrome(), accessibilityHidden(true))}>{null}</VStack>;
   const Converted = CONVERTED[route.page];
-  if (Converted) return <Converted route={route} />;
+  if (Converted && (pushed || drawnBeforePush(route.page))) {
+    return (
+      <SettingsPageOpenedContext.Provider value={opened}>
+        <Converted route={route} />
+      </SettingsPageOpenedContext.Provider>
+    );
+  }
+  if (!pushed) return <VStack modifiers={modifierList(navigationTitle(placeholderTitle(route.page)), navigationBarTitleDisplayMode("inline"), settingsChrome(), accessibilityHidden(true))}>{null}</VStack>;
   return (
     <VStack modifiers={modifierList(navigationTitle(TITLES[route.page]), navigationBarTitleDisplayMode("inline"), ignoreSafeArea({ edges: "bottom" }), settingsChrome())}>
       <RNHostView>
         <View style={styles.fill}>
           <SettingsHostedContext.Provider value>
-            <SettingsPageFor route={route} />
+            <SettingsPageOpenedContext.Provider value={showing}>
+              <SettingsPageFor route={route} />
+            </SettingsPageOpenedContext.Provider>
           </SettingsHostedContext.Provider>
         </View>
       </RNHostView>

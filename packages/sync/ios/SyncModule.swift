@@ -225,7 +225,7 @@ public class SyncModule: Module, SyncNative {
     }
   }
 
-  func savePassword(_ engineProfile: String, _ origin: String, _ username: String, _ sealed: String, _ replacing: Bool, _ promise: Promise) {
+  func savePassword(_ engineProfile: String, _ origin: String, _ username: String, _ sealed: String, _ replaced: String, _ promise: Promise) {
     guard let keys = self.state.keys, let password = try? keys.openPassword(sealed, origin: origin, username: username) else {
       NSLog("[sync] a synced password didn't open for its login; not saving it")
       return promise.resolve(false)
@@ -236,12 +236,15 @@ public class SyncModule: Module, SyncNative {
         promise.resolve(error == nil)
       }
     }
+    if replaced.isEmpty { return DispatchQueue.main.async(execute: save) }
+    guard let expected = try? keys.openPassword(replaced, origin: origin, username: username) else {
+      NSLog("[sync] the saved password a synced change replaces didn't open for its login; not saving it")
+      return promise.resolve(false)
+    }
     DispatchQueue.main.async {
-      guard replacing else { return save() }
-      ArdiaServices.deletePassword(profile: engineProfile, origin: origin, username: username) { _, error in
-        guard let error else { return save() }
-        NSLog("[sync] replacing a saved password: \(error)")
-        promise.resolve(false)
+      ArdiaServices.replacePassword(profile: engineProfile, origin: origin, username: username, password: password, expected: expected) { _, error in
+        if let error { NSLog("[sync] replacing a saved password: \(error)") }
+        promise.resolve(error == nil)
       }
     }
   }

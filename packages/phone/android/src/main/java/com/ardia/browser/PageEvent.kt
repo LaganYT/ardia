@@ -21,6 +21,7 @@ data class PageDownload(
     val referer: String?,
     val isPrivate: Boolean,
     val privateSession: String? = null,
+    val source: DownloadSource? = null,
 )
 
 sealed interface PressTarget {
@@ -52,6 +53,8 @@ sealed interface PageEvent {
     data class LongPress(val target: PressTarget, val x: Float, val y: Float) : PageEvent
 
     data object CloseRequested : PageEvent
+
+    data class ProcessEnded(val outcome: PageProcessOutcome) : PageEvent
 
     data class ExternalAppMissing(val url: String) : PageEvent
 }

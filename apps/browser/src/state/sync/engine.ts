@@ -6,26 +6,28 @@ import { engineProfile } from "../browser/model";
 import { historyExpired } from "./historyAdapter";
 import { settleRetiredDefaultsWithoutSync, settleSettingsFromSavedSync } from "./settingsAdapter";
 import { appAdapters, extensionsOf, forgetScopeAdapters, profileAdapters, typeSynced, watchBoosts, watchSyncedExtensions } from "./scopeAdapters";
-import { APP_SCOPE, emptyDoc, emptyUi, typeSyncedFor, type DataType, type SendTarget, type SyncDoc, type SyncUi } from "./syncDoc";
+import { APP_SCOPE, emptyDoc, emptyUi, typeSyncedFor, type SendTarget, type SyncDoc, type SyncUi } from "./syncDoc";
+import { syncDocEdits } from "./syncDocEdits";
 import { syncFiles } from "./syncFiles";
 import { settleThemeAdoption, themeChosenHere } from "./syncThemes";
 import { editClock, startEditClock } from "./editClock";
-import { addSyncedProfile, appScopeOf, linkProfiles, readyToPair, retireDeletedProfile } from "./profileLinks";
+import { appScopeOf, linkProfiles, readyToPair, retireDeletedProfile } from "./profileLinks";
 import { summarize } from "./syncSummary";
 import { markNewSync, sessionMarkHooks, settleLaunchMark } from "./sessionMarks";
 import { noteChainHealthy, noteChainMissing, noteCycle, timedCycle } from "./cycleWork";
 import { exposeDevSync } from "./devSync";
 import { folderScopes, moveChain, noteFolderMove, noteTurnOn, type FolderMoveResult, type TurnOnFolder } from "./folderMove";
 import { chainCheckedTransport, folderLossAfter, publishChainGone, recreateChainFolder, reseedPendingScopes, type FolderRecreateResult } from "./folderRecovery";
-import { freezeRemovals, markDeviceRemoved, markRemoved, settleRemovals } from "./profileRemoval";
+import { freezeRemovals, settleRemovals } from "./profileRemoval";
 import { profileScope } from "./records";
 import { queueSend, sendTargetsIn } from "./sentTabs";
 import { errorText } from "../../lib/errors";
+import { oneAtATime } from "../../lib/oneAtATime";
 import { isQuitting, saveBeforeQuit } from "../app/quit";
 import { onProfilesOpened, profileOpened } from "../profiles/profileLoading";
 import { onProfileDeleted } from "../profiles/profiles";
 export { takeSyncDataCounts } from "../telemetry/syncSafetyCounts";
-import { markOpenTabsSynced, openTabsClosed, recordOpenTabCloses } from "./openTabCloses";
+import { openTabsClosed, recordOpenTabCloses } from "./openTabCloses";
 import { PLATFORM_TERMS } from "../../lib/platformTerms";
 import { consentToken, type ConsentToken } from "../telemetry/client";
 import { warnFor } from "../telemetry/logs";
@@ -46,11 +48,12 @@ let cycle: Promise<void> | null = null;
 let again = false, forcePasswordsNext = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stateLoading: Promise<unknown> = Promise.resolve();
-const { read, loadState, persistJournal, persistApplying, watchScope, save, saveDocNow, startOver, checkpoint } = syncFiles(() => doc, sessionMarkHooks(() => doc));
+const { read, loadState, persistJournal, persistApplying, watchScope, save, saveDocNow, startOver, settleOwedReset, checkpoint } = syncFiles(() => doc, sessionMarkHooks(() => doc));
 
 const load = () => { const loaded = read(); if (loaded) doc = loaded; };
 
 function publishUi(patch: Partial<SyncUi> = {}) {
+  if (doc === settingUp) return;
   if (!doc.enabled || !typeSyncedFor(doc.types, "settings", true)) settleRetiredDefaultsWithoutSync();
   useSync.setState({
     enabled: doc.enabled,
@@ -70,7 +73,7 @@ const watchExtensions = () => watchSyncedExtensions(doc);
 
 const scheduleSync = (delay = AFTER_EDIT_MS) => void (doc.enabled && (clearTimeout(timer), (timer = setTimeout(() => void runCycle(), delay))));
 
-let stopping = false;
+let stopping = false, settingUp: SyncDoc | null = null;
 let folderOp: Promise<unknown> | null = null;
 const folderOpSettled = async () => { while (folderOp) await folderOp.catch(() => {}); };
 
@@ -87,7 +90,7 @@ export async function syncNow(stillWanted: () => void = () => {}): Promise<boole
 type CycleOptions = { retiring?: boolean; forcePasswords?: boolean };
 
 async function runCycle({ retiring = false, forcePasswords = false }: CycleOptions = {}) {
-  if (!SyncNative || !doc.enabled || folderOp || !doc.folder || !doc.deviceId || useSync.getState().status === "locked") return;
+  if (!SyncNative || !doc.enabled || doc === settingUp || folderOp || !doc.folder || !doc.deviceId || useSync.getState().status === "locked") return;
   if (cycle) {
     again = true;
     forcePasswordsNext ||= forcePasswords;
@@ -254,18 +257,34 @@ export const recreateSyncFolder = (): Promise<FolderRecreateResult> => {
   );
 };
 
-function begin(folder: string, deviceId: string, joining: boolean) {
-  doc = { ...emptyDoc(), types: doc.types, enabled: true, folder, deviceId, setupAt: Date.now(), joining };
-  markNewSync(doc);
-  startOver();
-  publishUi({ status: "starting", error: null });
-  scheduleSync(0);
+async function begin(native: NonNullable<typeof SyncNative>, folder: string, deviceId: string, joining: boolean, consent: ConsentToken | null): Promise<string | null> {
+  const before = doc;
+  const begun: SyncDoc = (doc = { ...emptyDoc(), types: doc.types, enabled: true, folder, deviceId, setupAt: Date.now(), joining, deviceCheckpoints: true });
+  markNewSync((settingUp = begun));
+  const failed = await startOver(consent).then(() => null, (error: unknown) => (warnFor(consent, "[sync] couldn't save sync.json to start syncing", error), { error }));
+  if (settingUp === begun) settingUp = null;
+  if (doc !== begun) return failed ? notSavedText(failed.error) : null;
+  if (!failed) return (publishUi({ status: "starting", error: null }), scheduleSync(0), null);
+  doc = before;
+  const forgetKey = async () => void (await native.forget(deviceId).catch((error: unknown) => warnFor(consent, "[sync] couldn't forget a sync key that never saved", error)));
+  void startOver(consent, forgetKey).catch((again: unknown) => warnFor(consent, "[sync] couldn't save sync.json after a start that failed", again));
+  publishUi({ status: "off", error: null });
+  return notSavedText(failed.error);
 }
 
-export async function turnOnSync(folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> {
-  const native = SyncNative;
+const notSavedText = (error: unknown) => `Sync couldn’t save its settings on this ${PLATFORM_TERMS.computer}: ${errorText(error)}`;
+
+const priorStopSaved = (consent: ConsentToken | null): Promise<string | null> => settleOwedReset(consent).then(() => null, (error: unknown) => (warnFor(consent, "[sync] couldn't finish stopping sync before starting again", error), notSavedText(error)));
+const oneSetupChangeAtATime = oneAtATime();
+
+export const turnOnSync = (folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> => oneSetupChangeAtATime(() => turnOn(folder, how));
+
+async function turnOn(folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> {
+  const native = SyncNative, consent = consentToken();
   if (!native) return { error: "Sync isn’t available in this build." };
   await folderOpSettled();
+  const unsaved = await priorStopSaved(consent);
+  if (unsaved) return { error: unsaved };
   const deviceId = native.newDeviceId();
   try {
     if (!(await native.createPhrase(deviceId))) return { error: `Couldn’t save the sync key in ${PLATFORM_TERMS.secretStore}.` };
@@ -274,13 +293,14 @@ export async function turnOnSync(folder: string, how?: TurnOnFolder): Promise<{ 
     await native.forget(deviceId);
     return { error: `Couldn’t use that folder: ${errorText(error)}` };
   }
-  begin(folder, deviceId, false);
+  const notSaved = await begin(native, folder, deviceId, false, consent);
+  if (notSaved) return { error: notSaved };
   noteTurnOn(how);
   return { ok: true };
 }
 
-export async function enterRecoveryPhrase(folder: string, phrase: Secret<"syncPhrase">): Promise<PhraseResult | { error: "unavailable" }> {
-  const native = SyncNative;
+export async function enterRecoveryPhrase(folder: string, phrase: Secret<"syncPhrase">): Promise<PhraseResult | { error: "unavailable" } | { error: "notSaved"; message: string }> {
+  const native = SyncNative, consent = consentToken();
   if (!native) return { error: "unavailable" };
   await folderOpSettled();
   if (doc.enabled && doc.deviceId && useSync.getState().status === "locked") {
@@ -292,10 +312,15 @@ export async function enterRecoveryPhrase(folder: string, phrase: Secret<"syncPh
     }
     return result;
   }
-  const deviceId = native.newDeviceId();
-  const result = await native.enterPhrase(deviceId, reveal(phrase), folder);
-  if ("ok" in result) begin(folder, deviceId, true);
-  return result;
+  return oneSetupChangeAtATime(async () => {
+    const unsaved = await priorStopSaved(consent);
+    if (unsaved) return { error: "notSaved", message: unsaved };
+    const deviceId = native.newDeviceId();
+    const result = await native.enterPhrase(deviceId, reveal(phrase), folder);
+    if (!("ok" in result)) return result;
+    const notSaved = await begin(native, folder, deviceId, true, consent);
+    return notSaved ? { error: "notSaved", message: notSaved } : result;
+  });
 }
 
 export async function stopSync({ deleteData = false } = {}) {
@@ -303,7 +328,7 @@ export async function stopSync({ deleteData = false } = {}) {
   await folderOpSettled();
   if (!native || !doc.enabled || stopping) return;
   stopping = true;
-  await retire(native, deleteData ? [...new Set([doc.folder, shown])] : [], consent).finally(() => (stopping = false));
+  await oneSetupChangeAtATime(() => retire(native, deleteData ? [...new Set([doc.folder, shown])] : [], consent).finally(() => (stopping = false)));
 }
 
 async function retire(native: NonNullable<typeof SyncNative>, deleteIn: (string | null)[], consent: ConsentToken | null) {
@@ -314,26 +339,17 @@ async function retire(native: NonNullable<typeof SyncNative>, deleteIn: (string 
   clearTimeout(timer);
   const folder = doc.folder;
   for (const target of deleteIn) if (target) await native.deleteChain(target).catch((error: unknown) => warnFor(consent, "[sync] deleting sync data failed", error));
-  if (doc.deviceId) await native.forget(doc.deviceId);
+  const device = doc.deviceId;
   doc = { ...emptyDoc(), folder, types: doc.types };
   forgetScopeAdapters();
-  startOver();
+  const forgetKey = async () => void (device && (await native.forget(device).catch((error: unknown) => warnFor(consent, "[sync] couldn't forget the stopped sync key", error))));
+  await startOver(consent, forgetKey).catch((error: unknown) => warnFor(consent, "[sync] couldn't save sync.json to stop syncing; its settings and key stay until it saves", error));
   publishUi({ status: "off", error: null });
 }
 
 const docChanged = () => void (save(), publishUi(), scheduleSync(0));
 
-export const setTypeSynced = (type: DataType, enabled: boolean): void => void ((doc.types = { ...doc.types, [type]: enabled }), docChanged());
-
-export function setProfileSynced(profileId: string, enabled: boolean) {
-  const link = doc.profiles[profileId];
-  if (!link) return;
-  const { retire: _retire, ...kept } = link;
-  doc.profiles[profileId] = enabled ? { ...kept, enabled } : { ...link, enabled, retire: true };
-  docChanged();
-}
-
-export const setOpenTabsSynced = (profileId: string, on: boolean): void => void (markOpenTabsSynced(doc, profileId, on), docChanged());
+export const { setTypeSynced, setProfileSynced, setOpenTabsSynced, addRemoteProfile, removeRemoteProfile, removeSyncedDevice } = syncDocEdits(() => doc, docChanged);
 
 export const sendTargets = (profileId: string): SendTarget[] => (useSync.getState().status === "locked" ? [] : sendTargetsIn(doc, profileId));
 
@@ -345,15 +361,6 @@ export function sendTab(tabId: string, deviceId: string): boolean {
 }
 
 export const appScopeRecords = () => doc.scopes[APP_SCOPE]?.records ?? {};
-
-export function addRemoteProfile(syncId: string): string | null {
-  const added = addSyncedProfile(doc, syncId);
-  if (added !== undefined) docChanged();
-  return added ?? null;
-}
-
-export const removeRemoteProfile = (syncId: string): boolean => markRemoved(doc, syncId) && (docChanged(), true);
-export const removeSyncedDevice = (id: string): boolean => markDeviceRemoved(doc, id) && (docChanged(), true);
 
 export function startSync() {
   if (!SyncNative) return;

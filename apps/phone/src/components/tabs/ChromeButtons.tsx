@@ -5,7 +5,7 @@ import { newIncognitoTab, newRegularTab, newTab, reopenLastClosed } from "../../
 import { menuOpenedHaptic } from "../../state/browse/tabMenus";
 import { useCanReopen, useIncognito } from "../../state/tabs/hooks";
 import { actionWords } from "../../lib/sharedWords";
-import { BarPlusGlyph, capsule, ChromeSurface, controlSize, iconRoles, PressInPlace, rolesFor, startLayout, Symbol, SystemGlyph, type MenuItem, type SymbolName } from "../ui";
+import { capsule, ChromeSurface, controlSize, iconRoles, PlatePlusGlyph, PlateSymbol, PlateSystemGlyph, PressInPlace, startLayout, type MenuItem, type SymbolName } from "../ui";
 import { MenuTrigger } from "../ui/MenuTrigger";
 import { PressedGlyph } from "../ui/PressInPlace";
 
@@ -63,9 +63,9 @@ export function GlassCircleButton({ icon, label, testID, diameter = controlSize.
       <ChromeSurface testID={testID} shape="circle" cornerRadius={capsule(diameter)} incognito={incognito} dark={dark} shown={glassShown} shownMs={glassShownMs} underlay={underlay} style={[styles.centered, size]}>
         <PressedFadingGlyphs testID={`${testID}Glyph`} pointerEvents="none" fade={glyphFade}>
           {CIRCLE_SYSTEM_NAMES[icon] ? (
-            <SystemGlyph systemName={CIRCLE_SYSTEM_NAMES[icon]} pointSize={CIRCLE_SYSTEM_GLYPH} weight="medium" name={icon} size={startLayout.circleGlyph} color={rolesFor(dark).label} />
+            <PlateSystemGlyph systemName={CIRCLE_SYSTEM_NAMES[icon]} pointSize={CIRCLE_SYSTEM_GLYPH} weight="medium" name={icon} size={startLayout.circleGlyph} />
           ) : (
-            <Symbol name={icon} size={startLayout.circleGlyph} color={rolesFor(dark).label} />
+            <PlateSymbol name={icon} size={startLayout.circleGlyph} />
           )}
         </PressedFadingGlyphs>
       </ChromeSurface>
@@ -75,19 +75,19 @@ export function GlassCircleButton({ icon, label, testID, diameter = controlSize.
 
 export const PLUS_HINT = "Touch and hold for more options.";
 
-export type PlusMenuButtonProps = Look & ChromeFade & { width: number; label: string; testID: string; place: ViewStyle; menusShown?: boolean; frost?: string | null; onMenu?: (open: boolean) => void; onCloseAll?: () => void };
+export type PlusMenuButtonProps = Look & ChromeFade & { width: number; label: string; testID: string; place: ViewStyle; drawn?: boolean; menusShown?: boolean; frost?: string | null; onMenu?: (open: boolean) => void; onCloseAll?: () => void };
 
-export function PlusMenuButton({ width, label, testID, dark, incognito = false, place, menusShown = true, frost, onMenu, onCloseAll, glassShown, glassShownMs, glyphFade }: PlusMenuButtonProps) {
+export function PlusMenuButton({ width, label, testID, dark, incognito = false, place, drawn = false, menusShown = true, frost, onMenu, onCloseAll, glassShown, glassShownMs, glyphFade }: PlusMenuButtonProps) {
   const tabIncognito = useIncognito();
   const canReopen = useCanReopen();
   const size = { width, height: controlSize.bar };
   return (
-    <MenuTrigger items={plusMenu(tabIncognito, canReopen, onCloseAll)} trigger="longPress" haptic={menuOpenedHaptic} disabled={!menusShown} frost={frost} onOpen={() => onMenu?.(true)} onClose={() => onMenu?.(false)} place={place} style={size}>
+    <MenuTrigger items={plusMenu(tabIncognito, canReopen, onCloseAll)} trigger="longPress" haptic={menuOpenedHaptic} disabled={!menusShown} frost={frost} onOpen={() => onMenu?.(true)} onClose={() => onMenu?.(false)} place={place} drawn={drawn} style={size}>
       {({ onLongPress }) => (
         <PressInPlace label={label} hint={PLUS_HINT} onPress={newTab} onLongPress={onLongPress ?? noop} onPressIn={haptics.barPress} dims="glyph" style={size}>
           <ChromeSurface testID={testID} shape={width === size.height ? "circle" : "capsule"} cornerRadius={capsule(size.height)} incognito={incognito} dark={dark} shown={glassShown} shownMs={glassShownMs} style={[styles.centered, size]}>
             <PressedFadingGlyphs testID={`${testID}Glyph`} pointerEvents="none" fade={glyphFade}>
-              <BarPlusGlyph color={rolesFor(dark).label} />
+              <PlatePlusGlyph />
             </PressedFadingGlyphs>
           </ChromeSurface>
         </PressInPlace>

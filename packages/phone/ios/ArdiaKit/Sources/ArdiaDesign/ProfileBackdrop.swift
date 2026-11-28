@@ -1,5 +1,15 @@
 import SwiftUI
 
+public struct DrawnBackdrop: Equatable {
+  enum Kind: Equatable {
+    case theme(DrawnTheme)
+    case gradient([LookRGB], diagonal: Bool)
+  }
+
+  let kind: Kind
+  public let dark: Bool
+}
+
 public struct ProfileBackdrop: View {
   private let look: ProfileLook?
   private let themeLook: ThemeLook?
@@ -38,27 +48,33 @@ public struct ProfileBackdrop: View {
     }
   }
 
+  public static func drawn(look: ProfileLook, themeLook: ThemeLook?, themed: Bool, dark: Bool) -> DrawnBackdrop {
+    if themed, let themeLook { return DrawnBackdrop(kind: .theme(themeLook.drawn(dark: dark)), dark: dark) }
+    return DrawnBackdrop(kind: .gradient(look.backdropStops(dark: dark, themed: themed), diagonal: look.showsTheme(dark: dark, themed: themed)), dark: dark)
+  }
+
   @ViewBuilder
   private func backdrop(softened: Bool) -> some View {
-    if themed, let themeLook {
-      ThemeBackdrop(look: themeLook, dark: colorScheme == .dark)
-        .overlay {
-          if softened {
-            Color.adaptive(light: .white.opacity(0.72), dark: .black.opacity(0.55))
+    let drawn = Self.drawn(look: look ?? ambientLook, themeLook: themeLook, themed: themed, dark: colorScheme == .dark)
+    switch drawn.kind {
+    case .theme:
+      if let themeLook {
+        ThemeBackdrop(look: themeLook, dark: drawn.dark)
+          .overlay {
+            if softened {
+              Color.adaptive(light: .white.opacity(0.72), dark: .black.opacity(0.55))
+            }
           }
-        }
-    } else {
-      gradientBackdrop(softened: softened)
+      }
+    case .gradient(let stops, let showsTheme):
+      gradientBackdrop(stops: stops, showsTheme: showsTheme, dark: drawn.dark, softened: softened)
     }
   }
 
   @ViewBuilder
-  private func gradientBackdrop(softened: Bool) -> some View {
-    let look = look ?? ambientLook
-    let dark = colorScheme == .dark
-    let showsTheme = look.showsTheme(dark: dark, themed: themed)
+  private func gradientBackdrop(stops: [LookRGB], showsTheme: Bool, dark: Bool, softened: Bool) -> some View {
     LinearGradient(
-      colors: look.backdropColors(dark: dark, themed: themed),
+      colors: stops.map(\.color),
       startPoint: showsTheme ? .topLeading : .top,
       endPoint: showsTheme ? .bottomTrailing : .bottom
     )
@@ -91,12 +107,30 @@ public struct LookFrost: View {
   private let reduceTransparencyOverride: Bool?
 
   @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+  @Environment(\.colorScheme) private var colorScheme
 
   public init(variant: Variant, look: ProfileLook, cornerRadius: Double = 0, reduceTransparency: Bool? = nil) {
     self.variant = variant
     self.look = look
     self.cornerRadius = cornerRadius
     reduceTransparencyOverride = reduceTransparency
+  }
+
+  public nonisolated static func veil(for variant: Variant, look: ProfileLook, dark: Bool) -> GlassInk? {
+    let shadeDark = dark || look.isAlwaysDark
+    switch variant {
+    case .bar, .sheet:
+      return LiquidGlassRules.materialVeil(tint: look.surfaceInk(dark: shadeDark, alpha: profileSheetTintShare), dark: shadeDark)
+    case .thin:
+      return LiquidGlassRules.materialVeil(tint: look.surfaceInk(dark: shadeDark, alpha: 0), dark: shadeDark)
+    case .glass:
+      return nil
+    }
+  }
+
+  private var veilColor: Color {
+    guard let ink = Self.veil(for: variant, look: look, dark: colorScheme == .dark) else { return .clear }
+    return Color(.sRGB, red: ink.red, green: ink.green, blue: ink.blue, opacity: ink.alpha)
   }
 
   public var body: some View {
@@ -111,14 +145,15 @@ public struct LookFrost: View {
         switch variant {
         case .bar:
           shape.fill(.bar)
-          shape.fill(look.surface.opacity(profileSheetTintShare))
+          shape.fill(veilColor)
         case .sheet:
           shape.fill(.regularMaterial)
-          shape.fill(look.surface.opacity(profileSheetTintShare))
+          shape.fill(veilColor)
         case .glass:
           LiquidGlassFill(shape)
         case .thin:
           shape.fill(.ultraThinMaterial)
+          shape.fill(veilColor)
         }
       }
     }

@@ -4518,8 +4518,8 @@
       "types": "packages/sync/src/generated/native.ts",
       "swift": "packages/sync/ios/SyncNative.swift",
       "sha256": {
-        "types": "59249d810d9c41938a00dee18b842f777c2aae83bea1c1f1ddf3c796f28ef91d",
-        "swift": "3c5a90c1a142c2881a35b5ba98e4bce39a6766fe5a9a4989a5f7801539983ea2"
+        "types": "b20d21546fbf88877d26f66bf8b52285bd5afdb9f468bbb42c26335d496c136d",
+        "swift": "a1ece123db0e2c1d1034df62b3618eb7b312eed10dd94877778f3ec75c168aa8"
       },
       "modules": {
         "ArdiaSync": {
@@ -4778,7 +4778,7 @@
                 "origin",
                 "username",
                 "sealed",
-                "replacing"
+                "replaced"
               ],
               "async": true,
               "mac": "custom",

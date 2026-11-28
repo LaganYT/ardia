@@ -1,7 +1,7 @@
-import { probes } from "../../state/app/launchFlags";
+import { launchArguments, probes } from "../../state/app/launchFlags";
 import { createContext, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { labTrace, markShownFrame, traceSlice } from "../../platform/lab";
-import { hardwareKeyboardShown } from "@ardia/phone-native";
+import { labLog, labTrace, markShownFrame, traceSlice } from "../../platform/lab";
+import { hardwareKeyboardShown, system, type KeyboardWarmUp } from "@ardia/phone-native";
 import { IncognitoEyes } from "../ui/IncognitoEyes";
 import { FabricCatchUp } from "../ui/FabricCatchUp";
 import { countRender } from "../../state/app/interactionPerf";
@@ -11,7 +11,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, FadeIn, FadeOut, runOnJS, runOnUI, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import type { GestureType } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { activateRow, cancelSearch, submitSearch, toggleTrayIncognito } from "../../state/browse/store";
+import { activateRow, cancelSearch, pageCovered, submitSearch, toggleTrayIncognito } from "../../state/browse/store";
 import { copyLink, menuOpenedHaptic, trayRowActions, trayRowHoldAction, type RowAction } from "../../state/browse/tabMenus";
 import { rowMenuItems, useRowConfirm } from "./rowConfirm";
 import { useSearchEditsPage, useSearchFieldVersion, useSearchInitialText, useSearchOpen, useSearchOrigin, useSearchRows, useSearchSession, useSearchText } from "../../state/search/hooks";
@@ -33,11 +33,13 @@ import { completingFieldIsNative } from "../../platform/completingField";
 import { UiFrameMark, uiFrameMarkStyle } from "../ui/UiFrameMark";
 import { preparedIdleKey, preparedIdleRows, searchPresented, searchState, setSearchClearsPagePrefill, setSearchText, typeSearch, warmSearchWhenIdle, whenSearchPresents, type SearchOrigin, type SearchPresenting } from "../../state/search/store";
 import { useBrowse } from "../../state/browse/store";
+import { pageUi } from "../../state/page/store";
 import { endSearchTiming, markSearchClosePhase, markSearchPhase, markSearchPresented } from "../../state/search/searchTiming";
 import { coverTray, followTrayBack, trayBackTravel, useTrayCovers } from "../../state/search/trayBack";
 import { useIncognito, useSelectedTab, useSelectedTabId } from "../../state/tabs/hooks";
 import { useTabs } from "../../state/tabs/store";
 import { countUsage, reportLaunchTray } from "../../state/telemetry/telemetry";
+import { readableVeil } from "../../lib/readableInk";
 import { browseLayout, closingGate, departBezier, shadowCss, DeckLookBackdrop, Favicon, FieldAccessory, iconRoles, smoothCorners, FloatingMenu, font, ink, LookFrost, MotionView, moveTo, radius, screenReaderActions, type MotionCurve, type MotionTarget, trayLandingDelayMs, space, stageMotion, barReturnMotion, slotAround, Symbol, SURFACES_FROST, tabsCurve, stroke, tabsInk, tabsLayout, Tappable, ToggleIconButton, trayMotion, trayShadow, useTheme, FadeView, fadeIsNative, floatingPanelLayout, useDesign, useReduceMotion } from "../ui";
 import { plateMaterial, SEARCH_PANEL_FACE, useSolidChrome, usesGlass, type PlateMaterial } from "../ui/LookViews";
 import { actionWords } from "../../lib/sharedWords";
@@ -74,14 +76,16 @@ const ROWS_FALLBACK = 5;
 export const panelCornerStyle = (panelRadius: number, corners: SearchPanelCorners) =>
   corners === "top" ? { borderTopLeftRadius: panelRadius, borderTopRightRadius: panelRadius, ...smoothCorners } : { borderRadius: panelRadius, ...smoothCorners };
 
-const panelFill = (incognito: boolean, dark: boolean, solid: boolean) => {
+export const searchPanelDark = (incognito: boolean, dark: boolean) => incognito || dark;
+
+export const panelFill = (incognito: boolean, dark: boolean, solid: boolean) => {
   const panelInk = searchPanelInk(incognito, dark);
-  return solid ? panelInk.solid : panelInk.tint;
+  return solid ? panelInk.solid : readableVeil(panelInk.tint, searchPanelDark(incognito, dark));
 };
 
 export const searchPanelMorphLook = (incognito: boolean, dark: boolean, material: PlateMaterial) => ({ usesGlass: material === "glass", panelTint: ink.clear, panelDark: incognito, classicPanel: panelFill(incognito, dark, material === "solid"), frosted: material === "frost", classicChrome: nativeClassicChrome });
 
-export const searchPanelSolidFace = (incognito: boolean, dark: boolean) => ({ backgroundColor: panelFill(incognito, dark, true), borderWidth: chromeLayout.edge, borderColor: (incognito || dark ? chromeInk.dark : chromeInk.light).edge });
+export const searchPanelSolidFace = (incognito: boolean, dark: boolean) => ({ backgroundColor: panelFill(incognito, dark, true), borderWidth: chromeLayout.edge, borderColor: (searchPanelDark(incognito, dark) ? chromeInk.dark : chromeInk.light).edge });
 
 function SearchPanelFace({ incognito, dark, panelRadius, corners, waiting = false }: { incognito: boolean; dark: boolean; panelRadius: number; corners: SearchPanelCorners; waiting?: boolean }) {
   const solid = plateMaterial(SEARCH_PANEL_FACE, useSolidChrome(), usesGlass()) === "solid";
@@ -90,7 +94,7 @@ function SearchPanelFace({ incognito, dark, panelRadius, corners, waiting = fals
   if (solid || waiting) return <View testID="searchPanelFace" pointerEvents="none" style={[place, searchPanelSolidFace(incognito, dark)]} />;
   return (
     <View testID="searchPanelFace" pointerEvents="none" style={[place, styles.clip]}>
-      <LookFrost source={SURFACES_FROST} variant="thin" cornerRadius={0} fill={ink.clear} dark={incognito || dark} incognito={incognito} style={StyleSheet.absoluteFill} />
+      <LookFrost source={SURFACES_FROST} variant="thin" cornerRadius={0} fill={ink.clear} dark={searchPanelDark(incognito, dark)} incognito={incognito} style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: fill }]} />
     </View>
   );
@@ -118,7 +122,46 @@ function useTrayTheme() {
 export function SearchTray() {
   const design = useDesign();
   if (design === "material") return <MaterialSearchTray />;
-  return searchStageIsNative() ? <StagedTray /> : <SheetTray />;
+  if (!searchStageIsNative()) return <SheetTray />;
+  return (
+    <>
+      <StagedTray />
+      <FirstKeyboardWarmUp />
+    </>
+  );
+}
+
+const KEYBOARD_WARM_AFTER_LAUNCH_MS = 2500;
+const KEYBOARD_WARM_RETRY_MS = 1500;
+const KEYBOARD_WARM_ATTEMPTS = 6;
+const KEYBOARD_WARM_FINAL = new Set(["warmed", "refused", "done", "unsupported", "failed"]);
+
+const overlayOpen = () => pageCovered() || pageUi().findOpen || useBrowse.getState().surface === "deck";
+
+function FirstKeyboardWarmUp() {
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+    let attempts = 0;
+    system.prepareKeyboardWarmUp();
+    const attempt = async () => {
+      timer = null;
+      attempts += 1;
+      const result: KeyboardWarmUp = searchState().open ? { outcome: "searchOpen" } : overlayOpen() ? { outcome: "overlay" } : await system.warmKeyboard();
+      if (stopped) return;
+      labLog(`PAGELAB search warm keyboard ${result.outcome}${typeof result.ms === "number" ? ` ${Math.round(result.ms)}ms` : ""}${result.holder ? ` ${result.holder}` : ""} attempt ${attempts}`);
+      if (KEYBOARD_WARM_FINAL.has(result.outcome) || attempts >= KEYBOARD_WARM_ATTEMPTS) return system.endKeyboardWarmUp();
+      timer = setTimeout(attempt, KEYBOARD_WARM_RETRY_MS);
+    };
+    const delaySeconds = launchArguments().keyboardWarmDelaySeconds;
+    timer = setTimeout(attempt, delaySeconds === null ? KEYBOARD_WARM_AFTER_LAUNCH_MS : delaySeconds * 1000);
+    return () => {
+      stopped = true;
+      if (timer !== null) clearTimeout(timer);
+      system.endKeyboardWarmUp();
+    };
+  }, []);
+  return null;
 }
 
 function SheetTray() {
@@ -1412,6 +1455,8 @@ const TrayRows = memo(function TrayRows({ dismissDrag }: { dismissDrag: GestureT
         </GestureDetector>
       ) : (
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           testID={arc ? "searchPanelRowsScroll" : undefined}
           style={arc || shown === null ? styles.rows : { height: shown, flexGrow: 0 }}
           contentContainerStyle={arc ? styles.searchPanelRowsContent : styles.rowsContent}
